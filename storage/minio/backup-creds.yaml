@@ -29,8 +29,21 @@ spec:
     target:
       name: minio-backup-creds
       creationPolicy: Owner
+      deletionPolicy: Retain
     data:
       - secretKey: ACCESS_KEY_ID
-        remoteRef: { key: secret/minio/backup-user, property: ACCESS_KEY_ID }
+        remoteRef:
+          key: secret/minio/backup-user
+          property: ACCESS_KEY_ID
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
+          nullBytePolicy: Ignore
       - secretKey: SECRET_ACCESS_KEY
-        remoteRef: { key: secret/minio/backup-user, property: SECRET_ACCESS_KEY }
+        remoteRef:
+          key: secret/minio/backup-user
+          property: SECRET_ACCESS_KEY
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
+          nullBytePolicy: Ignore

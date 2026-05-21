@@ -11,10 +11,13 @@ metadata:
       Require containers to use explicit image tags.
       Using :latest makes rollbacks impossible and breaks GitOps.
 spec:
+  admission: true
   validationFailureAction: Audit   # TODO: switch to Enforce post-Phase-8
   background: true
+  emitWarning: false
   rules:
     - name: require-image-tag
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -30,6 +33,7 @@ spec:
                       - longhorn-system
                       - velero
       validate:
+        allowExistingViolations: true
         message: "Image tag ':latest' is not allowed. Use an explicit tag or digest."
         deny:
           conditions:
@@ -50,10 +54,13 @@ metadata:
       Images must come from Harbor (homelab, cache, library projects),
       trusted k8s system registries, or approved public registries.
 spec:
+  admission: true
   validationFailureAction: Audit   # TODO: Enforce after all builds pushed to Harbor
   background: true
+  emitWarning: false
   rules:
     - name: validate-registries
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -67,6 +74,7 @@ spec:
                       - kube-public
                       - kube-node-lease
       validate:
+        allowExistingViolations: true
         message: >
           Images must use harbor.e-dani.com, registry.k8s.io, gcr.io/k8s-staging-*,
           quay.io, ghcr.io, docker.io/library, or nvcr.io/nvidia.
@@ -95,10 +103,13 @@ metadata:
   annotations:
     policies.kyverno.io/title: Require Resource Limits
 spec:
+  admission: true
   validationFailureAction: Audit
   background: true
+  emitWarning: false
   rules:
     - name: require-memory-limit
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -113,6 +124,7 @@ spec:
                       - kube-node-lease
                       - longhorn-system
       validate:
+        allowExistingViolations: true
         message: "All containers must set resources.limits.memory."
         pattern:
           spec:
@@ -131,10 +143,13 @@ metadata:
   annotations:
     policies.kyverno.io/title: Disallow Privileged Containers
 spec:
+  admission: true
   validationFailureAction: Audit
   background: true
+  emitWarning: false
   rules:
     - name: no-privileged
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -151,6 +166,7 @@ spec:
                       - gpu-operator
                       - nvidia-gpu-operator
       validate:
+        allowExistingViolations: true
         message: "Privileged containers are not allowed."
         pattern:
           spec:
