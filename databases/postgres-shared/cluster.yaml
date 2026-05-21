@@ -53,6 +53,12 @@ spec:
         passwordSecret:
           name: n8n-db-credentials
         comment: "n8n workflow automation (repo: pocharlies/k8s-n8n-pocharlies)"
+      - name: n8n_stg
+        ensure: present
+        login: true
+        passwordSecret:
+          name: n8n-stg-db-credentials
+        comment: "n8n staging workflow automation"
 
   backup:
     retentionPolicy: "30d"
