@@ -1,0 +1,11 @@
+githubConfigUrl: https://github.com/pocharlies/k8s-libreplay-pocharlies
+githubConfigSecret: arc-github-pat-secret
+runnerScaleSetName: arc-libreplay
+minRunners: 0
+maxRunners: 2
+containerMode: { type: dind }
+controllerServiceAccount: { namespace: arc-systems, name: arc-gha-rs-controller }
+template:
+  spec:
+    nodeSelector: { kubernetes.io/arch: amd64, kubernetes.io/hostname: ubuntu }
+    tolerations: []

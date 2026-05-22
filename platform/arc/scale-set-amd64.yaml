@@ -1,22 +1,33 @@
-# ARC Runner Scale Set — amd64 (x86, CI builds)
+# ARC Runner Scale Set — amd64 (x86, socialmedia CI/builds)
 # Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
 # Namespace: arc-runners
 #
 # NOTE: pocharlies is a personal GitHub account (not an org).
-# Runners must be registered per-repo. Add a scale set per repo as needed,
-# OR convert pocharlies to a GitHub Organization for org-level runners.
+# Runners must be registered per-repo. This legacy scale-set is kept for
+# k8s-socialmedia-pocharlies because existing workflows target arc-amd64.
 #
 # Auth: PAT with repo+workflow scopes in secret arc-github-pat-secret (arc-runners namespace)
 #   kubectl create secret generic arc-github-pat-secret -n arc-runners \
 #     --from-literal=github_token=<PAT>
+#
+# Image build jobs use Docker/container actions. ARC must therefore run this
+# scale set in dind or kubernetes container mode. DinD is privileged; keep these
+# runners isolated in arc-runners and only grant them repo/registry credentials.
 
 githubConfigUrl: https://github.com/pocharlies/k8s-socialmedia-pocharlies
 githubConfigSecret: arc-github-pat-secret
+
+controllerServiceAccount:
+  namespace: arc-systems
+  name: arc-gha-rs-controller
 
 runnerScaleSetName: arc-amd64
 
 minRunners: 0
 maxRunners: 4
+
+containerMode:
+  type: dind
 
 template:
   spec:
@@ -24,23 +35,3 @@ template:
       kubernetes.io/arch: amd64
       kubernetes.io/hostname: ubuntu
     tolerations: []
-    containers:
-      - name: runner
-        image: ghcr.io/actions/actions-runner:latest
-        command: ["/home/runner/run.sh"]
-        env:
-          # Allow runners to reach Harbor on LAN
-          - name: DOCKER_REGISTRY_MIRROR
-            value: harbor.lan.e-dani.com
-        resources:
-          requests:
-            cpu: 500m
-            memory: 512Mi
-          limits:
-            memory: 4Gi
-        volumeMounts:
-          - name: work
-            mountPath: /home/runner/_work
-    volumes:
-      - name: work
-        emptyDir: {}
