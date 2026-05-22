@@ -5,6 +5,7 @@ resources:
   - networking/cert-manager/test-cert-staging.yaml
   - networking/cert-manager/wildcard-prod.yaml
   - networking/metallb/ippool.yaml
+  - networking/traefik-lan/tls-store.yaml
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/tls-store.yaml
   - networking/traefik-edge/harbor-ingressroute.yaml
