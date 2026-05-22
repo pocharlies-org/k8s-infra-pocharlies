@@ -36,7 +36,9 @@ The Helm release metadata is currently unhealthy/corrupt: `helm status traefik-e
 
 Checked from Sauvage against `https://127.0.0.1:7443` with Host headers:
 
-- `firecrawl.e-dani.com /` -> `200`
+- `firecrawl.e-dani.com /` without Authorization -> `401`
+- `firecrawl.e-dani.com /` with the legacy Bearer -> `200`
+- `firecrawl.e-dani.com /health` -> `200`
 - `whatsapp.e-dani.com /` -> `302`
 - `harbor.e-dani.com /` -> `200`
 - `litellm.e-dani.com /health/readiness` -> `200`
@@ -56,7 +58,7 @@ Checked from Sauvage against `https://127.0.0.1:7443` with Host headers:
 
 Do not stop NGINX until these are resolved or explicitly accepted:
 
-- `firecrawl.e-dani.com`: NGINX enforced `Authorization: Bearer ...`; direct Traefik currently reaches the app without that edge guard.
+- `firecrawl.e-dani.com`: resolved with `firecrawl-edge-auth`, a Traefik ForwardAuth shim that preserves the old Bearer check. The live Secret is intentionally not stored in Git and should be moved to Vault/ExternalSecret.
 - `openclaw.e-dani.com /` and `/openclaw-mem/`: NGINX injects a root-only Authorization snippet that is not readable from this session.
 - static file routes need a non-NGINX static service or object storage migration:
   - `skirmshop.e-dani.com/files/`
