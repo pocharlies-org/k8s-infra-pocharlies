@@ -88,6 +88,7 @@ spec:
               command: [rabbitmq-diagnostics, check_port_connectivity]
             initialDelaySeconds: 20
             periodSeconds: 15
+            timeoutSeconds: 5
       volumes:
         - name: data
           persistentVolumeClaim:
