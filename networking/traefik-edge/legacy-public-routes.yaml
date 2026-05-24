@@ -46,7 +46,6 @@ spec:
     - { name: p3100, port: 3100, protocol: TCP }
     - { name: p3456, port: 3456, protocol: TCP }
     - { name: p3459, port: 3459, protocol: TCP }
-    - { name: p3461, port: 3461, protocol: TCP }
     - { name: p3462, port: 3462, protocol: TCP }
     - { name: p3470, port: 3470, protocol: TCP }
     - { name: p3473, port: 3473, protocol: TCP }
@@ -252,11 +251,6 @@ spec:
       services:
         - name: sauvage-localhost
           port: 3100
-    - kind: Rule
-      match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/sn`)
-      services:
-        - name: sauvage-localhost
-          port: 3461
     - kind: Rule
       match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/product-ai`)
       middlewares:
