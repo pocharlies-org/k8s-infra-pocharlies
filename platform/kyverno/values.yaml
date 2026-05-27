@@ -51,9 +51,9 @@ reportsController:
   resources:
     requests:
       cpu: 50m
-      memory: 64Mi
-    limits:
       memory: 128Mi
+    limits:
+      memory: 512Mi
 
 # Grafana dashboard configmap for kyverno metrics
 grafana:
