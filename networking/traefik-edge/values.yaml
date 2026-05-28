@@ -100,6 +100,8 @@ providers:
       - skirmshop-brain-prod
       - cv
       - homeassistant
+      - teslamate
+      - jarvis
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -115,6 +117,8 @@ providers:
       - skirmshop-brain-prod
       - cv
       - homeassistant
+      - teslamate
+      - jarvis
     allowExternalNameServices: true
     allowEmptyServices: true
 
