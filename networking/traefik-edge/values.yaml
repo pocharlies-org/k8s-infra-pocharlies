@@ -99,6 +99,7 @@ providers:
       - harbor
       - skirmshop-brain-prod
       - cv
+      - homeassistant
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -113,6 +114,7 @@ providers:
       - harbor
       - skirmshop-brain-prod
       - cv
+      - homeassistant
     allowExternalNameServices: true
     allowEmptyServices: true
 
