@@ -1,0 +1,48 @@
+---
+# Scheduled off-node etcd snapshots WITHOUT a k3s restart: a systemd timer on
+# ks5-cp-1 runs `k3s etcd-snapshot save --s3 --s3-config-secret=etcd-s3-config`
+# every 6h → uploads to the x86 backup-minio k3s-etcd-snapshots bucket (DR).
+# (The config.yaml etcd-s3 setting also covers the built-in schedule once a node
+# is restarted/reinstalled; this timer activates DR now, no pod churn.)
+- name: Off-node etcd snapshot timer (DR, no k3s restart)
+  hosts: ks5-cp-1
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install etcd-s3-snapshot.service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-s3-snapshot.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=k3s etcd off-node snapshot to x86 backup-minio (S3 DR)
+          After=k3s.service
+          Wants=network-online.target
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/k3s etcd-snapshot save --s3 --s3-config-secret=etcd-s3-config --name scheduled-offnode
+
+    - name: Install etcd-s3-snapshot.timer (every 6h, offset from built-in)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-s3-snapshot.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Run k3s etcd off-node snapshot every 6h
+          [Timer]
+          OnCalendar=*-*-* 03,09,15,21:30:00
+          Persistent=true
+          RandomizedDelaySec=300
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable + start the timer
+      ansible.builtin.systemd:
+        name: etcd-s3-snapshot.timer
+        state: started
+        enabled: true
+        daemon_reload: true
