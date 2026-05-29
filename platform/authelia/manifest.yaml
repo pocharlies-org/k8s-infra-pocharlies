@@ -44,7 +44,7 @@ data:
       ban_time: 5m
     storage:
       local:
-        path: /config/db.sqlite3
+        path: /data/db.sqlite3
     identity_providers:
       oidc:
         hmac_secret: '{{ secret "/oidc-secrets/oidc-hmac" }}'
@@ -79,7 +79,7 @@ data:
     notifier:
       disable_startup_check: true
       filesystem:
-        filename: /config/notification.txt
+        filename: /data/notification.txt
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
