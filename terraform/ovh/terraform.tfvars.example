@@ -1,0 +1,20 @@
+current_sauvage_server_name = "nsXXXXXXX.ip-57-129-17.eu"
+
+# Discovery only by default. Do not change until the manual order gate is reached.
+enable_order      = false
+confirm_ovh_order = ""
+
+# Fill from OVH cart/catalog discovery for the exact KS-5-A offer.
+# Must be the SSD NVMe Soft RAID variant:
+# - CPU: Intel Xeon E-2274G
+# - RAM: 32GB DDR4 ECC included
+# - Storage: 2x SSD NVMe 960GB Enterprise Class Soft RAID included
+ks5_plan_code = "CHANGE_ME_KS5A_PLAN_CODE"
+
+# Leave empty if the base plan already includes the NVMe Soft RAID storage.
+# If OVH asks for a storage option, this must be the NVMe Soft RAID option code,
+# never an HDD/SATA option.
+ks5_storage_option_plan_code = ""
+
+# OVH template names are catalog-specific; scripts/ovh_install.py can discover the exact one.
+ubuntu_2404_template = "ubuntu2404-server_64"

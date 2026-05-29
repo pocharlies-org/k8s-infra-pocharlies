@@ -1,0 +1,17 @@
+---
+- name: Bootstrap KS-5 control-plane nodes
+  hosts: ks5_control_plane
+  become: true
+  gather_facts: true
+  serial: 1
+  roles:
+    - common_hardening
+    - longhorn_prereqs
+    - tailscale
+    - k3s_control_plane
+
+- name: Apply Kubernetes labels after KS-5 nodes join
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - node_labels

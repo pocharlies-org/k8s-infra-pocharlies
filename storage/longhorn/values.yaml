@@ -1,4 +1,13 @@
-# Longhorn — block storage replicated 3x on LAN nodes (exclude sauvage edge)
+# Longhorn — block storage. System-managed components + replicas run on nodes
+# labelled `storage-longhorn=true` (the LAN nodes ubuntu/dgx + the OVH KS-5-A
+# NVMe trio), NOT on the sauvage edge. The KS-5-A pool is reserved for fast
+# NVMe volumes via the longhorn-prod-nvme StorageClass (node-tag ks5-nvme +
+# disk-tag nvme — see kubernetes/storage/longhorn-prod-nvme.yaml).
+#
+# NOTE: nodes must carry the `storage-longhorn=true` label (applied via k3s
+# node-label for KS-5 in ansible/roles/k3s_control_plane, and on the LAN nodes)
+# and the KS-5 Longhorn prerequisites (ansible/roles/longhorn_prereqs:
+# open-iscsi, dm_crypt, multipathd disabled) or replicas cannot be scheduled.
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 3
@@ -6,10 +15,7 @@ defaultSettings:
   storageMinimalAvailablePercentage: 15
   concurrentReplicaRebuildPerNodeLimit: 1
   guaranteedInstanceManagerCPU: 12
-  # System-managed components must run on every storage node, regardless of arch.
-  # Multi-arch (amd64 x86 + arm64 dgx) — let CSI plugin DaemonSet land everywhere
-  # that has topology=lan label. Excluding sauvage (topology=remote).
-  systemManagedComponentsNodeSelector: "topology:lan"
+  systemManagedComponentsNodeSelector: "storage-longhorn:true"
   # Soft anti-affinity so replicas spread but won't fail to schedule
   replicaSoftAntiAffinity: true
   replicaZoneSoftAntiAffinity: true
@@ -22,10 +28,10 @@ persistence:
   defaultClassReplicaCount: 3
   reclaimPolicy: Retain
 
-# Node selector — only LAN nodes with topology=lan and no edge taint
+# Node selector — storage nodes labelled storage-longhorn=true (excludes sauvage edge)
 longhornManager:
   nodeSelector:
-    topology: lan
+    storage-longhorn: "true"
   tolerations:
     - key: dedicated
       operator: Equal
@@ -34,7 +40,7 @@ longhornManager:
 
 longhornDriver:
   nodeSelector:
-    topology: lan
+    storage-longhorn: "true"
   tolerations:
     - key: dedicated
       operator: Equal
@@ -44,12 +50,11 @@ longhornDriver:
 longhornUI:
   replicas: 1
   nodeSelector:
-    topology: lan
+    storage-longhorn: "true"
 
-# Exclude sauvage and any non-lan node from being a Longhorn node
 longhornAdmissionWebhook:
   nodeSelector:
-    topology: lan
+    storage-longhorn: "true"
 
 # CSI driver settings
 csi:

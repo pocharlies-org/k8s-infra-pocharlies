@@ -1,0 +1,58 @@
+---
+# shell/command tasks use `set -o pipefail`, which dash (/bin/sh) rejects.
+# Force bash so those bashisms work on Ubuntu nodes.
+ansible_shell_executable: /bin/bash
+k3s_version: "v1.32.5+k3s1"
+k3s_cluster_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+k3s_flannel_iface: "tailscale0"
+k3s_disable_components:
+  - traefik
+  - servicelb
+  - local-storage
+k3s_tls_sans:
+  - k8s.lan.e-dani.com
+  - x86.taile0ad27.ts.net
+  - ks5-cp-1
+  - ks5-cp-2
+  - ks5-cp-3
+tailscale_tags:
+  - tag:k8s
+  - tag:ks5-control
+ssh_allowed_public_ports:
+  - "80/tcp"
+  - "443/tcp"
+  - "4444/tcp"
+kubernetes_control_plane_ports:
+  - "6443/tcp"
+  - "2379/tcp"
+  - "2380/tcp"
+node_label_sets:
+  ks5:
+    node-role.kubernetes.io/control-plane: "true"
+    node-role.kubernetes.io/etcd: "true"
+    node-pool: ks5-nvme
+    storage: nvme
+    db-storage: fast
+    workload: core
+    ingress: "true"
+    topology: ovh
+    region: ovh-rbx
+  ubuntu:
+    node-pool: home-dev
+    node-role: dev-fast
+    storage: local-fast
+    topology: home
+    workload: dev
+  sauvage:
+    node-pool: ovh-heavy
+    node-role: heavy-worker
+    storage: bulk
+    workload: heavy
+    ingress: "true"
+    topology: ovh
+    region: ovh-lim
+    workload.openclaw: "true"
+    workload.plugins: "true"
+    workload.cpu: "true"
+    role: edge

@@ -1,0 +1,53 @@
+---
+- name: Require K3S_TOKEN and join server
+  ansible.builtin.assert:
+    that:
+      - lookup('env', 'K3S_TOKEN') | length > 0
+      - lookup('env', 'K3S_JOIN_SERVER_IP') | length > 0
+    fail_msg: "Set K3S_TOKEN and K3S_JOIN_SERVER_IP before reinstalling x86 as worker."
+  no_log: true
+
+- name: Set join server
+  ansible.builtin.set_fact:
+    k3s_join_server_ip: "{{ lookup('env', 'K3S_JOIN_SERVER_IP') }}"
+
+- name: Stop existing k3s server
+  ansible.builtin.service:
+    name: k3s
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove old server unit before agent install
+  ansible.builtin.file:
+    path: /etc/systemd/system/k3s.service
+    state: absent
+
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write k3s agent config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install k3s agent
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent
+
+- name: Ensure k3s-agent is running
+  ansible.builtin.service:
+    name: k3s-agent
+    state: started
+    enabled: true

@@ -1,0 +1,6 @@
+---
+- name: Normalize labels on existing workers
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - node_labels

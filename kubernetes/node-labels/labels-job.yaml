@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-labeler
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-labeler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: node-labeler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: node-labeler
+subjects:
+  - kind: ServiceAccount
+    name: node-labeler
+    namespace: kube-system
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: node-labeler-ks5-ha
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      serviceAccountName: node-labeler
+      restartPolicy: OnFailure
+      containers:
+        - name: kubectl
+          image: bitnami/kubectl:1.32
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              kubectl label node ubuntu node-pool=home-dev node-role=dev-fast storage=local-fast workload=dev topology=home --overwrite
+              kubectl taint node ubuntu pocharlies.io/pool=dev:NoSchedule --overwrite
+
+              kubectl label node sauvage node-pool=ovh-heavy node-role=heavy-worker storage=bulk workload=heavy ingress=true topology=ovh role=edge region=ovh-lim --overwrite
+              kubectl label node sauvage workload.openclaw=true workload.plugins=true workload.cpu=true --overwrite
+              kubectl taint node sauvage pocharlies.io/pool=bulk:NoSchedule --overwrite
+
+              for node in ks5-cp-1 ks5-cp-2 ks5-cp-3; do
+                kubectl label node "$node" node-role.kubernetes.io/control-plane=true node-role.kubernetes.io/etcd=true --overwrite
+                kubectl label node "$node" node-pool=ks5-nvme storage=nvme db-storage=fast workload=core ingress=true topology=ovh region=ovh-rbx --overwrite
+              done

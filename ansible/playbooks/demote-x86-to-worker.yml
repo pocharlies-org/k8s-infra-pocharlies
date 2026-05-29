@@ -1,0 +1,29 @@
+---
+- name: Gate x86 demotion
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'CONFIRM_DEMOTE_X86') == 'demote-x86-after-ks5-quorum'
+        fail_msg: "Set CONFIRM_DEMOTE_X86=demote-x86-after-ks5-quorum after etcd quorum is healthy on all 3 KS-5 nodes."
+
+    - name: Verify at least three KS-5 control-plane nodes are Ready
+      ansible.builtin.command:
+        cmd: kubectl get nodes -l node-pool=ks5-nvme --no-headers
+      register: ks5_nodes
+      changed_when: false
+
+    - name: Refuse demotion without 3 KS-5 nodes
+      ansible.builtin.assert:
+        that:
+          - ks5_nodes.stdout_lines | length >= 3
+        fail_msg: "Need 3 Ready KS-5 nodes before demoting x86."
+
+- name: Reinstall x86 as k3s worker
+  hosts: ubuntu
+  become: true
+  gather_facts: true
+  roles:
+    - k3s_worker

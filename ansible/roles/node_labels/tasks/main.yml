@@ -1,0 +1,111 @@
+---
+- name: Apply KS-5 labels
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - label
+      - node
+      - "{{ item }}"
+      - node-role.kubernetes.io/control-plane=true
+      - node-role.kubernetes.io/etcd=true
+      - "node-pool={{ node_label_sets.ks5['node-pool'] }}"
+      - "storage={{ node_label_sets.ks5.storage }}"
+      - "db-storage={{ node_label_sets.ks5['db-storage'] }}"
+      - "workload={{ node_label_sets.ks5.workload }}"
+      - "ingress={{ node_label_sets.ks5.ingress }}"
+      - "topology={{ node_label_sets.ks5.topology }}"
+      - "region={{ node_label_sets.ks5.region }}"
+      - "--overwrite"
+  loop:
+    - ks5-cp-1
+    - ks5-cp-2
+    - ks5-cp-3
+  changed_when: true
+
+- name: Tag KS-5 Longhorn nodes (node-tag ks5-nvme + disk-tag nvme) for longhorn-prod-nvme SC
+  ansible.builtin.shell: |
+    set -euo pipefail
+    node="{{ item }}"
+    for i in $(seq 1 30); do
+      kubectl -n longhorn-system get nodes.longhorn.io "$node" >/dev/null 2>&1 && break
+      sleep 10
+    done
+    disk=$(kubectl -n longhorn-system get nodes.longhorn.io "$node" -o jsonpath='{.spec.disks}' \
+      | python3 -c 'import json,sys; d=json.load(sys.stdin); print(list(d.keys())[0])')
+    kubectl -n longhorn-system patch nodes.longhorn.io "$node" --type=merge \
+      -p "{\"spec\":{\"tags\":[\"ks5-nvme\"],\"disks\":{\"$disk\":{\"tags\":[\"nvme\"]}}}}"
+  loop:
+    - ks5-cp-1
+    - ks5-cp-2
+    - ks5-cp-3
+  changed_when: true
+
+- name: Decide whether existing nodes can be relabeled
+  ansible.builtin.set_fact:
+    relabel_existing_nodes: "{{ lookup('env', 'ALLOW_EXISTING_NODE_RELABEL') == 'ok' }}"
+
+- name: Apply x86 labels
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - label
+      - node
+      - ubuntu
+      - "node-pool={{ node_label_sets.ubuntu['node-pool'] }}"
+      - "node-role={{ node_label_sets.ubuntu['node-role'] }}"
+      - "storage={{ node_label_sets.ubuntu.storage }}"
+      - "topology={{ node_label_sets.ubuntu.topology }}"
+      - "workload={{ node_label_sets.ubuntu.workload }}"
+      - "--overwrite"
+  changed_when: true
+  when: relabel_existing_nodes
+
+- name: Apply Sauvage labels
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - label
+      - node
+      - sauvage
+      - "node-pool={{ node_label_sets.sauvage['node-pool'] }}"
+      - "node-role={{ node_label_sets.sauvage['node-role'] }}"
+      - "storage={{ node_label_sets.sauvage.storage }}"
+      - "workload={{ node_label_sets.sauvage.workload }}"
+      - "ingress={{ node_label_sets.sauvage.ingress }}"
+      - "topology={{ node_label_sets.sauvage.topology }}"
+      - "region={{ node_label_sets.sauvage.region }}"
+      - "workload.openclaw={{ node_label_sets.sauvage['workload.openclaw'] }}"
+      - "workload.plugins={{ node_label_sets.sauvage['workload.plugins'] }}"
+      - "workload.cpu={{ node_label_sets.sauvage['workload.cpu'] }}"
+      - "role={{ node_label_sets.sauvage.role }}"
+      - "--overwrite"
+  changed_when: true
+  when: relabel_existing_nodes
+
+- name: Taint x86 for dev-only scheduling
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - taint
+      - node
+      - ubuntu
+      - pocharlies.io/pool=dev:NoSchedule
+      - "--overwrite"
+  changed_when: true
+  when:
+    - relabel_existing_nodes
+    - lookup('env', 'ALLOW_APPLY_TAINTS') == 'ok'
+
+- name: Taint Sauvage for bulk scheduling
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - taint
+      - node
+      - sauvage
+      - pocharlies.io/pool=bulk:NoSchedule
+      - "--overwrite"
+  changed_when: true
+  when:
+    - relabel_existing_nodes
+    - lookup('env', 'ALLOW_APPLY_TAINTS') == 'ok'

@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-health
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-health
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edge-health
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edge-health
+    spec:
+      nodeSelector:
+        workload: core
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: health
+          image: docker.io/library/python:3.12-alpine
+          command:
+            - python
+            - -m
+            - http.server
+            - "8080"
+          workingDir: /srv
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-health
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-health
+spec:
+  selector:
+    app.kubernetes.io/name: edge-health
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-health-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: edge-health.e-dani.com
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`edge-health.e-dani.com`)
+      services:
+        - name: edge-health
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge

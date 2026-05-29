@@ -1,0 +1,17 @@
+---
+# Longhorn storage-node prerequisites.
+# Longhorn's node env-check reports RequiredPackages / KernelModulesLoaded /
+# Multipathd conditions; if any fail, no instance-manager/engine-image is
+# scheduled on the node and replicas cannot be placed there.
+longhorn_prereq_packages:
+  - open-iscsi   # iSCSI initiator (Longhorn volume attach)
+  - nfs-common   # RWX/NFS support + RequiredPackages check
+  - cryptsetup   # encrypted-volume support (dm_crypt userspace)
+
+longhorn_kernel_modules:
+  - iscsi_tcp
+  - dm_crypt
+
+# multipathd claims Longhorn block devices and corrupts volumes; these nodes
+# have no SAN/multipath storage, so disable it (Longhorn KB recommendation).
+longhorn_disable_multipathd: true

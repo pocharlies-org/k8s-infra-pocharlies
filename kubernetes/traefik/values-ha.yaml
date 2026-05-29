@@ -1,0 +1,38 @@
+# Staged values for Traefik Edge HA after KS-5 nodes are Ready.
+# Copy/merge into networking/traefik-edge/values.yaml during Phase 5.
+
+deployment:
+  kind: DaemonSet
+  dnsPolicy: ClusterFirstWithHostNet
+
+nodeSelector:
+  ingress: "true"
+
+tolerations:
+  - key: role
+    operator: Equal
+    value: edge
+    effect: NoSchedule
+  - key: pocharlies.io/pool
+    operator: Equal
+    value: bulk
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+hostNetwork: true
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+additionalArguments:
+  - "--log.level=INFO"
+  - "--accesslog=true"
+  - "--metrics.prometheus=true"
+  - "--metrics.prometheus.entrypoint=metrics"
+  - "--ping=true"
+  - "--ping.entryPoint=traefik"

@@ -1,0 +1,41 @@
+{% if k3s_cluster_init | default(false) %}
+cluster-init: true
+{% else %}
+server: "https://{{ k3s_first_server_ip }}:6443"
+{% endif %}
+token: "{{ lookup('env', 'K3S_TOKEN') }}"
+disable:
+{% for component in k3s_disable_components %}
+  - {{ component }}
+{% endfor %}
+tls-san:
+{% for san in k3s_tls_sans %}
+  - {{ san }}
+{% endfor %}
+cluster-cidr: {{ k3s_cluster_cidr }}
+service-cidr: {{ k3s_service_cidr }}
+advertise-address: {{ tailscale_ipv4 }}
+node-ip: {{ tailscale_ipv4 }}
+node-name: {{ inventory_hostname }}
+flannel-iface: {{ k3s_flannel_iface }}
+write-kubeconfig-mode: "0644"
+etcd-snapshot-schedule-cron: "0 */6 * * *"
+etcd-snapshot-retention: 28
+etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots
+kube-controller-manager-arg:
+  - bind-address=0.0.0.0
+kube-scheduler-arg:
+  - bind-address=0.0.0.0
+kube-proxy-arg:
+  - metrics-bind-address=0.0.0.0
+kubelet-arg:
+  - max-pods=200
+node-label:
+  - ingress=true
+  - workload=core
+  - node-pool=ks5-nvme
+  - storage=nvme
+  - db-storage=fast
+  - topology=ovh
+  - region=ovh-rbx
+  - storage-longhorn=true

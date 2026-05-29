@@ -1,0 +1,54 @@
+---
+- name: Require K3S_TOKEN
+  ansible.builtin.assert:
+    that:
+      - lookup('env', 'K3S_TOKEN') | length > 0
+      - lookup('env', 'K3S_JOIN_SERVER_IP') | length > 0 or lookup('env', 'K3S_CLUSTER_INIT') == 'true'
+    fail_msg: "Set K3S_TOKEN and K3S_JOIN_SERVER_IP from the current x86 control-plane before joining KS-5 servers."
+  no_log: true
+
+- name: Detect first control-plane server IP
+  ansible.builtin.set_fact:
+    k3s_first_server_ip: "{{ lookup('env', 'K3S_JOIN_SERVER_IP') | default(hostvars[groups['ks5_control_plane'][0]].tailscale_ipv4, true) }}"
+
+- name: Mark first server for cluster-init only in disaster-recovery mode
+  ansible.builtin.set_fact:
+    k3s_cluster_init: "{{ lookup('env', 'K3S_CLUSTER_INIT') == 'true' and inventory_hostname == groups['ks5_control_plane'][0] }}"
+
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write k3s server config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install k3s server
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server
+    creates: /usr/local/bin/k3s
+
+- name: Ensure k3s is running
+  ansible.builtin.service:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Wait for local API
+  ansible.builtin.command: k3s kubectl get --raw=/readyz
+  register: readyz
+  retries: 30
+  delay: 10
+  until: readyz.rc == 0
+  changed_when: false

@@ -1,0 +1,40 @@
+---
+- name: Install Longhorn prerequisite packages
+  ansible.builtin.apt:
+    name: "{{ longhorn_prereq_packages }}"
+    state: present
+    update_cache: true
+
+- name: Enable and start iscsid
+  ansible.builtin.service:
+    name: iscsid
+    state: started
+    enabled: true
+
+- name: Load required kernel modules now
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ longhorn_kernel_modules }}"
+
+- name: Persist kernel modules across reboot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/longhorn.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ longhorn_kernel_modules | join('\n') }}\n"
+
+- name: Gather service facts (detect multipathd)
+  ansible.builtin.service_facts:
+  when: longhorn_disable_multipathd | bool
+
+- name: Disable multipathd (interferes with Longhorn device discovery)
+  ansible.builtin.systemd:
+    name: multipathd
+    state: stopped
+    enabled: false
+    masked: true
+  when:
+    - longhorn_disable_multipathd | bool
+    - "'multipathd.service' in (ansible_facts.services | default({}))"

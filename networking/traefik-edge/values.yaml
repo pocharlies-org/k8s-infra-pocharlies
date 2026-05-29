@@ -1,8 +1,8 @@
-# Traefik EDGE — public ingress on sauvage (57.129.17.172)
+# Traefik EDGE — public ingress on KS-5 HA + sauvage
 # Helm chart: traefik/traefik
-# Deployed as DaemonSet with hostNetwork on sauvage nodes only.
+# Deployed as DaemonSet with hostNetwork on nodes labeled ingress=true.
 # TLS termination via cert-manager wildcard *.e-dani.com (DNS-01 Cloudflare).
-# Traffic flow: Internet → sauvage:443 → Traefik EDGE → cluster services (via flannel-WG overlay)
+# Traffic flow: Internet → Cloudflare Multi-A → Traefik EDGE → cluster services.
 #
 # Cutover completed 2026-05-22: NGINX stopped, Traefik binds 80/443.
 
@@ -10,18 +10,24 @@ deployment:
   kind: DaemonSet
   dnsPolicy: ClusterFirstWithHostNet
 
-# Pin to sauvage nodes only
+# Run on ks5-cp-1..3 and sauvage after the KS-5 HA rollout.
 nodeSelector:
-  topology: remote
-  role: edge
+  ingress: "true"
 
 tolerations:
   - key: role
     operator: Equal
     value: edge
     effect: NoSchedule
+  - key: pocharlies.io/pool
+    operator: Equal
+    value: bulk
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
 
-# hostNetwork: bind directly to sauvage IP 57.129.17.172
+# hostNetwork: bind directly to each public edge IP.
 hostNetwork: true
 
 # Use separate IngressClass from LAN Traefik

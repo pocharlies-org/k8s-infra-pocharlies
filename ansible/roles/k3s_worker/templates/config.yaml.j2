@@ -1,0 +1,12 @@
+server: "https://{{ k3s_join_server_ip }}:6443"
+token: "{{ lookup('env', 'K3S_TOKEN') }}"
+node-ip: {{ ansible_host }}
+flannel-iface: {{ k3s_flannel_iface }}
+kubelet-arg:
+  - max-pods=200
+node-label:
+  - node-pool=home-dev
+  - node-role=dev-fast
+  - storage=local-fast
+  - topology=home
+  - workload=dev
