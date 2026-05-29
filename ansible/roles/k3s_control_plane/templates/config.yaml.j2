@@ -22,6 +22,11 @@ write-kubeconfig-mode: "0644"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 28
 etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots
+# Off-node DR: also upload scheduled snapshots to the x86 backup-minio bucket
+# k3s-etcd-snapshots. Creds/endpoint live in kube-system secret etcd-s3-config
+# (NOT in git). Applied on next k3s restart.
+etcd-s3: true
+etcd-s3-config-secret: etcd-s3-config
 kube-controller-manager-arg:
   - bind-address=0.0.0.0
 kube-scheduler-arg:
