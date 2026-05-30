@@ -116,4 +116,4 @@ spec:
         effect: NoExecute
         tolerationSeconds: 300
     nodeSelector:
-      kubernetes.io/hostname: ubuntu
+      kubernetes.io/arch: amd64
