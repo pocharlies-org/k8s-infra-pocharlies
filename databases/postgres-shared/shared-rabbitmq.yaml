@@ -164,6 +164,9 @@ metadata:
 spec:
   serviceName: shared-rabbitmq-headless
   replicas: 3
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   podManagementPolicy: OrderedReady
   selector:
     matchLabels:
