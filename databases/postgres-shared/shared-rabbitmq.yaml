@@ -40,6 +40,24 @@ spec:
       storage: 5Gi
   storageClassName: longhorn
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-rabbitmq-tuning
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: shared-rabbitmq
+data:
+  # RabbitMQ reads the host's total memory (not the container cgroup limit),
+  # so the default 0.4 relative high-watermark computes to ~27 GB on a 67 GB
+  # node while the cgroup limit is 1-2 GiB → OOMKilled before any flow-control
+  # or paging kicks in. Pin watermark to an absolute value below the cgroup
+  # limit so paging/flow-control engages before the kernel OOMs us.
+  20-tuning.conf: |
+    vm_memory_high_watermark.absolute = 700MB
+    disk_free_limit.absolute = 500MB
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -77,12 +95,16 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq
+            - name: tuning
+              mountPath: /etc/rabbitmq/conf.d/20-tuning.conf
+              subPath: 20-tuning.conf
+              readOnly: true
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
             limits:
-              memory: 1Gi
+              memory: 2Gi
           readinessProbe:
             exec:
               command: [rabbitmq-diagnostics, check_port_connectivity]
@@ -93,6 +115,12 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: shared-rabbitmq-data
+        - name: tuning
+          configMap:
+            name: shared-rabbitmq-tuning
+            items:
+              - key: 20-tuning.conf
+                path: 20-tuning.conf
 ---
 apiVersion: v1
 kind: Service
