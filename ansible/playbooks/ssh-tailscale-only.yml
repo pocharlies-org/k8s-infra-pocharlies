@@ -1,0 +1,16 @@
+---
+# Restrict the 3 KS-5-A SSH daemons to the Tailscale interface only.
+#
+# MUST run over Tailscale (inventory/ks5-ts.ini) — connecting via the public IP
+# would cut Ansible's own connection the moment public SSH closes. ansible_user
+# is `ubuntu` (sudo), hence become: true.
+#
+# Run a canary first, verify, then the rest:
+#   ansible-playbook -i inventory/ks5-ts.ini playbooks/ssh-tailscale-only.yml -l ks5-cp-1
+#   ansible-playbook -i inventory/ks5-ts.ini playbooks/ssh-tailscale-only.yml -l ks5-cp-2,ks5-cp-3
+- name: Restrict KS-5 SSH to the Tailscale interface (no public SSH)
+  hosts: ks5-cp-1:ks5-cp-2:ks5-cp-3
+  become: true # ansible_user=ubuntu → sudo for sshd/sysctl changes
+  gather_facts: false
+  roles:
+    - ssh_tailscale_only

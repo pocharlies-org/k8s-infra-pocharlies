@@ -1,0 +1,98 @@
+---
+# Restrict sshd to the Tailscale interface (+ loopback) so the public OVH IP
+# no longer answers SSH. NO firewall is touched (ufw default-deny on an etcd
+# control-plane node could break k3s/flannel/etcd), only sshd's ListenAddress.
+#
+# Safety:
+#   * ip_nonlocal_bind=1  -> sshd can bind the Tailscale IP even if tailscaled
+#     is not yet up at boot, so a slow tailscale start never locks SSH out.
+#   * pre-flight assert    -> refuse to restrict if the Tailscale IP is not live.
+#   * sshd -t validate     -> roll the drop-in back if the config is invalid.
+#   * async restart + wait_for_connection -> survive restarting the very sshd we
+#     are connected through, and prove the Tailscale path still works.
+#
+# Ansible must connect over Tailscale (inventory/ks5-ts.ini) — once this role
+# runs, the public-IP inventory can no longer reach the node.
+
+- name: ip_nonlocal_bind=1 — persist (sshd binds Tailscale IP even before tailscale is up)
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-ssh-tailscale.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: "net.ipv4.ip_nonlocal_bind = 1\n"
+
+- name: ip_nonlocal_bind=1 — apply live now (before any sshd restart)
+  ansible.builtin.command: sysctl -w net.ipv4.ip_nonlocal_bind=1
+  changed_when: false
+
+- name: Pre-flight — read current IPv4 addresses
+  ansible.builtin.command: ip -4 addr show
+  register: ssh_ip_addrs
+  changed_when: false
+
+- name: Pre-flight — refuse to restrict sshd unless the Tailscale IP is live (lockout guard)
+  ansible.builtin.assert:
+    that:
+      - tailscale_ipv4 is defined
+      - tailscale_ipv4 | length > 0
+      - tailscale_ipv4 in ssh_ip_addrs.stdout
+    fail_msg: >-
+      Tailscale IP {{ tailscale_ipv4 | default('UNDEFINED') }} is not on any
+      interface — refusing to bind sshd to it (would lock out SSH).
+    success_msg: "Tailscale IP {{ tailscale_ipv4 }} is live; safe to restrict sshd."
+
+- name: Apply sshd drop-in (validate, roll back if invalid)
+  block:
+    - name: Write sshd Tailscale-only drop-in
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-tailscale-only.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by Ansible — role ssh_tailscale_only.
+          # SSH answers only on the Tailscale IP + loopback; the public OVH IP is
+          # not bound, so public-internet SSH is refused. net.ipv4.ip_nonlocal_bind=1
+          # (/etc/sysctl.d/99-ssh-tailscale.conf) lets sshd bind the Tailscale IP
+          # even if tailscaled is not yet up at boot.
+          ListenAddress {{ tailscale_ipv4 }}
+          ListenAddress 127.0.0.1
+      register: ssh_dropin
+
+    - name: Validate the full effective sshd config
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+  rescue:
+    - name: Roll back the drop-in (config invalid) — running sshd untouched
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/10-tailscale-only.conf
+        state: absent
+    - name: Fail loudly without restarting
+      ansible.builtin.fail:
+        msg: "sshd config invalid with the Tailscale-only drop-in; rolled back, no restart."
+
+- name: Restart sshd asynchronously (survives cutting our own connection)
+  ansible.builtin.shell: "sleep 2 && systemctl restart ssh"
+  async: 15
+  poll: 0
+  when: ssh_dropin.changed
+
+- name: Wait for SSH to come back on the Tailscale path
+  ansible.builtin.wait_for_connection:
+    delay: 4
+    timeout: 60
+  when: ssh_dropin.changed
+
+- name: Confirm sshd is now bound ONLY to Tailscale + loopback (not 0.0.0.0)
+  ansible.builtin.shell: "ss -tlnH 'sport = :22' | awk '{print $4}' | sort -u"
+  register: ssh_bind
+  changed_when: false
+
+- name: Assert public 0.0.0.0:22 is gone
+  ansible.builtin.assert:
+    that:
+      - "'0.0.0.0:22' not in ssh_bind.stdout"
+      - tailscale_ipv4 + ':22' in ssh_bind.stdout
+    fail_msg: "sshd still bound to a public address: {{ ssh_bind.stdout }}"
+    success_msg: "sshd bound to: {{ ssh_bind.stdout }}"
