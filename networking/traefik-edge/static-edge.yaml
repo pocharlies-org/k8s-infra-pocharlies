@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,109 +8,49 @@ metadata:
     app.kubernetes.io/name: edge-static-server
     app.kubernetes.io/part-of: traefik-edge-cutover
 data:
-  server.py: |
-    import mimetypes
-    import os
-    import re
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from pathlib import Path
-    from urllib.parse import unquote, urlparse
-
-    # cv.e-dani.com / cv-manu.e-dani.com migrados al app dedicado 'cv' (k8s).
-    HOST_ROOTS = {}
-
-    PREFIX_ROOTS = {
-        ("skirmshop.e-dani.com", "/files/"): ("/srv/skirmshop-files", False),
-        ("synapse.e-dani.com", "/attachments/"): ("/srv/synapse-email-attachments", False),
-    }
-
-    OPENCLAW_IMAGES_HOST = "images.openclaw.e-dani.com"
-    OPENCLAW_IMAGES_ROOT = "/srv/openclaw-images"
-    OPENCLAW_IMAGE_PATH = re.compile(r"^/(ephemeral|permanent)/[0-9a-f]{32}\.(png|jpe?g|webp)$")
-
-    def safe_join(root, rel):
-        root_path = Path(root).resolve()
-        candidate = (root_path / rel.lstrip("/")).resolve()
-        if not str(candidate).startswith(str(root_path)):
-            return None
-        return candidate
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_HEAD(self):
-            self._serve(head_only=True)
-
-        def do_GET(self):
-            self._serve(head_only=False)
-
-        def _serve(self, head_only=False):
-            host = self.headers.get("Host", "").split(":")[0]
-            path = unquote(urlparse(self.path).path)
-
-            root = None
-            spa = False
-            rel = path
-            is_openclaw_image = False
-
-            if host == OPENCLAW_IMAGES_HOST:
-                if not OPENCLAW_IMAGE_PATH.match(path):
-                    self.send_error(404)
-                    return
-                root = OPENCLAW_IMAGES_ROOT
-                rel = path
-                is_openclaw_image = True
-
-            for (prefix_host, prefix), mapping in PREFIX_ROOTS.items():
-                if root is None and host == prefix_host and path.startswith(prefix):
-                    root, spa = mapping
-                    rel = path[len(prefix):]
-                    break
-
-            if root is None and host in HOST_ROOTS:
-                root, spa = HOST_ROOTS[host]
-
-            if root is None:
-                self.send_error(404)
-                return
-
-            target = safe_join(root, rel)
-            if target is None:
-                self.send_error(403)
-                return
-
-            if target.is_dir():
-                target = target / "index.html"
-
-            if not target.exists() and spa:
-                target = Path(root) / "index.html"
-
-            if not target.exists() or not target.is_file():
-                self.send_error(404)
-                return
-
-            content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(target.stat().st_size))
-            if is_openclaw_image:
-                self.send_header("Cache-Control", "private, max-age=86400")
-                self.send_header("Content-Disposition", "inline")
-            elif target.suffix in {".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".woff", ".woff2", ".pdf"}:
-                self.send_header("Cache-Control", "public, max-age=2592000")
-            else:
-                self.send_header("Cache-Control", "public, max-age=300")
-            self.end_headers()
-
-            if not head_only:
-                try:
-                    with target.open("rb") as fh:
-                        self.wfile.write(fh.read())
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-
-        def log_message(self, fmt, *args):
-            return
-
-    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+  server.py: "import mimetypes\nimport os\nimport re\nfrom http.server import BaseHTTPRequestHandler,\
+    \ ThreadingHTTPServer\nfrom pathlib import Path\nfrom urllib.parse import unquote,\
+    \ urlparse\n\n# cv.e-dani.com / cv-manu.e-dani.com migrados al app dedicado 'cv'\
+    \ (k8s).\nHOST_ROOTS = {}\n\nPREFIX_ROOTS = {\n    (\"skirmshop.e-dani.com\",\
+    \ \"/files/\"): (\"/srv/skirmshop-files\", False),\n    (\"synapse.e-dani.com\"\
+    , \"/attachments/\"): (\"/srv/synapse-email-attachments\", False),\n}\n\nOPENCLAW_IMAGES_HOST\
+    \ = \"images.openclaw.e-dani.com\"\nOPENCLAW_IMAGES_ROOT = \"/srv/openclaw-images\"\
+    \nOPENCLAW_IMAGE_PATH = re.compile(r\"^/(ephemeral|permanent)/[0-9a-f]{32}\\.(png|jpe?g|webp)$\"\
+    )\n\ndef safe_join(root, rel):\n    root_path = Path(root).resolve()\n    candidate\
+    \ = (root_path / rel.lstrip(\"/\")).resolve()\n    if not str(candidate).startswith(str(root_path)):\n\
+    \        return None\n    return candidate\n\nclass Handler(BaseHTTPRequestHandler):\n\
+    \    def do_HEAD(self):\n        self._serve(head_only=True)\n\n    def do_GET(self):\n\
+    \        self._serve(head_only=False)\n\n    def _serve(self, head_only=False):\n\
+    \        host = self.headers.get(\"Host\", \"\").split(\":\")[0]\n        path\
+    \ = unquote(urlparse(self.path).path)\n\n        root = None\n        spa = False\n\
+    \        rel = path\n        is_openclaw_image = False\n\n        if host == OPENCLAW_IMAGES_HOST:\n\
+    \            if not OPENCLAW_IMAGE_PATH.match(path):\n                self.send_error(404)\n\
+    \                return\n            root = OPENCLAW_IMAGES_ROOT\n           \
+    \ rel = path\n            is_openclaw_image = True\n\n        for (prefix_host,\
+    \ prefix), mapping in PREFIX_ROOTS.items():\n            if root is None and host\
+    \ == prefix_host and path.startswith(prefix):\n                root, spa = mapping\n\
+    \                rel = path[len(prefix):]\n                break\n\n        if\
+    \ root is None and host in HOST_ROOTS:\n            root, spa = HOST_ROOTS[host]\n\
+    \n        if root is None:\n            self.send_error(404)\n            return\n\
+    \n        target = safe_join(root, rel)\n        if target is None:\n        \
+    \    self.send_error(403)\n            return\n\n        if target.is_dir():\n\
+    \            target = target / \"index.html\"\n\n        if not target.exists()\
+    \ and spa:\n            target = Path(root) / \"index.html\"\n\n        if not\
+    \ target.exists() or not target.is_file():\n            self.send_error(404)\n\
+    \            return\n\n        content_type = mimetypes.guess_type(str(target))[0]\
+    \ or \"application/octet-stream\"\n        self.send_response(200)\n        self.send_header(\"\
+    Content-Type\", content_type)\n        self.send_header(\"Content-Length\", str(target.stat().st_size))\n\
+    \        if is_openclaw_image:\n            self.send_header(\"Cache-Control\"\
+    , \"private, max-age=86400\")\n            self.send_header(\"Content-Disposition\"\
+    , \"inline\")\n        elif target.suffix in {\".css\", \".js\", \".png\", \"\
+    .jpg\", \".jpeg\", \".gif\", \".webp\", \".svg\", \".ico\", \".woff\", \".woff2\"\
+    , \".pdf\"}:\n            self.send_header(\"Cache-Control\", \"public, max-age=2592000\"\
+    )\n        else:\n            self.send_header(\"Cache-Control\", \"public, max-age=300\"\
+    )\n        self.end_headers()\n\n        if not head_only:\n            try:\n\
+    \                with target.open(\"rb\") as fh:\n                    self.wfile.write(fh.read())\n\
+    \            except (BrokenPipeError, ConnectionResetError):\n               \
+    \ pass\n\n    def log_message(self, fmt, *args):\n        return\n\nThreadingHTTPServer((\"\
+    0.0.0.0\", 8080), Handler).serve_forever()\n"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,54 +75,75 @@ spec:
         role: edge
         topology: remote
       tolerations:
-        - key: role
-          operator: Equal
-          value: edge
-          effect: NoSchedule
+      - key: role
+        operator: Equal
+        value: edge
+        effect: NoSchedule
       containers:
-        - name: static
-          image: docker.io/library/python:3.12-alpine
-          imagePullPolicy: IfNotPresent
-          command: ["python", "/app/server.py"]
-          ports:
-            - { name: http, containerPort: 8080 }
-          readinessProbe:
-            tcpSocket: { port: 8080 }
-            initialDelaySeconds: 2
-            periodSeconds: 10
-          livenessProbe:
-            tcpSocket: { port: 8080 }
-            initialDelaySeconds: 5
-            periodSeconds: 20
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              memory: 128Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-          volumeMounts:
-            - { name: app, mountPath: /app, readOnly: true }
-            - { name: tmp, mountPath: /tmp }
-            - { name: skirmshop-files, mountPath: /srv/skirmshop-files, readOnly: true }
-            - { name: synapse-email-attachments, mountPath: /srv/synapse-email-attachments, readOnly: true }
-            - { name: openclaw-images, mountPath: /srv/openclaw-images, readOnly: true }
-      volumes:
+      - name: static
+        image: docker.io/library/python:3.12-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - python
+        - /app/server.py
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
         - name: app
-          configMap:
-            name: edge-static-server
+          mountPath: /app
+          readOnly: true
         - name: tmp
-          emptyDir: {}
+          mountPath: /tmp
         - name: skirmshop-files
-          hostPath: { path: /var/www/skirmshop-files, type: Directory }
+          mountPath: /srv/skirmshop-files
+          readOnly: true
         - name: synapse-email-attachments
-          hostPath: { path: /var/lib/synapse/email-attachments, type: DirectoryOrCreate }
+          mountPath: /srv/synapse-email-attachments
+          readOnly: true
         - name: openclaw-images
-          hostPath: { path: /var/lib/openclaw-images, type: Directory }
+          mountPath: /srv/openclaw-images
+          readOnly: true
+      volumes:
+      - name: app
+        configMap:
+          name: edge-static-server
+      - name: tmp
+        emptyDir: {}
+      - name: skirmshop-files
+        hostPath:
+          path: /var/www/skirmshop-files
+          type: Directory
+      - name: synapse-email-attachments
+        hostPath:
+          path: /var/lib/synapse/email-attachments
+          type: DirectoryOrCreate
+      - name: openclaw-images
+        hostPath:
+          path: /var/lib/openclaw-images
+          type: Directory
 ---
 apiVersion: v1
 kind: Service
@@ -195,7 +157,9 @@ spec:
   selector:
     app.kubernetes.io/name: edge-static-server
   ports:
-    - { name: http, port: 8080, targetPort: 8080 }
+  - name: http
+    port: 8080
+    targetPort: 8080
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -214,7 +178,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /api/oracle
+    - /api/oracle
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -223,27 +187,23 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    # cv.e-dani.com and cv-manu.e-dani.com are now served by the dedicated 'cv'
-    # app (repo k8s-cv-pocharlies): cv-dani / cv-manu nginx + cv-oracle, with
-    # their IngressRoutes in the cv namespace (added to traefik-edge's watched
-    # namespaces in values.yaml). Removed from edge-static-server on 2026-05-24.
-    - kind: Rule
-      match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/files`)
-      priority: 2000
-      services:
-        - name: edge-static-server
-          port: 8080
-    - kind: Rule
-      match: Host(`synapse.e-dani.com`) && PathPrefix(`/attachments`)
-      priority: 2000
-      middlewares:
-        - name: synapse-admin-allowlist
-      services:
-        - name: edge-static-server
-          port: 8080
+  - kind: Rule
+    match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/files`)
+    priority: 2000
+    services:
+    - name: edge-static-server
+      port: 8080
+  - kind: Rule
+    match: Host(`synapse.e-dani.com`) && PathPrefix(`/attachments`)
+    priority: 2000
+    middlewares:
+    - name: synapse-admin-allowlist
+    services:
+    - name: edge-static-server
+      port: 8080
   tls:
     store:
       name: default
@@ -256,19 +216,19 @@ metadata:
   namespace: traefik-edge
   annotations:
     external-dns.alpha.kubernetes.io/hostname: images.openclaw.e-dani.com
-    external-dns.alpha.kubernetes.io/target: "sauvage.e-dani.com"
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'false'
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`images.openclaw.e-dani.com`)
-      middlewares:
-        - name: openclaw-images-auth
-      services:
-        - name: edge-static-server
-          port: 8080
+  - kind: Rule
+    match: Host(`images.openclaw.e-dani.com`)
+    middlewares:
+    - name: openclaw-images-auth
+    services:
+    - name: edge-static-server
+      port: 8080
   tls:
     secretName: images-openclaw-tls

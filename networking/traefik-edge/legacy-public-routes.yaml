@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,7 +9,10 @@ metadata:
     app.kubernetes.io/part-of: traefik-edge-cutover
 spec:
   ports:
-    - { name: http, port: 18795, targetPort: 18795, protocol: TCP }
+  - name: http
+    port: 18795
+    targetPort: 18795
+    protocol: TCP
 ---
 apiVersion: discovery.k8s.io/v1
 kind: EndpointSlice
@@ -21,13 +25,13 @@ metadata:
     app.kubernetes.io/part-of: traefik-edge-cutover
 addressType: IPv4
 ports:
-  - name: http
-    protocol: TCP
-    port: 18795
+- name: http
+  protocol: TCP
+  port: 18795
 endpoints:
-  - addresses:
-      - 100.109.183.9
-    conditions: {}
+- addresses:
+  - 100.109.183.9
+  conditions: {}
 ---
 apiVersion: v1
 kind: Service
@@ -41,29 +45,75 @@ spec:
   type: ExternalName
   externalName: localhost
   ports:
-    - { name: p3000, port: 3000, protocol: TCP }
-    - { name: p3050, port: 3050, protocol: TCP }
-    - { name: p3100, port: 3100, protocol: TCP }
-    - { name: p3456, port: 3456, protocol: TCP }
-    - { name: p3459, port: 3459, protocol: TCP }
-    - { name: p3462, port: 3462, protocol: TCP }
-    - { name: p3470, port: 3470, protocol: TCP }
-    - { name: p3473, port: 3473, protocol: TCP }
-    - { name: p5001, port: 5001, protocol: TCP }
-    - { name: p5002, port: 5002, protocol: TCP }
-    - { name: p6333, port: 6333, protocol: TCP }
-    - { name: p8002, port: 8002, protocol: TCP }
-    - { name: p8080, port: 8080, protocol: TCP }
-    - { name: p8787, port: 8787, protocol: TCP }
-    - { name: p8788, port: 8788, protocol: TCP }
-    - { name: p8789, port: 8789, protocol: TCP }
-    - { name: p8790, port: 8790, protocol: TCP }
-    - { name: p8791, port: 8791, protocol: TCP }
-    - { name: p18789, port: 18789, protocol: TCP }
-    - { name: p18790, port: 18790, protocol: TCP }
-    - { name: p18795, port: 18795, protocol: TCP }
-    - { name: p18890, port: 18890, protocol: TCP }
-    - { name: p18933, port: 18933, protocol: TCP }
+  - name: p3000
+    port: 3000
+    protocol: TCP
+  - name: p3050
+    port: 3050
+    protocol: TCP
+  - name: p3100
+    port: 3100
+    protocol: TCP
+  - name: p3456
+    port: 3456
+    protocol: TCP
+  - name: p3459
+    port: 3459
+    protocol: TCP
+  - name: p3462
+    port: 3462
+    protocol: TCP
+  - name: p3470
+    port: 3470
+    protocol: TCP
+  - name: p3473
+    port: 3473
+    protocol: TCP
+  - name: p5001
+    port: 5001
+    protocol: TCP
+  - name: p5002
+    port: 5002
+    protocol: TCP
+  - name: p6333
+    port: 6333
+    protocol: TCP
+  - name: p8002
+    port: 8002
+    protocol: TCP
+  - name: p8080
+    port: 8080
+    protocol: TCP
+  - name: p8787
+    port: 8787
+    protocol: TCP
+  - name: p8788
+    port: 8788
+    protocol: TCP
+  - name: p8789
+    port: 8789
+    protocol: TCP
+  - name: p8790
+    port: 8790
+    protocol: TCP
+  - name: p8791
+    port: 8791
+    protocol: TCP
+  - name: p18789
+    port: 18789
+    protocol: TCP
+  - name: p18790
+    port: 18790
+    protocol: TCP
+  - name: p18795
+    port: 18795
+    protocol: TCP
+  - name: p18890
+    port: 18890
+    protocol: TCP
+  - name: p18933
+    port: 18933
+    protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -73,7 +123,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /labels-cex
+    - /labels-cex
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -83,7 +133,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /chatbot
+    - /chatbot
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -93,7 +143,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /product-ai
+    - /product-ai
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -103,7 +153,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /apps/back-in-stock
+    - /apps/back-in-stock
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -122,7 +172,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /mcp
+    - /mcp
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -132,9 +182,9 @@ metadata:
 spec:
   ipAllowList:
     sourceRange:
-      - 10.8.0.0/24
-      - 100.64.0.0/10
-      - 192.168.50.0/24
+    - 10.8.0.0/24
+    - 100.64.0.0/10
+    - 192.168.50.0/24
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -165,19 +215,19 @@ metadata:
   namespace: traefik-edge
   annotations:
     external-dns.alpha.kubernetes.io/hostname: brain.e-dani.com
-    external-dns.alpha.kubernetes.io/target: "sauvage.e-dani.com"
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`brain.e-dani.com`)
-      services:
-        - name: skirmshop-brain
-          namespace: skirmshop-brain-prod
-          port: 80
+  - kind: Rule
+    match: Host(`brain.e-dani.com`)
+    services:
+    - name: skirmshop-brain
+      namespace: skirmshop-brain-prod
+      port: 80
   tls:
     store:
       name: default
@@ -190,37 +240,37 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`bundles.e-dani.com`) && PathPrefix(`/bundles`)
-      services:
-        - name: bundles-app
-          namespace: skirmshop
-          port: 80
-    - kind: Rule
-      match: Host(`bundles.e-dani.com`)
-      middlewares:
-        - name: redirect-bundles-root
-      services:
-        - name: bundles-app
-          namespace: skirmshop
-          port: 80
-    - kind: Rule
-      match: Host(`sii.e-dani.com`) && PathPrefix(`/sii`)
-      services:
-        - name: sii-app
-          namespace: skirmshop
-          port: 80
-    - kind: Rule
-      match: Host(`sii.e-dani.com`)
-      middlewares:
-        - name: redirect-sii-root
-      services:
-        - name: sii-app
-          namespace: skirmshop
-          port: 80
+  - kind: Rule
+    match: Host(`bundles.e-dani.com`) && PathPrefix(`/bundles`)
+    services:
+    - name: bundles-app
+      namespace: skirmshop
+      port: 80
+  - kind: Rule
+    match: Host(`bundles.e-dani.com`)
+    middlewares:
+    - name: redirect-bundles-root
+    services:
+    - name: bundles-app
+      namespace: skirmshop
+      port: 80
+  - kind: Rule
+    match: Host(`sii.e-dani.com`) && PathPrefix(`/sii`)
+    services:
+    - name: sii-app
+      namespace: skirmshop
+      port: 80
+  - kind: Rule
+    match: Host(`sii.e-dani.com`)
+    middlewares:
+    - name: redirect-sii-root
+    services:
+    - name: sii-app
+      namespace: skirmshop
+      port: 80
   tls:
     store:
       name: default
@@ -233,34 +283,31 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/labels-cex`)
-      middlewares:
-        - name: strip-labels-cex
-      services:
-        - name: labels-correos-express-adapter
-          namespace: skirmshop
-          port: 3003
-    - kind: Rule
-      match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/chatbot`)
-      middlewares:
-        - name: strip-chatbot
-      services:
-        - name: sauvage-localhost
-          port: 3100
-    - kind: Rule
-      match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/product-ai`)
-      middlewares:
-        - name: strip-product-ai
-      services:
-        - name: sauvage-localhost
-          port: 3459
-    # Root route (skirmshop.e-dani.com) is now served by the `rag-app`
-    # IngressRoute in the skirmshop namespace ("Pocharlies Catalog RAG Sync",
-    # k8s-skirmshopshopifyapp-pocharlies). Removed the dead sauvage:3456 catch-all.
+  - kind: Rule
+    match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/labels-cex`)
+    middlewares:
+    - name: strip-labels-cex
+    services:
+    - name: labels-correos-express-adapter
+      namespace: skirmshop
+      port: 3003
+  - kind: Rule
+    match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/chatbot`)
+    middlewares:
+    - name: strip-chatbot
+    services:
+    - name: sauvage-localhost
+      port: 3100
+  - kind: Rule
+    match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/product-ai`)
+    middlewares:
+    - name: strip-product-ai
+    services:
+    - name: sauvage-localhost
+      port: 3459
   tls:
     store:
       name: default
@@ -273,27 +320,28 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`sauvage.e-dani.com`) && PathPrefix(`/apps/back-in-stock`)
-      middlewares:
-        - name: strip-back-in-stock
-      services:
-        - name: sauvage-localhost
-          port: 3470
-    - kind: Rule
-      match: Host(`sauvage.e-dani.com`) && (PathPrefix(`/auth`) || PathPrefix(`/app`) || PathPrefix(`/api`) || PathPrefix(`/webhooks`) || Path(`/healthz`) || Path(`/readyz`))
-      services:
-        - name: sauvage-localhost
-          port: 3470
-    - kind: Rule
-      match: Host(`sauvage.e-dani.com`)
-      services:
-        - name: whatsapp-connector
-          namespace: whatsapp-mcp
-          port: 3001
+  - kind: Rule
+    match: Host(`sauvage.e-dani.com`) && PathPrefix(`/apps/back-in-stock`)
+    middlewares:
+    - name: strip-back-in-stock
+    services:
+    - name: sauvage-localhost
+      port: 3470
+  - kind: Rule
+    match: Host(`sauvage.e-dani.com`) && (PathPrefix(`/auth`) || PathPrefix(`/app`)
+      || PathPrefix(`/api`) || PathPrefix(`/webhooks`) || Path(`/healthz`) || Path(`/readyz`))
+    services:
+    - name: sauvage-localhost
+      port: 3470
+  - kind: Rule
+    match: Host(`sauvage.e-dani.com`)
+    services:
+    - name: whatsapp-connector
+      namespace: whatsapp-mcp
+      port: 3001
   tls:
     store:
       name: default
@@ -306,45 +354,45 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-pocharlies`)
-      middlewares:
-        - name: replace-gmail-pubsub
-      services:
-        - name: sauvage-localhost
-          port: 8789
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-leila`)
-      middlewares:
-        - name: replace-gmail-pubsub
-      services:
-        - name: sauvage-localhost
-          port: 8790
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-edani`)
-      middlewares:
-        - name: replace-gmail-pubsub
-      services:
-        - name: sauvage-localhost
-          port: 8791
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub`)
-      services:
-        - name: sauvage-localhost
-          port: 8788
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`) && Path(`/telegram-webhook`)
-      services:
-        - name: sauvage-localhost
-          port: 8787
-    - kind: Rule
-      match: Host(`openclaw.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 18789
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-pocharlies`)
+    middlewares:
+    - name: replace-gmail-pubsub
+    services:
+    - name: sauvage-localhost
+      port: 8789
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-leila`)
+    middlewares:
+    - name: replace-gmail-pubsub
+    services:
+    - name: sauvage-localhost
+      port: 8790
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-edani`)
+    middlewares:
+    - name: replace-gmail-pubsub
+    services:
+    - name: sauvage-localhost
+      port: 8791
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub`)
+    services:
+    - name: sauvage-localhost
+      port: 8788
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`) && Path(`/telegram-webhook`)
+    services:
+    - name: sauvage-localhost
+      port: 8787
+  - kind: Rule
+    match: Host(`openclaw.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 18789
   tls:
     store:
       name: default
@@ -357,18 +405,18 @@ metadata:
   namespace: traefik-edge
   annotations:
     external-dns.alpha.kubernetes.io/hostname: openclaw-webhooks.e-dani.com
-    external-dns.alpha.kubernetes.io/target: "sauvage.e-dani.com"
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/target: sauvage.e-dani.com
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`openclaw-webhooks.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 18890
+  - kind: Rule
+    match: Host(`openclaw-webhooks.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 18890
   tls:
     store:
       name: default
@@ -380,37 +428,31 @@ metadata:
   name: edge-synapse-legacy
   namespace: traefik-edge
   annotations:
-    # Internal admin tool: resolve to sauvage's Tailscale IP, DNS-only (NOT
-    # Cloudflare-proxied). Proxying would mask the client IP behind Cloudflare
-    # edge IPs and break synapse-admin-allowlist (private ranges only).
     external-dns.alpha.kubernetes.io/hostname: synapse.e-dani.com
-    external-dns.alpha.kubernetes.io/target: "100.109.183.9"
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/target: 100.109.183.9
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'false'
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    # synapse-admin owns POST /webhooks/brain-audit (token-auth receiver that
-    # publishes a messaging.send envelope for the daily brain audit summary).
-    # More specific than the broad /webhooks prefix below, so traefik picks it.
-    - kind: Rule
-      match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
-      services:
-        - name: synapse-edge-host
-          port: 18795
-    - kind: Rule
-      match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
-      services:
-        - name: sauvage-localhost
-          port: 18790
-    - kind: Rule
-      match: Host(`synapse.e-dani.com`)
-      middlewares:
-        - name: synapse-admin-allowlist
-      services:
-        - name: synapse-edge-host
-          port: 18795
+  - kind: Rule
+    match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
+    services:
+    - name: synapse-edge-host
+      port: 18795
+  - kind: Rule
+    match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
+    services:
+    - name: sauvage-localhost
+      port: 18790
+  - kind: Rule
+    match: Host(`synapse.e-dani.com`)
+    middlewares:
+    - name: synapse-admin-allowlist
+    services:
+    - name: synapse-edge-host
+      port: 18795
   tls:
     store:
       name: default
@@ -423,47 +465,47 @@ metadata:
   namespace: traefik-edge
 spec:
   entryPoints:
-    - websecure
+  - websecure
   ingressClassName: traefik-edge
   routes:
-    - kind: Rule
-      match: Host(`skirmbooks.e-dani.com`)
-      services:
-        - name: skirmbooks-ui
-          namespace: skirmshop
-          port: 80
-    - kind: Rule
-      match: Host(`sauvageplay.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 3000
-    - kind: Rule
-      match: Host(`sauva.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 8080
-    - kind: Rule
-      match: Host(`qdrant.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 6333
-    - kind: Rule
-      match: Host(`rag.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 5001
-    - kind: Rule
-      match: Host(`rag.e-dani.com`) && PathPrefix(`/mcp`)
-      middlewares:
-        - name: strip-mcp
-      services:
-        - name: sauvage-localhost
-          port: 8002
-    - kind: Rule
-      match: Host(`webui.e-dani.com`)
-      services:
-        - name: sauvage-localhost
-          port: 3000
+  - kind: Rule
+    match: Host(`skirmbooks.e-dani.com`)
+    services:
+    - name: skirmbooks-ui
+      namespace: skirmshop
+      port: 80
+  - kind: Rule
+    match: Host(`sauvageplay.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 3000
+  - kind: Rule
+    match: Host(`sauva.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 8080
+  - kind: Rule
+    match: Host(`qdrant.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 6333
+  - kind: Rule
+    match: Host(`rag.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 5001
+  - kind: Rule
+    match: Host(`rag.e-dani.com`) && PathPrefix(`/mcp`)
+    middlewares:
+    - name: strip-mcp
+    services:
+    - name: sauvage-localhost
+      port: 8002
+  - kind: Rule
+    match: Host(`webui.e-dani.com`)
+    services:
+    - name: sauvage-localhost
+      port: 3000
   tls:
     store:
       name: default
