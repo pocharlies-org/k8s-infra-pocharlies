@@ -25,6 +25,8 @@ data:
       rules:
         - domain: "auth.lan.e-dani.com"
           policy: bypass
+        - domain: "auth.e-dani.com"
+          policy: bypass
         - domain: "*.lan.e-dani.com"
           policy: one_factor
         - domain: "*.e-dani.com"
@@ -35,6 +37,12 @@ data:
           domain: lan.e-dani.com
           authelia_url: https://auth.lan.e-dani.com
           default_redirection_url: https://grafana.lan.e-dani.com
+          expiration: 12h
+          inactivity: 1h
+          remember_me: 1M
+        - name: authelia_session
+          domain: e-dani.com
+          authelia_url: https://auth.e-dani.com
           expiration: 12h
           inactivity: 1h
           remember_me: 1M
@@ -185,3 +193,35 @@ spec:
       - Remote-Name
       - Remote-Email
       - Remote-Groups
+---
+# Public-edge IngressRoute: exposes Authelia at auth.e-dani.com via traefik-edge
+# so apex *.e-dani.com hosts (dgx, tm, bambulab, etc.) can use ForwardAuth.
+# Uses the traefik-edge default TLS store (backed by wildcard-public-tls,
+# CN=*.e-dani.com,e-dani.com in ns traefik-edge), same pattern as
+# teslamate-public / homeassistant-public.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authelia-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: authelia
+    app.kubernetes.io/part-of: platform
+  annotations:
+    external-dns.alpha.kubernetes.io/target: 57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - match: Host(`auth.e-dani.com`)
+      kind: Rule
+      services:
+        - name: authelia
+          namespace: authelia
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
