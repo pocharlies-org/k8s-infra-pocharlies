@@ -1,7 +1,8 @@
-# Keycloak next auth canary
+# Keycloak SSO
 
-This stack stages the Authelia replacement without taking over
-`auth.e-dani.com`.
+This stack is the active SSO entry point for e-dani services.
+`auth-next.e-dani.com` serves Keycloak and oauth2-proxy; `auth.e-dani.com`
+redirects here for old bookmarks.
 
 ## Target shape
 
@@ -49,15 +50,13 @@ The live canary is configured with the Google OAuth client from the 1Password
 item `Grafana Google OAuth - monitor.e-dani.com`. Add the callback above to
 that Google Cloud OAuth client before expecting Gmail login to complete.
 
-Add the final `auth.e-dani.com` callback later, before cutover.
-
 ## Activation
 
-This directory is intentionally not referenced from the root kustomization yet.
-After the Vault secrets and Google OAuth client exist:
+This directory is referenced from the root kustomization. After the Vault
+secrets and Google OAuth client exist:
 
-1. Add `platform/keycloak-next` to `/home/dibanez/k8s/k8s-infra-pocharlies/kustomization.yaml`.
-2. Sync the Argo app.
+1. Sync the Argo app.
+2. Confirm the `keycloak` namespace is healthy.
 3. Create the `edani` realm with groups:
    - `/edani-admins`
    - `/edani-operators`
@@ -70,8 +69,8 @@ The included canary is:
 https://sso-canary.e-dani.com
 ```
 
-Do not move `auth.e-dani.com` away from Authelia until the canary route,
-oauth2-proxy headers, logout, and rollback path have been verified.
+Protected services should reference the `keycloak/sso-chain` Traefik middleware
+or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
 
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to

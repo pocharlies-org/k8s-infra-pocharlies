@@ -1,7 +1,7 @@
-# Keycloak next activation runbook
+# Keycloak SSO runbook
 
-This is a staged migration. Do not point `auth.e-dani.com` at this stack until
-`auth-next.e-dani.com` and `sso-canary.e-dani.com` are verified.
+Keycloak is the active SSO stack. `auth-next.e-dani.com` is canonical and
+`auth.e-dani.com` redirects here for old bookmarks.
 
 ## 1. Seed Vault secrets
 
@@ -32,8 +32,8 @@ vault kv put secret/secret/keycloak-next/postgres \
 Do not write `secret/keycloak-next/oauth2-proxy` until Keycloak has been
 bootstrapped and the confidential client exists.
 
-Temporary Kubernetes secrets can be used for a live canary if Vault write access
-is unavailable, but replace them with Vault-backed secrets before cutover.
+Temporary Kubernetes secrets can be used if Vault write access is unavailable,
+but replace them with Vault-backed secrets when Vault access is restored.
 
 ## 2. Activate the stack
 
@@ -127,10 +127,9 @@ Expected flow:
 3. User is accepted only if it belongs to `/edani-admins` or `/edani-operators`.
 4. `whoami` shows auth headers such as `X-Auth-Request-Email`.
 
-## 6. First migration target
+## 6. Protect services
 
-Migrate `dgx.e-dani.com` only after canary succeeds. Prefer moving the DGX
-route to Traefik Edge and attaching:
+For Traefik routes, attach:
 
 ```yaml
 middlewares:
@@ -138,5 +137,8 @@ middlewares:
     namespace: keycloak
 ```
 
-Keep Authelia and its `auth.e-dani.com` IngressRoute untouched until DGX is
-verified behind Keycloak on a canary host or low-risk route.
+For external Nginx `auth_request` checks, use:
+
+```text
+https://auth-next.e-dani.com/oauth2/auth
+```
