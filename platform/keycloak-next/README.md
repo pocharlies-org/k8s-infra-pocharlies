@@ -1,0 +1,77 @@
+# Keycloak SSO
+
+This stack is the active SSO entry point for e-dani services.
+`auth-next.e-dani.com` serves Keycloak and oauth2-proxy; `auth.e-dani.com`
+redirects here for old bookmarks.
+
+## Target shape
+
+- `auth-next.e-dani.com` serves Keycloak.
+- `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
+- Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
+  namespace:
+  - `sso-forward-auth`
+  - `sso-errors`
+  - `sso-chain`
+- Apps with native OIDC should use Keycloak directly.
+- Traefik Edge must watch the `keycloak` namespace. This is configured in
+  `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`.
+
+## Vault prerequisites
+
+Create these Vault paths before adding this stack to the root
+`kustomization.yaml`:
+
+- `secret/keycloak-next/bootstrap`
+  - `admin_username`
+  - `admin_password`
+- `secret/keycloak-next/postgres`
+  - `username`
+  - `password`
+- `secret/keycloak-next/oauth2-proxy`
+  - `client_id`
+  - `client_secret`
+  - `cookie_secret`
+
+The oauth2-proxy client must be a confidential Keycloak client in the `edani`
+realm. Use this callback:
+
+```text
+https://auth-next.e-dani.com/oauth2/callback
+```
+
+The Google identity provider callback in Keycloak will be:
+
+```text
+https://auth-next.e-dani.com/realms/edani/broker/google/endpoint
+```
+
+The live canary is configured with the Google OAuth client from the 1Password
+item `Grafana Google OAuth - monitor.e-dani.com`. Add the callback above to
+that Google Cloud OAuth client before expecting Gmail login to complete.
+
+## Activation
+
+This directory is referenced from the root kustomization. After the Vault
+secrets and Google OAuth client exist:
+
+1. Sync the Argo app.
+2. Confirm the `keycloak` namespace is healthy.
+3. Create the `edani` realm with groups:
+   - `/edani-admins`
+   - `/edani-operators`
+4. Create a confidential client for oauth2-proxy and add a groups mapper.
+5. Test a canary route with `keycloak/sso-chain`.
+
+The included canary is:
+
+```text
+https://sso-canary.e-dani.com
+```
+
+Protected services should reference the `keycloak/sso-chain` Traefik middleware
+or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
+
+oauth2-proxy deliberately uses public URLs for browser redirects and internal
+Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
+Cloudflare and IPv6 resolution issues while preserving the public OIDC issuer.

@@ -108,6 +108,7 @@ providers:
       - homeassistant
       - teslamate
       - jarvis
+      - keycloak
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -125,6 +126,7 @@ providers:
       - homeassistant
       - teslamate
       - jarvis
+      - keycloak
     allowExternalNameServices: true
     allowEmptyServices: true
 

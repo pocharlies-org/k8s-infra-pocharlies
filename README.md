@@ -1,7 +1,7 @@
 # k8s-infra-pocharlies
 
 Infraestructura del cluster k3s: networking (Traefik, MetalLB, cert-manager),
-storage (Longhorn, MinIO, NFS), platform (Harbor, Vault, Authelia, Kyverno,
+storage (Longhorn, MinIO, NFS), platform (Harbor, Vault, Keycloak, Kyverno,
 GPU Operator, Velero), shared PostgreSQL + RabbitMQ + Redis.
 
 ## Cluster
