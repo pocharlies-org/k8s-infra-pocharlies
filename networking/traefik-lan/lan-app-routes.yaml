@@ -41,8 +41,8 @@ spec:
     - kind: Rule
       match: Host(`synapse.lan.e-dani.com`)
       middlewares:
-        - name: authelia
-          namespace: authelia
+        - name: sso-chain
+          namespace: keycloak
       services:
         - name: synapse-lan-host
           port: 18795

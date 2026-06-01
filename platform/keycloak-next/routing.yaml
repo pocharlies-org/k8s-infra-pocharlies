@@ -1,0 +1,131 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    authResponseHeaders:
+      - Authorization
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Forwarded-User
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    status:
+      - "401-403"
+    service:
+      name: oauth2-proxy
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+      "403": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-errors
+      - name: sso-forward-auth
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: auth-next
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: sso
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: auth-next.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`auth-next.e-dani.com`) && PathPrefix(`/oauth2`)
+      priority: 200
+      services:
+        - name: oauth2-proxy
+          port: 4180
+    - kind: Rule
+      match: Host(`auth-next.e-dani.com`)
+      priority: 100
+      services:
+        - name: keycloak
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: auth-legacy-redirect
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-legacy-redirect
+spec:
+  redirectRegex:
+    regex: ^https?://auth\.e-dani\.com/(.*)
+    replacement: https://auth-next.e-dani.com/${1}
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: auth-legacy-redirect
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-legacy-redirect
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: auth.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`auth.e-dani.com`)
+      middlewares:
+        - name: auth-legacy-redirect
+          namespace: keycloak
+      services:
+        - name: keycloak
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge

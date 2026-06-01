@@ -209,7 +209,6 @@ spec:
                       - arc-runners
                       - arc-systems
                       - argocd
-                      - authelia
                       - cert-manager
                       - cnpg-system
                       - databases
@@ -253,7 +252,6 @@ spec:
                       - arc-runners
                       - arc-systems
                       - argocd
-                      - authelia
                       - cert-manager
                       - cnpg-system
                       - databases
