@@ -15,7 +15,8 @@ resources:
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/wildcard-cert.yaml
-  - platform/authelia/manifest.yaml
+  - storage/longhorn/ingressroute.yaml
+  - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml
   - platform/velero/schedules.yaml

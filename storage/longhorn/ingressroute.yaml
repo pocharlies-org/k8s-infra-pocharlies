@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`longhorn.lan.e-dani.com`)
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: longhorn-frontend
+          port: 80
+  tls:
+    secretName: wildcard-lan-tls

@@ -54,10 +54,10 @@ service:
   spec:
     externalTrafficPolicy: Local
 
-# Dashboard — internal only, will protect with auth later
+# Dashboard — internal only, will protect with SSO later
 ingressRoute:
   dashboard:
-    enabled: false   # enable later behind Authelia
+    enabled: false   # enable later behind Keycloak
 
 logs:
   access:

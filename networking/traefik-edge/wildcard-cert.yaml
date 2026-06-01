@@ -54,3 +54,18 @@ spec:
     - "affiliate.skirmshop.es"
     - "go.skirmshop.es"
   renewBefore: 720h
+---
+# Dedicated certificate for the Shopify tracking host.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: track-skirmshop-es-tls
+  namespace: traefik-edge
+spec:
+  secretName: track-skirmshop-es-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "track.skirmshop.es"
+  renewBefore: 720h

@@ -1,0 +1,104 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: keycloak-bootstrap
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: bootstrap-admin
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: keycloak-bootstrap
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: KC_BOOTSTRAP_ADMIN_USERNAME
+      remoteRef:
+        key: secret/keycloak-next/bootstrap
+        property: admin_username
+    - secretKey: KC_BOOTSTRAP_ADMIN_PASSWORD
+      remoteRef:
+        key: secret/keycloak-next/bootstrap
+        property: admin_password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: sso
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.6.2
+          args: ["start"]
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: management, containerPort: 9000 }
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: KC_HTTP_ENABLED, value: "true" }
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+            - { name: KC_HOSTNAME, value: https://auth-next.e-dani.com }
+            - { name: KC_HOSTNAME_STRICT, value: "true" }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+            - { name: KC_METRICS_ENABLED, value: "true" }
+            - { name: KC_DB, value: postgres }
+            - name: KC_DB_URL_HOST
+              value: keycloak-postgres-rw.keycloak.svc.cluster.local
+            - { name: KC_DB_URL_DATABASE, value: keycloak }
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-postgres-app
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-postgres-app
+                  key: password
+          readinessProbe:
+            httpGet: { path: /health/ready, port: management }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/live, port: management }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: sso
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - { name: http, port: 80, targetPort: http }
