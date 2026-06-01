@@ -32,6 +32,20 @@
     mode: "0600"
   no_log: true
 
+# Written BEFORE the k3s install so a fresh/re-bootstrapped node has Harbor auth in
+# place when containerd starts (no restart needed). On an existing node a re-run only
+# rewrites the file; apply it with a one-at-a-time `systemctl restart k3s` to preserve
+# etcd quorum (deliberately NOT a notify-handler, which could restart all servers at once).
+- name: Write k3s registries config (Harbor auth + LAN mirror)
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  when: lookup('env', 'HARBOR_REGISTRY_USER') | length > 0
+  no_log: true
+
 - name: Install k3s server
   ansible.builtin.shell:
     cmd: |

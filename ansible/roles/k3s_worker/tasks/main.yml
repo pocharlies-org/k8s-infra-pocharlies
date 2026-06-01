@@ -40,6 +40,18 @@
     mode: "0600"
   no_log: true
 
+# Written BEFORE the agent install so the node has Harbor auth in place when containerd
+# starts (no restart needed). Credentials from HARBOR_REGISTRY_USER/PASSWORD in the env.
+- name: Write k3s registries config (Harbor auth + LAN mirror)
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  when: lookup('env', 'HARBOR_REGISTRY_USER') | length > 0
+  no_log: true
+
 - name: Install k3s agent
   ansible.builtin.shell:
     cmd: |

@@ -1,0 +1,21 @@
+# Managed by ansible (k3s_worker role) — do not edit by hand on the node.
+# Harbor private-registry auth + LAN mirror so the node can pull
+# harbor.e-dani.com/* images via containerd WITHOUT per-namespace pull secrets.
+# The mirror redirects harbor.e-dani.com -> harbor.lan.e-dani.com, which is reachable
+# both on the home LAN and from the OVH nodes over the tailscale subnet route, and
+# bypasses the Cloudflare-proxied public name for (large) blob pulls.
+# Credentials come from HARBOR_REGISTRY_USER / HARBOR_REGISTRY_PASSWORD in the runtime
+# env (ks5-ha.runtime.env, 0600) — never hard-coded here.
+mirrors:
+  harbor.e-dani.com:
+    endpoint:
+      - "https://harbor.lan.e-dani.com"
+configs:
+  harbor.e-dani.com:
+    auth:
+      username: "{{ lookup('env', 'HARBOR_REGISTRY_USER') }}"
+      password: "{{ lookup('env', 'HARBOR_REGISTRY_PASSWORD') }}"
+  harbor.lan.e-dani.com:
+    auth:
+      username: "{{ lookup('env', 'HARBOR_REGISTRY_USER') }}"
+      password: "{{ lookup('env', 'HARBOR_REGISTRY_PASSWORD') }}"
