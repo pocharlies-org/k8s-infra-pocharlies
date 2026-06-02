@@ -111,7 +111,7 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
-    - match: Host(`code.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`))
+    - match: Host(`code.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
       kind: Rule
       priority: 300
       services:
