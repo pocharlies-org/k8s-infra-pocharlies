@@ -61,13 +61,7 @@ secrets and Google OAuth client exist:
    - `/edani-admins`
    - `/edani-operators`
 4. Create a confidential client for oauth2-proxy and add a groups mapper.
-5. Test a canary route with `keycloak/sso-chain`.
-
-The included canary is:
-
-```text
-https://sso-canary.e-dani.com
-```
+5. Test a protected LAN or public route that references `keycloak/sso-chain`.
 
 Protected services should reference the `keycloak/sso-chain` Traefik middleware
 or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
