@@ -6,7 +6,6 @@ resources:
   - keycloak.yaml
   - oauth2-proxy.yaml
   - routing.yaml
-  - canary.yaml
 labels:
   - includeSelectors: false
     pairs:
