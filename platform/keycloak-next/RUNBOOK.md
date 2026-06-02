@@ -112,20 +112,18 @@ kubectl annotate externalsecret -n keycloak oauth2-proxy-secrets \
   force-sync="$(date +%s)" --overwrite
 ```
 
-## 5. Verify canary
+## 5. Verify a protected route
 
-Open:
-
-```text
-https://sso-canary.e-dani.com
-```
+Open a route that uses the `keycloak/sso-chain` middleware, for example
+`https://dgx.e-dani.com/` or a non-bypassed public admin route.
 
 Expected flow:
 
 1. Redirect to Keycloak at `auth-next.e-dani.com/realms/edani/...`.
 2. Login with Google, or with the local break-glass user before Google is wired.
 3. User is accepted only if it belongs to `/edani-admins` or `/edani-operators`.
-4. `whoami` shows auth headers such as `X-Auth-Request-Email`.
+4. The original service receives oauth2-proxy auth headers such as
+   `X-Auth-Request-Email`.
 
 ## 6. Protect services
 
