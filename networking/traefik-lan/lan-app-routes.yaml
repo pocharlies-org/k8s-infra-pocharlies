@@ -39,7 +39,14 @@ spec:
     - websecure
   routes:
     - kind: Rule
+      match: Host(`synapse.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`))
+      priority: 300
+      services:
+        - name: synapse-lan-host
+          port: 18795
+    - kind: Rule
       match: Host(`synapse.lan.e-dani.com`)
+      priority: 100
       middlewares:
         - name: sso-chain
           namespace: keycloak
