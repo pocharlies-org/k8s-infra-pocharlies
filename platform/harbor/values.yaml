@@ -56,7 +56,7 @@ trivy:
   enabled: true
   replicas: 1
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
   resources:
     requests:
       cpu: 100m
@@ -71,36 +71,36 @@ notary:
 chartmuseum:
   enabled: false   # use OCI charts (modern Helm)
 
-# Pin to AMD64 (Harbor images are amd64-only as of 2024) — only x86 LAN node qualifies
-# (sauvage is amd64 but tainted role=edge:NoSchedule)
+# Pin to the ks5 (OVH) HA control-plane pool — off the ubuntu home node. ks5 are
+# amd64 (Harbor images are amd64-only) and already host harbor's stateful pods.
 nodeSelector:
-  kubernetes.io/arch: amd64
+  node-pool: ks5-nvme
 
 # Limit replicas for homelab — propagate arch nodeSelector everywhere
 portal:
   replicas: 1
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
 core:
   replicas: 1
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
 jobservice:
   replicas: 1
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
 registry:
   replicas: 1
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
 nginx:
   nodeSelector:
-    kubernetes.io/arch: amd64
+    node-pool: ks5-nvme
 database:
   internal:
     nodeSelector:
-      kubernetes.io/arch: amd64
+      node-pool: ks5-nvme
 redis:
   internal:
     nodeSelector:
-      kubernetes.io/arch: amd64
+      node-pool: ks5-nvme

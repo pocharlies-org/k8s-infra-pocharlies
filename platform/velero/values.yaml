@@ -65,10 +65,9 @@ nodeAgent:
     limits:
       memory: 1Gi
 
-# Velero server
+# Velero server (off ubuntu to ks5; node-agent + kopia maintenance stay LAN-pinned)
 nodeSelector:
-  topology: lan
-  kubernetes.io/arch: amd64
+  node-pool: ks5-nvme
 resources:
   requests:
     cpu: 100m

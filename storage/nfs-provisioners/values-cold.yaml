@@ -13,12 +13,10 @@ storageClass:
   archiveOnDelete: true
 
 replicaCount: 1
-# Pin to x86 master only — dgx/sauvage nodes can't reach sauvage NFS server
-# (sauvage uses WireGuard; flannel overlay doesn't bridge LAN→WG for mounts)
+# On ks5 NVMe pool — reaches the sauvage NFS via its Tailscale IP 100.109.183.9
+# over the tailnet (verified: PVC binds from ks5). Was hostname:ubuntu.
 nodeSelector:
-  topology: lan
-  kubernetes.io/arch: amd64
-  kubernetes.io/hostname: ubuntu
+  node-pool: ks5-nvme
 
 resources:
   requests:

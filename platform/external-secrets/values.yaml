@@ -5,7 +5,7 @@ installCRDs: true
 replicaCount: 1
 
 nodeSelector:
-  kubernetes.io/hostname: ubuntu
+  node-pool: ks5-nvme
 
 resources:
   requests:
@@ -17,9 +17,9 @@ resources:
 webhook:
   replicaCount: 1
   nodeSelector:
-    kubernetes.io/hostname: ubuntu
+    node-pool: ks5-nvme
 
 certController:
   replicaCount: 1
   nodeSelector:
-    kubernetes.io/hostname: ubuntu
+    node-pool: ks5-nvme
