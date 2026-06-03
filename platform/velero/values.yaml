@@ -65,10 +65,10 @@ nodeAgent:
     limits:
       memory: 1Gi
 
-# Velero server
+# Velero server (moved off ubuntu to ks5 HA pool; node-agent + kopia
+# maintenance below stay LAN-pinned for MinIO ClusterIP reachability)
 nodeSelector:
-  topology: lan
-  kubernetes.io/arch: amd64
+  node-pool: ks5-nvme
 resources:
   requests:
     cpu: 100m

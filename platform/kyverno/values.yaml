@@ -1,9 +1,9 @@
 # Kyverno admission policies controller
 # Helm chart: kyverno/kyverno
 admissionController:
-  replicas: 1
+  replicas: 2
   nodeSelector:
-    kubernetes.io/hostname: ubuntu
+    node-pool: ks5-nvme
   tolerations:
     - key: dedicated
       operator: Equal
