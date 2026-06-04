@@ -1,79 +1,79 @@
-# Traefik LAN values — internal ingress, exposed via MetalLB VIP 192.168.50.240
+# traefik-lan Helm values (chart traefik 40.2.0, ns traefik-lan). MANUAL release:
+#   helm upgrade traefik-lan traefik/traefik --version 40.2.0 -n traefik-lan -f values.yaml
+# 2026-06-05: reconciled to the live release + pinned to nvidia-dgx (arm64 LAN node)
+# so the LAN ingress VIP 192.168.50.240 leaves the x86 home node. MetalLB announces
+# it from nvidia-dgx's LAN NIC; tolerates dedicated=llm.
+additionalArguments:
+- --entrypoints.web.http.redirections.entrypoint.to=websecure
+- --entrypoints.web.http.redirections.entrypoint.scheme=https
+- --entrypoints.websecure.http.tls=true
+- --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
+- --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
 deployment:
   replicas: 1
-
 ingressClass:
   enabled: true
-  name: traefik-lan
   isDefaultClass: true
-
-providers:
-  kubernetesCRD:
-    enabled: true
-    allowCrossNamespace: true
-    allowExternalNameServices: true
-  kubernetesIngress:
-    enabled: true
-    allowExternalNameServices: true
-    publishedService:
-      enabled: true
-
-ports:
-  web:
-    port: 8000
-    expose:
-      default: true
-    exposedPort: 80
-    protocol: TCP
-  websecure:
-    port: 8443
-    expose:
-      default: true
-    exposedPort: 443
-    protocol: TCP
-    http3:
-      enabled: false
-  metrics:
-    port: 9100
-    expose:
-      default: true
-    exposedPort: 9100
-    protocol: TCP
-
-additionalArguments:
-  - --entrypoints.web.http.redirections.entrypoint.to=websecure
-  - --entrypoints.web.http.redirections.entrypoint.scheme=https
-  - --entrypoints.websecure.http.tls=true
-  - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
-  - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
-
-service:
-  type: LoadBalancer
-  annotations:
-    metallb.universe.tf/loadBalancerIPs: 192.168.50.240
-  spec:
-    externalTrafficPolicy: Local
-
-# Dashboard — internal only, will protect with auth later
+  name: traefik-lan
 ingressRoute:
   dashboard:
-    enabled: false   # enable later behind Authelia
-
+    enabled: false
 logs:
   access:
     enabled: true
     format: json
   general:
     level: INFO
-
 metrics:
   prometheus:
     entryPoint: metrics
-
-# Allow some resilience
+ports:
+  metrics:
+    expose:
+      default: true
+    exposedPort: 9100
+    port: 9100
+    protocol: TCP
+  web:
+    expose:
+      default: true
+    exposedPort: 80
+    port: 8000
+    protocol: TCP
+  websecure:
+    expose:
+      default: true
+    exposedPort: 443
+    http3:
+      enabled: false
+    port: 8443
+    protocol: TCP
+providers:
+  kubernetesCRD:
+    allowCrossNamespace: true
+    allowExternalNameServices: true
+    enabled: true
+  kubernetesIngress:
+    allowExternalNameServices: true
+    enabled: true
+    publishedService:
+      enabled: true
 resources:
+  limits:
+    memory: 512Mi
   requests:
     cpu: 100m
     memory: 128Mi
-  limits:
-    memory: 512Mi
+service:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 192.168.50.240
+  spec:
+    externalTrafficPolicy: Local
+  type: LoadBalancer
+nodeSelector:
+  kubernetes.io/hostname: nvidia-dgx
+tolerations:
+- key: dedicated
+  operator: Equal
+  value: llm
+  effect: NoSchedule
