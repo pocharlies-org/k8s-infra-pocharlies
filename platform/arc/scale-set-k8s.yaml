@@ -32,6 +32,19 @@ containerMode:
 
 template:
   spec:
+    # Prefer the NVMe dev node (ubuntu) for CI. sauvage is an HDD edge node; concurrent
+    # CI image pulls/builds saturate its disk I/O and stall container creation
+    # cluster-wide (CreateContainerError: context deadline exceeded). 2026-06-04.
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - ubuntu
     nodeSelector:
       kubernetes.io/arch: amd64
       workload: cpu
@@ -40,3 +53,10 @@ template:
       key: role
       operator: Equal
       value: edge
+    # Tolerate ubuntu's soft pool=dev taint so the ubuntu affinity above actually wins —
+    # without this the PreferNoSchedule penalty outweighs the affinity and runners flock
+    # to sauvage. sauvage remains a fallback only when ubuntu is full.
+    - effect: PreferNoSchedule
+      key: pool
+      operator: Equal
+      value: dev
