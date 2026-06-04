@@ -91,7 +91,12 @@ metadata:
     app.kubernetes.io/component: shared-rabbitmq
 data:
   20-tuning.conf: |
-    vm_memory_high_watermark.absolute = 700MB
+    # 2026-06-04: raised 700MB -> 1200MB (~60% of the 2Gi cgroup limit). 700MB was
+    # too low: the quorum-queue ETS baseline alone is ~0.41GB, so the broker sat at
+    # ~94% of the watermark and any webhook burst tipped it over -> publishers
+    # blocked -> synapse gateway webhook read-timeouts (broke the Telegram Apply
+    # button). 1200MB leaves working room above the baseline + buffer to the limit.
+    vm_memory_high_watermark.absolute = 1200MB
     disk_free_limit.absolute = 500MB
 ---
 # enabled_plugins + cluster formation config for the 3-replica HA cluster.
