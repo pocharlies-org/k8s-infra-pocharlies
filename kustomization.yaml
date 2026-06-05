@@ -14,6 +14,7 @@ resources:
   - networking/traefik-edge/legacy-public-routes.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
+  - networking/traefik-edge/dgx-dashboard-public.yaml
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
   - platform/keycloak-next
