@@ -1,0 +1,32 @@
+---
+# Public edge route for the DGX Control Nexus dashboard.
+# Cloudflare → traefik-edge (Keycloak SSO via sso-chain@keycloak) →
+# Service dgx-dashboard-ui.control-nexus:80 (nginx UI pod) → host backend.
+# Replaces the old docker api-gateway + oauth2-proxy path (home IP 83.46.66.146).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-dgx-dashboard-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: dgx.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`)
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
