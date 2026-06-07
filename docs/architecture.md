@@ -46,6 +46,30 @@ flowchart LR
   TS --> SVC
 ```
 
+## Shared Artifact Object Storage
+
+Skirmshop has a shared internal S3-compatible object store for documents and
+generated artifacts that should also land in Google Drive:
+
+```text
+apps and Synapse adapters
+  -> MinIO skirmshop-drive-s3.backup-hub.svc.cluster.local:9000
+  -> bucket skirmshop-drive
+  -> PVC skirmshop-drive-mirror on nfs-cold
+  -> Sauvage /srv/nfs/k8s-cold
+  -> rclone export to Google Drive info@skirmshop.es
+```
+
+Operator LAN/Tailscale access:
+
+- API: `https://skirmshop-s3.lan.e-dani.com`
+- Console: `https://skirmshop-s3-console.lan.e-dani.com`
+
+This store is for invoices, price lists, catalog/RAG source files and generated
+media. It is not a replacement for Longhorn/Postgres/Redis/NATS or hot
+application state. Workloads should write `s3://skirmshop-drive/<key>`
+references into Synapse events and databases.
+
 ## Failure Model
 
 - One KS-5-A can fail while k3s etcd keeps quorum.
