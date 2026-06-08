@@ -64,6 +64,10 @@ spec:
                   key: root-password
             - name: MINIO_PROMETHEUS_AUTH_TYPE
               value: public
+            # Sauvage's MinIO data path is on HDD RAID; keep background
+            # scanner work gentle so S3 metadata walks do not saturate md3.
+            - name: MINIO_SCANNER_SPEED
+              value: slowest
           volumeMounts:
             - name: data
               mountPath: /data
