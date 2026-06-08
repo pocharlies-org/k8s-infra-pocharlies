@@ -21,4 +21,5 @@ resources:
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml
   - platform/velero/schedules.yaml
+  - storage/minio/minio.yaml
   - storage/minio/backup-creds.yaml
