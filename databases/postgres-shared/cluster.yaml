@@ -15,16 +15,28 @@ spec:
 
   postgresql:
     parameters:
-      max_connections: "200"
-      shared_buffers: "256MB"
-      effective_cache_size: "1GB"
-      work_mem: "16MB"
-      maintenance_work_mem: "128MB"
+      # Resized 2026-06-08 for synapse-stack migration from docker shared-postgres
+      # (see plans/shared-stores-migration-from-sauvage.md §1.1).
+      # 41 synapse services × pool_size 5 = 205 connections projected; max_connections 400 = ×1.95 headroom.
+      # shared_buffers 1Gi (12.5% of 8Gi mem limit) absorbs litellm full-scan working set
+      # which was OOM-killing pod with 256MB / 2Gi (root cause documented in plan §12.2).
+      max_connections: "400"
+      shared_buffers: "1GB"
+      effective_cache_size: "4GB"
+      work_mem: "32MB"
+      maintenance_work_mem: "256MB"
       checkpoint_completion_target: "0.9"
-      wal_buffers: "16MB"
+      wal_buffers: "32MB"
       default_statistics_target: "100"
       log_statement: "ddl"
       log_min_duration_statement: "1000"
+      # Logical replication prerequisites (Fase 2 of synapse-stack migration).
+      # max_replication_slots kept at upstream CNPG default (32) to avoid regression;
+      # max_wal_senders bumped from default 10 to 20 to cover 7 synapse role PUBLICATIONs
+      # + walreceivers (replica + barman archive) with headroom.
+      wal_level: "logical"
+      max_wal_senders: "20"
+      max_replication_slots: "32"
 
   storage:
     storageClass: longhorn
@@ -36,11 +48,11 @@ spec:
 
   resources:
     requests:
-      cpu: "200m"
-      memory: "512Mi"
-    limits:
-      cpu: "2"
+      cpu: "500m"
       memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
 
   monitoring:
     enablePodMonitor: false
@@ -83,6 +95,71 @@ spec:
         passwordSecret:
           name: skirmshop-db-credentials
         comment: "SkirmShop shared apps and labels (shopify-* repos)"
+      # Synapse host stack (41 services in sauvage), migrated from docker shared-postgres
+      # to CNPG (2026-06-08). Mirrors the role topology in docker: synapse_app is a NOLOGIN
+      # group; the 6 login roles inherit from it. synapse_engine + synapse_admin BYPASSRLS.
+      # See plans/shared-stores-migration-from-sauvage.md §1.4 and §-1.11D.
+      - name: synapse_app
+        ensure: present
+        login: false
+        inherit: true
+        passwordSecret:
+          name: synapse-app-db-credentials
+        comment: "Synapse shared group role (NOLOGIN); members inherit table privileges via this role"
+      - name: synapse_engine
+        ensure: present
+        login: true
+        inherit: true
+        bypassrls: true
+        inRoles:
+          - synapse_app
+        passwordSecret:
+          name: synapse-engine-db-credentials
+        comment: "Synapse Workflow Engine (synapse-engine.service on sauvage)"
+      - name: synapse_dispatcher
+        ensure: present
+        login: true
+        inherit: true
+        inRoles:
+          - synapse_app
+        passwordSecret:
+          name: synapse-dispatcher-db-credentials
+        comment: "Synapse Dispatcher (outbox → RMQ) — synapse-dispatcher.service"
+      - name: synapse_gateway
+        ensure: present
+        login: true
+        inherit: true
+        inRoles:
+          - synapse_app
+        passwordSecret:
+          name: synapse-gateway-db-credentials
+        comment: "Synapse HTTP gateway (synapse-gateway.service)"
+      - name: synapse_admin
+        ensure: present
+        login: true
+        inherit: true
+        bypassrls: true
+        passwordSecret:
+          name: synapse-admin-db-credentials
+        comment: "Synapse Admin UI (synapse-admin.service); BYPASSRLS for cross-tenant operations"
+      - name: synapse_adapter
+        ensure: present
+        login: true
+        inherit: true
+        inRoles:
+          - synapse_app
+        passwordSecret:
+          name: synapse-adapter-db-credentials
+        comment: "Synapse Adapters (shared role for 35 synapse-adapter-* services)"
+      - name: synapse_outbox_gc
+        ensure: present
+        login: true
+        inherit: true
+        inRoles:
+          - synapse_app
+        passwordSecret:
+          name: synapse-outbox-gc-db-credentials
+        comment: "Synapse Outbox GC (synapse-outbox-gc.service; hourly oneshot timer)"
 
   backup:
     retentionPolicy: "30d"
