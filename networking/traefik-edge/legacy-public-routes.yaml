@@ -470,6 +470,12 @@ spec:
   routes:
   - kind: Rule
     match: Host(`skirmbooks.e-dani.com`)
+    # Keycloak SSO (forwardAuth) — financial app, internet-facing. El callback de
+    # Enable Banking (/banking/enablebanking/callback) pasa porque el navegador del
+    # usuario ya trae la cookie _edani_sso al volver del banco (sesión activa).
+    middlewares:
+    - name: sso-chain
+      namespace: keycloak
     services:
     - name: skirmbooks-ui
       namespace: skirmshop
