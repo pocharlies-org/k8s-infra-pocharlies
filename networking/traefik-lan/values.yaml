@@ -41,7 +41,9 @@ ports:
     protocol: TCP
 
 additionalArguments:
-  - --entrypoints.web.http.redirections.entrypoint.to=websecure
+  # ":443" (client-facing port), NOT "websecure": the entrypoint name resolves
+  # to the container port 8443, which is not reachable from LAN clients.
+  - --entrypoints.web.http.redirections.entrypoint.to=:443
   - --entrypoints.web.http.redirections.entrypoint.scheme=https
   - --entrypoints.websecure.http.tls=true
   - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
@@ -77,3 +79,14 @@ resources:
     memory: 128Mi
   limits:
     memory: 512Mi
+
+# MetalLB L2 announces the LAN VIP from the node running this pod, so it must
+# stay on a physical LAN node (not the OVH ones).
+nodeSelector:
+  kubernetes.io/hostname: nvidia-dgx
+
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
