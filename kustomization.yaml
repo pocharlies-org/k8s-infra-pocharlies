@@ -4,6 +4,7 @@ resources:
   - networking/cert-manager/cluster-issuers.yaml
   - networking/cert-manager/test-cert-staging.yaml
   - networking/cert-manager/wildcard-prod.yaml
+  - networking/dns/coredns-custom.yaml
   - networking/metallb/ippool.yaml
   - networking/traefik-lan/tls-store.yaml
   - networking/traefik-lan/lan-app-routes.yaml
