@@ -1,0 +1,40 @@
+---
+# Public media URL for DGX/AI Studio artifacts stored in MinIO.
+# Cloudflare -> traefik-edge -> dgx-dashboard-ui -> dashboard S3 media gateway.
+# LAN/Tailscale/cluster source ranges bypass Keycloak so OpenClaw/Codex/Claude
+# agents can read generated media directly; internet callers use Keycloak SSO.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-dgx-s3-media-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: s3.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 200
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      match: Host(`s3.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
