@@ -1,0 +1,68 @@
+---
+# Split-horizon LAN entrypoints for the public DGX hostnames.
+#
+# AdGuard rewrites these names to the Traefik LAN VIP (192.168.50.240), so LAN,
+# Tailscale and in-cluster callers can use the same public URLs without hitting
+# Cloudflare/Keycloak. Non-LAN callers should resolve the public Cloudflare route
+# and remain protected by the traefik-edge SSO route.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-dgx-dashboard-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 300
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-lan
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-dgx-s3-media-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 300
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      match: Host(`s3.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-lan
