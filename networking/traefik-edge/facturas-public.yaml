@@ -1,0 +1,66 @@
+---
+# Public, password-protected access to invoice/document PDFs in the
+# skirmshop-drive MinIO bucket "facturas". URL: https://s3.e-dani.com/facturas/<file>
+# Gated by Traefik BasicAuth. Anonymous read is enabled ONLY on the "facturas"
+# bucket (a dedicated bucket, NOT the Drive mirror). traefik-edge does not watch
+# the backup-hub namespace, so we expose the MinIO svc via an ExternalName
+# service in the (watched) skirmshop namespace.
+apiVersion: v1
+kind: Service
+metadata:
+  name: skirmshop-drive-s3-ext
+  namespace: skirmshop
+  labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
+spec:
+  type: ExternalName
+  externalName: skirmshop-drive-s3.backup-hub.svc.cluster.local
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: facturas-basic-auth
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
+type: Opaque
+data:
+  users: c2tpcm1zaG9wOiRhcHIxJFBiZ3F3UmFtJFdkaTZBMUw0MVJuL2plb2ZBLlNXRy8=
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: facturas-auth
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
+spec:
+  basicAuth:
+    secret: facturas-basic-auth
+    realm: Skirmshop Facturas
+    removeHeader: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: facturas-public
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/facturas`)
+      priority: 300
+      middlewares:
+        - name: facturas-auth
+      services:
+        - name: skirmshop-drive-s3-ext
+          namespace: skirmshop
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
