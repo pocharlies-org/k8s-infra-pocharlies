@@ -148,7 +148,10 @@ metadata:
     app.kubernetes.io/component: postgres-database
 spec:
   name: synapse
-  owner: skirmshop
+  # Owner = synapse_admin (BYPASSRLS), mirror del docker shared-postgres de
+  # sauvage cuyo owner era `admin`. Datos restaurados via pg_restore
+  # --no-owner --role=synapse_admin (migración sauvage→CNPG 2026-06).
+  owner: synapse_admin
   cluster:
     name: postgres-shared
 ---
