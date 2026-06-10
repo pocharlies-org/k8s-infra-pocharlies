@@ -1,0 +1,101 @@
+---
+# One-shot bootstrap for the synapse-email-attachments bucket: bucket + 7d ILM
+# expiry + least-privilege users/policies. NOT in kustomization.yaml on purpose
+# (same convention as bootstrap-buckets.yaml): Jobs are immutable and
+# ttlSecondsAfterFinished would make ArgoCD recreate it forever. Apply manually:
+#   kubectl apply -f storage/minio/synapse-email-attachments-bootstrap.yaml
+# Idempotent: safe to re-apply after deleting the finished Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synapse-email-attachments-bootstrap
+  namespace: minio
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/hostname: sauvage
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      containers:
+        - name: mc
+          image: minio/mc:RELEASE.2025-04-08T15-39-49Z
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: minio-root, key: root-user}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: minio-root, key: root-password}
+            - name: RW_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: synapse-email-attachments-creds, key: rw-access-key}
+            - name: RW_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: synapse-email-attachments-creds, key: rw-secret-key}
+            - name: RO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: synapse-email-attachments-creds, key: ro-access-key}
+            - name: RO_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: synapse-email-attachments-creds, key: ro-secret-key}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              BUCKET=synapse-email-attachments
+              mc alias set local http://minio-s3:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+
+              mc mb --ignore-existing "local/$BUCKET"
+              mc anonymous set none "local/$BUCKET"
+
+              # 7-day expiry (viewing cache; originals live in Gmail).
+              if ! mc ilm rule ls "local/$BUCKET" 2>/dev/null | grep -q "7d0h0m0s\|Expiry.*7"; then
+                mc ilm rule add --expire-days 7 "local/$BUCKET"
+              fi
+              mc ilm rule ls "local/$BUCKET"
+
+              cat > /tmp/rw.json <<'POL'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {"Effect": "Allow",
+                   "Action": ["s3:PutObject", "s3:GetObject"],
+                   "Resource": ["arn:aws:s3:::synapse-email-attachments/*"]},
+                  {"Effect": "Allow",
+                   "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+                   "Resource": ["arn:aws:s3:::synapse-email-attachments"]}
+                ]
+              }
+              POL
+              cat > /tmp/ro.json <<'POL'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {"Effect": "Allow",
+                   "Action": ["s3:GetObject"],
+                   "Resource": ["arn:aws:s3:::synapse-email-attachments/*"]},
+                  {"Effect": "Allow",
+                   "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+                   "Resource": ["arn:aws:s3:::synapse-email-attachments"]}
+                ]
+              }
+              POL
+              mc admin policy create local synapse-email-rw /tmp/rw.json
+              mc admin policy create local synapse-email-ro /tmp/ro.json
+
+              # mc admin user add is an upsert (rotates secret if user exists)
+              mc admin user add local "$RW_ACCESS_KEY" "$RW_SECRET_KEY"
+              mc admin user add local "$RO_ACCESS_KEY" "$RO_SECRET_KEY"
+              mc admin policy attach local synapse-email-rw --user "$RW_ACCESS_KEY" || true
+              mc admin policy attach local synapse-email-ro --user "$RO_ACCESS_KEY" || true
+
+              echo "--- result ---"
+              mc admin user info local "$RW_ACCESS_KEY"
+              mc admin user info local "$RO_ACCESS_KEY"

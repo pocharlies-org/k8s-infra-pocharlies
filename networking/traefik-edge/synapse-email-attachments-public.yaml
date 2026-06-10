@@ -1,0 +1,43 @@
+---
+# Public path-carve-out for presigned synapse email-attachment links:
+#   https://s3.e-dani.com/synapse-email-attachments/<key>?X-Amz-...
+# NO auth middleware on purpose: the bucket is private (anonymous=none) and the
+# SigV4 presigned signature IS the auth (7d ILM expiry; presign expiry < 7d).
+# Priority 300 beats the s3.e-dani.com SSO catch-all (100) and LAN bypass (200),
+# same pattern as facturas-public.yaml. traefik-edge does not watch the minio
+# namespace, hence the ExternalName hop (allowExternalNameServices=true).
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-s3-ext
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
+spec:
+  type: ExternalName
+  externalName: minio-s3.minio.svc.cluster.local
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: synapse-email-attachments-public
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/synapse-email-attachments`)
+      priority: 300
+      services:
+        - name: minio-s3-ext
+          namespace: traefik-edge
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge

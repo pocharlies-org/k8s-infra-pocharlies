@@ -1,0 +1,24 @@
+---
+# synapse-email-attachments — viewing cache for synapse email attachments.
+# Originals live in Gmail forever; objects here expire after 7 days (ILM rule
+# created by the bootstrap Job below). Bucket is PRIVATE: access is via
+# presigned GET URLs only (SigV4 signature is the auth), served publicly at
+# https://s3.e-dani.com/synapse-email-attachments/<key> (see
+# networking/traefik-edge/synapse-email-attachments-public.yaml).
+#
+# Users (created by the Job): synapse-email-rw (adapter-gmail uploads+presign),
+# synapse-email-ro (adapter-messaging downloads for OCR/Telegram). Host-side
+# copies of these keys live on sauvage at /etc/synapse/credentials/ and are fed
+# to the systemd --user units via LoadCredential.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: synapse-email-attachments-creds
+  namespace: minio
+  labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
+type: Opaque
+stringData:
+  rw-access-key: synapse-email-rw
+  rw-secret-key: 686a2d0dee04ef70943cb5583e90de94e06a4a341ce45c8b
+  ro-access-key: synapse-email-ro
+  ro-secret-key: d9d8f13c959ecf1830a2a35117fafdd51a31d4da3aea6fe7
