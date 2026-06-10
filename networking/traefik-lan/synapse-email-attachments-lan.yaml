@@ -1,0 +1,29 @@
+---
+# LAN split-horizon carve-out for presigned synapse email-attachment links.
+# AdGuard rewrites s3.e-dani.com to the traefik-lan VIP (192.168.50.240), where
+# lan-dgx-s3-media-public-host (prio 300) would otherwise swallow the path and
+# hand it to the dashboard media gateway. Priority 400 wins for the bucket
+# prefix so the SAME presigned URL works on LAN/Tailscale and on the internet
+# (traefik-edge carve-out at networking/traefik-edge/). No auth middleware:
+# the SigV4 presigned signature is the auth; the bucket is private.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-synapse-email-attachments
+  namespace: traefik-lan
+  labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/synapse-email-attachments`)
+      priority: 400
+      services:
+        - name: minio-s3
+          namespace: minio
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-lan
