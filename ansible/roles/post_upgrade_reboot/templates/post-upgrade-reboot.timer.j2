@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily post-upgrade reboot window for {{ inventory_hostname }} ({{ post_upgrade_reboot_window }} UTC)
+
+[Timer]
+OnCalendar=*-*-* {{ post_upgrade_reboot_window }}:00 UTC
+# Window is staggered per node by design; no extra jitter wanted.
+RandomizedDelaySec=0
+AccuracySec=1min
+# Do not fire on boot catch-up: if the node was down during its window it
+# just booted anyway.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

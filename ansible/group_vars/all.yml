@@ -19,6 +19,13 @@ k3s_tls_sans:
 tailscale_tags:
   - tag:k8s
   - tag:ks5-control
+# Static tailnet IPs of the KS-5 control planes. Used by post_upgrade_reboot
+# for peer reachability checks without DNS (MagicDNS/resolved can be dead in
+# exactly the failure mode that role exists for — incident 2026-06-10).
+ks5_tailscale_ips:
+  ks5-cp-1: 100.107.21.89
+  ks5-cp-2: 100.71.117.127
+  ks5-cp-3: 100.75.189.75
 ssh_allowed_public_ports:
   - "80/tcp"
   - "443/tcp"
