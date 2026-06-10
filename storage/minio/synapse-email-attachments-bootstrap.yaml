@@ -56,7 +56,9 @@ spec:
               mc anonymous set none "local/$BUCKET"
 
               # 7-day expiry (viewing cache; originals live in Gmail).
-              if ! mc ilm rule ls "local/$BUCKET" 2>/dev/null | grep -q "7d0h0m0s\|Expiry.*7"; then
+              # No grep in the mc image: any non-empty rule listing means the
+              # rule is already there (this Job is the only ILM writer).
+              if [ -z "$(mc ilm rule ls "local/$BUCKET" 2>/dev/null)" ]; then
                 mc ilm rule add --expire-days 7 "local/$BUCKET"
               fi
               mc ilm rule ls "local/$BUCKET"
