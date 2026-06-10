@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Reboot after package upgrades if required (quorum-aware)
+Documentation=file:/usr/local/sbin/post-upgrade-reboot.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/post-upgrade-reboot.sh
+# Script may wait 90s for a stuck PID 1 before reboot -f.
+TimeoutStartSec=10min

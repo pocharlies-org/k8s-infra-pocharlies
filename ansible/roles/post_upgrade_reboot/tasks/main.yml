@@ -1,0 +1,61 @@
+---
+- name: Compute staggered reboot window for this node
+  ansible.builtin.set_fact:
+    post_upgrade_reboot_window: >-
+      {{ '%02d:%02d' | format(
+           post_upgrade_reboot_base_hour + ((_stagger_idx | int) * post_upgrade_reboot_stagger_minutes // 60),
+           ((_stagger_idx | int) * post_upgrade_reboot_stagger_minutes) % 60) }}
+  vars:
+    _stagger_idx: "{{ groups['ks5_control_plane'].index(inventory_hostname) }}"
+
+- name: Install post-upgrade-reboot script
+  ansible.builtin.template:
+    src: post-upgrade-reboot.sh.j2
+    dest: /usr/local/sbin/post-upgrade-reboot.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install post-upgrade-reboot service unit
+  ansible.builtin.template:
+    src: post-upgrade-reboot.service.j2
+    dest: /etc/systemd/system/post-upgrade-reboot.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install post-upgrade-reboot timer unit
+  ansible.builtin.template:
+    src: post-upgrade-reboot.timer.j2
+    dest: /etc/systemd/system/post-upgrade-reboot.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Keep unattended-upgrades own reboot disabled (this timer owns reboots)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52-post-upgrade-reboot
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      // Managed by ansible role post_upgrade_reboot.
+      // Reboots are handled by post-upgrade-reboot.timer (quorum-aware,
+      // staggered per control-plane). Do not enable the built-in one.
+      Unattended-Upgrade::Automatic-Reboot "false";
+
+- name: Enable and start post-upgrade-reboot timer
+  ansible.builtin.systemd_service:
+    name: post-upgrade-reboot.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Verify script logic (dry-run, never reboots)
+  ansible.builtin.command: /usr/local/sbin/post-upgrade-reboot.sh --dry-run
+  register: post_upgrade_reboot_dryrun
+  changed_when: false
+
+- name: Show dry-run verdict
+  ansible.builtin.debug:
+    msg: "{{ post_upgrade_reboot_dryrun.stdout_lines }}"

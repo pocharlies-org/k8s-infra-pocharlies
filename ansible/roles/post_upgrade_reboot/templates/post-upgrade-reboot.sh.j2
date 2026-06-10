@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Reboots this control-plane in its daily window when apt left
+# /var/run/reboot-required, without ever taking down etcd quorum.
+#
+# Why this exists: on 2026-06-10 unattended-upgrades updated the systemd
+# package; the postinst daemon-reexec corrupted PID 1 (journald/resolved dead,
+# -.mount failed) and every later service stop became permanent, killing k3s
+# and tailscaled and locking the node out (SSH is tailscale-only). A prompt
+# scheduled reboot after such upgrades prevents days of running on a
+# half-reexeced systemd.
+#
+# Decision matrix:
+#   no reboot-required flag            -> exit 0
+#   local k3s healthy + peers Ready    -> reboot (cluster covers us)
+#   local k3s healthy + a peer NotReady-> skip (do not shrink quorum further)
+#   local k3s broken                   -> reboot regardless (we contribute
+#                                         nothing; reboot is the cure — peers
+#                                         checked over TCP only for the log)
+set -uo pipefail
+
+SELF="{{ inventory_hostname }}"
+PEERS=({% for host, ip in post_upgrade_reboot_peer_ips.items() if host != inventory_hostname %}"{{ host }}:{{ ip }}" {% endfor %})
+FLAG="${REBOOT_REQUIRED_FLAG:-/var/run/reboot-required}"
+DRY_RUN=0
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+
+log() { logger -t post-upgrade-reboot -- "$*"; echo "post-upgrade-reboot: $*"; }
+
+if [[ ! -f "$FLAG" ]]; then
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "dry-run: no $FLAG, continuing checks anyway"
+  else
+    log "no $FLAG; nothing to do"
+    exit 0
+  fi
+else
+  log "reboot required: $(tr '\n' ' ' <"$FLAG")"
+  [[ -f "${FLAG}.pkgs" ]] && log "packages: $(sort -u "${FLAG}.pkgs" | tr '\n' ' ')"
+fi
+
+do_reboot() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "dry-run: WOULD REBOOT now ($*)"
+    exit 0
+  fi
+  log "rebooting: $*"
+  wall "post-upgrade-reboot: rebooting $SELF now ($*)" 2>/dev/null || true
+  sync
+  systemctl reboot &
+  # PID 1 may be too corrupted to act on the request (the very failure mode
+  # this script exists for) — force the syscall after a grace period.
+  sleep 90
+  log "systemctl reboot did not act after 90s; forcing reboot -f"
+  sync
+  reboot -f
+}
+
+# --- local k3s health -------------------------------------------------------
+KUBECTL_OK=0
+NODES_OUT=""
+if NODES_OUT=$(timeout 20 k3s kubectl get nodes --no-headers 2>/dev/null); then
+  KUBECTL_OK=1
+fi
+
+if [[ "$KUBECTL_OK" == "0" ]]; then
+  # Local k3s broken: log peer reachability (TCP etcd peer port) and reboot.
+  for peer in "${PEERS[@]}"; do
+    ip="${peer##*:}"
+    if timeout 4 bash -c "echo > /dev/tcp/${ip}/2380" 2>/dev/null; then
+      log "peer ${peer%%:*} etcd port reachable"
+    else
+      log "WARNING: peer ${peer%%:*} etcd port UNREACHABLE"
+    fi
+  done
+  # Best-effort etcd snapshot is pointless here (k3s is down); just go.
+  do_reboot "local k3s broken, reboot is the cure"
+fi
+
+# --- local k3s healthy: only reboot if every peer control-plane is Ready ----
+for peer in "${PEERS[@]}"; do
+  name="${peer%%:*}"
+  status=$(awk -v n="$name" '$1==n {print $2}' <<<"$NODES_OUT")
+  if [[ "$status" != "Ready" ]]; then
+    log "SKIP: peer $name status='${status:-absent}' (not Ready); refusing to shrink quorum"
+    exit 0
+  fi
+done
+log "all peer control-planes Ready"
+
+# Fresh local etcd snapshot before going down (best effort, cron ones are 6h).
+if [[ "$DRY_RUN" == "0" ]]; then
+  if timeout 90 k3s etcd-snapshot save --name "pre-reboot-auto" >/dev/null 2>&1; then
+    log "local etcd snapshot pre-reboot-auto saved"
+  else
+    log "WARNING: pre-reboot etcd snapshot failed; continuing (6h cron snapshots exist)"
+  fi
+fi
+
+do_reboot "post-upgrade window, cluster healthy"

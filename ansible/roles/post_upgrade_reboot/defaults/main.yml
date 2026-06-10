@@ -1,0 +1,10 @@
+---
+# Daily window (UTC) in which a node reboots if /var/run/reboot-required exists.
+# Each host in the group gets base_hour + (group index * stagger) so two
+# control-planes are never down at once (boot ~3min << 30min stagger).
+post_upgrade_reboot_base_hour: 4
+post_upgrade_reboot_stagger_minutes: 30
+
+# Tailscale IPs of all etcd peers (static; MagicDNS may be down when this
+# script matters most — see incident 2026-06-10, resolved/journald dead).
+post_upgrade_reboot_peer_ips: "{{ ks5_tailscale_ips }}"

@@ -1,0 +1,17 @@
+---
+# Installs a quorum-aware, staggered post-upgrade reboot window on the KS-5
+# control planes (cp-1 04:00, cp-2 04:30, cp-3 05:00 UTC). A node only reboots
+# in its window when apt left /var/run/reboot-required, and never while a peer
+# control-plane is not Ready. Rationale: incident 2026-06-10 — an
+# unattended-upgrades systemd update corrupted PID 1 and the node ran for
+# hours in a state where any service restart was fatal.
+#
+# Run with the tailscale inventory (public :22 is closed):
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/post-upgrade-reboot.yml
+- name: Configure post-upgrade reboot windows on KS-5 control planes
+  hosts: ks5_control_plane
+  become: true
+  gather_facts: false
+  serial: 1
+  roles:
+    - post_upgrade_reboot
