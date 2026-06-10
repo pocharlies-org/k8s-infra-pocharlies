@@ -152,6 +152,7 @@ spec:
   # sauvage cuyo owner era `admin`. Datos restaurados via pg_restore
   # --no-owner --role=synapse_admin (migración sauvage→CNPG 2026-06).
   owner: synapse_admin
+  ensure: present
   cluster:
     name: postgres-shared
 ---
