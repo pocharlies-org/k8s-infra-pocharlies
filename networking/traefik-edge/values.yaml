@@ -110,6 +110,7 @@ providers:
       - jarvis
       - keycloak
       - control-nexus
+      - bambulab
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
