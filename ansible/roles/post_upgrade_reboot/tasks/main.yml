@@ -32,6 +32,28 @@
     group: root
     mode: "0644"
 
+- name: Install post-upgrade-uncordon script
+  ansible.builtin.template:
+    src: post-upgrade-uncordon.sh.j2
+    dest: /usr/local/sbin/post-upgrade-uncordon.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install post-upgrade-uncordon service unit
+  ansible.builtin.template:
+    src: post-upgrade-uncordon.service.j2
+    dest: /etc/systemd/system/post-upgrade-uncordon.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable post-upgrade-uncordon service (runs at boot, no-op without marker)
+  ansible.builtin.systemd_service:
+    name: post-upgrade-uncordon.service
+    enabled: true
+    daemon_reload: true
+
 - name: Keep unattended-upgrades own reboot disabled (this timer owns reboots)
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/52-post-upgrade-reboot

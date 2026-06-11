@@ -6,5 +6,6 @@ Documentation=file:/usr/local/sbin/post-upgrade-reboot.sh
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/post-upgrade-reboot.sh
-# Script may wait 90s for a stuck PID 1 before reboot -f.
-TimeoutStartSec=10min
+# Worst case: drain ({{ post_upgrade_reboot_drain_timeout_seconds }}s) + etcd
+# snapshot (90s) + 90s wait for a stuck PID 1 before reboot -f, plus margin.
+TimeoutStartSec=25min

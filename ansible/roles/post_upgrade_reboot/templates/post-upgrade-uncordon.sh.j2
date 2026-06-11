@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Boot-time companion of post-upgrade-reboot.sh: if that script cordoned this
+# node before rebooting (marker below), wait for the local k3s node to be
+# Ready again and uncordon it. A node cordoned manually (no marker) is left
+# alone — removing an operator's cordon is never our call.
+set -uo pipefail
+
+SELF="{{ inventory_hostname }}"
+MARKER=/var/lib/post-upgrade-reboot/cordoned
+
+log() { logger -t post-upgrade-uncordon -- "$*"; echo "post-upgrade-uncordon: $*"; }
+
+if [[ ! -f "$MARKER" ]]; then
+  log "no marker; nothing to do"
+  exit 0
+fi
+
+# k3s needs a couple of minutes after boot to rejoin etcd and report Ready.
+for _ in $(seq 1 60); do
+  status=$(timeout 15 k3s kubectl get node "$SELF" --no-headers 2>/dev/null | awk '{print $2}')
+  case "$status" in
+    Ready|Ready,SchedulingDisabled)
+      if timeout 30 k3s kubectl uncordon "$SELF" >/dev/null 2>&1; then
+        rm -f "$MARKER"
+        log "uncordoned $SELF"
+        exit 0
+      fi
+      ;;
+  esac
+  sleep 10
+done
+
+log "WARNING: $SELF not Ready/uncordonable after 10min; marker kept, will retry next boot"
+exit 1

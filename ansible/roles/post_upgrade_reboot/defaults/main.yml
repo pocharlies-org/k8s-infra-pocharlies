@@ -8,3 +8,9 @@ post_upgrade_reboot_stagger_minutes: 30
 # Tailscale IPs of all etcd peers (static; MagicDNS may be down when this
 # script matters most — see incident 2026-06-10, resolved/journald dead).
 post_upgrade_reboot_peer_ips: "{{ ks5_tailscale_ips }}"
+
+# kubectl drain budget before the reboot is aborted for this window
+# (incident 2026-06-11: undrained reboot -> Longhorn iSCSI shutdown hang,
+# dirty CNPG/RabbitMQ ext4, OVH tech power-cycled the node mid-boot).
+# Must stay well under the service TimeoutStartSec and the 30min stagger.
+post_upgrade_reboot_drain_timeout_seconds: 420
