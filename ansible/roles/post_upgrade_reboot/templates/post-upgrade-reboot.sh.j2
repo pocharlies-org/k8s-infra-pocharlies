@@ -10,18 +10,33 @@
 # scheduled reboot after such upgrades prevents days of running on a
 # half-reexeced systemd.
 #
+# 2026-06-11 (OVH CS15972406): rebooting WITHOUT draining made the shutdown
+# hang ~6min on Longhorn iSCSI writes (dirty ext4 on CNPG/RabbitMQ volumes,
+# ~2h of faulted-volume recovery, Harbor down -> cluster-wide
+# ImagePullBackOff) and the >10min ping gap dispatched an OVH datacenter tech
+# who power-cycled the node mid-boot. Hence: cordon+drain BEFORE rebooting
+# (clean volume detach, fast shutdown, ping gap below OVH's ~10min
+# intervention threshold); post-upgrade-uncordon.service restores
+# schedulability after boot.
+#
 # Decision matrix:
 #   no reboot-required flag            -> exit 0
-#   local k3s healthy + peers Ready    -> reboot (cluster covers us)
+#   node already cordoned (no marker)  -> skip (operator intent, do not fight)
+#   local k3s healthy + peers Ready    -> drain, reboot (cluster covers us)
+#   drain fails or times out           -> uncordon, skip (retry next window)
 #   local k3s healthy + a peer NotReady-> skip (do not shrink quorum further)
-#   local k3s broken                   -> reboot regardless (we contribute
-#                                         nothing; reboot is the cure — peers
-#                                         checked over TCP only for the log)
+#   local k3s broken                   -> reboot regardless, no drain possible
+#                                         (we contribute nothing; reboot is
+#                                         the cure — peers checked over TCP
+#                                         only for the log)
 set -uo pipefail
 
 SELF="{{ inventory_hostname }}"
 PEERS=({% for host, ip in post_upgrade_reboot_peer_ips.items() if host != inventory_hostname %}"{{ host }}:{{ ip }}" {% endfor %})
 FLAG="${REBOOT_REQUIRED_FLAG:-/var/run/reboot-required}"
+DRAIN_TIMEOUT="{{ post_upgrade_reboot_drain_timeout_seconds }}"
+MARKER_DIR=/var/lib/post-upgrade-reboot
+MARKER="$MARKER_DIR/cordoned"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
@@ -87,6 +102,43 @@ for peer in "${PEERS[@]}"; do
   fi
 done
 log "all peer control-planes Ready"
+
+# --- already cordoned and not by us? operator intent — leave the node alone -
+UNSCHED=$(timeout 20 k3s kubectl get node "$SELF" -o jsonpath='{.spec.unschedulable}' 2>/dev/null)
+if [[ "$UNSCHED" == "true" && ! -f "$MARKER" ]]; then
+  log "SKIP: $SELF is cordoned by an operator; not rebooting"
+  exit 0
+fi
+
+# --- drain: detach Longhorn volumes cleanly so shutdown stays fast ----------
+if [[ "$DRY_RUN" == "1" ]]; then
+  log "dry-run: would cordon+drain $SELF (timeout ${DRAIN_TIMEOUT}s) before reboot"
+else
+  if ! timeout 30 k3s kubectl cordon "$SELF" >/dev/null 2>&1; then
+    log "WARNING: cordon failed; skipping reboot this window"
+    exit 0
+  fi
+  mkdir -p "$MARKER_DIR"
+  touch "$MARKER"
+  log "draining $SELF (timeout ${DRAIN_TIMEOUT}s)"
+  # --force covers unmanaged pods (reboot would kill them anyway); PDBs
+  # (CNPG primary switchover, RabbitMQ quorum, Longhorn last-replica) are
+  # respected by the eviction API and are exactly why a failed drain must
+  # abort the reboot instead of proceeding.
+  if timeout $((DRAIN_TIMEOUT + 60)) k3s kubectl drain "$SELF" \
+       --ignore-daemonsets --delete-emptydir-data --force \
+       --timeout="${DRAIN_TIMEOUT}s" 2>&1 | logger -t post-upgrade-reboot; then
+    log "drain complete"
+  else
+    log "WARNING: drain failed/timed out; uncordoning and skipping this window"
+    if timeout 30 k3s kubectl uncordon "$SELF" >/dev/null 2>&1; then
+      rm -f "$MARKER"
+    else
+      log "WARNING: uncordon also failed; marker kept, post-upgrade-uncordon will retry on next boot"
+    fi
+    exit 0
+  fi
+fi
 
 # Fresh local etcd snapshot before going down (best effort, cron ones are 6h).
 if [[ "$DRY_RUN" == "0" ]]; then

@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Uncordon this node after a post-upgrade reboot
+Documentation=file:/usr/local/sbin/post-upgrade-uncordon.sh
+After=k3s.service network-online.target
+Wants=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/post-upgrade-uncordon.sh
+# Script polls node readiness for up to 10min after boot.
+TimeoutStartSec=12min
+
+[Install]
+WantedBy=multi-user.target
