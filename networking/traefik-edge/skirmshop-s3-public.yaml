@@ -1,0 +1,56 @@
+---
+# Acceso público (Cloudflare -> traefik-edge) a la carpeta de documentos
+# fiscales del modelo 369 alojados en el MinIO skirmshop-drive (ns backup-hub).
+#
+# Diseño de seguridad:
+#   - SOLO se expone la API S3 (puerto 9000). La consola (9001) NO se expone
+#     públicamente: evita dar a internet superficie de fuerza bruta sobre el
+#     usuario de aplicación (RW) que ve toda la facturación de skirmbooks.
+#   - El servicio vive en backup-hub; traefik-edge solo vigila su propio
+#     namespace, así que se referencia vía un Service ExternalName local
+#     (mismo patrón que minio-s3-ext), no por service cross-namespace directo.
+#   - El acceso a los objetos es por:
+#       (a) lectura anónima del prefijo fiscal/aeat-369-presentados/* (enlaces
+#           directos permanentes que la gestoría abre en el navegador), y
+#       (b) un usuario MinIO read-only `talenom-369` con policy acotada SOLO a
+#           ese prefijo (configurado fuera de GitOps con mc; ver memoria).
+#   - El resto del bucket NO es accesible: sin la lectura anónima de su prefijo
+#     y sin credenciales, cualquier otra ruta devuelve AccessDenied.
+#
+# Cuando la gestoría confirme la descarga, este acceso público puede retirarse
+# (borrar este fichero + revocar usuario/anonymous) sin afectar al uso interno.
+apiVersion: v1
+kind: Service
+metadata:
+  name: skirmshop-drive-s3-ext
+  namespace: traefik-edge
+spec:
+  type: ExternalName
+  externalName: skirmshop-drive-s3.backup-hub.svc.cluster.local
+  ports:
+    - name: s3
+      port: 9000
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: skirmshop-drive-s3-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: skirmshop-s3.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 57.129.17.172,141.94.73.52,145.239.194.168
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`skirmshop-s3.e-dani.com`)
+      services:
+        - name: skirmshop-drive-s3-ext
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
