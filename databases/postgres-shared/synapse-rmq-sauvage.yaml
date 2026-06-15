@@ -24,10 +24,16 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: synapse-rmq-bridge
   annotations:
-    pocharlies.io/target: "sauvage:5672 (docker shared-rabbitmq)"
+    pocharlies.io/target: "shared-rabbitmq pods (in-cluster, /synapse cutover 2026-06-15)"
 spec:
   type: ClusterIP
   clusterIP: None
+  # 2026-06-15 cutover: synapse-rmq ahora es un ALIAS headless de los pods del broker
+  # k8s (app=shared-rabbitmq); k8s autogestiona los endpoints. Antes era headless sin
+  # selector + EndpointSlice manual -> 100.109.183.9 (docker shared-rabbitmq en sauvage).
+  # El EndpointSlice manual se eliminó en este commit (selfHeal lo recrearía si no).
+  selector:
+    app: shared-rabbitmq
   ports:
     - name: amqp
       port: 5672
@@ -37,26 +43,3 @@ spec:
       port: 15672
       protocol: TCP
       targetPort: 15672
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: synapse-rmq-sauvage
-  namespace: databases
-  labels:
-    kubernetes.io/service-name: synapse-rmq
-    app.kubernetes.io/part-of: shared-infrastructure
-    app.kubernetes.io/component: synapse-rmq-bridge
-addressType: IPv4
-endpoints:
-  - addresses:
-      - 100.109.183.9   # sauvage Tailscale IP, also its k8s node InternalIP
-    conditions:
-      ready: true
-ports:
-  - name: amqp
-    port: 5672
-    protocol: TCP
-  - name: management
-    port: 15672
-    protocol: TCP
