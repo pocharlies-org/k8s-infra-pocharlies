@@ -96,7 +96,13 @@ data:
     # ~94% of the watermark and any webhook burst tipped it over -> publishers
     # blocked -> synapse gateway webhook read-timeouts (broke the Telegram Apply
     # button). 1200MB leaves working room above the baseline + buffer to the limit.
-    vm_memory_high_watermark.absolute = 1200MB
+    # 2026-06-15: 1200MB -> 1800MB (limit 2Gi -> 3Gi) for the Synapse broker
+    # migration: the /synapse fabric (445 queues + DLX/delayed) moves here from the
+    # sauvage docker broker. Real usage today is ~0.48GB, but a stuck-consumer backlog
+    # (the 14:33 outage on the docker broker) needs headroom; ~1.4GB stays above the
+    # watermark for the broker to flush before OOM. NB: RAM is NOT the real fix —
+    # delivery-limit (quorum, phase-2) + the backlog alert below are.
+    vm_memory_high_watermark.absolute = 1800MB
     disk_free_limit.absolute = 500MB
 ---
 # enabled_plugins + cluster formation config for the 3-replica HA cluster.
@@ -110,7 +116,7 @@ metadata:
     app.kubernetes.io/component: shared-rabbitmq
 data:
   enabled_plugins: |
-    [rabbitmq_peer_discovery_k8s,rabbitmq_management,rabbitmq_prometheus].
+    [rabbitmq_peer_discovery_k8s,rabbitmq_management,rabbitmq_prometheus,rabbitmq_delayed_message_exchange].
   rabbitmq.conf: |
     cluster_formation.peer_discovery_backend = k8s
     cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
@@ -197,7 +203,12 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: rabbitmq
-          image: rabbitmq:3.13.7-management
+          # 2026-06-15: rabbitmq:3.13.7-management + rabbitmq_delayed_message_exchange
+          # (v3.13.0) + federation, baked in build/Dockerfile.rabbitmq. Required because
+          # the Synapse /synapse topology declares exchange `delayed` (x-delayed-message),
+          # absent from the stock image. Use the harbor.e-dani.com hostname (NOT harbor.lan
+          # 192.168.50.240, which the OVH ks5 nodes can't route).
+          image: harbor.e-dani.com/homelab/shared-rabbitmq:3.13.7-dme
           ports:
             - { name: amqp,       containerPort: 5672  }
             - { name: mgmt,       containerPort: 15672 }
@@ -223,7 +234,7 @@ spec:
             - { name: tuning, mountPath: /etc/rabbitmq/conf.d/20-tuning.conf, subPath: 20-tuning.conf, readOnly: true }
           resources:
             requests: { cpu: 100m, memory: 512Mi }
-            limits:   { memory: 2Gi }
+            limits:   { memory: 3Gi }
           readinessProbe:
             exec: { command: [rabbitmq-diagnostics, -q, ping] }
             initialDelaySeconds: 60
