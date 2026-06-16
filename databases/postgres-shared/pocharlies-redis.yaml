@@ -1,0 +1,124 @@
+# pocharlies-redis — cache del adapter Synapse `product-creator` (índice nl_source SKU->handle de
+# skirmshop.nl, cache puro con TTL 6h). Migrado del docker single-node de sauvage (127.0.0.1:6381)
+# a k8s 2026-06-16. Lo consumen los 9 adapters product-creator (systemd en sauvage) vía ClusterIP.
+#
+# Diseño (auditado): cache puro -> allkeys-lru + maxmemory acotado (a diferencia del docker
+# noeviction/0, que arriesgaba OOM). NO se migran datos: el working set de product-creator es
+# efímero (TTL 6h, ~3k entradas, refill ~3s); los datos viejos del docker (db0 afiliados, db2 brain)
+# son fósiles de hace 28-38 días cuyos dominios YA viven en affiliate-redis (ns skirmshop) y
+# skirmshop-brain-redis (ns skirmshop-brain-prod) -> no se traen.
+#
+# Ubicación: app `postgres-shared` (ns databases) = datastores compartidos que el fabric de sauvage
+# alcanza por ClusterIP (junto a CNPG postgres + shared-rabbitmq). Se evitó el app-of-apps porque su
+# repo estaba en rama de feature de otra sesión.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pocharlies-redis-data
+  namespace: databases
+  labels:
+    app: pocharlies-redis
+    app.kubernetes.io/component: pocharlies-redis
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocharlies-redis
+  namespace: databases
+  labels:
+    app: pocharlies-redis
+    app.kubernetes.io/component: pocharlies-redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # PVC RWO -> el pod nuevo debe esperar a que el viejo suelte el volumen
+  selector:
+    matchLabels:
+      app: pocharlies-redis
+  template:
+    metadata:
+      labels:
+        app: pocharlies-redis
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - "512mb"
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - "900 1"
+            - --save
+            - "300 10"
+          ports:
+            - { name: redis, containerPort: 6379 }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits:   { memory: 768Mi }
+          livenessProbe:
+            exec: { command: [redis-cli, ping] }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            exec: { command: [redis-cli, ping] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+        - name: exporter
+          image: oliver006/redis_exporter:v1.66.0
+          args: ["--redis.addr=redis://localhost:6379"]
+          ports:
+            - { name: metrics, containerPort: 9121 }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { memory: 64Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pocharlies-redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocharlies-redis
+  namespace: databases
+  labels:
+    app: pocharlies-redis
+    app.kubernetes.io/component: pocharlies-redis
+spec:
+  selector:
+    app: pocharlies-redis
+  ports:
+    - { name: redis,   port: 6379, targetPort: 6379 }
+    - { name: metrics, port: 9121, targetPort: 9121 }
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: pocharlies-redis
+  namespace: databases
+  labels:
+    app: pocharlies-redis
+    app.kubernetes.io/component: pocharlies-redis
+spec:
+  selector:
+    matchLabels:
+      app: pocharlies-redis
+  endpoints:
+    - port: metrics
