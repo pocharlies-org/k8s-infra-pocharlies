@@ -25,7 +25,10 @@ controllerServiceAccount:
 runnerScaleSetName: arc-k8s
 
 minRunners: 0
-maxRunners: 8
+# Bumped 8→16: the whole org's CI now runs exclusively on this self-hosted pool
+# (no GitHub-hosted runners). sauvage (48 CPU / 126Gi) hosts the DinD runners at
+# ~9% utilisation, so there is ample headroom for concurrent fleet CI bursts.
+maxRunners: 16
 
 containerMode:
   type: dind
