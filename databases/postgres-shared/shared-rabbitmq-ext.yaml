@@ -1,0 +1,19 @@
+# AMQP externo del broker k8s vía NodePort en la IP Tailscale de los nodos.
+# Creado en el cutover /synapse 2026-06-16 para el "Mac bridge" (sync de reminders del
+# Mac de familia, cliente Pika externo no-cluster): el Mac apunta a 100.109.183.9:30672
+# (Tailscale de sauvage -> kube-proxy -> pods del broker). Reemplaza la conexión directa
+# que tenía al RabbitMQ docker (5672) antes de retirarlo. Auth por user synapse_adapter_reminders.
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-rabbitmq-ext
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: shared-rabbitmq
+spec:
+  type: NodePort
+  selector:
+    app: shared-rabbitmq
+  ports:
+    - { name: amqp, port: 5672, targetPort: 5672, nodePort: 30672, protocol: TCP }
