@@ -1,22 +1,27 @@
 # ARC Runner Scale Set — arc-k8s (shared, organization scope)
-# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set (0.14.1)
 # Namespace: arc-runners
 #
-# Single shared runner for the whole pocharlies-org organization. All repos
-# target it with `runner: arc-k8s` (callers of the reusable workflows in
-# pocharlies-org/k8s-gitops-pocharlies). Org-scope runners are only available
-# to repositories inside pocharlies-org.
+# Single shared runner for the whole pocharlies-org organization. ALL org CI now
+# runs exclusively here (no GitHub-hosted runners) — repos target it with
+# `runs-on: arc-k8s`. Org-scope runners are only available to repositories inside
+# pocharlies-org.
 #
-# Auth: PAT (org scope) with repo+workflow in secret arc-github-pat-secret
-# (arc-runners namespace):
-#   kubectl create secret generic arc-github-pat-secret -n arc-runners \
-#     --from-literal=github_token=<PAT>
+# Auth: GitHub App, secret `arc-github-app` (arc-runners namespace), materialized
+# from Vault by external-secrets (see arc-github-app-externalsecret.yaml).
+# NOTE: an earlier revision of this file referenced a PAT secret
+# `arc-github-pat-secret` that no longer exists — the live release uses the App.
 #
 # Image build jobs use Docker/container actions, so this scale set runs in dind
 # mode. DinD is privileged; keep these runners isolated in arc-runners.
+#
+# This is a DIRECT Helm release (NOT ArgoCD-managed). Apply changes with:
+#   helm upgrade arc-k8s \
+#     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#     --version 0.14.1 -n arc-runners -f platform/arc/scale-set-k8s.yaml
 
 githubConfigUrl: https://github.com/pocharlies-org
-githubConfigSecret: arc-github-pat-secret
+githubConfigSecret: arc-github-app
 
 controllerServiceAccount:
   namespace: arc-systems
@@ -25,9 +30,10 @@ controllerServiceAccount:
 runnerScaleSetName: arc-k8s
 
 minRunners: 0
-# Bumped 8→16: the whole org's CI now runs exclusively on this self-hosted pool
-# (no GitHub-hosted runners). sauvage (48 CPU / 126Gi) hosts the DinD runners at
-# ~9% utilisation, so there is ample headroom for concurrent fleet CI bursts.
+# Bumped 8->16: the whole org's CI now runs exclusively on this self-hosted pool.
+# sauvage (48 CPU / 126Gi) + ubuntu host the DinD runners at low utilisation, so
+# 16 concurrent runners is well within capacity and gives headroom for fleet-wide
+# CI bursts.
 maxRunners: 16
 
 containerMode:
@@ -35,6 +41,16 @@ containerMode:
 
 template:
   spec:
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - ubuntu
+          weight: 100
     nodeSelector:
       kubernetes.io/arch: amd64
       workload: cpu
@@ -43,3 +59,7 @@ template:
       key: role
       operator: Equal
       value: edge
+    - effect: PreferNoSchedule
+      key: pool
+      operator: Equal
+      value: dev
