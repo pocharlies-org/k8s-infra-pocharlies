@@ -1,4 +1,6 @@
 # SRE hygiene overlay for the live Helm release `metallb`.
+# Use with post-renderer-sre.py so hostNetwork speaker pods use cluster DNS and
+# do not emit DNSConfigForming warnings from long node resolver lists.
 # Keeps Kyverno require-resource-limits from producing recurring warning noise.
 controller:
   resources:
