@@ -24,6 +24,9 @@ spec:
       annotations:
         # Rootless buildkit requires AppArmor unconfined (no privileged escalation).
         container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+        # Disable Vault agent injection: the injector's MutatingWebhook resets
+        # allowPrivilegeEscalation to false on ALL containers, breaking rootlesskit.
+        vault.hashicorp.com/agent-inject: "false"
     spec:
       # amd64 worker. Prefer the home node (ubuntu) which reaches harbor.lan +
       # harbor.e-dani + ClusterIPs; tolerate its soft dev taint. Falls back to
@@ -45,6 +48,12 @@ spec:
           value: dev
           effect: PreferNoSchedule
       automountServiceAccountToken: false
+      # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
+      # setup. The container-level override alone is insufficient because k3s/runc
+      # applies the seccomp profile before the container securityContext is merged.
+      securityContext:
+        seccompProfile:
+          type: Unconfined
       containers:
         - name: buildkitd
           image: docker.io/moby/buildkit:v0.31.0-rootless
@@ -65,13 +74,21 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 30
           securityContext:
-            # Rootless: no privileged, no extra Linux caps. Only seccomp
-            # Unconfined is needed so the userns/overlay snapshotter works.
+            # Rootless buildkit needs SETUID+SETGID so newuidmap/newgidmap can
+            # configure the user-namespace UID/GID map. Not privileged; Kyverno
+            # only blocks privileged:true, not specific Linux capabilities.
+            # allowPrivilegeEscalation=true is required: with APE=false the kernel
+            # strips the ambient+inheritable caps across exec(), which prevents
+            # newuidmap from using its setuid bit even if SETUID is in add[].
             seccompProfile:
               type: Unconfined
             runAsUser: 1000
             runAsGroup: 1000
-            allowPrivilegeEscalation: false
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - SETUID
+                - SETGID
           resources:
             requests:
               cpu: "500m"
