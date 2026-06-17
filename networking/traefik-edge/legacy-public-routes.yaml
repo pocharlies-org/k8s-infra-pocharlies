@@ -323,19 +323,8 @@ spec:
   - websecure
   ingressClassName: traefik-edge
   routes:
-  - kind: Rule
-    match: Host(`sauvage.e-dani.com`) && PathPrefix(`/apps/back-in-stock`)
-    middlewares:
-    - name: strip-back-in-stock
-    services:
-    - name: sauvage-localhost
-      port: 3470
-  - kind: Rule
-    match: Host(`sauvage.e-dani.com`) && (PathPrefix(`/auth`) || PathPrefix(`/app`)
-      || PathPrefix(`/api`) || PathPrefix(`/webhooks`) || Path(`/healthz`) || Path(`/readyz`))
-    services:
-    - name: sauvage-localhost
-      port: 3470
+  # Shopify back-in-stock paths are owned by
+  # k8s-shopify-back-in-stock-pocharlies. Do not duplicate them here.
   - kind: Rule
     match: Host(`sauvage.e-dani.com`)
     services:
