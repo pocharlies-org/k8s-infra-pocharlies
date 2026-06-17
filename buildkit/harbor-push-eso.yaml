@@ -1,0 +1,44 @@
+---
+# ExternalSecret: synthesize harbor-push dockerconfigjson from vault.
+# Vault path: secret/infra/harbor/ci-robot (username + password + registry).
+# The resulting secret is consumed by both buildkitd-amd64 and buildkitd-arm64
+# as a volume-mounted Docker config.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-push
+  namespace: buildkit
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: harbor-push
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {
+            "auths": {
+              "{{ .registry }}": {
+                "username": "{{ .username }}",
+                "password": "{{ .password }}",
+                "auth": "{{ printf "%s:%s" .username .password | b64enc }}"
+              }
+            }
+          }
+  data:
+    - secretKey: username
+      remoteRef:
+        key: infra/harbor/ci-robot
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: infra/harbor/ci-robot
+        property: password
+    - secretKey: registry
+      remoteRef:
+        key: infra/harbor/ci-robot
+        property: registry
