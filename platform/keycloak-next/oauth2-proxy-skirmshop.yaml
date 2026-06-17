@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-skirmshop-config
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+data:
+  oauth2_proxy.cfg: |
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
+    skip_oidc_discovery = true
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/certs"
+    redirect_url = "https://admin.skirmshop.es/oauth2/callback"
+    scope = "openid email profile"
+
+    reverse_proxy = true
+    http_address = "0.0.0.0:4180"
+    upstreams = [ "static://202" ]
+
+    cookie_name = "_skirmshop_sso"
+    cookie_secure = true
+    cookie_samesite = "lax"
+    cookie_expire = "12h"
+    cookie_refresh = "1h"
+
+    whitelist_domains = [ ".skirmshop.es" ]
+    email_domains = [ "*" ]
+    allowed_groups = [ "/edani-admins", "/edani-operators" ]
+
+    pass_access_token = true
+    pass_user_headers = true
+    set_authorization_header = true
+    set_xauthrequest = true
+    skip_provider_button = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-skirmshop
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oauth2-proxy-skirmshop
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-skirmshop
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+          args: ["--config=/etc/oauth2-proxy/oauth2_proxy.cfg"]
+          envFrom:
+            - secretRef:
+                name: oauth2-proxy-secrets
+          ports:
+            - { name: http, containerPort: 4180 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy/oauth2_proxy.cfg
+              subPath: oauth2_proxy.cfg
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: oauth2-proxy-skirmshop-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-skirmshop
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+spec:
+  selector:
+    app: oauth2-proxy-skirmshop
+  ports:
+    - { name: http, port: 4180, targetPort: http }
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmshop-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-skirmshop.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    authResponseHeaders:
+      - Authorization
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Forwarded-User
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmshop-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    status:
+      - "401-403"
+    service:
+      name: oauth2-proxy-skirmshop
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+      "403": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmshop-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmshop
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-skirmshop-errors
+      - name: sso-skirmshop-forward-auth
