@@ -80,7 +80,7 @@ spec:
         message: >
           Images must use harbor.e-dani.com, harbor.lan.e-dani.com,
           registry.k8s.io, gcr.io/k8s-staging-*,
-          quay.io, ghcr.io, docker.io/library, or nvcr.io/nvidia.
+          quay.io, ghcr.io, docker.io/library, nvcr.io/nvidia, or reg.kyverno.io.
           Build and push to harbor.e-dani.com/homelab/ for private images.
         deny:
           conditions:
@@ -96,6 +96,7 @@ spec:
                   - ghcr.io
                   - docker.io
                   - nvcr.io
+                  - reg.kyverno.io
                   - ""   # relative images (local)
 ---
 # POLICY 3: Require resource requests and limits on all containers
