@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd-amd64
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: amd64
+spec:
+  replicas: 1
+  # buildkitd holds a node-local cache PVC (RWO, local-path) -> Recreate avoids
+  # two pods racing the same volume during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+      arch: amd64
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+        arch: amd64
+      annotations:
+        # Rootless buildkit requires AppArmor unconfined (no privileged escalation).
+        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+    spec:
+      # amd64 worker. Prefer the home node (ubuntu) which reaches harbor.lan +
+      # harbor.e-dani + ClusterIPs; tolerate its soft dev taint. Falls back to
+      # any amd64 node (ks5 control-plane / sauvage) if ubuntu is unavailable.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: ["ubuntu"]
+      tolerations:
+        - key: pool
+          operator: Equal
+          value: dev
+          effect: PreferNoSchedule
+      automountServiceAccountToken: false
+      containers:
+        - name: buildkitd
+          image: docker.io/moby/buildkit:v0.31.0-rootless
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --oci-worker-no-process-sandbox
+          readinessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            # Rootless: no privileged, no extra Linux caps. Only seccomp
+            # Unconfined is needed so the userns/overlay snapshotter works.
+            seccompProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          ports:
+            - name: buildkit
+              containerPort: 1234
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+            - name: harbor-push
+              mountPath: /home/user/.docker
+              readOnly: true
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkitd-amd64-cache
+        - name: harbor-push
+          secret:
+            secretName: harbor-push
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-amd64-cache
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: amd64
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd-amd64
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: amd64
+spec:
+  type: ClusterIP
+  selector:
+    app: buildkitd
+    arch: amd64
+  ports:
+    - name: buildkit
+      port: 1234
+      targetPort: 1234
+      protocol: TCP
