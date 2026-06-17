@@ -55,6 +55,11 @@ reportsController:
     limits:
       memory: 512Mi
 
+features:
+  policyExceptions:
+    enabled: true
+    namespace: monitoring
+
 # Grafana dashboard configmap for kyverno metrics
 grafana:
   enabled: true
