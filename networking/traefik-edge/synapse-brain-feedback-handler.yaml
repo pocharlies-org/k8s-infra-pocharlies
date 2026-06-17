@@ -17,6 +17,84 @@ data:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", "1048576"))
+    DATA_DIR = os.getenv("DATA_DIR", "/data")
+    EVENTS_PATH = os.path.join(DATA_DIR, "events.jsonl")
+    RERANK_SIGNALS_PATH = os.path.join(DATA_DIR, "rerank-signals.jsonl")
+    LATEST_SIGNAL_PATH = os.path.join(DATA_DIR, "latest-rerank-signal.json")
+
+
+    def _write_jsonl(path: str, record: dict) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        line = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+
+
+    def _write_json(path: str, record: dict) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(record, fh, sort_keys=True, indent=2)
+            fh.write("\n")
+        os.replace(tmp_path, path)
+
+
+    def _ranked_results(payload: dict) -> list[dict]:
+        results = payload.get("ranked_results") or []
+        if not isinstance(results, list):
+            return []
+        out = []
+        for item in results[:100]:
+            if not isinstance(item, dict):
+                continue
+            usefulness = item.get("usefulness")
+            try:
+                usefulness_score = int(usefulness)
+            except (TypeError, ValueError):
+                usefulness_score = 0
+            if usefulness_score >= 4 and item.get("used"):
+                action = "boost_for_similar_queries"
+            elif usefulness_score <= 1:
+                action = "downrank_or_suppress"
+            else:
+                action = "observe"
+            out.append({
+                "result_id": item.get("result_id"),
+                "source_id": item.get("source_id"),
+                "displayed_rank": item.get("displayed_rank"),
+                "feedback_rank": item.get("feedback_rank"),
+                "usefulness": usefulness_score,
+                "used": bool(item.get("used")),
+                "rerank_action": action,
+            })
+        return out
+
+
+    def _learning_signal(payload: dict) -> dict:
+        usefulness = payload.get("overall_usefulness")
+        try:
+            usefulness_score = int(usefulness)
+        except (TypeError, ValueError):
+            usefulness_score = 0
+        misleading = payload.get("misleading_source_ids") or []
+        missing_information = str(payload.get("missing_information") or "").strip()
+        action_taken = str(payload.get("action_taken") or "")
+        if misleading or usefulness_score <= 1 or action_taken == "failed":
+            recommended_action = "review_and_downrank_bad_sources"
+        elif missing_information:
+            recommended_action = "expand_context_for_similar_requests"
+        elif usefulness_score >= 4:
+            recommended_action = "boost_used_sources_for_similar_requests"
+        else:
+            recommended_action = "observe_more_feedback"
+        return {
+            "recommended_action": recommended_action,
+            "overall_usefulness": usefulness_score,
+            "confidence": payload.get("confidence"),
+            "has_missing_information": bool(missing_information),
+            "misleading_source_count": len(misleading) if isinstance(misleading, list) else 0,
+            "promotion_guardrail": "neuron_promotion_disabled_until_reviewed_gate",
+        }
 
 
     class Handler(BaseHTTPRequestHandler):
@@ -76,25 +154,46 @@ data:
                 return
 
             digest = hashlib.sha256(raw).hexdigest()
-            record = {
-                "event": "brain.search_feedback.received",
+            learning_signal = _learning_signal(payload)
+            rerank_signal = {
+                "event": "brain.feedback.rerank_signal",
                 "received_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "search_event_id": event_id,
                 "instance_id": instance_id,
                 "tool_name": tool_name,
+                "consumer": payload.get("consumer"),
+                "query_hash": payload.get("query_hash"),
+                "query_preview": payload.get("query_preview"),
                 "overall_usefulness": payload.get("overall_usefulness"),
                 "promotion_mode": payload.get("promotion_mode"),
-                "ranked_results": len(payload.get("ranked_results") or []),
+                "learning_signal": learning_signal,
+                "rerank_candidates": _ranked_results(payload),
+                "ranked_result_count": len(payload.get("ranked_results") or []),
                 "payload_sha256": digest,
                 "token_present": bool(self.headers.get("X-Synapse-Brain-Token")),
                 "reranking_queue": "synapse.brain_feedback",
             }
-            print(json.dumps(record, sort_keys=True), flush=True)
+            event_record = {
+                "event": "brain.feedback.received",
+                "received_at": rerank_signal["received_at"],
+                "search_event_id": event_id,
+                "instance_id": instance_id,
+                "tool_name": tool_name,
+                "payload_sha256": digest,
+                "reranking_queue": "synapse.brain_feedback",
+            }
+            _write_jsonl(EVENTS_PATH, event_record)
+            _write_jsonl(RERANK_SIGNALS_PATH, rerank_signal)
+            _write_json(LATEST_SIGNAL_PATH, rerank_signal)
+            print(json.dumps(rerank_signal, sort_keys=True), flush=True)
             self._json(202, {
                 "status": "accepted",
-                "event_type": "brain.search_feedback",
+                "event_type": "brain.feedback.rerank_signal",
                 "search_event_id": event_id,
                 "reranking_queue": "synapse.brain_feedback",
+                "recommended_action": learning_signal["recommended_action"],
+                "learning_signal": learning_signal,
+                "queue_recorded": True,
             })
 
 
@@ -108,8 +207,8 @@ metadata:
   name: synapse-brain-feedback-handler
   namespace: traefik-edge
   labels:
-    app.kubernetes.io/name: synapse-brain-feedback-handler
-    app.kubernetes.io/part-of: synapse
+        app.kubernetes.io/name: synapse-brain-feedback-handler
+        app.kubernetes.io/part-of: synapse
 spec:
   replicas: 1
   selector:
@@ -132,6 +231,9 @@ spec:
           image: python:3.12-alpine
           imagePullPolicy: IfNotPresent
           command: ["python", "/app/handler.py"]
+          env:
+            - name: DATA_DIR
+              value: /data
           ports:
             - name: http
               containerPort: 8080
@@ -156,10 +258,31 @@ spec:
             - name: handler
               mountPath: /app
               readOnly: true
+            - name: queue
+              mountPath: /data
       volumes:
         - name: handler
           configMap:
             name: synapse-brain-feedback-handler
+        - name: queue
+          persistentVolumeClaim:
+            claimName: synapse-brain-feedback-queue
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: synapse-brain-feedback-queue
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: synapse-brain-feedback-handler
+    app.kubernetes.io/part-of: synapse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
