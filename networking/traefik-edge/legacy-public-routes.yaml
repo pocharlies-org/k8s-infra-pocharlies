@@ -426,6 +426,12 @@ spec:
   ingressClassName: traefik-edge
   routes:
   - kind: Rule
+    match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-feedback`)
+    priority: 2500
+    services:
+    - name: synapse-brain-feedback-handler
+      port: 8080
+  - kind: Rule
     match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
     services:
     - name: synapse-edge-host
