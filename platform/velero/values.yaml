@@ -29,7 +29,7 @@ configuration:
 
   defaultRepoMaintenanceFrequency: 168h0m0s
   garbageCollectionFrequency: 1h0m0s
-  features: ""
+  features: EnableCSI
   logLevel: info
   # Pin kopia maintenance jobs to x86 — dgx/sauvage nodes can't reach MinIO
   # ClusterIP because the flannel overlay doesn't cross the WG tunnel from LAN→sauvage.
@@ -37,6 +37,10 @@ configuration:
     repositoryConfigData:
       global:
         keepLatestMaintenanceJobs: 3
+        podResources:
+          cpuRequest: "50m"
+          memoryRequest: "128Mi"
+          memoryLimit: "512Mi"
         loadAffinity:
           - nodeSelector:
               matchExpressions:
