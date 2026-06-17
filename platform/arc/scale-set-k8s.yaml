@@ -41,6 +41,10 @@ containerMode:
 
 template:
   spec:
+    # Prefer sauvage (48 CPU / 126Gi, ~idle) over ubuntu (16 CPU home node that
+    # runs LLM CPU inference + aiops and sits ~98% CPU). Heavy monorepo `tsc`
+    # builds OOM-killed/segfaulted (exit 137/139) when runners landed on the
+    # contended ubuntu node. Soft preference: ubuntu still serves as fallback.
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -49,7 +53,7 @@ template:
             - key: kubernetes.io/hostname
               operator: In
               values:
-              - ubuntu
+              - sauvage
           weight: 100
     nodeSelector:
       kubernetes.io/arch: amd64
