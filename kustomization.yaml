@@ -30,3 +30,4 @@ resources:
   - storage/minio/backup-creds.yaml
   - storage/minio/synapse-email-attachments.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
+  - buildkit

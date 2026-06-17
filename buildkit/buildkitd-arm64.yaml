@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd-arm64
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64
+spec:
+  replicas: 1
+  # buildkitd holds a node-local cache PVC (RWO, local-path) -> Recreate avoids
+  # two pods racing the same volume during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+      arch: arm64
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+        arch: arm64
+      annotations:
+        # Rootless buildkit requires AppArmor unconfined (no privileged escalation).
+        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+    spec:
+      # arm64 worker pinned to gx10-ec3d (the only arm64 worker node).
+      # The node carries dedicated=llm:NoSchedule so we must tolerate it explicitly.
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: ["gx10-ec3d"]
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: llm
+          effect: NoSchedule
+      automountServiceAccountToken: false
+      containers:
+        - name: buildkitd
+          image: docker.io/moby/buildkit:v0.31.0-rootless
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --oci-worker-no-process-sandbox
+          readinessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            # Rootless: no privileged, no extra Linux caps. Only seccomp
+            # Unconfined is needed so the userns/overlay snapshotter works.
+            seccompProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+          resources:
+            # Modest caps: gx10 GB10 has 81% memory reserved by LLM workloads.
+            requests:
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          ports:
+            - name: buildkit
+              containerPort: 1234
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+            - name: harbor-push
+              mountPath: /home/user/.docker
+              readOnly: true
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkitd-arm64-cache
+        - name: harbor-push
+          secret:
+            secretName: harbor-push
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-arm64-cache
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd-arm64
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64
+spec:
+  type: ClusterIP
+  selector:
+    app: buildkitd
+    arch: arm64
+  ports:
+    - name: buildkit
+      port: 1234
+      targetPort: 1234
+      protocol: TCP
