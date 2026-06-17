@@ -15,6 +15,7 @@ resources:
   - networking/traefik-edge/firecrawl-edge-auth.yaml
   - networking/traefik-edge/harbor-ingressroute.yaml
   - networking/traefik-edge/legacy-public-routes.yaml
+  - networking/traefik-edge/synapse-brain-feedback-handler.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
