@@ -9,6 +9,11 @@ controller:
       memory: 256Mi
 
 speaker:
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: llm
+      effect: NoSchedule
   resources:
     requests:
       cpu: 10m
