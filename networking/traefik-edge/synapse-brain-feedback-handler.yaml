@@ -41,7 +41,23 @@ data:
         os.replace(tmp_path, path)
 
 
+    def _metadata(payload: dict) -> dict:
+        metadata = payload.get("metadata") or {}
+        return metadata if isinstance(metadata, dict) else {}
+
+
+    def _rerank_eligible(payload: dict) -> bool:
+        metadata = _metadata(payload)
+        if metadata.get("diagnostic_only") is True:
+            return False
+        if metadata.get("rerank_eligible") is False:
+            return False
+        return True
+
+
     def _ranked_results(payload: dict) -> list[dict]:
+        if not _rerank_eligible(payload):
+            return []
         results = payload.get("ranked_results") or []
         if not isinstance(results, list):
             return []
@@ -81,7 +97,9 @@ data:
         misleading = payload.get("misleading_source_ids") or []
         missing_information = str(payload.get("missing_information") or "").strip()
         action_taken = str(payload.get("action_taken") or "")
-        if misleading or usefulness_score <= 1 or action_taken == "failed":
+        if not _rerank_eligible(payload):
+            recommended_action = "observe_diagnostic_feedback"
+        elif misleading or usefulness_score <= 1 or action_taken == "failed":
             recommended_action = "review_and_downrank_bad_sources"
         elif missing_information:
             recommended_action = "expand_context_for_similar_requests"
@@ -95,6 +113,7 @@ data:
             "confidence": payload.get("confidence"),
             "has_missing_information": bool(missing_information),
             "misleading_source_count": len(misleading) if isinstance(misleading, list) else 0,
+            "rerank_eligible": _rerank_eligible(payload),
             "promotion_guardrail": "neuron_promotion_disabled_until_reviewed_gate",
         }
 
@@ -175,6 +194,7 @@ data:
 
             digest = hashlib.sha256(raw).hexdigest()
             learning_signal = _learning_signal(payload)
+            rerank_candidates = _ranked_results(payload)
             rerank_signal = {
                 "event": "brain.feedback.rerank_signal",
                 "received_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -187,8 +207,9 @@ data:
                 "overall_usefulness": payload.get("overall_usefulness"),
                 "promotion_mode": payload.get("promotion_mode"),
                 "learning_signal": learning_signal,
-                "rerank_candidates": _ranked_results(payload),
+                "rerank_candidates": rerank_candidates,
                 "ranked_result_count": len(payload.get("ranked_results") or []),
+                "metadata": _metadata(payload),
                 "payload_sha256": digest,
                 "token_present": bool(self.headers.get(TOKEN_HEADER)),
                 "token_valid": True,
