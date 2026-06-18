@@ -263,6 +263,8 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: synapse-brain-feedback-handler
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
