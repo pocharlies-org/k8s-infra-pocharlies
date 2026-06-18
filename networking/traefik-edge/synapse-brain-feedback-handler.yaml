@@ -193,6 +193,8 @@ data:
                 "reranking_queue": "synapse.brain_feedback",
                 "recommended_action": learning_signal["recommended_action"],
                 "learning_signal": learning_signal,
+                "promotion_mode": payload.get("promotion_mode"),
+                "candidate_count": 0,
                 "queue_recorded": True,
             })
 
