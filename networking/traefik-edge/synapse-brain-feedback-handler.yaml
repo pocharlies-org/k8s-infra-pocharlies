@@ -288,6 +288,8 @@ spec:
     type: Recreate
   template:
     metadata:
+      annotations:
+        skirmshop.e-dani.com/feedback-handler-config-revision: "2026-06-18-diagnostic-rerank"
       labels:
         app.kubernetes.io/name: synapse-brain-feedback-handler
         app.kubernetes.io/part-of: synapse
