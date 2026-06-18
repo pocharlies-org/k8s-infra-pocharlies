@@ -11,6 +11,7 @@ data:
     from __future__ import annotations
 
     import hashlib
+    import hmac
     import json
     import os
     import time
@@ -21,6 +22,7 @@ data:
     EVENTS_PATH = os.path.join(DATA_DIR, "events.jsonl")
     RERANK_SIGNALS_PATH = os.path.join(DATA_DIR, "rerank-signals.jsonl")
     LATEST_SIGNAL_PATH = os.path.join(DATA_DIR, "latest-rerank-signal.json")
+    TOKEN_HEADER = "X-Synapse-Brain-Token"
 
 
     def _write_jsonl(path: str, record: dict) -> None:
@@ -97,6 +99,18 @@ data:
         }
 
 
+    def _auth_failure(headers) -> tuple[int, dict] | None:
+        expected_token = os.getenv("SYNAPSE_BRAIN_FEEDBACK_TOKEN", "").strip()
+        if not expected_token:
+            return 503, {"detail": "Synapse Brain feedback token is not configured"}
+        provided_token = str(headers.get(TOKEN_HEADER) or "")
+        if not provided_token:
+            return 401, {"detail": "Missing Synapse Brain feedback token"}
+        if not hmac.compare_digest(provided_token, expected_token):
+            return 401, {"detail": "Invalid Synapse Brain feedback token"}
+        return None
+
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "synapse-brain-feedback/1.0"
 
@@ -125,6 +139,12 @@ data:
         def do_POST(self) -> None:
             if self.path != "/webhooks/brain-feedback":
                 self._json(404, {"detail": "Not Found"})
+                return
+
+            auth_failure = _auth_failure(self.headers)
+            if auth_failure is not None:
+                status, payload = auth_failure
+                self._json(status, payload)
                 return
 
             try:
@@ -170,7 +190,8 @@ data:
                 "rerank_candidates": _ranked_results(payload),
                 "ranked_result_count": len(payload.get("ranked_results") or []),
                 "payload_sha256": digest,
-                "token_present": bool(self.headers.get("X-Synapse-Brain-Token")),
+                "token_present": bool(self.headers.get(TOKEN_HEADER)),
+                "token_valid": True,
                 "reranking_queue": "synapse.brain_feedback",
             }
             event_record = {
@@ -202,6 +223,32 @@ data:
     if __name__ == "__main__":
         port = int(os.getenv("PORT", "8080"))
         ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: synapse-brain-feedback-token
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: synapse-brain-feedback-handler
+    app.kubernetes.io/part-of: synapse
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: synapse-brain-feedback-token
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        SYNAPSE_BRAIN_FEEDBACK_TOKEN: "{{ .dashboard_api_key }}"
+  data:
+    - secretKey: dashboard_api_key
+      remoteRef:
+        key: skirmshop-brain/prod/app
+        property: dashboard_api_key
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -236,6 +283,11 @@ spec:
           env:
             - name: DATA_DIR
               value: /data
+            - name: SYNAPSE_BRAIN_FEEDBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: synapse-brain-feedback-token
+                  key: SYNAPSE_BRAIN_FEEDBACK_TOKEN
           ports:
             - name: http
               containerPort: 8080
