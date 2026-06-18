@@ -30,39 +30,32 @@ controllerServiceAccount:
 runnerScaleSetName: arc-k8s
 
 minRunners: 0
-# Bumped 8->16: the whole org's CI now runs exclusively on this self-hosted pool.
-# sauvage (48 CPU / 126Gi) + ubuntu host the DinD runners at low utilisation, so
-# 16 concurrent runners is well within capacity and gives headroom for fleet-wide
-# CI bursts.
-maxRunners: 16
+# Keep DinD builds off the edge/business node. A 2026-06-18 audit found ARC
+# runners on sauvage driving NodeDiskIOSaturation and kubelet exec/probe
+# timeouts. Limit concurrency until there is a dedicated non-edge CPU pool.
+maxRunners: 4
 
 containerMode:
   type: dind
 
 template:
   spec:
-    # Prefer sauvage (48 CPU / 126Gi, ~idle) over ubuntu (16 CPU home node that
-    # runs LLM CPU inference + aiops and sits ~98% CPU). Heavy monorepo `tsc`
-    # builds OOM-killed/segfaulted (exit 137/139) when runners landed on the
-    # contended ubuntu node. Soft preference: ubuntu still serves as fallback.
+    # Run only on non-edge amd64 CPU nodes. Do not tolerate `role=edge`; that
+    # keeps Docker-in-Docker image builds away from sauvage and its Skirmshop /
+    # Synapse workloads.
     affinity:
       nodeAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-        - preference:
-            matchExpressions:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
             - key: kubernetes.io/hostname
-              operator: In
+              operator: NotIn
               values:
               - sauvage
-          weight: 100
     nodeSelector:
       kubernetes.io/arch: amd64
       workload: cpu
     tolerations:
-    - effect: NoSchedule
-      key: role
-      operator: Equal
-      value: edge
     - effect: PreferNoSchedule
       key: pool
       operator: Equal

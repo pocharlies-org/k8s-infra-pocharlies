@@ -7,7 +7,7 @@ VERSION="0.14.1"
 NAMESPACE="arc-runners"
 
 kubectl get namespace "$NAMESPACE" >/dev/null
-kubectl get secret arc-github-pat-secret -n "$NAMESPACE" >/dev/null
+kubectl get secret arc-github-app -n "$NAMESPACE" >/dev/null
 
 # Single shared org-scope runner for all of pocharlies-org.
 helm upgrade --install arc-k8s "$CHART" \

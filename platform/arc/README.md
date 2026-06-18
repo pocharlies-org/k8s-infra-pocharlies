@@ -22,8 +22,8 @@ Org-scope runners are only available to repositories inside `pocharlies-org`.
 
 ## Apply
 
-The `arc-github-pat-secret` secret must exist in `arc-runners` and contain
-`github_token` (a PAT with org repo + workflow scope).
+The `arc-github-app` secret must exist in `arc-runners`. It is materialized
+from Vault by External Secrets and is referenced by `githubConfigSecret`.
 
 ```bash
 platform/arc/install-scale-sets.sh
@@ -31,4 +31,4 @@ platform/arc/install-scale-sets.sh
 
 `arc-k8s` uses `containerMode.type: dind` so Docker build and push jobs work
 from Kubernetes runners. DinD is privileged; keep these runners isolated in
-`arc-runners`.
+`arc-runners` and off the `role=edge` node `sauvage`.
