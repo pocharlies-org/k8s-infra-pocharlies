@@ -111,6 +111,7 @@ providers:
       - keycloak
       - control-nexus
       - bambulab
+      - libreplay-staging
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -130,6 +131,7 @@ providers:
       - jarvis
       - keycloak
       - control-nexus
+      - libreplay-staging
     allowExternalNameServices: true
     allowEmptyServices: true
 
