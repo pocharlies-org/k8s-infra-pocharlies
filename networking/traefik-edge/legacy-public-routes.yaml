@@ -295,13 +295,6 @@ spec:
       namespace: skirmshop
       port: 3003
   - kind: Rule
-    match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/chatbot`)
-    middlewares:
-    - name: strip-chatbot
-    services:
-    - name: sauvage-localhost
-      port: 3100
-  - kind: Rule
     match: Host(`skirmshop.e-dani.com`) && PathPrefix(`/product-ai`)
     middlewares:
     - name: strip-product-ai
