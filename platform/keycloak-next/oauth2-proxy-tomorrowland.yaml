@@ -67,6 +67,7 @@ data:
     skip_provider_button = true
   allowed-emails: |
     me@e-dani.com
+    valli.aam@gmail.com
 ---
 apiVersion: apps/v1
 kind: Deployment
