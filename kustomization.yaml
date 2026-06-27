@@ -9,6 +9,7 @@ resources:
   - networking/traefik-lan/tls-store.yaml
   - networking/traefik-lan/lan-app-routes.yaml
   - networking/traefik-lan/dgx-public-host-lan.yaml
+  - networking/traefik-lan/openclaw-lan.yaml
   - networking/traefik-lan/synapse-email-attachments-lan.yaml
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/tls-store.yaml
