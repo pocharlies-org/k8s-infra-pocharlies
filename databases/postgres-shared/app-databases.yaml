@@ -71,6 +71,20 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
+  name: competitor-intel
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: competitor_intel
+  owner: skirmshop
+  cluster:
+    name: postgres-shared
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
   name: bundles
   namespace: databases
   labels:
