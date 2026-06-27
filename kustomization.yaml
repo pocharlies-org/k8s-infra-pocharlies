@@ -12,6 +12,7 @@ resources:
   - networking/traefik-lan/openclaw-lan.yaml
   - networking/traefik-lan/synapse-email-attachments-lan.yaml
   - networking/traefik-edge/namespace.yaml
+  - networking/traefik-edge/networkpolicy.yaml
   - networking/traefik-edge/tls-store.yaml
   - networking/traefik-edge/firecrawl-edge-auth.yaml
   - networking/traefik-edge/harbor-ingressroute.yaml
