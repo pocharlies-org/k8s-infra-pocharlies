@@ -1,0 +1,80 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-edge-default-deny-ingress
+  namespace: traefik-edge
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-edge-allow-same-namespace
+  namespace: traefik-edge
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-edge-allow-node-proxy-app-kubernetes-labels
+  namespace: traefik-edge
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - edge-static-server
+          - firecrawl-edge-auth
+          - synapse-brain-feedback-handler
+          - tesla-static
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 100.64.0.0/10
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-edge-allow-node-proxy-app-labels
+  namespace: traefik-edge
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - uriel-chat
+          - uriel-oauth2-proxy
+          - uriel-poster
+          - uriel-site
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 100.64.0.0/10
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 4180
+  policyTypes:
+    - Ingress
