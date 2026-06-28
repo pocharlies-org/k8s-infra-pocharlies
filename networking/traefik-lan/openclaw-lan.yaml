@@ -32,34 +32,6 @@ endpoints:
       - 100.109.183.9
     conditions: {}
 ---
-# Trusted-proxy identity for the OpenClaw gateway (gateway.auth.mode=trusted-proxy).
-# Traefik-LAN is the sole ingress in front of the gateway and is therefore the
-# trust boundary: it STRIPS any inbound Authorization header (empty value = delete,
-# so a client cannot spoof a gateway token or smuggle credentials) and INJECTS a
-# fixed operator identity that the gateway consumes as the authenticated principal.
-# This carries no secrets — identity is asserted by network position, mirroring the
-# openclaw-k8s (public edge) trusted-proxy posture.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: openclaw-lan-identity
-  namespace: traefik-lan
-  labels:
-    app.kubernetes.io/name: openclaw-lan-host
-    app.kubernetes.io/part-of: traefik-lan
-    app.kubernetes.io/component: trusted-proxy-identity
-spec:
-  headers:
-    customRequestHeaders:
-      # Drop any client-supplied Authorization so it can never reach the gateway.
-      Authorization: ""
-      X-Forwarded-Proto: https
-      X-Forwarded-Host: openclaw.lan.e-dani.com
-      X-Forwarded-User: openclaw-lan
-      X-Auth-Request-User: openclaw-lan
-      X-Auth-Request-Email: openclaw-lan@e-dani.com
-      X-Auth-Request-Groups: /edani-operators
----
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -69,30 +41,23 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # LAN / Tailscale clients reach the Control UI directly. The gateway runs in
-    # trusted-proxy mode (gateway.auth.mode=trusted-proxy) and trusts the identity
-    # headers injected by Traefik-LAN below; TLS terminates here. This is
-    # defence-in-depth, mirroring the synapse.lan Ops UI posture.
+    # LAN / Tailscale clients reach the Control UI directly. The gateway has its
+    # own app-layer auth (gateway.auth.token; controlUi.allowInsecureAuth=false,
+    # satisfied by TLS termination here), so this is defence-in-depth, mirroring
+    # the synapse.lan Ops UI posture.
     - kind: Rule
       match: Host(`openclaw.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
       priority: 300
-      middlewares:
-        - name: openclaw-lan-identity
-          namespace: traefik-lan
       services:
         - name: openclaw-lan-host
           port: 18789
-    # Everything else goes through Keycloak SSO, then gets the trusted-proxy
-    # identity stamped in (openclaw-lan-identity runs AFTER sso-chain so authenticated
-    # users present the operator identity the gateway expects).
+    # Everything else goes through Keycloak SSO.
     - kind: Rule
       match: Host(`openclaw.lan.e-dani.com`)
       priority: 100
       middlewares:
         - name: sso-chain
           namespace: keycloak
-        - name: openclaw-lan-identity
-          namespace: traefik-lan
       services:
         - name: openclaw-lan-host
           port: 18789
