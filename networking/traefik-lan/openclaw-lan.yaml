@@ -41,12 +41,11 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # LAN / Tailscale clients reach the Control UI directly. The gateway has its
-    # own app-layer auth (gateway.auth.token; controlUi.allowInsecureAuth=false,
-    # satisfied by TLS termination here), so this is defence-in-depth, mirroring
-    # the synapse.lan Ops UI posture.
+    # LAN clients reach the Control UI directly. The local Sauvage gateway now
+    # runs auth=none on loopback and is exposed only through a host-local proxy,
+    # so keep this no-SSO path limited to the physical LAN.
     - kind: Rule
-      match: Host(`openclaw.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      match: Host(`openclaw.lan.e-dani.com`) && ClientIP(`192.168.50.0/24`)
       priority: 300
       services:
         - name: openclaw-lan-host
