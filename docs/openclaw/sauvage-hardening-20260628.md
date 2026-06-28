@@ -585,3 +585,142 @@ read or printed; only mode/owner were inspected and changed.
 - [ ] Backup retention policy for `~/.openclaw/backups/*` (prune/rotate).
 - [ ] Independent verifier pass (AC1–AC7) — required since the PMO self-executed; run if
       this change is to be signed off.
+
+---
+
+## Execution log — 2026-06-28 continuation P2-P7
+
+> **Author role:** PMO direct execution, with explicit exception because delegated Claude
+> SSH verification/implementation remained blocked. **Secret-free:** no Telegram token,
+> LiteLLM key value, or OpenClaw auth token is recorded below.
+
+### P2 — Gateway exposure audit
+
+- **Listener:** `ss -ltnp "sport = :18789"` on `sauvage` shows
+  `0.0.0.0:18789` owned by the OpenClaw `node` gateway process.
+- **Interfaces:** public `enp5s0f0=57.129.17.172`, Tailscale
+  `tailscale0=100.109.183.9`, loopback `127.0.0.1`.
+- **Firewall visibility:** no `nft`/`iptables` rule matching `18789` was visible without
+  sudo; `sudo -n` is blocked (`sudo: a password is required`).
+- **External probe from this workspace:** TCP connect to `57.129.17.172:18789` returned
+  `tcp_18789_not_reachable`.
+- **Config:** `gateway.bind=lan`, `gateway.port=18789`, `gateway.auth.mode=token`, token
+  present. Schema supports `auto|lan|loopback|custom|tailnet`.
+- **Consumers found in GitOps:** Jarvis and Traefik LAN route to
+  `100.109.183.9:18789`; Synapse local spawner uses `127.0.0.1:18789`.
+
+**Decision:** do **not** change bind to `loopback` or `tailnet` in this run. Either change
+would break one of the current consumer paths. Correct remediation is host firewall by
+interface, or a deliberate proxy split preserving both loopback and Tailscale.
+
+**Status:** AC3 remains **blocked / partial**. Direct WAN reachability was not confirmed
+from this workspace, but wildcard bind remains a real hardening risk.
+
+### P3 — systemd `--user` hardening attempt and rollback
+
+- **Attempted drop-in:** `10-hardening.conf` with `NoNewPrivileges=true`,
+  kernel/control-group protections, `RestrictSUIDSGID=true`, `LockPersonality=true`,
+  `MemoryHigh=2G`, `MemoryMax=3G`, `TasksMax=512`, `Restart=on-failure`.
+- **Validation before restart:** effective unit showed the drop-in loaded.
+- **Restart result:** gateway failed to start. `systemctl --user status` showed
+  `ExecStartPre=/home/ubuntu/.openclaw/bin/enforce-supported-codex-default.sh`
+  exiting `status=218/CAPABILITIES`; journal showed
+  `Failed to drop capabilities: Operation not permitted`.
+- **Rollback:** removed `/home/ubuntu/.config/systemd/user/openclaw-gateway.service.d/10-hardening.conf`,
+  `daemon-reload`, `reset-failed`, restarted gateway.
+- **Post-rollback health:** service `active/running`, Telegram `connected:true`,
+  `eventLoopDegraded:false`, plugin errors `0`.
+
+**Status:** AC4 remains **blocked / not applied**. The conservative hardening template is
+not compatible with the current user-service `ExecStartPre` on this host. Do not reapply
+that drop-in unchanged.
+
+### P4 — Session lifecycle and timers
+
+- `session.maintenance` is present:
+  `mode=enforce`, `pruneAfter=30d`, `maxEntries=500`, `resetArchiveRetention=30d`,
+  `maxDiskBytes=400mb`, `highWaterBytes=320mb`.
+- Cleanup dry-run: `stores=13`, `over_budget=[]`,
+  `would_mutate=[skirmshop, hogar, social-media, synapse, synapse-ops-analyst]`.
+- Timers: `openclaw-session-gc.timer=active`,
+  `openclaw-gateway-autoheal.timer=active`.
+- Latest GC service runs finished successfully on 2026-06-26, 2026-06-27,
+  and 2026-06-28.
+- Largest session dirs: `main=363M`, `skirmshop=283M`, `synapse-ops-analyst=281M`,
+  all under the 400mb per-store budget reported by dry-run.
+
+**Status:** AC5 **pass** for timer activity and disk budget. Dry-run would clean
+unreferenced artifacts in several agents on the next real cleanup.
+
+### P5 — LiteLLM key audit
+
+- `sauvage` `.env`: `LITELLM_API_KEY` present, length `25`, `sk-*` shape.
+- LiteLLM admin route is `/key/list`, not `/v1/key/list`.
+- `sauvage` `/key/info` resolves to `key_alias=openclaw`, `key_name=sk-...H6kQ`,
+  `models=[]`, metadata `purpose=openclaw-gateway+jarvis off master key`.
+- Related keys observed:
+  - `openclaw-qwen36-prod`: `models=["qwen36-35b-tooling"]`, metadata
+    `stack=openclaw-qwen36`, `environment=prod`, `model_contract=qwen36-35b-tooling`.
+  - `openclaw`: all-model virtual key via empty models list.
+  - `openclaw-bot-cloudblue`: cloudblue bot key.
+- `max_budget`, `rpm_limit`, and `tpm_limit` are currently `null` on the `openclaw`
+  key.
+
+**Status:** AC2 **partial**. The host is not using the master key, but budget/RPM/TPM
+limits are absent. Do not invent limits without an agreed peak/budget policy.
+
+### P6 — Observability notify
+
+- Notify token file is readable by the service user; only byte count was checked.
+- Gateway journal contains structured timestamped component logs.
+- Test Telegram notify to documented Crons topic failed:
+  `notify_http=400`, `Bad Request: message thread not found` for thread `28350`.
+
+**Status:** AC6 **failed**. The documented Crons topic ID is stale or deleted. Locate the
+current topic ID, or create a new monitored topic, before treating autoheal notify as
+healthy.
+
+### P7 — Smoke
+
+- Gateway health after rollback: `ok:true`, `eventLoopDegraded:false`,
+  Telegram `running:true`, `connected:true`, plugins errors `0`.
+- DGX/OpenClaw Image API live docs refreshed via `dgx-synapse-api` skill:
+  summary generated at `/home/dibanez/.cache/codex-dgx-synapse-api/summary.md`,
+  source status OK for DGX OpenAPI, DGX image spec, and Synapse OpenAPI.
+- Image API reachability: `http://127.0.0.1:9002/` → `200`;
+  `http://10.43.80.147:9002/` → `200`.
+- Cleanup dry-run: `stores=13`, `over_budget=[]`.
+- Agent wrapper smoke:
+  `openclaw-talk.sh skirmshop "ping hardening smoke ... Responde solo: ok."`
+  returned `ok`.
+- Agent wrapper also printed:
+  `WARN: could not post question to topic` and
+  `WARN: could not post reply to topic`.
+
+**Status:** AC7 **partial pass**. The gateway, image API, cleanup dry-run, and agent turn
+work. Telegram topic mirroring is broken by stale topic routing and must be fixed with P6.
+
+### Reconciled checklist after continuation
+
+- [x] **AC1** — config/`.env` and sensitive backup permissions hardened.
+- [x] **AC2 scoped-key portion** — `sauvage` uses LiteLLM virtual key alias `openclaw`, not master.
+- [blocked] **AC2 budget limits** — `max_budget`, `rpm_limit`, `tpm_limit` are `null`; requires policy decision.
+- [blocked] **AC3** — gateway still binds `0.0.0.0:18789`; public TCP probe from this workspace failed, but proper remediation needs firewall/proxy work or sudo.
+- [blocked] **AC4** — attempted drop-in broke `ExecStartPre` with `218/CAPABILITIES`; rollback completed; do not reapply unchanged.
+- [x] **AC5** — timers active; dry-run under disk budget.
+- [blocked] **AC6** — notify route fails because Telegram thread `28350` is gone.
+- [x] **AC7 core** — gateway health, image API, cleanup dry-run, and agent response pass.
+- [blocked] **AC7 topic mirror** — wrapper cannot post question/reply to topic.
+- [x] **AC8 partial** — rollback of P3 was actually exercised and restored gateway health.
+- [ ] **AC9** — source/documentation sync still must be committed and pushed after this log update.
+
+### Follow-up actions
+
+1. Decide a LiteLLM budget/RPM/TPM policy for `openclaw` before mutating the key.
+2. Fix notify/topic routing: discover or create the current Crons/hardening topic and
+   update autoheal/runbook references from stale thread `28350`.
+3. Replace P3 hardening with a compatible user-service drop-in. Start with resource-only
+   limits or move the `ExecStartPre` logic outside the capability-constrained service
+   path; validate in a canary before restart.
+4. Remediate `18789` exposure with host firewall or proxy split preserving both
+   `127.0.0.1` and `100.109.183.9`.
