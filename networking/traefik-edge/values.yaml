@@ -110,6 +110,7 @@ providers:
       - jarvis
       - keycloak
       - control-nexus
+      - openclaw-qwen36
       - tomorrowland
       - bambulab
       - libreplay-staging
@@ -132,6 +133,7 @@ providers:
       - jarvis
       - keycloak
       - control-nexus
+      - openclaw-qwen36
       - tomorrowland
       - libreplay-staging
     allowExternalNameServices: true
