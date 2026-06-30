@@ -198,12 +198,13 @@ spec:
           args:
             - --redis.addr=redis://localhost:6379
             - --redis.user=sentinel
-            - --redis.password-file=/etc/redis-exporter/password
+            - --redis.password=$(SENTINEL_VALKEY_PASSWORD)
             - --config-command=-
+          env:
+            - name: SENTINEL_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-valkey-password } }
           ports:
             - { name: metrics, containerPort: 9121 }
-          volumeMounts:
-            - { name: exporter-auth, mountPath: /etc/redis-exporter, readOnly: true }
           resources:
             requests: { cpu: 10m, memory: 16Mi }
             limits: { memory: 64Mi }
@@ -215,11 +216,6 @@ spec:
             secretName: shared-valkey-acl
             items:
               - { key: users.acl, path: users.acl }
-        - name: exporter-auth
-          secret:
-            secretName: shared-valkey-acl
-            items:
-              - { key: sentinel-valkey-password, path: password }
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
