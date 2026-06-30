@@ -68,6 +68,7 @@ metadata:
   labels:
     app: shared-valkey
     app.kubernetes.io/component: shared-valkey
+    metrics.e-dani.com/scrape: "true"
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
@@ -76,6 +77,7 @@ spec:
   ports:
     - { name: valkey, port: 6379, targetPort: 6379 }
     - { name: sentinel, port: 26379, targetPort: 26379 }
+    - { name: metrics, port: 9121, targetPort: 9121 }
 ---
 apiVersion: v1
 kind: Service
@@ -191,6 +193,20 @@ spec:
           resources:
             requests: { cpu: 20m, memory: 32Mi }
             limits: { memory: 96Mi }
+        - name: exporter
+          image: oliver006/redis_exporter:v1.66.0
+          args:
+            - --redis.addr=redis://localhost:6379
+            - --redis.user=sentinel
+            - --redis.password-file=/etc/redis-exporter/password
+            - --config-command=-
+          ports:
+            - { name: metrics, containerPort: 9121 }
+          volumeMounts:
+            - { name: exporter-auth, mountPath: /etc/redis-exporter, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
       volumes:
         - name: scripts
           configMap: { name: shared-valkey-scripts, defaultMode: 0755 }
@@ -199,6 +215,11 @@ spec:
             secretName: shared-valkey-acl
             items:
               - { key: users.acl, path: users.acl }
+        - name: exporter-auth
+          secret:
+            secretName: shared-valkey-acl
+            items:
+              - { key: sentinel-valkey-password, path: password }
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
@@ -329,3 +350,134 @@ spec:
               app.kubernetes.io/instance: affiliate
       ports:
         - { protocol: TCP, port: 6379 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vmagent
+      ports:
+        - { protocol: TCP, port: 9121 }
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: shared-valkey
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  selector:
+    matchLabels:
+      metrics.e-dani.com/scrape: "true"
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: shared-valkey
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-valkey
+spec:
+  groups:
+    - name: shared-valkey.cache
+      rules:
+        - alert: SharedValkeyMetricsMissing
+          expr: absent(redis_up{job="shared-valkey"})
+          for: 5m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey metrics are missing"
+            description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down."
+        - alert: SharedValkeyScrapeTargetsLow
+          expr: count(redis_up{job="shared-valkey"}) < 3
+          for: 5m
+          labels:
+            severity: warning
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey has fewer than 3 scrape targets"
+            description: "VictoriaMetrics sees {{ $value }} shared-valkey exporter target(s); expected 3 pods."
+        - alert: SharedValkeyExporterDown
+          expr: redis_up{job="shared-valkey"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey exporter cannot reach Valkey"
+            description: "Exporter target {{ $labels.pod }} reports redis_up=0 for 2m."
+        - alert: SharedValkeyMasterCountInvalid
+          expr: (count(redis_instance_info{job="shared-valkey",role="master"}) or vector(0)) != 1
+          for: 2m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey master count is invalid"
+            description: "Expected exactly one shared-valkey master; current master count is {{ $value }}."
+        - alert: SharedValkeyReplicaCountLow
+          expr: (max(redis_connected_slaves{job="shared-valkey"}) or vector(0)) < 2
+          for: 5m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey master has fewer than two replicas"
+            description: "The current shared-valkey master reports {{ $value }} connected replica(s); expected 2."
+        - alert: SharedValkeyMemoryHigh
+          expr: max(redis_memory_used_bytes{job="shared-valkey"} / redis_memory_max_bytes{job="shared-valkey"}) > 0.80
+          for: 10m
+          labels:
+            severity: warning
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey memory usage is above 80%"
+            description: "shared-valkey memory is above 80% of maxmemory for 10m. Check tenants before evictions start."
+        - alert: SharedValkeyEvictions
+          expr: sum(increase(redis_evicted_keys_total{job="shared-valkey"}[10m])) > 0
+          for: 0m
+          labels:
+            severity: warning
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey is evicting keys"
+            description: "shared-valkey evicted {{ $value }} key(s) in the last 10m. During affiliate soak this should stay at 0."
+        - alert: SharedValkeyRejectedConnections
+          expr: sum(increase(redis_rejected_connections_total{job="shared-valkey"}[5m])) > 0
+          for: 0m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey rejected connections"
+            description: "shared-valkey rejected {{ $value }} connection(s) in the last 5m."
+        - alert: SharedValkeyAofUnhealthy
+          expr: |
+            (min(redis_aof_last_bgrewrite_status{job="shared-valkey"}) == 0)
+            or
+            (min(redis_aof_last_write_status{job="shared-valkey"}) == 0)
+          for: 5m
+          labels:
+            severity: critical
+            area: cache
+            component: shared-valkey
+          annotations:
+            summary: "shared-valkey AOF is unhealthy"
+            description: "At least one shared-valkey pod reports a failing AOF rewrite or write status for 5m."
