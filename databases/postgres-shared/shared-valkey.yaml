@@ -1,0 +1,331 @@
+# Shared Valkey HA for low-risk cache/rate-limit tenants.
+#
+# Scope guard:
+# - Do not point ArgoCD, Harbor, labels/Synapse, or Libreplay here.
+# - This instance is tuned as a cache tier: allkeys-lru + bounded memory.
+# - The Secret `shared-valkey-acl` is intentionally not stored in Git. It must
+#   contain: users.acl, replication-password, sentinel-password,
+#   sentinel-valkey-password.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-valkey-scripts
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+data:
+  start-valkey.sh: |
+    #!/bin/sh
+    set -eu
+
+    HEADLESS="shared-valkey-headless.${POD_NAMESPACE}.svc.cluster.local"
+    SENTINEL_SVC="shared-valkey-sentinel.${POD_NAMESPACE}.svc.cluster.local"
+    MYFQDN="${POD_NAME}.${HEADLESS}"
+    CLI=valkey-cli
+
+    MASTER_IP=""
+    for i in $(seq 1 10); do
+      MASTER_IP=$($CLI -h "$SENTINEL_SVC" -p 26379 -a "$SENTINEL_PASSWORD" --no-auth-warning sentinel get-master-addr-by-name shared-cache-master 2>/dev/null | head -1 || true)
+      [ -n "$MASTER_IP" ] && break
+      sleep 2
+    done
+
+    COMMON="--port 6379 --dir /data --appendonly yes --appendfsync everysec --save '' --maxmemory 512mb --maxmemory-policy allkeys-lru --aclfile /acl/users.acl --replica-announce-ip ${MYFQDN} --masteruser replication --masterauth ${REPLICATION_PASSWORD}"
+    if [ -n "$MASTER_IP" ] && [ "$MASTER_IP" != "$MYFQDN" ]; then
+      exec valkey-server $COMMON --replicaof "$MASTER_IP" 6379
+    elif [ "$POD_NAME" = "shared-valkey-0" ]; then
+      exec valkey-server $COMMON
+    else
+      exec valkey-server $COMMON --replicaof "shared-valkey-0.${HEADLESS}" 6379
+    fi
+  start-sentinel.sh: |
+    #!/bin/sh
+    set -eu
+
+    HEADLESS="shared-valkey-headless.${POD_NAMESPACE}.svc.cluster.local"
+    CONF=/data/sentinel.conf
+    cat > "$CONF" <<EOF
+    port 26379
+    dir /data
+    requirepass ${SENTINEL_PASSWORD}
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    sentinel monitor shared-cache-master shared-valkey-0.${HEADLESS} 6379 2
+    sentinel auth-user shared-cache-master sentinel
+    sentinel auth-pass shared-cache-master ${SENTINEL_VALKEY_PASSWORD}
+    sentinel down-after-milliseconds shared-cache-master 5000
+    sentinel failover-timeout shared-cache-master 10000
+    sentinel parallel-syncs shared-cache-master 1
+    EOF
+    exec valkey-sentinel "$CONF"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-valkey-headless
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: shared-valkey
+  ports:
+    - { name: valkey, port: 6379, targetPort: 6379 }
+    - { name: sentinel, port: 26379, targetPort: 26379 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-valkey-sentinel
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  selector:
+    app: shared-valkey
+  ports:
+    - { name: sentinel, port: 26379, targetPort: 26379 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-valkey-master
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  selector:
+    app: shared-valkey
+    valkey-role: master
+  ports:
+    - { name: valkey, port: 6379, targetPort: 6379 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: shared-valkey
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  serviceName: shared-valkey-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: shared-valkey
+  template:
+    metadata:
+      labels:
+        app: shared-valkey
+        app.kubernetes.io/component: shared-valkey
+    spec:
+      enableServiceLinks: false
+      nodeSelector: { workload: core }
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector: { matchLabels: { app: shared-valkey } }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: valkey
+          image: valkey/valkey:8-alpine
+          command: ["/bin/sh", "/scripts/start-valkey.sh"]
+          env:
+            - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: POD_NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
+            - name: REPLICATION_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: replication-password } }
+            - name: SENTINEL_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-password } }
+            - name: SENTINEL_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-valkey-password } }
+          ports:
+            - { name: valkey, containerPort: 6379 }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: scripts, mountPath: /scripts }
+            - { name: acl, mountPath: /acl, readOnly: true }
+          livenessProbe:
+            exec:
+              command: ["sh", "-ec", "valkey-cli -p 6379 --user sentinel -a \"$SENTINEL_VALKEY_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command: ["sh", "-ec", "valkey-cli -p 6379 --user sentinel -a \"$SENTINEL_VALKEY_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 768Mi }
+        - name: sentinel
+          image: valkey/valkey:8-alpine
+          command: ["/bin/sh", "/scripts/start-sentinel.sh"]
+          env:
+            - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: POD_NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
+            - name: SENTINEL_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-password } }
+            - name: SENTINEL_VALKEY_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-valkey-password } }
+          ports:
+            - { name: sentinel, containerPort: 26379 }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: scripts, mountPath: /scripts }
+          livenessProbe:
+            exec:
+              command: ["sh", "-ec", "valkey-cli -p 26379 -a \"$SENTINEL_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 96Mi }
+      volumes:
+        - name: scripts
+          configMap: { name: shared-valkey-scripts, defaultMode: 0755 }
+        - name: acl
+          secret:
+            secretName: shared-valkey-acl
+            items:
+              - { key: users.acl, path: users.acl }
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shared-valkey-master-labeler
+  namespace: databases
+  labels:
+    app: shared-valkey-master-labeler
+    app.kubernetes.io/component: shared-valkey
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shared-valkey-master-labeler
+  namespace: databases
+  labels:
+    app: shared-valkey-master-labeler
+    app.kubernetes.io/component: shared-valkey
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shared-valkey-master-labeler
+  namespace: databases
+  labels:
+    app: shared-valkey-master-labeler
+    app.kubernetes.io/component: shared-valkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shared-valkey-master-labeler
+subjects:
+  - kind: ServiceAccount
+    name: shared-valkey-master-labeler
+    namespace: databases
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shared-valkey-master-labeler
+  namespace: databases
+  labels:
+    app: shared-valkey-master-labeler
+    app.kubernetes.io/component: shared-valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shared-valkey-master-labeler
+  template:
+    metadata:
+      labels:
+        app: shared-valkey-master-labeler
+        app.kubernetes.io/component: shared-valkey
+    spec:
+      serviceAccountName: shared-valkey-master-labeler
+      enableServiceLinks: false
+      nodeSelector: { workload: core }
+      containers:
+        - name: labeler
+          image: alpine/k8s:1.32.5
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              PODS="shared-valkey-0 shared-valkey-1 shared-valkey-2"
+              echo "shared-valkey-master-labeler started"
+              while true; do
+                for p in $PODS; do
+                  role=$(kubectl -n databases exec "$p" -c valkey -- sh -c 'valkey-cli -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning role' 2>/dev/null | head -1)
+                  case "$role" in
+                    master) kubectl -n databases label pod "$p" valkey-role=master --overwrite >/dev/null 2>&1 ;;
+                    slave)  kubectl -n databases label pod "$p" valkey-role=replica --overwrite >/dev/null 2>&1 ;;
+                    *) : ;;
+                  esac
+                done
+                sleep 5
+              done
+          resources:
+            requests: { cpu: 20m, memory: 48Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shared-valkey-ingress
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  podSelector:
+    matchLabels:
+      app: shared-valkey
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: shared-valkey
+      ports:
+        - { protocol: TCP, port: 6379 }
+        - { protocol: TCP, port: 26379 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: skirmshop
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: affiliate
+      ports:
+        - { protocol: TCP, port: 6379 }
