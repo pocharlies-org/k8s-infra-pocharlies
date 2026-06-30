@@ -10,6 +10,7 @@ resources:
   - shared-rabbitmq.yaml
   - synapse-rmq-sauvage.yaml
   - pocharlies-redis.yaml
+  - shared-valkey.yaml
   - scheduledbackup.yaml
 labels:
   - includeSelectors: false
