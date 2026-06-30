@@ -2,6 +2,40 @@
 apiVersion: v1
 kind: Service
 metadata:
+  name: openclaw-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: openclaw-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  ports:
+  - name: http
+    port: 18789
+    targetPort: 18789
+    protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: openclaw-edge-host
+  namespace: traefik-edge
+  labels:
+    kubernetes.io/service-name: openclaw-edge-host
+    app.kubernetes.io/name: openclaw-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+addressType: IPv4
+ports:
+- name: http
+  protocol: TCP
+  port: 18789
+endpoints:
+- addresses:
+  - 100.109.183.9
+  conditions: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: synapse-edge-host
   namespace: traefik-edge
   labels:
@@ -200,6 +234,17 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
+  name: openclaw-sso-upstream-headers
+  namespace: traefik-edge
+spec:
+  headers:
+    customRequestHeaders:
+      Authorization: ""
+      X-Forwarded-Proto: "https"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
   name: redirect-sii-root
   namespace: traefik-edge
 spec:
@@ -334,6 +379,10 @@ kind: IngressRoute
 metadata:
   name: edge-openclaw-webhooks
   namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: openclaw.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   entryPoints:
   - websecure
@@ -372,8 +421,12 @@ spec:
       port: 8787
   - kind: Rule
     match: Host(`openclaw.e-dani.com`)
+    middlewares:
+    - name: sso-chain
+      namespace: keycloak
+    - name: openclaw-sso-upstream-headers
     services:
-    - name: sauvage-localhost
+    - name: openclaw-edge-host
       port: 18789
   tls:
     store:
