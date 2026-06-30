@@ -28,6 +28,46 @@ spec:
     volumeSnapshotLocations:
       - default
 ---
+# Daily backup of the aiops brain namespace (Qdrant + FalkorDB + Redis stores).
+#
+# Rationale: the brain (Qdrant collections supplier_offers_v2 /
+# manufacturer_products_v2) becomes the home of the unmatched offer catalogue
+# (F1b). Until now `aiops` was only covered by `weekly-all` (RPO 7d). The offer
+# corpus is re-scrapeable so a daily RPO is generous, but a dedicated daily
+# schedule gives margin without bloating `daily-critical`'s blast radius.
+#
+# Dedicated schedule (not folded into daily-critical) because:
+#  * smaller blast radius / independent ttl tuning (30d here vs 30d critical),
+#  * isolates the whole-namespace fs-backup (~37Gi across 3 PVCs: Qdrant 20Gi,
+#    Redis data-aiops-redis-ks5-0 15Gi, FalkorDB 2Gi) so the critical platform
+#    backup window is unaffected if the brain volumes grow,
+#  * staggered to 03:30 UTC to avoid contending with daily-critical at 03:00
+#    for the single LAN-pinned node-agent / MinIO target.
+#
+# Scope: the FULL `aiops` namespace (all 3 PVCs) is backed up for DR coverage,
+# not just the Qdrant offer collections. Redis is included deliberately — it is
+# part of the brain's runtime state and the marginal ~15Gi fs-backup is cheap
+# vs the consistency win of one atomic namespace restore point.
+#
+# Uses fs-backup (Kopia via node-agent) + snapshotMoveData, identical mechanics
+# to daily-critical so the same restore path applies.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: daily-aiops
+  namespace: velero
+spec:
+  schedule: "30 3 * * *"   # 03:30 UTC daily (staggered after daily-critical)
+  template:
+    ttl: 720h0m0s   # 30 days retention
+    includedNamespaces:
+      - aiops
+    snapshotMoveData: true
+    defaultVolumesToFsBackup: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+---
 # Weekly backup of everything else (apps, etc.)
 apiVersion: velero.io/v1
 kind: Schedule
