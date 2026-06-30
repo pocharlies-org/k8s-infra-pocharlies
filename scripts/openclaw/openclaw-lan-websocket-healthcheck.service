@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenClaw LAN Control UI WebSocket healthcheck
+After=network-online.target openclaw-lan-loopback-proxy.service
+Wants=network-online.target openclaw-lan-loopback-proxy.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/ubuntu/.openclaw/bin/openclaw-lan-websocket-healthcheck.sh
+Environment=OPENCLAW_LAN_HEALTHCHECK_URL=wss://openclaw.lan.e-dani.com/
+Environment=OPENCLAW_LAN_HEALTHCHECK_ORIGIN=https://openclaw.lan.e-dani.com
+Environment=OPENCLAW_LAN_HEALTHCHECK_TIMEOUT_MS=8000
+Environment=OPENCLAW_LAN_HEALTHCHECK_EXPECTED=connect.challenge
+Environment=OPENCLAW_LAN_HEALTHCHECK_RESTART_PROXY_ON_FAIL=1
