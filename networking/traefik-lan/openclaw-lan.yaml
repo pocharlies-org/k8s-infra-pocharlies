@@ -25,12 +25,35 @@ ports:
     protocol: TCP
     port: 18789
 endpoints:
-  # OpenClaw Gateway (Control UI + node/agent protocol) runs on sauvage host,
-  # systemd --user unit openclaw-gateway.service, listening 0.0.0.0:18789.
-  # 100.109.183.9 is sauvage's Tailscale IP (same target as jarvis/openclaw-gw).
+  # OpenClaw Control UI for the sauvage host runtime. The actual OpenClaw
+  # gateway is loopback-only on sauvage (127.0.0.1:18789, auth=none); a guarded
+  # user-systemd proxy publishes 100.109.183.9:18789 and rewrites the first
+  # WebSocket Host header back to 127.0.0.1:18789.
   - addresses:
       - 100.109.183.9
     conditions: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: openclaw-sauvage-lan-identity
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: openclaw-lan-host
+    app.kubernetes.io/part-of: traefik-lan
+spec:
+  # Preparation for the final trusted-proxy cutover. Today the sauvage gateway
+  # still runs auth=none behind the loopback proxy, so these headers are inert.
+  # If/when the host gateway is migrated to auth=trusted-proxy, this middleware
+  # gives OpenClaw a stable operator identity and overwrites any spoofed client
+  # values before the request leaves Traefik-LAN.
+  headers:
+    customRequestHeaders:
+      X-Forwarded-User: openclaw-sauvage-lan
+      X-Forwarded-Email: openclaw-sauvage-lan@e-dani.com
+      X-Forwarded-Groups: /edani-operators
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: openclaw.lan.e-dani.com
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -47,6 +70,9 @@ spec:
     - kind: Rule
       match: Host(`openclaw.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`10.42.0.0/16`))
       priority: 300
+      middlewares:
+        - name: openclaw-sauvage-lan-identity
+          namespace: traefik-lan
       services:
         - name: openclaw-lan-host
           port: 18789
@@ -57,6 +83,8 @@ spec:
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        - name: openclaw-sauvage-lan-identity
+          namespace: traefik-lan
       services:
         - name: openclaw-lan-host
           port: 18789
