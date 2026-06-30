@@ -385,7 +385,7 @@ spec:
     - name: shared-valkey.cache
       rules:
         - alert: SharedValkeyMetricsMissing
-          expr: absent(redis_up{job="shared-valkey"})
+          expr: absent(redis_up{job="shared-valkey-headless"})
           for: 5m
           labels:
             severity: critical
@@ -395,7 +395,7 @@ spec:
             summary: "shared-valkey metrics are missing"
             description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down."
         - alert: SharedValkeyScrapeTargetsLow
-          expr: count(redis_up{job="shared-valkey"}) < 3
+          expr: count(redis_up{job="shared-valkey-headless"}) < 3
           for: 5m
           labels:
             severity: warning
@@ -405,7 +405,7 @@ spec:
             summary: "shared-valkey has fewer than 3 scrape targets"
             description: "VictoriaMetrics sees {{ $value }} shared-valkey exporter target(s); expected 3 pods."
         - alert: SharedValkeyExporterDown
-          expr: redis_up{job="shared-valkey"} == 0
+          expr: redis_up{job="shared-valkey-headless"} == 0
           for: 2m
           labels:
             severity: critical
@@ -415,7 +415,7 @@ spec:
             summary: "shared-valkey exporter cannot reach Valkey"
             description: "Exporter target {{ $labels.pod }} reports redis_up=0 for 2m."
         - alert: SharedValkeyMasterCountInvalid
-          expr: (count(redis_instance_info{job="shared-valkey",role="master"}) or vector(0)) != 1
+          expr: (count(redis_instance_info{job="shared-valkey-headless",role="master"}) or vector(0)) != 1
           for: 2m
           labels:
             severity: critical
@@ -425,7 +425,7 @@ spec:
             summary: "shared-valkey master count is invalid"
             description: "Expected exactly one shared-valkey master; current master count is {{ $value }}."
         - alert: SharedValkeyReplicaCountLow
-          expr: (max(redis_connected_slaves{job="shared-valkey"}) or vector(0)) < 2
+          expr: (max(redis_connected_slaves{job="shared-valkey-headless"}) or vector(0)) < 2
           for: 5m
           labels:
             severity: critical
@@ -435,7 +435,7 @@ spec:
             summary: "shared-valkey master has fewer than two replicas"
             description: "The current shared-valkey master reports {{ $value }} connected replica(s); expected 2."
         - alert: SharedValkeyMemoryHigh
-          expr: max(redis_memory_used_bytes{job="shared-valkey"} / redis_memory_max_bytes{job="shared-valkey"}) > 0.80
+          expr: max(redis_memory_used_bytes{job="shared-valkey-headless"} / redis_memory_max_bytes{job="shared-valkey-headless"}) > 0.80
           for: 10m
           labels:
             severity: warning
@@ -445,7 +445,7 @@ spec:
             summary: "shared-valkey memory usage is above 80%"
             description: "shared-valkey memory is above 80% of maxmemory for 10m. Check tenants before evictions start."
         - alert: SharedValkeyEvictions
-          expr: sum(increase(redis_evicted_keys_total{job="shared-valkey"}[10m])) > 0
+          expr: sum(increase(redis_evicted_keys_total{job="shared-valkey-headless"}[10m])) > 0
           for: 0m
           labels:
             severity: warning
@@ -455,7 +455,7 @@ spec:
             summary: "shared-valkey is evicting keys"
             description: "shared-valkey evicted {{ $value }} key(s) in the last 10m. During affiliate soak this should stay at 0."
         - alert: SharedValkeyRejectedConnections
-          expr: sum(increase(redis_rejected_connections_total{job="shared-valkey"}[5m])) > 0
+          expr: sum(increase(redis_rejected_connections_total{job="shared-valkey-headless"}[5m])) > 0
           for: 0m
           labels:
             severity: critical
@@ -466,9 +466,9 @@ spec:
             description: "shared-valkey rejected {{ $value }} connection(s) in the last 5m."
         - alert: SharedValkeyAofUnhealthy
           expr: |
-            (min(redis_aof_last_bgrewrite_status{job="shared-valkey"}) == 0)
+            (min(redis_aof_last_bgrewrite_status{job="shared-valkey-headless"}) == 0)
             or
-            (min(redis_aof_last_write_status{job="shared-valkey"}) == 0)
+            (min(redis_aof_last_write_status{job="shared-valkey-headless"}) == 0)
           for: 5m
           labels:
             severity: critical
