@@ -200,6 +200,13 @@ ssh ubuntu@sauvage.taile0ad27.ts.net '
 probe times out or refuses. If bound to `0.0.0.0` → remediate via OpenClaw gateway bind
 config (`openclaw.json` gateway/host block) — `# MUTATES`, then P3 restart applies it.
 
+**LAN loopback proxy note:** when the gateway runs as `--bind loopback --auth none`,
+the tailnet-facing proxy must rewrite the first WebSocket HTTP `Host` header to
+`127.0.0.1:18789`. OpenClaw treats non-local `Host` values as remote even when
+the TCP peer is loopback, so a raw TCP proxy can leave
+`wss://openclaw.lan.e-dani.com/` stuck during the opening handshake.
+Tracked source: `scripts/openclaw/openclaw-loopback-proxy.mjs`.
+
 **Rollback:** restore `$BK/openclaw.json.bak`; restart gateway (see P3 rollback).
 
 ---
