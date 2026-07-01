@@ -386,7 +386,6 @@ spec:
                 operator: In
                 values:
                   - dgx-dashboard-backend
-                  - aiops-redis-migrator
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
