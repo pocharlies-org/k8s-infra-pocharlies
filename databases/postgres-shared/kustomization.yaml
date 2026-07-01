@@ -9,7 +9,6 @@ resources:
   - app-databases.yaml
   - shared-rabbitmq.yaml
   - synapse-rmq-sauvage.yaml
-  - pocharlies-redis.yaml
   - shared-valkey.yaml
   - scheduledbackup.yaml
 labels:
