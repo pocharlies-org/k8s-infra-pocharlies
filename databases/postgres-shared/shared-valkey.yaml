@@ -374,6 +374,20 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
+              kubernetes.io/metadata.name: skirmshop
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - skirmbooks-fiscal-validator
+                  - skirmbooks-fiscal-validator-validation
+                  - skirmbooks-fiscal-validator-analysis
+      ports:
+        - { protocol: TCP, port: 6379 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
               kubernetes.io/metadata.name: whatsapp-mcp
           podSelector:
             matchLabels:
