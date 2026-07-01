@@ -390,8 +390,12 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: control-nexus
           podSelector:
-            matchLabels:
-              app: dgx-dashboard-backend
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - dgx-dashboard-backend
+                  - aiops-redis-migrator
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
