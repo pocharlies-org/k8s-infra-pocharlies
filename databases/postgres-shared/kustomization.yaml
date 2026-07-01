@@ -9,6 +9,7 @@ resources:
   - app-databases.yaml
   - shared-rabbitmq.yaml
   - synapse-rmq-sauvage.yaml
+  - shared-valkey.yaml
   - scheduledbackup.yaml
 labels:
   - includeSelectors: false
