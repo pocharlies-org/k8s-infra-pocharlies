@@ -1,7 +1,7 @@
 # Shared Valkey HA for low-risk shared cache/state tenants.
 #
 # Scope guard:
-# - Do not point ArgoCD, Harbor, labels/Synapse, or Libreplay here.
+# - Do not point ArgoCD, Harbor, or labels/Synapse here.
 # - This instance is tuned as a small shared tier: AOF + bounded memory +
 #   noeviction, so queue/session metadata is not silently evicted.
 # - The Secret `shared-valkey-acl` is intentionally not stored in Git. It must
@@ -367,15 +367,6 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: skirmshop
           podSelector:
-            matchLabels:
-              app: firecrawl-valkey
-      ports:
-        - { protocol: TCP, port: 6379 }
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: skirmshop
-          podSelector:
             matchExpressions:
               - key: app
                 operator: In
@@ -428,10 +419,15 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: whatsapp-mcp
+              kubernetes.io/metadata.name: libreplay
           podSelector:
-            matchLabels:
-              app: whatsapp-mcp-redis
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - libreplay-web
+                  - libreplay-worker
+                  - libreplay-db-seed
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
