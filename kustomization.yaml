@@ -35,3 +35,4 @@ resources:
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - buildkit
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
+  - kubernetes/workloads/sauvage-pod-reaper.yaml
