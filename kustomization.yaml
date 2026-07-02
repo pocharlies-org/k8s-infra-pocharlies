@@ -34,3 +34,4 @@ resources:
   - storage/minio/synapse-email-attachments.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - buildkit
+  - kubernetes/workloads/sauvage-zombie-watchdog.yaml

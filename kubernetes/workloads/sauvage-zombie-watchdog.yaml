@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sauvage-zombie-watchdog
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sauvage-zombie-watchdog
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sauvage-zombie-watchdog
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sauvage-zombie-watchdog
+subjects:
+  - kind: ServiceAccount
+    name: sauvage-zombie-watchdog
+    namespace: kube-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sauvage-zombie-watchdog
+  namespace: kube-system
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 180
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sauvage-zombie-watchdog
+        spec:
+          serviceAccountName: sauvage-zombie-watchdog
+          hostPID: true
+          nodeName: sauvage
+          restartPolicy: Never
+          enableServiceLinks: false
+          tolerations:
+            - key: role
+              operator: Equal
+              value: edge
+              effect: NoSchedule
+          containers:
+            - name: watchdog
+              image: alpine/k8s:1.32.5
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: ZOMBIE_THRESHOLD
+                  value: "10"
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  memory: 256Mi
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  threshold="${ZOMBIE_THRESHOLD:-10}"
+                  work="$(mktemp -d)"
+                  trap 'rm -rf "$work"' EXIT
+
+                  : > "$work/zombies"
+                  for proc in /proc/[0-9]*; do
+                    [ -r "$proc/stat" ] || continue
+                    stat="$(cat "$proc/stat" 2>/dev/null || true)"
+                    [ -n "$stat" ] || continue
+                    rest="${stat##*) }"
+                    set -- $rest
+                    state="$1"
+                    ppid="$2"
+                    [ "$state" = "Z" ] || continue
+                    zpid="${proc##*/}"
+                    comm="$(cat "$proc/comm" 2>/dev/null || echo unknown)"
+                    printf '%s %s %s\n' "$ppid" "$zpid" "$comm" >> "$work/zombies"
+                  done
+                  total="$(wc -l < "$work/zombies" | tr -d ' ')"
+                  echo "{\"msg\":\"zombie-watchdog.scan\",\"node\":\"sauvage\",\"total\":$total,\"threshold\":$threshold}"
+                  [ "$total" -eq 0 ] && exit 0
+
+                  kubectl get pods -A \
+                    -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,OWNER_KIND:.metadata.ownerReferences[0].kind,OWNER_NAME:.metadata.ownerReferences[0].name,NODE:.spec.nodeName \
+                    --no-headers > "$work/pods"
+
+                  : > "$work/counts"
+                  while read -r ppid zpid comm; do
+                    [ -r "/proc/$ppid/cgroup" ] || continue
+                    uid="$(awk -F: '$1=="0" {print $3}' "/proc/$ppid/cgroup" | sed -n 's/.*pod\([0-9a-f_]*\).*/\1/p' | tr _ -)"
+                    [ -n "$uid" ] || continue
+                    printf '%s %s %s %s\n' "$uid" "$ppid" "$zpid" "$comm" >> "$work/counts"
+                  done < "$work/zombies"
+                  [ -s "$work/counts" ] || exit 0
+
+                  cut -d' ' -f1 "$work/counts" | sort | uniq -c | while read -r count uid; do
+                    podline="$(awk -v uid="$uid" '$3==uid {print; exit}' "$work/pods")"
+                    if [ -z "$podline" ]; then
+                      echo "{\"msg\":\"zombie-watchdog.unmapped\",\"uid\":\"$uid\",\"count\":$count}"
+                      continue
+                    fi
+
+                    ns="$(printf '%s\n' "$podline" | awk '{print $1}')"
+                    pod="$(printf '%s\n' "$podline" | awk '{print $2}')"
+                    owner_kind="$(printf '%s\n' "$podline" | awk '{print $4}')"
+                    owner_name="$(printf '%s\n' "$podline" | awk '{print $5}')"
+                    node="$(printf '%s\n' "$podline" | awk '{print $6}')"
+                    echo "{\"msg\":\"zombie-watchdog.pod\",\"namespace\":\"$ns\",\"pod\":\"$pod\",\"node\":\"$node\",\"count\":$count,\"owner_kind\":\"$owner_kind\",\"owner_name\":\"$owner_name\"}"
+
+                    [ "$count" -ge "$threshold" ] || continue
+                    if [ "$ns" != "skirmshop" ]; then
+                      echo "{\"msg\":\"zombie-watchdog.skip-namespace\",\"namespace\":\"$ns\",\"pod\":\"$pod\",\"count\":$count}"
+                      continue
+                    fi
+
+                    target_kind="$owner_kind"
+                    target_name="$owner_name"
+                    if [ "$owner_kind" = "ReplicaSet" ]; then
+                      target_name="$(kubectl get replicaset -n "$ns" "$owner_name" -o jsonpath='{.metadata.ownerReferences[0].name}' 2>/dev/null || true)"
+                      target_kind="$(kubectl get replicaset -n "$ns" "$owner_name" -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || true)"
+                    fi
+                    if [ "$target_kind" != "Deployment" ] || [ -z "$target_name" ]; then
+                      echo "{\"msg\":\"zombie-watchdog.skip-owner\",\"namespace\":\"$ns\",\"pod\":\"$pod\",\"owner_kind\":\"$owner_kind\",\"owner_name\":\"$owner_name\",\"count\":$count}"
+                      continue
+                    fi
+
+                    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    kubectl patch deployment -n "$ns" "$target_name" --type=merge \
+                      -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"zombie-watchdog.skirmshop.es/restartedAt\":\"$ts\"}}}}}"
+                    echo "{\"msg\":\"zombie-watchdog.restarted\",\"namespace\":\"$ns\",\"deployment\":\"$target_name\",\"pod\":\"$pod\",\"count\":$count,\"at\":\"$ts\"}"
+                  done
