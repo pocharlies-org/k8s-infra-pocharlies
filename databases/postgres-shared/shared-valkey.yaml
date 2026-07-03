@@ -386,6 +386,11 @@ spec:
                 operator: In
                 values:
                   - dgx-dashboard-backend
+                  # worker dedicado de colas AI Studio (dgx-infra
+                  # k8s/control-nexus/dashboard-worker-deployment.yaml) — misma
+                  # app, mismo Redis; sin esta entrada el worker recibe
+                  # connection refused y las colas image/video/trellis no corren.
+                  - dgx-dashboard-worker
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
