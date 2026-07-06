@@ -114,6 +114,7 @@ providers:
       - tomorrowland
       - bambulab
       - libreplay-staging
+      - serpientetool
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -136,6 +137,7 @@ providers:
       - openclaw-qwen36
       - tomorrowland
       - libreplay-staging
+      - serpientetool
     allowExternalNameServices: true
     allowEmptyServices: true
 
