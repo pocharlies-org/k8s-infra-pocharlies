@@ -12,10 +12,48 @@ Current production state after the 2026-07-01 guard fix:
 - `openclaw-lan-loopback-proxy.service` publishes `100.109.183.9:18789`.
 - The proxy is guarded by `ExecStartPre` and reinstalled from
   `~/.openclaw/managed/openclaw-loopback-proxy.mjs` if drift is detected.
+- The proxy allowlist must include every k8s node that may originate Jarvis,
+  Traefik, or healthcheck traffic. Current tracked source:
+  `scripts/openclaw/openclaw-lan-loopback-proxy-k8s-allowlist.conf`.
 - `openclaw-lan-websocket-healthcheck.timer` validates
   `wss://openclaw.lan.e-dani.com/` and expects `connect.challenge`.
 - GitOps already injects stable trusted-proxy headers through middleware
   `traefik-lan/openclaw-sauvage-lan-identity`.
+
+## 2026-07-06 Allowlist Incident
+
+Symptom: Jarvis/OpenClaw stopped answering from k8s even though
+`openclaw-gateway.service` on `sauvage` was running and direct tailnet probes
+to `ws://sauvage.taile0ad27.ts.net:18789/` returned `connect.challenge`.
+
+Root cause: `openclaw-lan-loopback-proxy.service` allowed only `ubuntu`
+(`100.83.56.98`) and `ks5-cp-1` (`100.107.21.89`). `jarvis-backend` was
+scheduled on `ks5-cp-2` (`100.71.117.127`), so the proxy destroyed the TCP
+connection and logged `rejected remote=100.71.117.127`. Traefik/probes can also
+arrive from other k8s nodes.
+
+Fix applied on `sauvage`: add user-systemd drop-in
+`~/.config/systemd/user/openclaw-lan-loopback-proxy.service.d/20-k8s-node-allowlist.conf`
+with the full current node allowlist, then run:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart openclaw-lan-loopback-proxy.service
+```
+
+Current allowlist:
+
+```text
+100.83.56.98,100.107.21.89,100.71.117.127,100.75.189.75,100.73.153.70,100.82.12.28,100.109.183.9
+```
+
+Validation evidence after the fix:
+
+- From a pod in namespace `jarvis`, `curl http://openclaw-gw.jarvis.svc.cluster.local:18789/`
+  returns `HTTP/1.1 200 OK` instead of `Recv failure: Connection reset by peer`.
+- `jarvis-backend` logs `OpenClaw connected to ws://openclaw-gw.jarvis.svc.cluster.local:18789/ as agent=hogar`.
+- `openclaw gateway call health` on `sauvage` returns `"ok": true`, event loop
+  not degraded, and Telegram channel `connected: true`.
 
 ## Gate
 
@@ -28,6 +66,7 @@ ssh ubuntu@sauvage.taile0ad27.ts.net '
   openclaw status --json >/tmp/openclaw-status-before-trusted-proxy.json
   systemctl --user is-active openclaw-gateway.service openclaw-lan-loopback-proxy.service
   systemctl --user is-active openclaw-lan-websocket-healthcheck.timer
+  systemctl --user cat openclaw-lan-loopback-proxy.service | grep OPENCLAW_PROXY_ALLOWED_IPS
 '
 
 kubectl -n traefik-lan get middleware openclaw-sauvage-lan-identity -o yaml
