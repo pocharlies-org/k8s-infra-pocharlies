@@ -1,6 +1,9 @@
 ---
-# Public edge route for the Langfuse UI (LLM observability), gated by Keycloak SSO.
+# Public edge route for the Langfuse UI (LLM observability).
 # Cloudflare → traefik-edge → langfuse-web (namespace: langfuse).
+# Auth is handled by Langfuse's OWN Keycloak OIDC login (realm edani) — no oauth2-proxy
+# ForwardAuth here, so there is a single sign-on (removed the redundant sso-chain that
+# caused a double login). The /api/public/* ingestion endpoints remain pk/sk key-authed.
 #
 # The traefik-edge DaemonSet only watches an explicit namespace allowlist (and resolves
 # backend services only within it), and `langfuse` is intentionally NOT added to avoid a
@@ -39,9 +42,6 @@ spec:
       services:
         - name: langfuse-web-ext
           port: 3000
-      middlewares:
-        - name: sso-chain
-          namespace: keycloak
   tls:
     store:
       name: default
