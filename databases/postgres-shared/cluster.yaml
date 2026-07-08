@@ -77,6 +77,12 @@ spec:
         passwordSecret:
           name: litellm-db-credentials
         comment: "LiteLLM router (repo: pocharlies/k8s-litellm-pocharlies)"
+      - name: langfuse
+        ensure: present
+        login: true
+        passwordSecret:
+          name: langfuse-db-credentials
+        comment: "Langfuse LLM observability (repo: pocharlies-org/k8s-langfuse-pocharlies)"
       - name: teslamate
         ensure: present
         login: true
