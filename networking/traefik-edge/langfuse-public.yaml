@@ -37,6 +37,18 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # /logout -> RP-initiated Keycloak logout (ends the SSO session, then back to sign-in).
+    # A persistent "logout" on the Langfuse domain: the packaged Langfuse sign-in page has
+    # no logout button (its in-app logout only exists once you're signed in), so this lets
+    # you switch Keycloak accounts without hunting for the Keycloak logout URL.
+    - kind: Rule
+      match: Host(`langfuse.e-dani.com`) && Path(`/logout`)
+      priority: 100
+      services:
+        - name: langfuse-web-ext
+          port: 3000
+      middlewares:
+        - name: langfuse-logout-redirect
     - kind: Rule
       match: Host(`langfuse.e-dani.com`)
       services:
@@ -46,3 +58,13 @@ spec:
     store:
       name: default
       namespace: traefik-edge
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: langfuse-logout-redirect
+  namespace: traefik-edge
+spec:
+  redirectRegex:
+    regex: ".*"
+    replacement: "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/logout?client_id=langfuse&post_logout_redirect_uri=https://langfuse.e-dani.com/auth/sign-in"
