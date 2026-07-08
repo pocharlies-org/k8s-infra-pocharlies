@@ -16,6 +16,7 @@ resources:
   - networking/traefik-edge/tls-store.yaml
   - networking/traefik-edge/firecrawl-edge-auth.yaml
   - networking/traefik-edge/harbor-ingressroute.yaml
+  - networking/traefik-edge/langfuse-public.yaml
   - networking/traefik-edge/legacy-public-routes.yaml
   - networking/traefik-edge/synapse-brain-feedback-handler.yaml
   - networking/traefik-edge/affiliate-public.yaml

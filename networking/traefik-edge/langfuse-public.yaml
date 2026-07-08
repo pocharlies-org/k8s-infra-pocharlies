@@ -1,0 +1,32 @@
+---
+# Public edge route for the Langfuse UI (LLM observability), gated by Keycloak SSO.
+# Cloudflare → traefik-edge → langfuse-web (namespace: langfuse). Central-IngressRoute
+# pattern (same as harbor/firecrawl/serpientetool) so the edge picks it up live without
+# adding `langfuse` to the traefik-edge watched-namespaces list (no DaemonSet restart).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-langfuse-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: langfuse.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`langfuse.e-dani.com`)
+      services:
+        - name: langfuse-web
+          namespace: langfuse
+          port: 3000
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
