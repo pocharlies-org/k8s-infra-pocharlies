@@ -391,6 +391,11 @@ spec:
                   # app, mismo Redis; sin esta entrada el worker recibe
                   # connection refused y las colas image/video/trellis no corren.
                   - dgx-dashboard-worker
+                  # Telegram Studio bot (dgx-infra
+                  # k8s/control-nexus/dgx-studio-bot-deployment.yaml) — misma red,
+                  # mismo Redis de colas/estado (offset getUpdates, FSM, rate-limit);
+                  # sin esta entrada el bot recibe connection refused a shared-valkey.
+                  - dgx-studio-bot
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
