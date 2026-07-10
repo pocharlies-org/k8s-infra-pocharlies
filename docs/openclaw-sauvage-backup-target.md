@@ -5,6 +5,16 @@ Telegram router's immediate dependency on the NFS backup target hosted by the
 node named `ubuntu`. It is not an external disaster-recovery target: MinIO is a
 single StatefulSet pod backed by `/srv/minio/data` on `sauvage`.
 
+There is also a P0 credential debt in the current MinIO deployment: its active
+root identity is still represented by literals in Git and is consumed by
+Harbor, Velero, and Loki (Loki additionally embeds it in a ConfigMap). The
+credential values are deliberately omitted here. The dedicated OpenClaw
+identity below limits Longhorn's authority, but this target cannot be called
+production-grade until those three clients have dedicated bucket-scoped
+identities, the MinIO root identity has been rotated from Vault, the old root
+credential has been proven invalid, and the literals have been removed from
+all current manifests.
+
 Longhorn 1.11 supports multiple `BackupTarget` resources. The existing
 `BackupTarget/default` remains unchanged. The new `openclaw-sauvage` target
 uses only `s3://longhorn-backups@us-east-1/openclaw/` and a dedicated MinIO
@@ -157,4 +167,7 @@ pod or VolumeAttachment.
 This target removes `ubuntu` from the OpenClaw backup path, but it does not
 provide site, host, or provider independence. Production DR still requires an
 external object store, TLS/KMS-backed encryption, monitoring, and a repeated
-restore drill against that external target.
+restore drill against that external target. It also requires completion of the
+root-credential remediation above. Historical Git cleanup, if required after
+the old credential is revoked, must be handled as a separately coordinated
+history rewrite rather than force-pushing during this storage change.
