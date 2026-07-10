@@ -18,5 +18,6 @@ resources:
   - platform/authelia/manifest.yaml
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml
+  - platform/external-secrets/runtime-credentials.yaml
   - platform/velero/schedules.yaml
   - storage/minio/backup-creds.yaml
