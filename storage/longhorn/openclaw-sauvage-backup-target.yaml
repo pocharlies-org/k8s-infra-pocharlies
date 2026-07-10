@@ -1,0 +1,77 @@
+---
+# Secondary, workload-scoped backup target for the two OpenClaw state volumes.
+#
+# This target intentionally does not replace BackupTarget/default. The current
+# default holds the backup catalogue for the rest of the cluster. Only the
+# OpenClaw gateway and Telegram router Volume CRs are assigned to this target
+# during the controlled runbook in docs/openclaw-sauvage-backup-target.md.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: longhorn-openclaw-sauvage-backup
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/managed-by: external-secrets
+    app.kubernetes.io/part-of: longhorn
+    backup.e-dani.com/scope: openclaw
+spec:
+  refreshInterval: 1h
+  refreshPolicy: Periodic
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: longhorn-openclaw-sauvage-backup
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: external-secrets
+          app.kubernetes.io/part-of: longhorn
+          backup.e-dani.com/scope: openclaw
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef:
+        key: secret/longhorn/openclaw-sauvage-backup
+        property: AWS_ACCESS_KEY_ID
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef:
+        key: secret/longhorn/openclaw-sauvage-backup
+        property: AWS_SECRET_ACCESS_KEY
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+    - secretKey: AWS_ENDPOINTS
+      remoteRef:
+        key: secret/longhorn/openclaw-sauvage-backup
+        property: AWS_ENDPOINTS
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+---
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: openclaw-sauvage
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: longhorn
+    backup.e-dani.com/scope: openclaw
+    backup.e-dani.com/tier: transitional
+spec:
+  backupTargetURL: s3://longhorn-backups@us-east-1/openclaw/
+  credentialSecret: longhorn-openclaw-sauvage-backup
+  pollInterval: 5m0s
