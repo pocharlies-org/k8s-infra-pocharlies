@@ -7,6 +7,7 @@ longhorn_prereq_packages:
   - open-iscsi   # iSCSI initiator (Longhorn volume attach)
   - nfs-common   # RWX/NFS support + RequiredPackages check
   - cryptsetup   # encrypted-volume support (dm_crypt userspace)
+  - dmsetup      # device-mapper userspace required by dm-crypt/LUKS
 
 longhorn_kernel_modules:
   - iscsi_tcp

@@ -1,0 +1,257 @@
+---
+# Explicit, gated rollout for making Sauvage a Longhorn attach/compute node.
+# It deliberately does NOT make Sauvage a replica-storage node.
+#
+# Required order:
+#   1. Upgrade Longhorn with storage/longhorn/values.yaml.
+#   2. Confirm the three Longhorn settings asserted below are applied.
+#   3. Run this playbook with the explicit confirmation token.
+#
+# Example:
+#   CONFIRM_SAUVAGE_LONGHORN_ATTACH_ONLY=enable-sauvage-attach-only \
+#     ansible-playbook -i ansible/inventory/generated/ks5.ini \
+#     ansible/playbooks/enable-sauvage-longhorn-attach-only.yml
+
+- name: Confirm the Sauvage attach-only rollout
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require explicit attach-only confirmation
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'CONFIRM_SAUVAGE_LONGHORN_ATTACH_ONLY') == 'enable-sauvage-attach-only'
+        fail_msg: >-
+          Set CONFIRM_SAUVAGE_LONGHORN_ATTACH_ONLY=enable-sauvage-attach-only
+          after the Longhorn Helm values have been upgraded and verified.
+
+- name: Install Longhorn attach and encryption prerequisites on Sauvage
+  hosts: sauvage
+  become: true
+  gather_facts: true
+  roles:
+    - longhorn_prereqs
+
+- name: Admit Sauvage to Longhorn as attach-only
+  hosts: localhost
+  gather_facts: false
+  vars:
+    longhorn_namespace: longhorn-system
+    longhorn_node: sauvage
+  tasks:
+    - name: Read Sauvage Kubernetes node state
+      ansible.builtin.command:
+        argv: [kubectl, get, node, "{{ longhorn_node }}", -o, json]
+      register: sauvage_node_raw
+      changed_when: false
+
+    - name: Require Sauvage to be Ready
+      ansible.builtin.assert:
+        that:
+          - >-
+            (sauvage_node_raw.stdout | from_json).status.conditions
+            | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True')
+            | list | length == 1
+        fail_msg: "Sauvage must be Ready before Longhorn admission."
+
+    - name: Read Longhorn attach-only safety settings
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - get
+          - settings.longhorn.io
+          - create-default-disk-labeled-nodes
+          - system-managed-components-node-selector
+          - taint-toleration
+          - -o
+          - json
+      register: longhorn_settings_raw
+      changed_when: false
+
+    - name: Index Longhorn settings
+      ansible.builtin.set_fact:
+        longhorn_settings_items: "{{ (longhorn_settings_raw.stdout | from_json)['items'] }}"
+
+    - name: Index Longhorn setting application state
+      ansible.builtin.set_fact:
+        create_default_disk_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'create-default-disk-labeled-nodes')
+            | first
+          }}
+        system_component_selector_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'system-managed-components-node-selector')
+            | first
+          }}
+        taint_toleration_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'taint-toleration')
+            | first
+          }}
+
+    - name: Refuse admission unless no-disk and taint gates are active
+      ansible.builtin.assert:
+        that:
+          - create_default_disk_setting.value | bool
+          - system_component_selector_setting.value == 'storage-longhorn:true'
+          - "'role=edge:NoSchedule' in taint_toleration_setting.value"
+          - create_default_disk_setting.status.applied | bool
+          - system_component_selector_setting.status.applied | bool
+          - taint_toleration_setting.status.applied | bool
+        fail_msg: >-
+          Longhorn must create disks only on explicitly labelled nodes, select
+          storage-longhorn=true for system components, and tolerate the Sauvage
+          edge taint before the node is admitted.
+
+    - name: Remove any default-disk opt-in from Sauvage
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if kubectl get node "{{ longhorn_node }}" -o json \
+          | jq -e '.metadata.labels | has("node.longhorn.io/create-default-disk")' >/dev/null; then
+          kubectl label node "{{ longhorn_node }}" node.longhorn.io/create-default-disk-
+          echo changed
+        else
+          echo unchanged
+        fi
+      register: remove_default_disk_label
+      changed_when: "'changed' in remove_default_disk_label.stdout"
+
+    - name: Label Sauvage for Longhorn system components
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - label
+          - node
+          - "{{ longhorn_node }}"
+          - "storage-longhorn={{ node_label_sets.sauvage['storage-longhorn'] }}"
+          - "workload.openclaw={{ node_label_sets.sauvage['workload.openclaw'] }}"
+          - --overwrite
+      register: label_sauvage
+      changed_when: "'not labeled' not in label_sauvage.stdout"
+
+    - name: Wait for the Longhorn node resource
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=create
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Disable replica scheduling on the node and every discovered disk
+      ansible.builtin.shell: |
+        set -euo pipefail
+        current="$(kubectl -n "{{ longhorn_namespace }}" get nodes.longhorn.io \
+          "{{ longhorn_node }}" -o json)"
+        patch="$(jq -cn --argjson node "$current" \
+          '{spec:{allowScheduling:false,disks:(($node.spec.disks // {}) | with_entries(.value.allowScheduling=false))}}')"
+        kubectl -n "{{ longhorn_namespace }}" patch nodes.longhorn.io \
+          "{{ longhorn_node }}" --type=merge -p "$patch"
+      changed_when: true
+
+    - name: Wait for Longhorn manager on Sauvage
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - app=longhorn-manager
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn CSI plugin on Sauvage
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - app=longhorn-csi-plugin
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn engine image on Sauvage
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - longhorn.io/component=engine-image
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn instance manager on Sauvage
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - longhorn.io/component=instance-manager
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Read final Longhorn node state
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - get
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - -o
+          - json
+      register: longhorn_node_raw
+      changed_when: false
+
+    - name: Count replicas placed on Sauvage
+      ansible.builtin.shell: |
+        set -euo pipefail
+        kubectl -n "{{ longhorn_namespace }}" get replicas.longhorn.io -o json \
+          | jq '[.items[] | select(.spec.nodeID == "{{ longhorn_node }}" and .metadata.deletionTimestamp == null)] | length'
+      register: sauvage_replica_count
+      changed_when: false
+
+    - name: Prove Sauvage is attach-only
+      ansible.builtin.assert:
+        that:
+          - not (longhorn_node_raw.stdout | from_json).spec.allowScheduling
+          - >-
+            (longhorn_node_raw.stdout | from_json).spec.disks | default({})
+            | dict2items | selectattr('value.allowScheduling', 'equalto', true)
+            | list | length == 0
+          - sauvage_replica_count.stdout | int == 0
+        fail_msg: >-
+          Attach-only invariant failed: the node or one of its disks is
+          schedulable, or a Longhorn replica exists on Sauvage.
