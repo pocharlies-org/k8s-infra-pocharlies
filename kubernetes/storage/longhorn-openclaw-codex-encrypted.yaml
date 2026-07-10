@@ -1,0 +1,84 @@
+---
+# Encryption key for the dedicated OpenClaw CODEX_HOME volume.
+#
+# Vault prerequisite (KV v2):
+#   secret/longhorn/openclaw-codex-crypto
+#     CRYPTO_KEY_VALUE: high-entropy passphrase generated in a trusted shell
+#
+# CreatedOnce is intentional: silently replacing a LUKS passphrase underneath
+# an existing volume can make it impossible to attach after a restart. A future
+# key rotation must use a documented LUKS key migration, not a normal ESO refresh.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: openclaw-codex-crypto
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/managed-by: external-secrets
+    app.kubernetes.io/part-of: openclaw
+    security.e-dani.com/rotation-class: storage-encryption
+spec:
+  refreshPolicy: CreatedOnce
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: openclaw-codex-crypto
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: external-secrets
+          app.kubernetes.io/part-of: openclaw
+          security.e-dani.com/rotation-class: storage-encryption
+      data:
+        CRYPTO_KEY_VALUE: "{{ .cryptoKeyValue }}"
+        CRYPTO_KEY_PROVIDER: secret
+        CRYPTO_KEY_CIPHER: aes-xts-plain64
+        CRYPTO_KEY_HASH: sha256
+        CRYPTO_KEY_SIZE: "256"
+        CRYPTO_PBKDF: argon2i
+  data:
+    - secretKey: cryptoKeyValue
+      remoteRef:
+        key: secret/longhorn/openclaw-codex-crypto
+        property: CRYPTO_KEY_VALUE
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+---
+# Dedicated encrypted class for CODEX_HOME. It deliberately keeps three replicas
+# on the three KS5 NVMe Longhorn nodes and never schedules replicas on ubuntu.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-openclaw-codex-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    storage.e-dani.com/purpose: openclaw-codex-home
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "3"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: ext4
+  encrypted: "true"
+  dataLocality: disabled
+  replicaAutoBalance: best-effort
+  diskSelector: nvme
+  nodeSelector: ks5-nvme
+  csi.storage.k8s.io/provisioner-secret-name: openclaw-codex-crypto
+  csi.storage.k8s.io/provisioner-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-publish-secret-name: openclaw-codex-crypto
+  csi.storage.k8s.io/node-publish-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-stage-secret-name: openclaw-codex-crypto
+  csi.storage.k8s.io/node-stage-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-expand-secret-name: openclaw-codex-crypto
+  csi.storage.k8s.io/node-expand-secret-namespace: longhorn-system

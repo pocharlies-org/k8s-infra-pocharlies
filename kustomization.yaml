@@ -20,4 +20,5 @@ resources:
   - platform/vault/auto-unseal.yaml
   - platform/external-secrets/runtime-credentials.yaml
   - platform/velero/schedules.yaml
+  - kubernetes/storage/longhorn-openclaw-codex-encrypted.yaml
   - storage/minio/backup-creds.yaml
