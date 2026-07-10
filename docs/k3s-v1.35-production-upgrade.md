@@ -455,7 +455,7 @@ enabled state and matching hashes, takes a second S3 snapshot, and reruns all
 infrastructure and OpenClaw functional gates.
 
 Both restart passes use the same production disruption discipline as the K3s
-binary wave. For each server the playbook requires both protected OpenClaw
+binary wave. For each server the playbook requires all three protected OpenClaw
 singletons off the target, cordons it, runs a server-side drain dry-run, drains
 without PDB bypass, restarts K3s, verifies the local encryption stage plus all
 infrastructure/OpenClaw gates, and only then uncordons. A per-node root-only
