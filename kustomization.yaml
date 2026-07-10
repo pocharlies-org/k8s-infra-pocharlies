@@ -36,7 +36,7 @@ resources:
   - platform/external-secrets/runtime-credentials.yaml
   - platform/velero/schedules.yaml
   - storage/minio/minio.yaml
-  - storage/minio/workload-identities.yaml
+  - storage/minio/harbor-identity.yaml
   - storage/minio/backup-creds.yaml
   - storage/minio/synapse-email-attachments.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
