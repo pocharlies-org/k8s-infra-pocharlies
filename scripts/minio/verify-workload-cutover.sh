@@ -71,6 +71,6 @@ kubectl -n monitoring get statefulset loki -o json | jq -e '
 
 kubectl get --raw '/api/v1/namespaces/minio/services/http:minio-s3:9000/proxy/minio/health/ready' >/dev/null
 kubectl get --raw '/api/v1/namespaces/harbor/services/http:harbor:80/proxy/api/v2.0/health' >/dev/null
-kubectl get --raw '/api/v1/namespaces/monitoring/services/http:loki-gateway:80/proxy/ready' >/dev/null
+kubectl get --raw '/api/v1/namespaces/monitoring/services/http:loki:3100/proxy/ready' >/dev/null
 
 printf 'MINIO_WORKLOAD_CUTOVER_RUNTIME_PASS\n'
