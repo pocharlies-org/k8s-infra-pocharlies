@@ -11,7 +11,12 @@
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 3
-  storageOverProvisioningPercentage: 100
+  # Keep the 30% host-filesystem reserve, while allowing a small amount of
+  # logical overcommit. At 100%, the KS5 disks are physically >400 GiB free
+  # but cannot schedule even a 1 GiB replica because requested capacity has
+  # reached the post-reservation ceiling. 110% leaves the OS reserve intact
+  # and restores bounded headroom for three-way production replicas.
+  storageOverProvisioningPercentage: 110
   storageMinimalAvailablePercentage: 15
   concurrentReplicaRebuildPerNodeLimit: 1
   guaranteedInstanceManagerCPU: 12
