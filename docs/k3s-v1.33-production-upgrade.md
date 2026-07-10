@@ -265,8 +265,12 @@ Each node operation performs:
 9. cluster, Argo, Longhorn, CNPG, node-version, and OpenClaw gates;
 10. uncordon.
 
-If a node operation fails after replacement, the Ansible rescue block restores
-the old binary, restarts it, uncordons the node, and aborts the whole wave.
+If an agent operation fails after replacement, the Ansible rescue block restores
+the old binary, restarts it, uncordons the node, and aborts the whole wave. A
+server failure after replacement is intentionally different: the server remains
+on the target binary and cordoned. Automatically starting the prior K3s/etcd
+binary after datastore migration is not a safe rollback. Use the incident and
+snapshot-restore procedure before changing that server again.
 
 ## Enable Kubernetes Secrets encryption at rest
 
