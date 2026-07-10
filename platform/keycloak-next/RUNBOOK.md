@@ -211,3 +211,39 @@ Official references:
   <https://www.keycloak.org/docs/latest/server_admin/index.html>
 - Keycloak Admin REST role mappings:
   <https://www.keycloak.org/docs-api/latest/rest-api/index.html>
+
+## 8. Independent OpenClaw read-only clients
+
+Prerequisite Vault properties under `secret/keycloak-next/openclaw-readonly`:
+
+- `ui_client_secret` for `openclaw-readonly-ui`;
+- `cookie_secret` for the dedicated oauth2-proxy;
+- `agentgateway_client_secret` for `openclaw-readonly-agentgateway`.
+
+Generate all three outside logs and shell history. Do not reuse the admin
+oauth2-proxy secret, its cookie secret, or `agentgateway-mcp` credentials.
+
+After the AgentGateway signed write-role policy is live, sync infra and require:
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-openclaw-readonly-clients --timeout=300s
+kubectl -n keycloak logs job/keycloak-openclaw-readonly-clients \
+  -c reconcile-clients
+kubectl -n keycloak rollout status \
+  deployment/oauth2-proxy-openclaw-readonly --timeout=300s
+```
+
+The client Job log may contain client IDs, email and
+`"write_role_present":false`; it must never contain a secret or JWT. Before
+enabling the OpenClaw chart, mint an operator token through a protected helper
+that does not print it and run the AgentGateway list-only smoke. Known write
+tools must be absent, a synthetic direct write call must be denied and the
+admin token must remain unchanged.
+
+For state rollback, first disable/prune the OpenClaw read-only plane. While this
+revision's ConfigMap still exists, apply
+`manual/openclaw-readonly-clients-rollback-job.yaml`, inspect its sanitized
+`"present":false` output, and only then revert the oauth2-proxy/client manifests.
+The rollback intentionally does not touch the retained OpenClaw PVC or its CSI
+crypto key.
