@@ -1,0 +1,40 @@
+---
+k3s_upgrade_final_version: "v1.35.6+k3s1"
+k3s_upgrade_backup_root: /var/lib/k3s-upgrade-backups
+k3s_upgrade_drain_timeout: 45m
+k3s_upgrade_kubectl: "{{ lookup('env', 'KUBECTL_BIN') | default('kubectl', true) }}"
+k3s_upgrade_expected_context: "{{ lookup('env', 'EXPECTED_KUBE_CONTEXT') | default('x86-k3s', true) }}"
+k3s_upgrade_openclaw_smoke_repo: "{{ lookup('env', 'OPENCLAW_SMOKE_REPO') | default('', true) }}"
+k3s_secrets_operation_root: "{{ k3s_upgrade_backup_root }}/secrets-encryption-v1.35.6"
+
+# SHA-256 values are copied from the official K3s release assets
+# sha256sum-{amd64,arm64}.txt. Downloads fail closed on any mismatch.
+k3s_upgrade_releases:
+  "v1.32.13+k3s1":
+    amd64:
+      asset: k3s
+      sha256: 4aaf9825a92dc885856baab578f18e1881e8d381d42578bcbdabd5d7b7285865
+    arm64:
+      asset: k3s-arm64
+      sha256: 66b5f9991fe6973169b3eb6e2200022474bb7242d702ada825fa467991717d3a
+  "v1.33.13+k3s1":
+    amd64:
+      asset: k3s
+      sha256: 5353c35020dcf314e824e02abf023bc5b08b157e5c4844ca79cc7a916f03ecfc
+    arm64:
+      asset: k3s-arm64
+      sha256: 007652573124c2e2b581894919d595fed0b7a9b2d54c9eb956d18bc43912f12b
+  "v1.34.9+k3s1":
+    amd64:
+      asset: k3s
+      sha256: 80eebb578e36a04ca460575fab419a3336b32c84205a0ae954ff16636181d9f7
+    arm64:
+      asset: k3s-arm64
+      sha256: c782d6bb71eb2eb30f034aaddabb480294f9fdae5a7bca49ac5e3e0f66b96ea5
+  "v1.35.6+k3s1":
+    amd64:
+      asset: k3s
+      sha256: 2b52a2c1ca6eb502e2a0ffa1a4cf79eef94875926577c1e43347ed292cc92432
+    arm64:
+      asset: k3s-arm64
+      sha256: 64c71644eb83d48f54da43c86ee8ba0ddff69db87e11d96a48fec7a965b1bc80
