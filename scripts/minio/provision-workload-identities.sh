@@ -50,6 +50,9 @@ vault_path_exists() {
 
 vault_put() {
   local path="$1" access_key="$2" secret_key="$3"
+  # Register first so an ambiguous transport failure after the server-side
+  # write is still cleaned up.
+  WRITTEN_PATHS+=("$path")
   printf '%s\n%s\n%s\n' "$VAULT_TOKEN" "$access_key" "$secret_key" |
     kubectl -n vault exec -i vault-0 -- sh -eu -c '
       IFS= read -r token
@@ -59,11 +62,13 @@ vault_put() {
       vault kv put -mount=secret "$1" access_key="$access_key" secret_key="$secret_key" >/dev/null
       unset token access_key secret_key
     ' sh "$path" >/dev/null
-  WRITTEN_PATHS+=("$path")
 }
 
 create_policy() {
   local name="$1" file="$2"
+  # Policy deletion is idempotent; register before the remote create in case
+  # the API succeeds but the exec transport returns an error.
+  CREATED_POLICIES+=("$name")
   kubectl -n minio exec -i minio-0 -- sh -eu -c '
     policy=$(mktemp)
     d=$(mktemp -d)
@@ -72,7 +77,6 @@ create_policy() {
     mc --config-dir "$d" alias set admin http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
     mc --config-dir "$d" admin policy create admin "$1" "$policy" >/dev/null
   ' sh "$name" < "$file" >/dev/null
-  CREATED_POLICIES+=("$name")
 }
 
 create_user() {
