@@ -140,3 +140,74 @@ For external Nginx `auth_request` checks, use:
 ```text
 https://auth-next.e-dani.com/oauth2/auth
 ```
+
+## 7. Coordinated AgentGateway write-role cutover
+
+The live `agentgateway-mcp` client is confidential, has service accounts enabled,
+and currently has only Keycloak default roles. OpenClaw uses that one service
+identity for every browser session, so the role must not be granted until the
+privileged OpenClaw plane is restricted to admins.
+
+Required changes:
+
+- OpenClaw privileged-plane PR: <https://github.com/pocharlies-org/k8s-openclaw-qwen36-pocharlies/pull/24>
+- AgentGateway CEL policy PR: <https://github.com/pocharlies-org/k8s-agentgateway-pocharlies/pull/2>
+- this Keycloak bootstrap PR
+
+Do not merge or sync any of the three independently. During the approved window:
+
+1. pause new OpenClaw work and confirm the Telegram/social plane is unaffected;
+2. sync the admin-only OpenClaw plane (PR 24); its MCP proxy fails closed until
+   the service token has the role;
+3. sync this infra revision. The PostSync hook creates/maps the role and emits
+   only a sanitized JSON assertion such as:
+
+   ```json
+   {"client_id":"agentgateway-mcp","realm_role":"agentgateway-write","present":true,"exclusive_service_account":true}
+   ```
+
+4. inspect the hook result without printing a JWT or credential:
+
+   ```bash
+   kubectl -n keycloak logs job/keycloak-agentgateway-write-role -c reconcile-role
+   ```
+
+5. sync the AgentGateway CEL policy (PR 2);
+6. run its list-only two-token smoke. The operator token must retain reads and
+   see no write tools; the admin token must see representative write tools;
+7. run the OpenClaw Workboard and strict Codex smokes.
+
+The hook is idempotent. It refuses to proceed if `agentgateway-write` is
+composite, mapped to a group, mapped to any user other than the exact service
+account, or missing from a freshly minted service token.
+
+### State rollback
+
+Reverting Git alone does not remove a Keycloak database role. Roll back explicitly:
+
+1. first set `GATEWAY_WRITE=false` and `SOCIAL_WRITE_RULE=false` in the
+   AgentGateway production overlay and verify mutating tools are absent;
+2. keep operators denied from the privileged OpenClaw plane;
+3. apply the manual rollback Job (it is deliberately excluded from Kustomize):
+
+   ```bash
+   kubectl apply -f platform/keycloak-next/manual/agentgateway-write-role-rollback-job.yaml
+   kubectl -n keycloak wait --for=condition=complete \
+     job/keycloak-agentgateway-write-role-rollback --timeout=300s
+   kubectl -n keycloak logs job/keycloak-agentgateway-write-role-rollback -c rollback-role
+   kubectl -n keycloak delete job keycloak-agentgateway-write-role-rollback
+   ```
+
+4. expect sanitized output with `"present":false`; then revert the three Git
+   changes as required. Never restore the former boolean-only write policy while
+   an operator shares the privileged OpenClaw runtime.
+
+The rollback Job fails before mutation if it finds any unexpected user or group
+assignment, so it cannot silently remove authority that GitOps did not create.
+
+Official references:
+
+- Keycloak service accounts and role scope intersection:
+  <https://www.keycloak.org/docs/latest/server_admin/index.html>
+- Keycloak Admin REST role mappings:
+  <https://www.keycloak.org/docs-api/latest/rest-api/index.html>
