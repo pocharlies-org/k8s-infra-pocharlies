@@ -128,6 +128,10 @@ spec:
                       - kube-public
                       - kube-node-lease
                       - longhorn-system
+                      # gpu-operator: DaemonSets gestionados por el operator NVIDIA
+                      # (device-plugin, dcgm, gfd, validators) sin control directo
+                      # de limits desde este repo — solo generaban ruido Audit.
+                      - gpu-operator
       validate:
         allowExistingViolations: true
         message: "All containers must set resources.limits.memory."
