@@ -1,10 +1,21 @@
 ---
-- name: Map host architecture to K3s release architecture
+- name: Read node architecture from the Kubernetes API
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_upgrade_kubectl }}"
+      - get
+      - node
+      - "{{ inventory_hostname }}"
+      - -o
+      - "jsonpath={.metadata.labels.kubernetes\\.io/arch}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: k3s_upgrade_node_architecture
+
+- name: Map node service and rollback paths
   ansible.builtin.set_fact:
-    k3s_upgrade_arch: >-
-      {{ 'amd64' if ansible_architecture in ['x86_64', 'amd64'] else
-         'arm64' if ansible_architecture in ['aarch64', 'arm64'] else
-         'unsupported' }}
+    k3s_upgrade_arch: "{{ k3s_upgrade_node_architecture.stdout }}"
     k3s_upgrade_service: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
     k3s_upgrade_backup_version_dir: >-
       {{ k3s_upgrade_backup_root }}/{{ k3s_upgrade_from_version | regex_replace('[^A-Za-z0-9._-]', '-') }}
@@ -13,7 +24,9 @@
   ansible.builtin.assert:
     that:
       - k3s_upgrade_arch in ['amd64', 'arm64']
-    fail_msg: "Unsupported architecture {{ ansible_architecture }} on {{ inventory_hostname }}"
+    fail_msg: >-
+      Unsupported architecture {{ k3s_upgrade_node_architecture.stdout }} on
+      {{ inventory_hostname }}
 
 - name: Select pinned release asset
   ansible.builtin.set_fact:
