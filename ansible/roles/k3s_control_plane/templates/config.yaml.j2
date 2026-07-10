@@ -19,6 +19,7 @@ node-ip: {{ tailscale_ipv4 }}
 node-name: {{ inventory_hostname }}
 flannel-iface: {{ k3s_flannel_iface }}
 write-kubeconfig-mode: "0644"
+secrets-encryption: true
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 28
 etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots

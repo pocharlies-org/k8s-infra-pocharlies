@@ -124,6 +124,24 @@
         checksum: "sha256:{{ k3s_upgrade_release.sha256 }}"
         timeout: 120
 
+    - name: Capture OpenClaw state before draining a server
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - pre
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-failover-{{ inventory_hostname }}-{{
+            k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when: k3s_upgrade_service == 'k3s'
+
     - name: Cordon node
       ansible.builtin.command:
         argv:
@@ -245,6 +263,28 @@
       retries: 60
       delay: 10
       until: k3s_upgrade_post_node_gate.rc == 0
+
+    - name: Verify and record OpenClaw state after draining a server
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - post
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-failover-{{ inventory_hostname }}-{{
+            k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: k3s_upgrade_openclaw_failover_gate
+      retries: 90
+      delay: 10
+      until: k3s_upgrade_openclaw_failover_gate.rc == 0
+      when: k3s_upgrade_service == 'k3s'
 
     - name: Uncordon healthy upgraded node
       ansible.builtin.command:
