@@ -31,6 +31,7 @@ resources:
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml
+  - platform/external-secrets/runtime-credentials.yaml
   - platform/velero/schedules.yaml
   - storage/minio/minio.yaml
   - storage/minio/backup-creds.yaml
