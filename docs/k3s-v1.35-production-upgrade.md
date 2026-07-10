@@ -433,12 +433,36 @@ ansible-playbook \
   ansible/playbooks/k3s-enable-secrets-encryption.yml
 ```
 
-The playbook verifies the disabled state on all servers, takes and verifies an
-S3 etcd snapshot, runs `k3s secrets-encrypt enable` on S1, persists the flag and
-restarts S1/S2/S3 serially, requires the `start` stage with matching hashes,
-runs `rotate-keys` on S1, waits for `reencrypt_finished`, restarts S1/S2/S3
-serially again, verifies enabled state and matching hashes, takes a second S3
-snapshot, and reruns all infrastructure and OpenClaw functional gates.
+The playbook verifies a recognised initial/resume state on all servers, takes
+and verifies an S3 etcd snapshot, runs `k3s secrets-encrypt enable` on S1 only
+when no configuration exists, persists the flag, restarts S1/S2/S3 serially,
+requires the `start` stage with matching hashes,
+runs `rotate-keys` on S1 only when the live stage has not already advanced,
+waits for `reencrypt_finished`, restarts S1/S2/S3 serially again, verifies
+enabled state and matching hashes, takes a second S3 snapshot, and reruns all
+infrastructure and OpenClaw functional gates.
+
+Both restart passes use the same production disruption discipline as the K3s
+binary wave. For each server the playbook requires both protected OpenClaw
+singletons off the target, cordons it, runs a server-side drain dry-run, drains
+without PDB bypass, restarts K3s, verifies the local encryption stage plus all
+infrastructure/OpenClaw gates, and only then uncordons. A per-node root-only
+marker under `/var/lib/k3s-upgrade-backups/secrets-encryption-v1.35.6/` records
+the completed `start` and `reencrypt-finished` restart passes.
+
+This makes the operation deliberately resumable. If the next target hosts a
+protected singleton, perform the controlled failover and rerun the same
+playbook; already completed nodes are checked against their marker, persisted
+flag, and live encryption state and are not restarted again. The rotation step
+uses live JSON status as the source of truth: it rotates only from disabled
+`start` with matching hashes, waits through an in-progress re-encryption, and
+never repeats `rotate-keys` after `reencrypt_finished`.
+
+A failure before a restart is uncordoned automatically. A failure after restart
+attempt remains cordoned for diagnosis. Markers are evidence for this one
+operation, not authority after an etcd snapshot restore or node reinstall; a
+recovery event requires a new reviewed plan and must not blindly reuse or
+manually fabricate them.
 
 Abort on any hash mismatch, non-ready server, or unexpected rotation stage.
 Do not attempt manual repair of an encryption configuration from memory: use
@@ -511,4 +535,5 @@ Abort immediately on any of the following:
   period or otherwise lacks verified graceful proxy/native Codex shutdown;
 - any social gateway, ephemeral Workboard, or strict Codex create/send/read/delete
   contract failure after a completed version stage or Secrets encryption;
+- an unknown Secrets-encryption JSON stage or mismatched `start` hashes;
 - the target node cannot be returned Ready and schedulable after rollback.
