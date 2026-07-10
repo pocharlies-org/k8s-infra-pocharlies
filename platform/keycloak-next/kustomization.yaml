@@ -7,17 +7,21 @@ resources:
   - keycloak.yaml
   - oauth2-proxy.yaml
   - oauth2-proxy-skirmshop.yaml
+  - oauth2-proxy-openclaw-readonly.yaml
   - routing.yaml
   - agentgateway-write-role-job.yaml
+  - openclaw-readonly-clients.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
       - agentgateway-write-role.sh=scripts/agentgateway-write-role.sh
+  - name: keycloak-openclaw-readonly-clients
+    files:
+      - openclaw-readonly-clients.sh=scripts/openclaw-readonly-clients.sh
 generatorOptions:
   disableNameSuffixHash: true
   labels:
     app.kubernetes.io/name: keycloak
-    app.kubernetes.io/component: agentgateway-write-role
 labels:
   - includeSelectors: false
     pairs:

@@ -1,0 +1,164 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: openclaw-readonly-ui-secrets
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-openclaw-readonly
+    app.kubernetes.io/component: ui-client-credentials
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: openclaw-readonly-ui-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: OAUTH2_PROXY_CLIENT_SECRET
+      remoteRef:
+        # vault-backend already mounts the KV-v2 engine at secret/.
+        key: keycloak-next/openclaw-readonly
+        property: ui_client_secret
+    - secretKey: OAUTH2_PROXY_COOKIE_SECRET
+      remoteRef:
+        key: keycloak-next/openclaw-readonly
+        property: cookie_secret
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: openclaw-readonly-agentgateway-bootstrap
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openclaw-readonly-clients
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: openclaw-readonly-agentgateway-bootstrap
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client_secret
+      remoteRef:
+        key: keycloak-next/openclaw-readonly
+        property: agentgateway_client_secret
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-openclaw-readonly-clients
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openclaw-readonly-clients
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "21"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: openclaw-readonly-clients
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-clients
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/openclaw-readonly-clients.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: UI_CLIENT_ID, value: openclaw-readonly-ui }
+            - { name: AGENTGATEWAY_CLIENT_ID, value: openclaw-readonly-agentgateway }
+            - { name: UI_REDIRECT_URI, value: https://openclaw-k8s-readonly.e-dani.com/oauth2/callback }
+            - { name: UI_PUBLIC_ORIGIN, value: https://openclaw-k8s-readonly.e-dani.com }
+            - { name: UI_LAN_ORIGIN, value: https://openclaw-k8s-readonly.lan.e-dani.com }
+            - { name: OPERATOR_EMAIL, value: info@e-dani.com }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
+            - name: OPENCLAW_READONLY_UI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-readonly-ui-secrets
+                  key: OAUTH2_PROXY_CLIENT_SECRET
+            - name: OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-readonly-agentgateway-bootstrap
+                  key: client_secret
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-openclaw-readonly-clients
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-openclaw-readonly-clients-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openclaw-readonly-clients
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: openclaw-readonly-clients
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
