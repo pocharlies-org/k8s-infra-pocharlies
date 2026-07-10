@@ -1,0 +1,34 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-codex-home-encrypted
+  labels:
+    app.kubernetes.io/name: longhorn-codex-home
+    app.kubernetes.io/part-of: openclaw-qwen36
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "3"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: ext4
+  dataLocality: disabled
+  replicaAutoBalance: best-effort
+  # These are Longhorn storage tags, not Kubernetes node selectors. They keep
+  # all three encrypted replicas on the KS5 NVMe nodes even when the volume is
+  # attached by a workload running on attach-only Sauvage.
+  nodeSelector: ks5-nvme
+  diskSelector: nvme
+  encrypted: "true"
+  csi.storage.k8s.io/provisioner-secret-name: longhorn-codex-home-crypto
+  csi.storage.k8s.io/provisioner-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-publish-secret-name: longhorn-codex-home-crypto
+  csi.storage.k8s.io/node-publish-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-stage-secret-name: longhorn-codex-home-crypto
+  csi.storage.k8s.io/node-stage-secret-namespace: longhorn-system
+  csi.storage.k8s.io/node-expand-secret-name: longhorn-codex-home-crypto
+  csi.storage.k8s.io/node-expand-secret-namespace: longhorn-system
