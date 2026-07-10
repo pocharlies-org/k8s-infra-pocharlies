@@ -82,6 +82,19 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
         self.assertIn("oauth2-proxy:v7.15.2@sha256:", manifest)
         self.assertIn("readOnlyRootFilesystem: true", manifest)
         self.assertIn("cidr: 100.107.21.89/32", manifest)
+        for cidr in (
+            "141.94.73.52/32",
+            "141.94.73.50/32",
+            "145.239.194.168/32",
+            "57.129.17.172/32",
+        ):
+            self.assertIn(f"cidr: {cidr}", manifest)
+        for forbidden_non_ovh_node in (
+            "100.83.56.98/32",  # ubuntu
+            "100.82.12.28/32",  # nvidia-dgx
+            "100.73.153.70/32",  # gx10-ec3d
+        ):
+            self.assertNotIn(f"cidr: {forbidden_non_ovh_node}", manifest)
         self.assertNotIn("cidr: 10.42.0.0/24", manifest)
 
     def test_kustomize_wires_reconciler_but_excludes_manual_rollback(self):
