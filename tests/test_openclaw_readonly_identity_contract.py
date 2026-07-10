@@ -15,6 +15,8 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
     def test_clients_are_dedicated_fail_closed_and_never_log_credentials(self):
         script = (BASE / "scripts" / "openclaw-readonly-clients.sh").read_text()
         self.assertIn('UI_CLIENT_ID="${UI_CLIENT_ID:-openclaw-readonly-ui}"', script)
+        self.assertIn('filter_mapper_id "${mapper_name}"', script)
+        self.assertNotIn("awk -F", script)
         self.assertIn(
             'AGENTGATEWAY_CLIENT_ID="${AGENTGATEWAY_CLIENT_ID:-openclaw-readonly-agentgateway}"',
             script,
