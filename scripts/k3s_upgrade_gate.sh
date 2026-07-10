@@ -120,11 +120,23 @@ if kctl get crd applications.argoproj.io >/dev/null 2>&1; then
   else
     fail "Argo CD Applications not green: $(jq -c . <<<"$bad_apps")"
   fi
+  argocd_image="$(kctl -n argocd get statefulset argocd-application-controller -o json | jq -r '.spec.template.spec.containers[] | select(.name == "application-controller") | .image')"
+  if [[ "$argocd_image" == quay.io/argoproj/argocd:v3.4.2 ]]; then
+    pass "Argo CD v3.4.2 is in its official Kubernetes 1.35 test matrix"
+  else
+    fail "unexpected/unvalidated Argo CD controller image: $argocd_image"
+  fi
 else
   fail "Argo CD Application CRD missing"
 fi
 
 if kctl get crd volumes.longhorn.io >/dev/null 2>&1; then
+  longhorn_image="$(kctl -n longhorn-system get daemonset longhorn-manager -o json | jq -r '.spec.template.spec.containers[] | select(.name == "longhorn-manager") | .image')"
+  if [[ "$longhorn_image" == docker.io/longhornio/longhorn-manager:v1.11.2 ]]; then
+    pass "Longhorn 1.11.2 is in its official Kubernetes 1.35 test matrix"
+  else
+    fail "unexpected/unvalidated Longhorn manager image: $longhorn_image"
+  fi
   volumes_json="$(kctl -n longhorn-system get volumes.longhorn.io -o json)"
   bad_volumes="$(jq '[.items[] | select(.status.robustness == "degraded" or .status.robustness == "faulted") | {name:.metadata.name,state:.status.state,robustness:.status.robustness}]' <<<"$volumes_json")"
   low_replica_volumes="$(jq '[.items[] | select((.spec.numberOfReplicas // 0) < 2) | {name:.metadata.name,replicas:.spec.numberOfReplicas}]' <<<"$volumes_json")"
@@ -176,10 +188,16 @@ if kctl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
   cnpg_image="$(jq -r '.spec.template.spec.containers[] | select(.name == "manager") | .image' <<<"$cnpg_deploy_json")"
   cnpg_ready="$(jq -r '.status.readyReplicas // 0' <<<"$cnpg_deploy_json")"
   cnpg_desired="$(jq -r '.spec.replicas // 0' <<<"$cnpg_deploy_json")"
-  if [[ "$cnpg_image" == ghcr.io/cloudnative-pg/cloudnative-pg:1.29.1 && "$cnpg_ready" == "$cnpg_desired" && "$cnpg_desired" -ge 2 ]]; then
-    pass "CloudNativePG 1.29.1 operator is HA and supported on Kubernetes 1.33"
+  if grep -Fq 'v1.35.6+k3s1' <<<"$EXPECTED_VERSIONS"; then
+    required_cnpg_version=1.30.0
   else
-    fail "CloudNativePG prerequisite not met: image=$cnpg_image ready=$cnpg_ready/$cnpg_desired (require 1.29.1 and at least 2/2)"
+    required_cnpg_version=1.29.1
+  fi
+  required_cnpg_image="ghcr.io/cloudnative-pg/cloudnative-pg:$required_cnpg_version"
+  if [[ "$cnpg_image" == "$required_cnpg_image" && "$cnpg_ready" == "$cnpg_desired" && "$cnpg_desired" -ge 2 ]]; then
+    pass "CloudNativePG $required_cnpg_version operator is HA and supported for this stage"
+  else
+    fail "CloudNativePG prerequisite not met: image=$cnpg_image ready=$cnpg_ready/$cnpg_desired (require $required_cnpg_version and at least 2/2)"
   fi
 
   cnpg_clusters_json="$(kctl get clusters.postgresql.cnpg.io -A -o json)"

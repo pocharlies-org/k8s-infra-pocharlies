@@ -151,6 +151,7 @@
           - --require-off-target
       environment:
         KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
       delegate_to: localhost
       become: false
       changed_when: false
@@ -291,6 +292,7 @@
           - "{{ inventory_hostname }}"
       environment:
         KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
       delegate_to: localhost
       become: false
       changed_when: false

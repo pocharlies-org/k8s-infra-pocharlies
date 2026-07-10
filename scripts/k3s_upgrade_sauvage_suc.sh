@@ -45,7 +45,20 @@ release_image() {
     v1.33.13+k3s1)
       echo 'rancher/k3s-upgrade:v1.33.13-k3s1@sha256:54045ecd5de79a3fe60f6c98da330c582592290020bed33c48ed414e223ee37d'
       ;;
+    v1.34.9+k3s1)
+      echo 'rancher/k3s-upgrade:v1.34.9-k3s1@sha256:11165b0e53d09f870e339c0a3a5efdf7ea2d693f3d04381c2209883f6690ebcf'
+      ;;
+    v1.35.6+k3s1)
+      echo 'rancher/k3s-upgrade:v1.35.6-k3s1@sha256:ee89420a1a545cbd2b8334161dd4b11ba4836a330f67e71ad1ae5ce005ee3bc6'
+      ;;
     *) fail "unsupported target image version: $1" ;;
+  esac
+}
+
+require_adjacent_upgrade() {
+  case "$1->$2" in
+    'v1.32.5+k3s1->v1.32.13+k3s1'|'v1.32.13+k3s1->v1.33.13+k3s1'|'v1.33.13+k3s1->v1.34.9+k3s1'|'v1.34.9+k3s1->v1.35.6+k3s1') ;;
+    *) fail "unsupported or non-adjacent K3s upgrade: $1 -> $2" ;;
   esac
 }
 
@@ -140,6 +153,7 @@ wait_for_target() {
 
 upgrade_node() {
   local from="$1" target="$2" image plan confirmation current unschedulable
+  require_adjacent_upgrade "$from" "$target"
   image="$(release_image "$target")"
   plan="sauvage-$(slug "$target")"
   confirmation="upgrade-sauvage-to-$(slug "$target")"

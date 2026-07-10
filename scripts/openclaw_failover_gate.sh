@@ -7,6 +7,7 @@ STATE_FILE=""
 TARGET_NODE=""
 REQUIRE_OFF_TARGET=false
 KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
+EXPECTED_KUBE_CONTEXT="${EXPECTED_KUBE_CONTEXT:-x86-k3s}"
 NAMESPACE="openclaw-qwen36"
 
 while (($#)); do
@@ -26,6 +27,11 @@ fi
 
 kctl() { "$KUBECTL_BIN" "$@"; }
 fail() { echo "OpenClaw failover gate: FAIL: $*" >&2; exit 1; }
+
+context="$(kctl config current-context 2>/dev/null || true)"
+[[ "$context" == "$EXPECTED_KUBE_CONTEXT" ]] ||
+  fail "kubectl context is '$context', expected '$EXPECTED_KUBE_CONTEXT'"
+kctl get --raw=/readyz >/dev/null || fail "Kubernetes API readyz failed"
 
 pods_json="$(kctl -n "$NAMESPACE" get pods -o json)"
 terminating="$(jq '[.items[] | select(.metadata.deletionTimestamp != null)] | length' <<<"$pods_json")"
