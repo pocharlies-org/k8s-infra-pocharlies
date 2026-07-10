@@ -178,3 +178,16 @@
         KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
         EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
       changed_when: false
+
+    - name: Run strict OpenClaw functional contracts after a complete stage
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_functional_gate.sh"
+          - --expected-k3s-version
+          - "{{ k3s_upgrade_target_version }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+        OPENCLAW_SMOKE_REPO: "{{ k3s_upgrade_openclaw_smoke_repo }}"
+      changed_when: false
+      when: k3s_upgrade_phase in ['all', 'agents']

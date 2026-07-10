@@ -4,6 +4,7 @@ k3s_upgrade_backup_root: /var/lib/k3s-upgrade-backups
 k3s_upgrade_drain_timeout: 45m
 k3s_upgrade_kubectl: "{{ lookup('env', 'KUBECTL_BIN') | default('kubectl', true) }}"
 k3s_upgrade_expected_context: "{{ lookup('env', 'EXPECTED_KUBE_CONTEXT') | default('x86-k3s', true) }}"
+k3s_upgrade_openclaw_smoke_repo: "{{ lookup('env', 'OPENCLAW_SMOKE_REPO') | default('', true) }}"
 
 # SHA-256 values are copied from the official K3s release assets
 # sha256sum-{amd64,arm64}.txt. Downloads fail closed on any mismatch.
