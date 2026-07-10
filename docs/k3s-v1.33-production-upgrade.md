@@ -115,24 +115,29 @@ drain removes its data-protection gate.
 
 ### OpenClaw controlled failover
 
-Every server drain is also an OpenClaw availability event because the gateway
-is constrained to the KS5 pool. Before cordoning a server, the playbook records
-the fully Ready gateway pod/node and Telegram router counters. It refuses to
-start while any OpenClaw pod is Terminating, while a deployment is unavailable,
-or while the gateway is outside a non-Ubuntu KS5 node.
+Every server drain is also an OpenClaw availability event because the operator
+and isolated social gateways are separate, stateful singletons constrained to
+the KS5 pool. Before cordoning a server, the playbook records both fully Ready
+gateway pods/nodes and Telegram router counters. It refuses to start while any
+OpenClaw pod is Terminating, while a deployment is unavailable, or while either
+gateway is outside a non-Ubuntu KS5 node.
 
-If the gateway is on the node being drained, the post-drain gate requires it to
-move to a different KS5 node. In every case it then requires:
+The playbook deliberately refuses to cordon a node that hosts either protected
+singleton: its `minAvailable: 1` PDB must never be bypassed. First run the
+documented quiesce, router-pause, recreate-on-another-KS5, readiness, router
+resume, and queue-drain procedure; then resume the idempotent K3s wave. The
+evidence must identify each singleton independently. In every case the gate
+then requires:
 
-- exactly one fully Ready gateway and one fully Ready Telegram router;
-- a ready, non-terminating gateway EndpointSlice endpoint and `/readyz=true`;
+- exactly one fully Ready operator gateway, social gateway, and Telegram router;
+- ready, non-terminating endpoints and `/readyz=true` for both gateways;
 - OpenClaw Longhorn volumes healthy, attached, and not attached to `ubuntu`;
 - router unpaused, delivery acknowledgements enabled, a live backend, and no
   increase in the dead-letter count;
 - no OpenClaw pod left Terminating.
 
-The evidence file records source, destination, whether a move was required,
-queue/dead-letter counters, and an upper bound for failover time. Never start a
+The evidence file records independent source/destination pairs, queue and
+dead-letter counters, and an upper bound for failover time. Never start a
 second node while the post-drain gate is pending.
 
 ## Controller preparation

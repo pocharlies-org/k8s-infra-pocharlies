@@ -135,6 +135,7 @@
             k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
           - --target-node
           - "{{ inventory_hostname }}"
+          - --require-off-target
       environment:
         KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
       delegate_to: localhost
