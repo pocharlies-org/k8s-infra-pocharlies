@@ -77,3 +77,19 @@ kubectl -n longhorn-system get nodes.longhorn.io -o json | jq -r '
 
 The first numeric column must be at least 6 GiB before creating the validation
 pair. Physical available space must remain greater than 15% of disk maximum.
+
+## Controlled repair headroom
+
+The smoke cleanup alone is not stable headroom: as soon as capacity becomes
+available, Longhorn correctly resumes missing replicas for degraded production
+volumes. This was observed live with Langfuse and Tomorrowland immediately
+after the cleanup. The cluster therefore manages these two settings through
+Argo CD:
+
+- `concurrent-replica-rebuild-per-node-limit=1` throttles repair I/O;
+- `storage-over-provisioning-percentage=110` provides bounded logical room.
+
+The 30% per-disk reservation and 15% minimum-free guard remain unchanged. Do
+not raise the logical ceiling again without a fresh requested-vs-actual
+capacity report and a restore drill. During the controlled wave, require each
+OpenClaw replica to land on a different KS5 node.
