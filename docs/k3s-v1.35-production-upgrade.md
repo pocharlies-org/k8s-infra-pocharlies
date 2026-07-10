@@ -191,6 +191,31 @@ period. The gate must report zero `Terminating` pods before every drain. Never
 work around this by force-deleting the pod or shortening the grace period
 without first proving graceful child-process and session shutdown.
 
+### OpenClaw post-stage functional contract
+
+Kubernetes readiness is necessary but not sufficient. After all agents complete
+each version stage, and again after Secrets encryption, the playbooks run the
+three official smoke scripts from the OpenClaw deployment repository:
+
+- `scripts/smoke-social-gateway.sh` validates the isolated social runtime,
+  least-privilege identity/storage contract, deep audit, and active router;
+- `scripts/smoke-workboard.sh` creates and reads a card in a temporary state
+  directory that is removed on exit;
+- `scripts/smoke-codex-k8s.sh` performs the strict endpoint probe plus
+  materialised create/send/read contract, validates the exact response, and
+  deletes the smoke thread through the supported remote Codex command.
+
+`scripts/openclaw_functional_gate.sh` refuses a dirty or unrelated checkout and
+requires its HEAD to equal the exact revision reported by the Synced/Healthy
+OpenClaw Argo Application. It also requires the reviewed
+`codex-smoke-cleanup-contract:v1` marker, pins every nested `kubectl` call to the
+expected context, and runs only when every node reports the completed stage
+version. It requires `codex-smoke-cleanup-contract:v2` plus
+`openclaw-smoke-session-cleanup-contract:v1`, so both the Codex thread and the
+OpenClaw orchestration session/transcript are deleted and verified absent. No
+real owner Telegram update is sent. A missing cleanup contract, failed
+readback/delete, or any other smoke failure is a hard stop.
+
 ## Controller preparation
 
 Create a private inventory from the example. Real IPs and SSH options belong in
@@ -202,7 +227,13 @@ cp ansible/inventory/k3s-production.example.ini \
 scripts/install-kubectl-k3s-upgrade.sh
 export KUBECTL_BIN="$PWD/.tools/kubectl-v1.33.13"
 export EXPECTED_KUBE_CONTEXT=x86-k3s
+export OPENCLAW_SMOKE_REPO=/absolute/path/to/k8s-openclaw-qwen36-pocharlies
 ```
+
+The OpenClaw checkout must be clean and checked out at the exact live Argo
+revision. Do not point the gate at an unmerged feature branch or copy smoke
+scripts into this repository. The revision comparison makes the test contract
+part of the deployed release rather than an operator-local approximation.
 
 Keep `kubectl-v1.33.13` selected for stages 1 and 2. Before stage 3, switch to
 `export KUBECTL_BIN="$PWD/.tools/kubectl-v1.34.9"` and retain it for stages 3
@@ -267,9 +298,9 @@ ansible-playbook \
   -e upgrade_phase=agents
 ```
 
-Stop and observe the full cluster after the final gate. Do not start stage 2
-while any Application, PDB, CNPG cluster, Longhorn volume, node, or API check is
-unhealthy.
+Stop and observe the full cluster after the final infrastructure and functional
+gates. Do not start stage 2 while any Application, PDB, CNPG cluster, Longhorn
+volume, node, API, social, Workboard, or Codex contract is unhealthy.
 
 ## Stage 2: Kubernetes v1.33
 
@@ -407,7 +438,7 @@ S3 etcd snapshot, runs `k3s secrets-encrypt enable` on S1, persists the flag and
 restarts S1/S2/S3 serially, requires the `start` stage with matching hashes,
 runs `rotate-keys` on S1, waits for `reencrypt_finished`, restarts S1/S2/S3
 serially again, verifies enabled state and matching hashes, takes a second S3
-snapshot, and reruns all production gates.
+snapshot, and reruns all infrastructure and OpenClaw functional gates.
 
 Abort on any hash mismatch, non-ready server, or unexpected rotation stage.
 Do not attempt manual repair of an encryption configuration from memory: use
@@ -478,4 +509,6 @@ Abort immediately on any of the following:
 - new Argo OutOfSync/Degraded state;
 - an OpenClaw failover that leaves a pod `Terminating` for the 900-second grace
   period or otherwise lacks verified graceful proxy/native Codex shutdown;
+- any social gateway, ephemeral Workboard, or strict Codex create/send/read/delete
+  contract failure after a completed version stage or Secrets encryption;
 - the target node cannot be returned Ready and schedulable after rollback.
