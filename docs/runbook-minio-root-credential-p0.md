@@ -105,6 +105,9 @@ Do not prepare or merge the cutover until all three consumers pass Wave 2.
 3. Prove by in-memory comparison that Harbor, Velero, Loki, CNPG, Keycloak,
    Langfuse, Synapse, and Longhorn do not use the old root. Scan current Git,
    rendered Helm output, ConfigMaps, pod specs, and non-server Secrets.
+   The separately operated `backup-hub/backup-minio` currently uses the same
+   literal pair and is an explicit exception: do not edit it in this wave and
+   do not mistake its continued acceptance for acceptance by the main endpoint.
 4. Announce a maintenance window. Quiesce writes and record the pre-cutover
    StatefulSet revision and health. The raw singleton reads root environment
    only at process start, so this step causes an intentional MinIO outage.
@@ -128,8 +131,11 @@ a literal into Git.
 
 - No application uses MinIO root.
 - Current Git, Helm renders, ConfigMaps, non-server Secrets, and pod specs have
-  zero occurrences of the revoked pair.
-- Root-v2 works; old root is rejected.
+  zero occurrences of the revoked pair within the main-MinIO server and
+  consumer scope. `backup-hub` remains a documented exception until its own
+  coordinated K3s-etcd-safe rotation.
+- Root-v2 works on the main MinIO endpoint; old root is rejected by that same
+  endpoint.
 - Harbor push/pull/delete, Velero backup/restore, Loki ingest/query/retention,
   CNPG backups, and the OpenClaw backup target all pass.
 - `backup-hub/backup-minio` and K3s etcd remain unchanged; their separate debt
