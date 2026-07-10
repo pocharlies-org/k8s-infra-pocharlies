@@ -84,9 +84,11 @@ an out-of-band pre-existing Secret.
    they still reference the missing `synapse-secrets/catalog_sync.token` key.
 
 4. Generate a new random token in memory. Write Vault atomically with
-   `active=<new>` and `previous=<old>`. Force ESO refresh and restart only client
-   controllers whose environment value is captured at process start. Keep the
-   server accepting both values throughout the rollout.
+   `active=<new>` and `previous=<old>`, then force ESO refresh. **Roll rag-app
+   first** so it loads and accepts both values; prove both work before touching
+   a client. Only then restart client controllers whose environment value is
+   captured at process start. Reversing this order creates an authentication
+   outage because the old server process has not loaded the new value yet.
 
 5. Validate every client with a read-only catalog endpoint, then validate one
    idempotent write path. Confirm the old value is no longer mounted in any
