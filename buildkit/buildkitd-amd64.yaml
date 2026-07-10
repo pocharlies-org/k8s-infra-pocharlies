@@ -41,6 +41,11 @@ spec:
       # setup. The container-level override alone is insufficient because k3s/runc
       # applies the seccomp profile before the container securityContext is merged.
       securityContext:
+        # Fresh CSI filesystems are owned by root. Grant the rootless BuildKit
+        # process group access to the Longhorn cache without a privileged
+        # chown init container or a node-specific preparation step.
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: Unconfined
       containers:
