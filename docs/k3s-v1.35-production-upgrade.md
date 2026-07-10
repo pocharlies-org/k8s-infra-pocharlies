@@ -1,4 +1,4 @@
-# K3s production upgrade: v1.32.5+k3s1 to v1.33.13+k3s1
+# K3s production upgrade: v1.32.5+k3s1 to v1.35.6+k3s1
 
 Status: prepared; execution is gated. This runbook never permits skipping a
 minor version, parallel control-plane restarts, PDB bypass, or a Longhorn drain
@@ -17,24 +17,34 @@ nodes were Ready. Longhorn had 87 volumes, no degraded/faulted volume, no
 replica rebuild, and no volume configured with fewer than two replicas.
 
 The local default `kubectl` was v1.36.1 and is outside the supported skew for a
-v1.32 API. `scripts/install-kubectl-k3s-upgrade.sh` installs a checksum-pinned
-v1.33.13 client that is supported against both sides of this upgrade.
+v1.32 API. `scripts/install-kubectl-k3s-upgrade.sh` installs checksum-pinned
+v1.33.13 and v1.34.9 clients. Use v1.33.13 for the v1.32/v1.33 stages and
+v1.34.9 for the v1.34/v1.35 stages so the client always stays within one minor
+of both sides.
 
 ## Supported version path
 
-Run two complete rolling stages:
+Run four complete rolling stages:
 
 1. `v1.32.5+k3s1` -> `v1.32.13+k3s1`
 2. `v1.32.13+k3s1` -> `v1.33.13+k3s1`
+3. `v1.33.13+k3s1` -> `v1.34.9+k3s1`
+4. `v1.34.9+k3s1` -> `v1.35.6+k3s1`
+
+Kubernetes v1.33 reached end of life on 2026-06-28. It is an adjacent-minor
+hop only and must never be declared the production baseline. Kubernetes v1.35
+is supported until 2027-02-28 and is the highest version simultaneously tested
+by the installed Longhorn 1.11.2, CNPG 1.29/1.30, and Argo CD 3.4.2.
 
 For each stage, upgrade the three servers one at a time, verify all servers are
 at target, and only then upgrade agents one at a time. K3s explicitly requires
 servers before agents and warns not to skip intermediate minors.
 
-The target release changes embedded etcd from the 3.5 line to 3.6 and updates
-containerd. It also updates the bundled Traefik chart, but bundled Traefik,
-ServiceLB, and local-storage are disabled in this cluster. The playbook checks
-the live server config before every server restart.
+The v1.33 hop changes embedded etcd from the 3.5 line to 3.6. The later hops
+remain on etcd 3.6 and update containerd and Kubernetes. K3s v1.34.9 and
+v1.35.6 update the bundled Traefik chart to v40, but bundled Traefik, ServiceLB,
+and local-storage are disabled in this cluster. The playbook checks the live
+server config before every server restart.
 
 Official references:
 
@@ -42,23 +52,39 @@ Official references:
 - K3s automated upgrades: <https://docs.k3s.io/upgrades/automated>
 - K3s v1.32.13 release: <https://github.com/k3s-io/k3s/releases/tag/v1.32.13%2Bk3s1>
 - K3s v1.33.13 release: <https://github.com/k3s-io/k3s/releases/tag/v1.33.13%2Bk3s1>
+- K3s v1.34.9 release: <https://github.com/k3s-io/k3s/releases/tag/v1.34.9%2Bk3s1>
+- K3s v1.35.6 release: <https://github.com/k3s-io/k3s/releases/tag/v1.35.6%2Bk3s1>
 - K3s etcd snapshots and restore: <https://docs.k3s.io/cli/etcd-snapshot>
-- Kubernetes v1.33 skew/order policy: <https://v1-33.docs.kubernetes.io/releases/version-skew-policy/>
+- Kubernetes supported releases and EOL dates: <https://kubernetes.io/releases/>
+- Kubernetes version skew policy: <https://kubernetes.io/releases/version-skew-policy/>
 - Longhorn node maintenance: <https://longhorn.io/docs/1.11.2/maintenance/maintenance/>
 - K3s secrets encryption: <https://docs.k3s.io/cli/secrets-encrypt>
 
 ## Hard prerequisites
 
-Do not begin either K3s stage unless `scripts/k3s_upgrade_gate.sh preflight`
+Do not begin any K3s stage unless `scripts/k3s_upgrade_gate.sh preflight`
 passes without exceptions.
 
 ### CloudNativePG
 
 The live CNPG operator was 1.25.1. CNPG 1.25 supports Kubernetes only through
-1.32; Kubernetes 1.33 is tested but not supported. The prerequisite GitOps
-change upgrades to official Helm chart 0.28.3 / operator 1.29.1. CNPG 1.29 is
-the newest charted operator line that officially supports Kubernetes 1.33.
-CNPG 1.30 officially supports Kubernetes 1.34-1.36 only.
+1.32; Kubernetes 1.33 is tested but not supported. Before the first K3s hop,
+upgrade to official Helm chart 0.28.3 / operator 1.29.1. CNPG 1.29 supports
+Kubernetes 1.33, 1.34, and 1.35.
+
+CNPG 1.29.2 is the recommended latest patch, but the official Helm repository
+did not publish a chart containing it: chart 0.28.3 contains 1.29.1 and the next
+chart, 0.29.0, contains operator 1.30.0. Do not override only the image to
+1.29.2 because its CRDs changed. The safe chart-managed sequence is therefore:
+
+1. chart 0.28.3 / operator 1.29.1 while Kubernetes is 1.32-1.34;
+2. after the v1.34.9 stage is fully green, chart 0.29.0 / operator 1.30.0;
+3. only then start the v1.35.6 stage.
+
+CNPG 1.30 supports Kubernetes 1.34-1.36 and includes the 1.29.2 security
+hardening plus Lease-coordinated primary election and authenticated instance
+manager status calls. The gate requires 1.29.1 for the earlier hops and 1.30.0
+for the v1.35 hop; it never accepts a merely tested-but-unsupported pairing.
 
 Before syncing the CNPG upgrade:
 
@@ -69,6 +95,9 @@ Before syncing the CNPG upgrade:
 4. Wait for any currently running backup to finish.
 5. Confirm no custom monitoring query needs access to user tables. CNPG 1.29.1
    changes the exporter to the limited `cnpg_metrics_exporter` role.
+6. Before 1.30.0, verify every instance was created or recreated by CNPG 1.24+
+   and serves its status port over TLS; verify the chart grants the operator
+   `coordination.k8s.io/leases` permissions.
 
 The operator upgrade rolls instance managers. The GitOps values deliberately
 spread cluster rollouts by 300 seconds and instance rollouts by 120 seconds.
@@ -78,9 +107,11 @@ database connectivity before proceeding.
 
 References:
 
-- CNPG 1.29 support matrix: <https://cloudnative-pg.io/docs/1.30/supported_releases/>
+- CNPG support matrix: <https://cloudnative-pg.io/docs/1.30/supported_releases/>
 - CNPG upgrade behavior: <https://cloudnative-pg.io/docs/1.30/installation_upgrade/>
 - CNPG 1.29.1 release: <https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.29.1>
+- CNPG 1.30.0 release: <https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.30.0>
+- Official CNPG charts: <https://github.com/cloudnative-pg/charts/releases>
 
 ### Argo CD
 
@@ -89,6 +120,10 @@ only be classified as non-blocking after its live diff is captured and shown
 not to affect control-plane, networking, storage, admission, secrets, databases,
 or workloads scheduled on the node being drained. Degraded infrastructure or
 data services are always a stop condition.
+
+The live Argo CD is v3.4.2. Its official test matrix covers Kubernetes v1.32,
+v1.33, v1.34, and v1.35. No Argo minor upgrade is required for this wave.
+Reference: <https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions>.
 
 ### etcd and restore material
 
@@ -101,6 +136,12 @@ encrypts confidential bootstrap data and is required for restore. Never copy it
 into Git, the runbook, CI logs, or chat.
 
 ### Longhorn
+
+Longhorn 1.11.2's official production matrix explicitly tests Kubernetes 1.32,
+1.33, 1.34, and 1.35. Keep Longhorn at 1.11.2 during the K3s wave; upgrading the
+storage control plane while recovering a CSI incident would combine failure
+domains. Evaluate the supported 1.11.x -> 1.12.x upgrade in a separate window.
+Reference: <https://longhorn.io/docs/1.11.2/best-practices/#kubernetes-version>.
 
 Require:
 
@@ -141,6 +182,15 @@ The evidence file records independent source/destination pairs, queue and
 dead-letter counters, and an upper bound for failover time. Never start a
 second node while the post-drain gate is pending.
 
+The 2026-07-10 rehearsal exposed a shutdown defect: the regular proxy/native
+Codex process could keep an old gateway pod `Terminating` until its 900-second
+grace period even after the main gateway had exited. K3s maintenance is blocked
+until the OpenClaw GitOps fix is deployed and a controlled rehearsal proves
+that both singleton types terminate cleanly without consuming that full grace
+period. The gate must report zero `Terminating` pods before every drain. Never
+work around this by force-deleting the pod or shortening the grace period
+without first proving graceful child-process and session shutdown.
+
 ## Controller preparation
 
 Create a private inventory from the example. Real IPs and SSH options belong in
@@ -153,6 +203,10 @@ scripts/install-kubectl-k3s-upgrade.sh
 export KUBECTL_BIN="$PWD/.tools/kubectl-v1.33.13"
 export EXPECTED_KUBE_CONTEXT=x86-k3s
 ```
+
+Keep `kubectl-v1.33.13` selected for stages 1 and 2. Before stage 3, switch to
+`export KUBECTL_BIN="$PWD/.tools/kubectl-v1.34.9"` and retain it for stages 3
+and 4.
 
 Verify SSH, passwordless sudo, architecture, service name, and live K3s version
 on the six Ansible-mutated hosts before the window:
@@ -244,8 +298,66 @@ ansible-playbook \
   -e upgrade_phase=agents
 ```
 
-After all seven nodes pass the final v1.33 gate, remove the temporary privileged
-controller and its cluster-wide RBAC:
+Kubernetes v1.33 is EOL. Do not pause the maintenance programme here or treat
+this hop as the production baseline.
+
+## Stage 3: Kubernetes v1.34
+
+Switch to the client that remains within one minor of v1.33 and v1.35:
+
+```bash
+export KUBECTL_BIN="$PWD/.tools/kubectl-v1.34.9"
+export CONFIRM_K3S_UPGRADE=upgrade-v1.34.9-k3s1
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.33.13+k3s1 \
+  -e target_version=v1.34.9+k3s1 \
+  -e upgrade_phase=servers
+
+export CONFIRM_K3S_SAUVAGE_SUC=upgrade-sauvage-to-v1.34.9-k3s1
+scripts/k3s_upgrade_sauvage_suc.sh upgrade \
+  v1.33.13+k3s1 v1.34.9+k3s1
+
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.33.13+k3s1 \
+  -e target_version=v1.34.9+k3s1 \
+  -e upgrade_phase=agents
+```
+
+After the complete v1.34.9 gate and observation window, upgrade CNPG with the
+separate reviewed GitOps change from chart 0.28.3/operator 1.29.1 to chart
+0.29.0/operator 1.30.0. Repeat the backup, archiving, connectivity, HA operator,
+and cluster readiness checks. Do not start stage 4 until CNPG 1.30.0 and all
+Applications are Synced/Healthy.
+
+## Stage 4: supported production baseline v1.35
+
+```bash
+export CONFIRM_K3S_UPGRADE=upgrade-v1.35.6-k3s1
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.34.9+k3s1 \
+  -e target_version=v1.35.6+k3s1 \
+  -e upgrade_phase=servers
+
+export CONFIRM_K3S_SAUVAGE_SUC=upgrade-sauvage-to-v1.35.6-k3s1
+scripts/k3s_upgrade_sauvage_suc.sh upgrade \
+  v1.34.9+k3s1 v1.35.6+k3s1
+
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.34.9+k3s1 \
+  -e target_version=v1.35.6+k3s1 \
+  -e upgrade_phase=agents
+```
+
+After all seven nodes pass the exact v1.35.6 final gate, remove the temporary
+privileged controller and its cluster-wide RBAC:
 
 ```bash
 export CONFIRM_K3S_SAUVAGE_SUC=remove-sauvage-system-upgrade-controller
@@ -274,17 +386,17 @@ snapshot-restore procedure before changing that server again.
 
 ## Enable Kubernetes Secrets encryption at rest
 
-This is a separate post-upgrade operation. Do not mix it into either binary
+This is a separate post-upgrade operation. Do not mix it into any binary
 upgrade stage. The enable-existing-cluster procedure is available only from
-K3s `v1.33.10+k3s1`; therefore it is gated on every node being healthy at
-`v1.33.13+k3s1`.
+K3s `v1.33.10+k3s1`; this runbook waits until every node is healthy at the
+supported final baseline `v1.35.6+k3s1`.
 
 Do not apply the control-plane role merely to add `secrets-encryption: true` on
 an existing unencrypted cluster. The playbook must first initialise the shared
 encryption configuration on S1, following the official HA order.
 
 ```bash
-export CONFIRM_K3S_SECRETS_ENCRYPTION=enable-after-v1.33.13-healthy
+export CONFIRM_K3S_SECRETS_ENCRYPTION=enable-after-v1.35.6-healthy
 ansible-playbook \
   -i ansible/inventory/generated/k3s-production.ini \
   ansible/playbooks/k3s-enable-secrets-encryption.yml
@@ -312,23 +424,23 @@ requires explicit acknowledgement because rolling back one executable is not a
 substitute for restoring a datastore after a successful etcd upgrade.
 
 ```bash
-export CONFIRM_K3S_BINARY_ROLLBACK=rollback-<node>-to-v1.32.13-k3s1
+export CONFIRM_K3S_BINARY_ROLLBACK=rollback-<node>-to-v1.34.9-k3s1
 # Servers only:
 export CONFIRM_K3S_SERVER_ROLLBACK_RISK=acknowledge-etcd-compatibility-risk
 ansible-playbook \
   -i ansible/inventory/generated/k3s-production.ini \
   ansible/playbooks/k3s-rollback-binary.yml \
   --limit <node> \
-  -e current_version=v1.33.13+k3s1 \
-  -e rollback_version=v1.32.13+k3s1
+  -e current_version=v1.35.6+k3s1 \
+  -e rollback_version=v1.34.9+k3s1
 ```
 
 For `sauvage`, leave the node cordoned and use its verified on-host backup:
 
 ```bash
-export CONFIRM_K3S_SAUVAGE_SUC=rollback-sauvage-to-v1.32.13-k3s1
+export CONFIRM_K3S_SAUVAGE_SUC=rollback-sauvage-to-v1.34.9-k3s1
 scripts/k3s_upgrade_sauvage_suc.sh rollback \
-  v1.33.13+k3s1 v1.32.13+k3s1
+  v1.35.6+k3s1 v1.34.9+k3s1
 ```
 
 The rollback Job is hostname-bound, privileged only for the recovery window,
@@ -364,4 +476,6 @@ Abort immediately on any of the following:
 - any CNPG cluster below desired Ready instances, failed archiving, or stale backup;
 - API `/readyz` failure, unexpected node version, or service restart loop;
 - new Argo OutOfSync/Degraded state;
+- an OpenClaw failover that leaves a pod `Terminating` for the 900-second grace
+  period or otherwise lacks verified graceful proxy/native Codex shutdown;
 - the target node cannot be returned Ready and schedulable after rollback.

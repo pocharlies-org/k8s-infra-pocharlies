@@ -15,12 +15,15 @@
       ansible.builtin.assert:
         that:
           - k3s_upgrade_from_version == 'v1.32.5+k3s1' and k3s_upgrade_target_version == 'v1.32.13+k3s1' or
-            k3s_upgrade_from_version == 'v1.32.13+k3s1' and k3s_upgrade_target_version == 'v1.33.13+k3s1'
+            k3s_upgrade_from_version == 'v1.32.13+k3s1' and k3s_upgrade_target_version == 'v1.33.13+k3s1' or
+            k3s_upgrade_from_version == 'v1.33.13+k3s1' and k3s_upgrade_target_version == 'v1.34.9+k3s1' or
+            k3s_upgrade_from_version == 'v1.34.9+k3s1' and k3s_upgrade_target_version == 'v1.35.6+k3s1'
           - k3s_upgrade_target_version in k3s_upgrade_releases
           - k3s_upgrade_phase in ['all', 'servers', 'agents']
         fail_msg: >-
           Allowed stages are v1.32.5+k3s1 -> v1.32.13+k3s1 and
-          v1.32.13+k3s1 -> v1.33.13+k3s1.
+          v1.32.13+k3s1 -> v1.33.13+k3s1 -> v1.34.9+k3s1 ->
+          v1.35.6+k3s1.
 
     - name: Require explicit per-stage production confirmation
       ansible.builtin.assert:
