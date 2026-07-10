@@ -1,0 +1,13 @@
+---
+k3s_agent_ha_endpoint_url: https://k8s.lan.e-dani.com:6443
+k3s_agent_ha_endpoint_host: k8s.lan.e-dani.com
+k3s_agent_ha_endpoint_port: 6443
+k3s_agent_ha_endpoint_ip: 100.105.20.73
+k3s_agent_endpoint_backup_root: /var/lib/k3s-agent-endpoint-migrations
+k3s_agent_endpoint_expected_nodes:
+  - ubuntu
+  - sauvage
+  - nvidia-dgx
+  - gx10-ec3d
+k3s_agent_endpoint_kubectl: "{{ lookup('env', 'KUBECTL_BIN') | default('kubectl', true) }}"
+k3s_agent_endpoint_expected_context: "{{ lookup('env', 'EXPECTED_KUBE_CONTEXT') | default('x86-k3s', true) }}"
