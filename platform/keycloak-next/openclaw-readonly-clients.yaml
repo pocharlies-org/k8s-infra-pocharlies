@@ -18,11 +18,12 @@ spec:
   data:
     - secretKey: OAUTH2_PROXY_CLIENT_SECRET
       remoteRef:
-        key: secret/keycloak-next/openclaw-readonly
+        # vault-backend already mounts the KV-v2 engine at secret/.
+        key: keycloak-next/openclaw-readonly
         property: ui_client_secret
     - secretKey: OAUTH2_PROXY_COOKIE_SECRET
       remoteRef:
-        key: secret/keycloak-next/openclaw-readonly
+        key: keycloak-next/openclaw-readonly
         property: cookie_secret
 ---
 apiVersion: external-secrets.io/v1
@@ -45,7 +46,7 @@ spec:
   data:
     - secretKey: client_secret
       remoteRef:
-        key: secret/keycloak-next/openclaw-readonly
+        key: keycloak-next/openclaw-readonly
         property: agentgateway_client_secret
 ---
 apiVersion: batch/v1

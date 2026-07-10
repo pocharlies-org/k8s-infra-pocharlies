@@ -220,6 +220,10 @@ Prerequisite Vault properties under `secret/keycloak-next/openclaw-readonly`:
 - `cookie_secret` for the dedicated oauth2-proxy;
 - `agentgateway_client_secret` for `openclaw-readonly-agentgateway`.
 
+That is Vault CLI notation. The ClusterSecretStore already mounts `secret/`, so
+the manifests intentionally use the relative ExternalSecret key
+`keycloak-next/openclaw-readonly`.
+
 Generate all three outside logs and shell history. Do not reuse the admin
 oauth2-proxy secret, its cookie secret, or `agentgateway-mcp` credentials.
 
@@ -246,4 +250,10 @@ revision's ConfigMap still exists, apply
 `manual/openclaw-readonly-clients-rollback-job.yaml`, inspect its sanitized
 `"present":false` output, and only then revert the oauth2-proxy/client manifests.
 The rollback intentionally does not touch the retained OpenClaw PVC or its CSI
-crypto key.
+crypto key. It also does not require either dedicated client secret or a healthy
+operator account: after authenticating with the bootstrap administrator it
+deletes only the two immutable dedicated client IDs and verifies both are gone.
+This is deliberate incident behavior, including when the service client has
+accidentally acquired `agentgateway-write`. Already minted JWTs remain valid
+until their short expiry, so keep the read-only Ingress/Deployment disabled
+through at least that interval.
