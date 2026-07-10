@@ -125,7 +125,7 @@ while IFS=$'\t' read -r component service container pod node; do
     'fetch("http://127.0.0.1:8080/readyz").then(async r=>{if(!r.ok)process.exit(1);const b=await r.json();if(b.ready!==true)process.exit(1)})'
 done < <(jq -r '.[] | [.component,.service,.container,.pod,.node] | @tsv' <<<"$gateways")
 
-pvc_names_json="$(kctl -n "$NAMESPACE" get pvc -o json | jq '[.items[].spec.volumeName | select(. != null and startswith("pvc-"))]')"
+pvc_names_json="$(kctl -n "$NAMESPACE" get pvc -o json | jq '[.items[] | select((.spec.storageClassName // "") | startswith("longhorn")) | .spec.volumeName | select(. != null and startswith("pvc-"))]')"
 longhorn_json="$(kctl -n longhorn-system get volumes.longhorn.io -o json)"
 matched_pvcs="$(jq --argjson names "$pvc_names_json" '[.items[] | select(.metadata.name as $n | $names | index($n))] | length' <<<"$longhorn_json")"
 [[ "$matched_pvcs" == "$(jq 'length' <<<"$pvc_names_json")" ]] ||

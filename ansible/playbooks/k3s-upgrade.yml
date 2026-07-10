@@ -101,7 +101,7 @@
   serial: 1
   any_errors_fatal: true
   become: true
-  gather_facts: true
+  gather_facts: false
   vars_files:
     - ../vars/k3s-upgrade.yml
   vars:
@@ -142,7 +142,7 @@
   serial: 1
   any_errors_fatal: true
   become: true
-  gather_facts: true
+  gather_facts: false
   vars_files:
     - ../vars/k3s-upgrade.yml
   vars:

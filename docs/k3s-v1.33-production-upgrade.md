@@ -39,6 +39,7 @@ the live server config before every server restart.
 Official references:
 
 - K3s manual upgrade order: <https://docs.k3s.io/upgrades/manual>
+- K3s automated upgrades: <https://docs.k3s.io/upgrades/automated>
 - K3s v1.32.13 release: <https://github.com/k3s-io/k3s/releases/tag/v1.32.13%2Bk3s1>
 - K3s v1.33.13 release: <https://github.com/k3s-io/k3s/releases/tag/v1.33.13%2Bk3s1>
 - K3s etcd snapshots and restore: <https://docs.k3s.io/cli/etcd-snapshot>
@@ -154,14 +155,27 @@ export EXPECTED_KUBE_CONTEXT=x86-k3s
 ```
 
 Verify SSH, passwordless sudo, architecture, service name, and live K3s version
-on every inventory host before the window:
+on the six Ansible-mutated hosts before the window:
 
 ```bash
-ansible -i ansible/inventory/generated/k3s-production.ini k3s_cluster \
+ansible -i ansible/inventory/generated/k3s-production.ini 'k3s_cluster:!sauvage' \
   -b -m shell -a 'hostname; uname -m; systemctl is-active k3s || systemctl is-active k3s-agent; k3s --version'
 ```
 
 Do not disable SSH host verification. Enrol and verify each host key out of band.
+
+`sauvage` intentionally does not expose passwordless sudo. Do not weaken sudoers
+or copy an interactive password into Ansible. Its agent binary is upgraded with
+the official System Upgrade Controller v0.19.2, restricted by hostname to only
+that node. The helper verifies the release manifests by SHA-256 and pins the
+controller and per-K3s upgrade images by multi-architecture digest.
+
+The helper does not let the controller drain the node. It first runs the same
+production preflight, performs the explicit PDB-safe drain without `--force` or
+`--disable-eviction`, and submits a one-node Plan only after the node is empty
+and cordoned. The Plan's prepare container stores a root-only binary/config/unit
+backup on the host. A failure leaves the node cordoned for diagnosis or the
+explicit rollback action.
 
 ## Stage 1: latest v1.32 patch
 
@@ -171,13 +185,33 @@ ansible-playbook \
   -i ansible/inventory/generated/k3s-production.ini \
   ansible/playbooks/k3s-upgrade.yml \
   -e from_version=v1.32.5+k3s1 \
-  -e target_version=v1.32.13+k3s1
+  -e target_version=v1.32.13+k3s1 \
+  -e upgrade_phase=servers
 ```
 
 For an intentionally split or resumed wave, use the same confirmation and run
 `-e upgrade_phase=servers` first. Only after all three servers are at target,
-run `-e upgrade_phase=agents`. The preflight accepts only the adjacent source
-and target versions, and already-upgraded nodes are verified and skipped.
+upgrade `sauvage` with the commands below, then run
+`-e upgrade_phase=agents`. The Ansible agent phase verifies and skips the
+already-upgraded `sauvage` without opening a sudo session. The preflight accepts
+only the adjacent source and target versions, and already-upgraded nodes are
+verified and skipped.
+
+```bash
+export CONFIRM_K3S_SAUVAGE_SUC=install-sauvage-system-upgrade-controller
+scripts/k3s_upgrade_sauvage_suc.sh install
+
+export CONFIRM_K3S_SAUVAGE_SUC=upgrade-sauvage-to-v1.32.13-k3s1
+scripts/k3s_upgrade_sauvage_suc.sh upgrade \
+  v1.32.5+k3s1 v1.32.13+k3s1
+
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.32.5+k3s1 \
+  -e target_version=v1.32.13+k3s1 \
+  -e upgrade_phase=agents
+```
 
 Stop and observe the full cluster after the final gate. Do not start stage 2
 while any Application, PDB, CNPG cluster, Longhorn volume, node, or API check is
@@ -191,7 +225,31 @@ ansible-playbook \
   -i ansible/inventory/generated/k3s-production.ini \
   ansible/playbooks/k3s-upgrade.yml \
   -e from_version=v1.32.13+k3s1 \
-  -e target_version=v1.33.13+k3s1
+  -e target_version=v1.33.13+k3s1 \
+  -e upgrade_phase=servers
+```
+
+Between the server and agent phases of stage 2:
+
+```bash
+export CONFIRM_K3S_SAUVAGE_SUC=upgrade-sauvage-to-v1.33.13-k3s1
+scripts/k3s_upgrade_sauvage_suc.sh upgrade \
+  v1.32.13+k3s1 v1.33.13+k3s1
+
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-upgrade.yml \
+  -e from_version=v1.32.13+k3s1 \
+  -e target_version=v1.33.13+k3s1 \
+  -e upgrade_phase=agents
+```
+
+After all seven nodes pass the final v1.33 gate, remove the temporary privileged
+controller and its cluster-wide RBAC:
+
+```bash
+export CONFIRM_K3S_SAUVAGE_SUC=remove-sauvage-system-upgrade-controller
+scripts/k3s_upgrade_sauvage_suc.sh cleanup
 ```
 
 Each node operation performs:
@@ -260,6 +318,18 @@ ansible-playbook \
   -e current_version=v1.33.13+k3s1 \
   -e rollback_version=v1.32.13+k3s1
 ```
+
+For `sauvage`, leave the node cordoned and use its verified on-host backup:
+
+```bash
+export CONFIRM_K3S_SAUVAGE_SUC=rollback-sauvage-to-v1.32.13-k3s1
+scripts/k3s_upgrade_sauvage_suc.sh rollback \
+  v1.33.13+k3s1 v1.32.13+k3s1
+```
+
+The rollback Job is hostname-bound, privileged only for the recovery window,
+verifies the stored binary checksum, atomically restores it, and terminates the
+agent process so its existing supervisor restarts the prior version.
 
 ### Cluster/datastore rollback
 
