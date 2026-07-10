@@ -11,19 +11,19 @@
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 3
-  # Keep the 30% host-filesystem reserve, while allowing a small amount of
-  # logical overcommit. At 100%, the KS5 disks are physically >400 GiB free
-  # but cannot schedule even a 1 GiB replica because requested capacity has
-  # reached the post-reservation ceiling. 110% leaves the OS reserve intact
-  # and restores bounded headroom for three-way production replicas.
-  storageOverProvisioningPercentage: 110
+  # Keep requested capacity inside the post-reservation budget. Capacity must
+  # be recovered by deleting verified, unreferenced test volumes instead of by
+  # weakening the 30% root-disk reservation with extra logical overcommit.
+  storageOverProvisioningPercentage: 100
   storageMinimalAvailablePercentage: 15
   concurrentReplicaRebuildPerNodeLimit: 1
   guaranteedInstanceManagerCPU: 12
   systemManagedComponentsNodeSelector: "storage-longhorn:true"
-  # Soft anti-affinity so replicas spread but won't fail to schedule
-  replicaSoftAntiAffinity: true
+  # Production volumes must never satisfy a replica count by co-locating
+  # replicas on the same node. Capacity failures should therefore fail closed.
+  replicaSoftAntiAffinity: false
   replicaZoneSoftAntiAffinity: true
+  allowVolumeCreationWithDegradedAvailability: false
   # Backup target — will configure post-MinIO
   # backupTarget: s3://longhorn-backups@us-east-1/
   taintToleration: "dedicated=llm:NoSchedule"

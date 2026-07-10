@@ -5,4 +5,22 @@ metadata:
   namespace: longhorn-system
   labels:
     app.kubernetes.io/part-of: longhorn
-value: "110"
+value: "100"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: replica-soft-anti-affinity
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+value: "false"
+---
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: allow-volume-creation-with-degraded-availability
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+value: "false"
