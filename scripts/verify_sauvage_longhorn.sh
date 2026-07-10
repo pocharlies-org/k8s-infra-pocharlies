@@ -68,22 +68,13 @@ verify_static() {
   assert_pattern 'value: edge' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'key: pocharlies.io/pool' "$tmp/longhorn-rendered.yaml"
 
-  assert_pattern 'name: longhorn-codex-home-encrypted' "$tmp/storage-rendered.yaml"
+  assert_pattern 'name: longhorn-openclaw-encrypted' "$tmp/storage-rendered.yaml"
   assert_pattern 'encrypted: "true"' "$tmp/storage-rendered.yaml"
   assert_pattern 'nodeSelector: ks5-nvme' "$tmp/storage-rendered.yaml"
   assert_pattern 'diskSelector: nvme' "$tmp/storage-rendered.yaml"
   assert_pattern 'numberOfReplicas: "3"' "$tmp/storage-rendered.yaml"
-  assert_pattern 'csi.storage.k8s.io/node-expand-secret-name: longhorn-codex-home-crypto' "$tmp/storage-rendered.yaml"
-
-  assert_pattern 'kind: ExternalSecret' "$tmp/infra-rendered.yaml"
-  assert_pattern 'name: longhorn-codex-home-crypto' "$tmp/infra-rendered.yaml"
-  assert_pattern 'refreshPolicy: CreatedOnce' "$tmp/infra-rendered.yaml"
-  assert_pattern 'key: secret/openclaw-qwen36/codex-crypto' "$tmp/infra-rendered.yaml"
-
-  if rg -n 'CRYPTO_KEY_VALUE: [^"{][^ ]+' \
-    "$ROOT/storage/longhorn/codex-home-crypto-externalsecret.yaml"; then
-    fail "crypto key appears to be literal in Git"
-  fi
+  assert_pattern 'csi.storage.k8s.io/provisioner-secret-name: \$\{pvc\.name\}' "$tmp/storage-rendered.yaml"
+  assert_pattern 'csi.storage.k8s.io/node-expand-secret-namespace: \$\{pvc\.namespace\}' "$tmp/storage-rendered.yaml"
 
   echo "Sauvage/Longhorn static verification OK (chart $CHART_VERSION)"
 }
@@ -128,7 +119,7 @@ verify_live() {
   [[ "$(ready_pods_on_sauvage longhorn.io/component=instance-manager)" -ge 1 ]] \
     || fail "Longhorn instance manager is not Ready on Sauvage"
 
-  kubectl get storageclass longhorn-codex-home-encrypted -o json | jq -e '
+  kubectl get storageclass longhorn-openclaw-encrypted -o json | jq -e '
     .provisioner == "driver.longhorn.io" and
     .reclaimPolicy == "Retain" and
     .allowVolumeExpansion == true and
@@ -136,15 +127,11 @@ verify_live() {
     .parameters.numberOfReplicas == "3" and
     .parameters.nodeSelector == "ks5-nvme" and
     .parameters.diskSelector == "nvme" and
-    .parameters["csi.storage.k8s.io/node-expand-secret-name"] == "longhorn-codex-home-crypto"
+    .parameters["csi.storage.k8s.io/provisioner-secret-name"] == "${pvc.name}" and
+    .parameters["csi.storage.k8s.io/provisioner-secret-namespace"] == "${pvc.namespace}" and
+    .parameters["csi.storage.k8s.io/node-expand-secret-name"] == "${pvc.name}" and
+    .parameters["csi.storage.k8s.io/node-expand-secret-namespace"] == "${pvc.namespace}"
   ' >/dev/null || fail "encrypted CODEX_HOME StorageClass drifted"
-
-  kubectl -n longhorn-system get externalsecret longhorn-codex-home-crypto -o json \
-    | jq -e '.status.conditions | any(.type == "Ready" and .status == "True")' >/dev/null \
-    || fail "crypto ExternalSecret is not Ready"
-  kubectl -n longhorn-system get secret longhorn-codex-home-crypto -o json \
-    | jq -e '.data | has("CRYPTO_KEY_VALUE") and has("CRYPTO_KEY_PROVIDER") and has("CRYPTO_KEY_CIPHER") and has("CRYPTO_KEY_HASH") and has("CRYPTO_KEY_SIZE") and has("CRYPTO_PBKDF")' >/dev/null \
-    || fail "crypto Secret does not contain the required key names"
 
   echo "Sauvage/Longhorn live verification OK"
 }

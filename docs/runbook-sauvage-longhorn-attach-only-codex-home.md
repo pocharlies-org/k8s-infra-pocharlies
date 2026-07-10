@@ -1,7 +1,7 @@
 # Runbook: Sauvage attach-only + encrypted CODEX_HOME
 
-Status: prepared and statically validated, not applied. Tested against Longhorn
-chart/app version `1.11.2` on 2026-07-10.
+Status: production rollout runbook. Tested against Longhorn chart/app version
+`1.11.2` on 2026-07-10.
 
 ## Target invariant
 
@@ -10,10 +10,11 @@ chart/app version `1.11.2` on 2026-07-10.
 - `sauvage` never stores a Longhorn replica: `Node.spec.allowScheduling=false`,
   no schedulable Longhorn disk, and zero `Replica` resources with
   `spec.nodeID=sauvage`.
-- `CODEX_HOME` uses `longhorn-codex-home-encrypted`: three replicas, all on
+- `CODEX_HOME` uses `longhorn-openclaw-encrypted`: three replicas, all on
   Longhorn node tag `ks5-nvme` and disk tag `nvme`, with LUKS encryption.
-- The passphrase is not in Git. External Secrets materializes it once from
-  Vault into `longhorn-system/longhorn-codex-home-crypto`.
+- The passphrase is not in Git. The OpenClaw chart materializes a per-PVC
+  Secret once from Vault in the PVC namespace. Its name equals the PVC name,
+  as required by the StorageClass `${pvc.name}` templates.
 
 Longhorn distinguishes user-deployed components from system-managed
 components and requires node selection/tolerations for both. Its storage tags
@@ -71,13 +72,13 @@ The prerequisite list matches Longhorn 1.11.2 documentation:
 
 ## Phase 1 — seed and verify the encryption key
 
-Create one high-entropy `CRYPTO_KEY_VALUE` at the Vault remote reference used by
-`storage/longhorn/codex-home-crypto-externalsecret.yaml`:
+Create one high-entropy `CRYPTO_KEY_VALUE` and the static provider property at
+the Vault reference consumed by the OpenClaw chart:
 
 ```text
 ClusterSecretStore: vault-backend
-remoteRef.key: secret/openclaw-qwen36/codex-crypto
-remoteRef.property: CRYPTO_KEY_VALUE
+remoteRef.key: openclaw-qwen36/codex-crypto
+properties: CRYPTO_KEY_VALUE, CRYPTO_KEY_PROVIDER=secret
 ```
 
 Requirements:
@@ -89,15 +90,16 @@ Requirements:
   LUKS volume unmountable;
 - back up the Vault/etcd material needed for disaster recovery.
 
-After GitOps applies the canonical ExternalSecret, validate names only:
+After OpenClaw GitOps applies its per-volume ExternalSecret, validate names
+only:
 
 ```bash
-kubectl -n longhorn-system wait \
-  --for=condition=Ready externalsecret/longhorn-codex-home-crypto --timeout=2m
-kubectl -n longhorn-system get secret longhorn-codex-home-crypto -o json \
-  | jq -e '.data | has("CRYPTO_KEY_VALUE") and has("CRYPTO_KEY_PROVIDER") \
-    and has("CRYPTO_KEY_CIPHER") and has("CRYPTO_KEY_HASH") \
-    and has("CRYPTO_KEY_SIZE") and has("CRYPTO_PBKDF")' >/dev/null
+kubectl -n openclaw-qwen36 wait --for=condition=Ready \
+  externalsecret/openclaw-qwen36-codex-crypto --timeout=2m
+kubectl -n openclaw-qwen36 get secret \
+  openclaw-qwen36-codex-state-longhorn -o json \
+  | jq -e '.data | has("CRYPTO_KEY_VALUE") and \
+    has("CRYPTO_KEY_PROVIDER")' >/dev/null
 ```
 
 `refreshPolicy: CreatedOnce` intentionally prevents a Vault edit from silently
@@ -198,10 +200,11 @@ manager pods must be Ready.
 
 ## Phase 4 — encrypted attach smoke test
 
-After the canonical StorageClass and Secret are Ready, create a disposable 1
-GiB PVC with `storageClassName: longhorn-codex-home-encrypted` and mount it in a
-disposable pod explicitly scheduled to Sauvage with the `role=edge` toleration.
-Write data, restart the pod, and verify the checksum.
+After the canonical StorageClass is Ready, create a disposable namespace, an
+ExternalSecret whose target name equals the disposable PVC, and a 1 GiB PVC
+with `storageClassName: longhorn-openclaw-encrypted`. Mount it in a disposable
+pod explicitly scheduled to Sauvage with the `role=edge` toleration. Write
+data, restart the pod, and verify the checksum.
 
 For the resulting PV/Longhorn volume, prove:
 
