@@ -3,6 +3,34 @@
 Status: production rollout runbook. Tested against Longhorn chart/app version
 `1.11.2` on 2026-07-10.
 
+## Execution checkpoint — 2026-07-10 04:47 Europe/Madrid
+
+- PR #21 and PR #23 are merged into `deploy/prod`; Argo `k8s-infra` is
+  `Synced/Healthy` and owns all three safety Setting CRs.
+- The manual Helm release was upgraded successfully from revision 3 to revision
+  4 using the pinned 1.11.2 chart and this repository's values. The 110%
+  bounded repair headroom and replica rebuild limit 1 were preserved.
+- All 53 attached Longhorn volumes remained healthy; there were no degraded
+  volumes, running unhealthy replicas, or engine replicas in write-only rebuild
+  mode after the upgrade.
+- `create-default-disk-labeled-nodes=true` is `APPLIED=true`.
+- `system-managed-components-node-selector` and `taint-toleration` contain the
+  correct desired values but remain `APPLIED=false`. Longhorn manager logs
+  confirm that it refuses these updates while volumes are attached.
+- The impact inventory contains 55 active Longhorn pod/PVC mounts across 19
+  namespaces, including PostgreSQL, Vault, Harbor, RabbitMQ, monitoring and
+  OpenClaw. Detaching every volume is therefore a cluster-wide storage outage,
+  not an OpenClaw-only restart.
+- The mandatory gate remains closed: Sauvage has **not** received
+  `storage-longhorn=true`, has no Longhorn Node resource, and has zero replicas.
+  The encrypted attach smoke on Sauvage is intentionally deferred.
+
+Do not bypass this checkpoint by patching Setting status, editing generated
+DaemonSets, removing the edge taint, or weakening the playbook assertion. The
+supported completion path is an approved maintenance window that cleanly
+detaches every Longhorn volume, waits for both settings to become
+`APPLIED=true`, restores workloads, and only then runs Phase 3 and Phase 4.
+
 ## Target invariant
 
 - `sauvage` can run Longhorn manager, CSI plugin, engine image and instance
