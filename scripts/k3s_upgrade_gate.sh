@@ -217,11 +217,10 @@ if kctl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
   cnpg_image="$(jq -r '.spec.template.spec.containers[] | select(.name == "manager") | .image' <<<"$cnpg_deploy_json")"
   cnpg_ready="$(jq -r '.status.readyReplicas // 0' <<<"$cnpg_deploy_json")"
   cnpg_desired="$(jq -r '.spec.replicas // 0' <<<"$cnpg_deploy_json")"
-  if grep -Fq 'v1.35.6+k3s1' <<<"$EXPECTED_VERSIONS"; then
-    required_cnpg_version=1.30.0
-  else
-    required_cnpg_version=1.29.1
-  fi
+  # CNPG 1.29.x officially supports Kubernetes 1.33, 1.34 and 1.35.
+  # Keep the database operator stable throughout the K3s wave; upgrading CNPG
+  # and migrating Barman are separate maintenance changes with their own gates.
+  required_cnpg_version=1.29.1
   required_cnpg_image="ghcr.io/cloudnative-pg/cloudnative-pg:$required_cnpg_version"
   if [[ "$cnpg_image" == "$required_cnpg_image" && "$cnpg_ready" == "$cnpg_desired" && "$cnpg_desired" -ge 2 ]]; then
     pass "CloudNativePG $required_cnpg_version operator is HA and supported for this stage"

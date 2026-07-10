@@ -74,17 +74,16 @@ Kubernetes 1.33, 1.34, and 1.35.
 
 CNPG 1.29.2 is the recommended latest patch, but the official Helm repository
 did not publish a chart containing it: chart 0.28.3 contains 1.29.1 and the next
-chart, 0.29.0, contains operator 1.30.0. Do not override only the image to
-1.29.2 because its CRDs changed. The safe chart-managed sequence is therefore:
+chart, 0.29.0, contains operator 1.30.0. Do not override only the image because
+that would leave chart-managed CRDs behind. Keep chart 0.28.3/operator 1.29.1
+unchanged throughout all four K3s stages: the official 1.29 support matrix
+includes Kubernetes 1.33, 1.34 and 1.35. This avoids combining a database
+operator/instance-manager rollout with control-plane upgrades.
 
-1. chart 0.28.3 / operator 1.29.1 while Kubernetes is 1.32-1.34;
-2. after the v1.34.9 stage is fully green, chart 0.29.0 / operator 1.30.0;
-3. only then start the v1.35.6 stage.
-
-CNPG 1.30 supports Kubernetes 1.34-1.36 and includes the 1.29.2 security
-hardening plus Lease-coordinated primary election and authenticated instance
-manager status calls. The gate requires 1.29.1 for the earlier hops and 1.30.0
-for the v1.35 hop; it never accepts a merely tested-but-unsupported pairing.
+Upgrade CNPG 1.30 and migrate the deprecated in-tree Barman configuration in a
+separate maintenance change after K3s 1.35 and Secrets encryption are stable.
+CNPG 1.30 release notes now defer removal of in-tree Barman to 1.31, so that
+migration is recommended but is not a prerequisite for the K3s wave.
 
 Before syncing the CNPG upgrade:
 
@@ -95,9 +94,8 @@ Before syncing the CNPG upgrade:
 4. Wait for any currently running backup to finish.
 5. Confirm no custom monitoring query needs access to user tables. CNPG 1.29.1
    changes the exporter to the limited `cnpg_metrics_exporter` role.
-6. Before 1.30.0, verify every instance was created or recreated by CNPG 1.24+
-   and serves its status port over TLS; verify the chart grants the operator
-   `coordination.k8s.io/leases` permissions.
+6. Defer CNPG 1.30-specific TLS status-port and Lease checks to its separate
+   reviewed maintenance window.
 
 The operator upgrade rolls instance managers. The GitOps values deliberately
 spread cluster rollouts by 300 seconds and instance rollouts by 120 seconds.
@@ -107,8 +105,8 @@ database connectivity before proceeding.
 
 References:
 
-- CNPG support matrix: <https://cloudnative-pg.io/docs/1.30/supported_releases/>
-- CNPG upgrade behavior: <https://cloudnative-pg.io/docs/1.30/installation_upgrade/>
+- CNPG 1.29 support matrix: <https://cloudnative-pg.io/docs/1.29/supported_releases/>
+- CNPG upgrade behavior: <https://cloudnative-pg.io/docs/1.29/installation_upgrade/>
 - CNPG 1.29.1 release: <https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.29.1>
 - CNPG 1.30.0 release: <https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.30.0>
 - Official CNPG charts: <https://github.com/cloudnative-pg/charts/releases>
@@ -369,11 +367,10 @@ ansible-playbook \
   -e upgrade_phase=agents
 ```
 
-After the complete v1.34.9 gate and observation window, upgrade CNPG with the
-separate reviewed GitOps change from chart 0.28.3/operator 1.29.1 to chart
-0.29.0/operator 1.30.0. Repeat the backup, archiving, connectivity, HA operator,
-and cluster readiness checks. Do not start stage 4 until CNPG 1.30.0 and all
-Applications are Synced/Healthy.
+After the complete v1.34.9 gate and observation window, keep CNPG at
+chart 0.28.3/operator 1.29.1 and repeat its backup, archiving, connectivity, HA
+operator and cluster readiness checks. Do not introduce the separate CNPG 1.30
+or Barman migration into this control-plane window.
 
 ## Stage 4: supported production baseline v1.35
 
