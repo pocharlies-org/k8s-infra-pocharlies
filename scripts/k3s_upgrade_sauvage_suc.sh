@@ -13,6 +13,7 @@ SUC_VERSION=v0.19.2
 SUC_MANIFEST_SHA256=bdb0efbf63e3296666b223e16ccf70a67ce6343b3446b6495a62254bc076f612
 SUC_CRD_SHA256=f8f488252adceaad35c6b322ccd35bfbdb851c19b5796df853e8119ebbd0ca6c
 SUC_IMAGE='rancher/system-upgrade-controller:v0.19.2@sha256:34fa058fe453da2e1d6cf9052d2961976d5c7294921f8a6a6fb75098a27b0e89'
+K3S_AGENT_HA_ENDPOINT='https://k8s.lan.e-dani.com:6443'
 
 fail() { echo "sauvage SUC upgrade: FAIL: $*" >&2; exit 1; }
 kctl() { "$KUBECTL_BIN" "$@"; }
@@ -191,6 +192,63 @@ assert_controller_idle_for_rollback() {
   ((active_jobs == 0)) || fail "refusing to replace an active rollback Job"
 }
 
+require_sauvage_ha_endpoint() {
+  local image="$1" job=sauvage-ha-endpoint-preflight
+  kctl -n "$NAMESPACE" delete job "$job" --ignore-not-found --wait=true >/dev/null
+  kctl apply -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: $job
+  namespace: $NAMESPACE
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      nodeName: $NODE
+      hostPID: true
+      serviceAccountName: system-upgrade
+      containers:
+        - name: endpoint-preflight
+          image: $image
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              env_file=/host/etc/systemd/system/k3s-agent.service.env
+              test -f "\$env_file"
+              test "\$(grep -Ec '^[[:space:]]*(export[[:space:]]+)?K3S_URL[[:space:]]*=' "\$env_file")" = 1
+              persisted="\$(sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?K3S_URL[[:space:]]*=[[:space:]]*(.*)$/\2/p' "\$env_file")"
+              persisted="\${persisted%\"}"
+              persisted="\${persisted#\"}"
+              persisted="\${persisted%\'}"
+              persisted="\${persisted#\'}"
+              test "\$persisted" = "$K3S_AGENT_HA_ENDPOINT"
+              pid="\$(ps -ef | grep -E '( |/)k3s .*agent' | grep -E -v '(init|grep|channelserver|supervise-daemon)' | awk '{print \$2}')"
+              test "\$(echo "\$pid" | wc -w)" = 1
+              tr '\\0' '\\n' < "/proc/\${pid}/environ" | grep -Fxq "K3S_URL=$K3S_AGENT_HA_ENDPOINT"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+EOF
+  if ! kctl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=2m; then
+    kctl -n "$NAMESPACE" logs "job/$job" --all-containers >&2 || true
+    kctl -n "$NAMESPACE" delete job "$job" --ignore-not-found --wait=true >/dev/null || true
+    fail "$NODE persisted or effective K3S_URL is not $K3S_AGENT_HA_ENDPOINT"
+  fi
+  kctl -n "$NAMESPACE" delete job "$job" --wait=true >/dev/null
+}
+
 apply_plan() {
   local from="$1" target="$2" image="$3" plan="$4" backup_dir backup_incoming
   backup_dir="/host/var/lib/k3s-upgrade-backups/$(slug "$from")"
@@ -273,6 +331,7 @@ upgrade_node() {
   current="$(node_version)"
   unschedulable="$(kctl get node "$NODE" -o jsonpath='{.spec.unschedulable}')"
   assert_controller_state_for_upgrade "$current" "$from" "$target" "$image" "$plan"
+  require_sauvage_ha_endpoint "$image"
   if [[ "$current" == "$target" && "$unschedulable" == true ]]; then
     wait_for_node_ready
     "$(dirname "$0")/k3s_upgrade_gate.sh" post-node \
@@ -328,6 +387,7 @@ rollback_node() {
   [[ "$(kctl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" == true ]] ||
     fail "$NODE must remain cordoned for rollback"
   assert_controller_idle_for_rollback "$job"
+  require_sauvage_ha_endpoint "$image"
   kctl -n "$NAMESPACE" delete job "$job" --ignore-not-found --wait=true
   kctl apply -f - <<EOF
 apiVersion: batch/v1

@@ -58,6 +58,35 @@
       {{ inventory_hostname }} is {{ k3s_upgrade_node_version_before.stdout }};
       expected {{ k3s_upgrade_from_version }} or {{ k3s_upgrade_target_version }}.
 
+- name: Require the persisted and effective HA endpoint before an agent upgrade
+  ansible.builtin.shell: |
+    set -euo pipefail
+    env_file=/etc/systemd/system/k3s-agent.service.env
+    [[ -f "$env_file" ]]
+    mapfile -t persisted < <(
+      sed -n -E 's/^[[:space:]]*(export[[:space:]]+)?K3S_URL[[:space:]]*=[[:space:]]*(.*)$/\2/p' "$env_file"
+    )
+    [[ -n "${persisted[0]:-}" && -z "${persisted[1]:-}" ]]
+    persisted_url="${persisted[0]}"
+    persisted_url="${persisted_url%\"}"
+    persisted_url="${persisted_url#\"}"
+    persisted_url="${persisted_url%\'}"
+    persisted_url="${persisted_url#\'}"
+    [[ "$persisted_url" == "{{ k3s_upgrade_agent_ha_endpoint }}" ]]
+
+    pid="$(systemctl show k3s-agent --property MainPID --value)"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]]
+    mapfile -t effective < <(tr '\0' '\n' < "/proc/${pid}/environ" | sed -n 's/^K3S_URL=//p')
+    [[ -n "${effective[0]:-}" && -z "${effective[1]:-}" ]]
+    [[ "${effective[0]}" == "{{ k3s_upgrade_agent_ha_endpoint }}" ]]
+  args:
+    executable: /bin/bash
+  changed_when: false
+  no_log: true
+  when:
+    - k3s_upgrade_service == 'k3s-agent'
+    - k3s_upgrade_node_version_before.stdout == k3s_upgrade_from_version
+
 - name: Report resumable already-upgraded node
   ansible.builtin.debug:
     msg: "{{ inventory_hostname }} already runs {{ k3s_upgrade_target_version }}; mutation skipped."
