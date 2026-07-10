@@ -48,16 +48,6 @@ spec:
             - { name: OPERATOR_EMAIL, value: info@e-dani.com }
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
-            - name: OPENCLAW_READONLY_UI_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: openclaw-readonly-ui-secrets
-                  key: OAUTH2_PROXY_CLIENT_SECRET
-            - name: OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: openclaw-readonly-agentgateway-bootstrap
-                  key: client_secret
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }

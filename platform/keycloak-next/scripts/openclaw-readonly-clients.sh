@@ -32,8 +32,14 @@ fail() {
 [ "${AGENTGATEWAY_CLIENT_ID}" = "openclaw-readonly-agentgateway" ] || fail "AGENTGATEWAY_CLIENT_ID is immutable"
 [ "${OPERATOR_EMAIL}" = "info@e-dani.com" ] || fail "OPERATOR_EMAIL is immutable"
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
-[ -n "${OPENCLAW_READONLY_UI_CLIENT_SECRET:-}" ] || fail "UI client secret is empty"
-[ -n "${OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET:-}" ] || fail "AgentGateway client secret is empty"
+case "${MODE}" in
+  ensure|audit)
+    [ -n "${OPENCLAW_READONLY_UI_CLIENT_SECRET:-}" ] || fail "UI client secret is empty"
+    [ -n "${OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET:-}" ] || fail "AgentGateway client secret is empty"
+    ;;
+  rollback) ;;
+  *) fail "unsupported MODE=${MODE}" ;;
+esac
 
 nonempty_lines() {
   sed '/^[[:space:]]*$/d'
@@ -306,6 +312,12 @@ delete_dedicated_client() {
     fail "failed to delete dedicated client ${client_id}"
 }
 
+assert_dedicated_client_absent() {
+  client_id="$1"
+  [ -z "$(resolve_client_optional "${client_id}")" ] || \
+    fail "dedicated client ${client_id} remains after rollback"
+}
+
 login_admin
 
 case "${MODE}" in
@@ -326,12 +338,15 @@ case "${MODE}" in
       "${UI_CLIENT_ID}" "${AGENTGATEWAY_CLIENT_ID}" "${OPERATOR_EMAIL}"
     ;;
   rollback)
-    verify_clients
-    verify_minted_claims
+    # Recovery must not depend on either application secret, a mintable token,
+    # the operator user remaining enabled, or the client still being safely
+    # configured. Delete the two immutable dedicated IDs with the admin API;
+    # this also contains an accidental forbidden-role grant.
     delete_dedicated_client "${AGENTGATEWAY_CLIENT_ID}"
     delete_dedicated_client "${UI_CLIENT_ID}"
+    assert_dedicated_client_absent "${AGENTGATEWAY_CLIENT_ID}"
+    assert_dedicated_client_absent "${UI_CLIENT_ID}"
     printf '{"ui_client":"%s","agentgateway_client":"%s","present":false}\n' \
       "${UI_CLIENT_ID}" "${AGENTGATEWAY_CLIENT_ID}"
     ;;
-  *) fail "unsupported MODE=${MODE}" ;;
 esac

@@ -37,6 +37,10 @@ Create these Vault paths before adding this stack to the root
   - `cookie_secret`
   - `agentgateway_client_secret`
 
+The path above is Vault CLI notation. Because `vault-backend` already mounts
+the KV-v2 engine at `secret/`, ExternalSecret `remoteRef.key` values must use the
+relative key `keycloak-next/openclaw-readonly` and must not repeat `secret/`.
+
 The oauth2-proxy client must be a confidential Keycloak client in the `edani`
 realm. Use this callback:
 
@@ -106,5 +110,8 @@ Traefik ingress for the proxy).
 Do not sync these resources until the Vault path above is seeded and the
 AgentGateway signed-role policy is live. The OpenClaw chart remains disabled
 until the sanitized PostSync result reports `"write_role_present":false`.
-State rollback is explicit and excluded from Argo:
+State rollback is explicit and excluded from Argo. It authenticates only with
+the Keycloak bootstrap administrator and deletes the two immutable dedicated
+client IDs even if the operator was disabled, an application secret was lost,
+or the service client accidentally acquired the forbidden write role:
 `manual/openclaw-readonly-clients-rollback-job.yaml`.

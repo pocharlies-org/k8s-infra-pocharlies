@@ -1,6 +1,9 @@
+import os
 import pathlib
 import shutil
 import subprocess
+import tempfile
+import textwrap
 import unittest
 
 
@@ -41,7 +44,8 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
         self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
         self.assertIn("name: openclaw-readonly-ui-secrets", manifest)
         self.assertIn("name: openclaw-readonly-agentgateway-bootstrap", manifest)
-        self.assertIn("key: secret/keycloak-next/openclaw-readonly", manifest)
+        self.assertEqual(manifest.count("key: keycloak-next/openclaw-readonly"), 3)
+        self.assertNotIn("key: secret/keycloak-next/openclaw-readonly", manifest)
         self.assertIn("property: ui_client_secret", manifest)
         self.assertIn("property: cookie_secret", manifest)
         self.assertIn("property: agentgateway_client_secret", manifest)
@@ -88,6 +92,95 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
         self.assertIn("value: rollback", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
         self.assertIn("node-pool: ks5-nvme", rollback)
+        self.assertNotIn("OPENCLAW_READONLY_UI_CLIENT_SECRET", rollback)
+        self.assertNotIn("OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET", rollback)
+        self.assertNotIn("openclaw-readonly-ui-secrets", rollback)
+        self.assertNotIn("openclaw-readonly-agentgateway-bootstrap", rollback)
+
+    def test_rollback_deletes_exact_clients_without_app_secrets_or_operator_lookup(self):
+        script = BASE / "scripts" / "openclaw-readonly-clients.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            ui_marker = tmp_path / "ui-present"
+            agentgateway_marker = tmp_path / "agentgateway-present"
+            ui_marker.touch()
+            agentgateway_marker.touch()
+            fake_kcadm = tmp_path / "kcadm.sh"
+            fake_kcadm.write_text(
+                textwrap.dedent(
+                    """\
+                    #!/bin/sh
+                    command="$1"
+                    shift
+                    case "$command" in
+                      config)
+                        exit 0
+                        ;;
+                      get)
+                        endpoint="$1"
+                        shift
+                        [ "$endpoint" = clients ] || {
+                          echo "unexpected lookup: $endpoint" >&2
+                          exit 73
+                        }
+                        query=""
+                        for argument in "$@"; do
+                          case "$argument" in
+                            clientId=*) query="$argument" ;;
+                          esac
+                        done
+                        case "$query" in
+                          clientId=openclaw-readonly-ui)
+                            [ -e "$FAKE_UI_MARKER" ] && printf '%s\n' ui-uuid
+                            ;;
+                          clientId=openclaw-readonly-agentgateway)
+                            [ -e "$FAKE_AGENTGATEWAY_MARKER" ] && printf '%s\n' agentgateway-uuid
+                            ;;
+                          *)
+                            echo "unexpected client query: $query" >&2
+                            exit 74
+                            ;;
+                        esac
+                        ;;
+                      delete)
+                        case "$1" in
+                          clients/ui-uuid) rm -f "$FAKE_UI_MARKER" ;;
+                          clients/agentgateway-uuid) rm -f "$FAKE_AGENTGATEWAY_MARKER" ;;
+                          *) echo "unexpected delete: $1" >&2; exit 75 ;;
+                        esac
+                        ;;
+                      *)
+                        echo "unexpected command: $command" >&2
+                        exit 76
+                        ;;
+                    esac
+                    """
+                )
+            )
+            fake_kcadm.chmod(0o755)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "MODE": "rollback",
+                    "KCADM": str(fake_kcadm),
+                    "KC_BOOTSTRAP_ADMIN_USERNAME": "test-admin",
+                    "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
+                    "FAKE_UI_MARKER": str(ui_marker),
+                    "FAKE_AGENTGATEWAY_MARKER": str(agentgateway_marker),
+                }
+            )
+            env.pop("OPENCLAW_READONLY_UI_CLIENT_SECRET", None)
+            env.pop("OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET", None)
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                check=True,
+                text=True,
+                capture_output=True,
+                env=env,
+            )
+            self.assertIn('"present":false', result.stdout)
+            self.assertFalse(ui_marker.exists())
+            self.assertFalse(agentgateway_marker.exists())
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_keycloak_kustomization_builds(self):
