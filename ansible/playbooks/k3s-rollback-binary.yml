@@ -1,0 +1,241 @@
+---
+- name: Roll back one K3s agent binary
+  hosts: k3s_cluster
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_rollback_version_value: "{{ rollback_version | default('') }}"
+    k3s_rollback_current_version_value: "{{ current_version | default('') }}"
+    k3s_rollback_backup_dir: >-
+      {{ k3s_upgrade_backup_root }}/{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}
+    k3s_rollback_service: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
+    k3s_rollback_confirmation: >-
+      rollback-{{ inventory_hostname }}-to-{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}
+  pre_tasks:
+    - name: Require exactly one explicitly limited agent and adjacent rollback
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - k3s_rollback_version_value | length > 0
+          - k3s_rollback_current_version_value | length > 0
+          - k3s_rollback_service == 'k3s-agent'
+          - inventory_hostname != 'sauvage'
+          - >-
+            (k3s_rollback_current_version_value == 'v1.32.13+k3s1' and
+             k3s_rollback_version_value == 'v1.32.5+k3s1') or
+            (k3s_rollback_current_version_value == 'v1.33.13+k3s1' and
+             k3s_rollback_version_value == 'v1.32.13+k3s1') or
+            (k3s_rollback_current_version_value == 'v1.34.9+k3s1' and
+             k3s_rollback_version_value == 'v1.33.13+k3s1') or
+            (k3s_rollback_current_version_value == 'v1.35.6+k3s1' and
+             k3s_rollback_version_value == 'v1.34.9+k3s1')
+          - lookup('env', 'CONFIRM_K3S_BINARY_ROLLBACK') == k3s_rollback_confirmation
+        fail_msg: >-
+          Use --limit with exactly one agent, select the immediately preceding
+          stage, and set CONFIRM_K3S_BINARY_ROLLBACK=
+          rollback-{{ inventory_hostname }}-to-{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}.
+          A server minor rollback requires the official cluster/datastore restore
+          procedure and is intentionally forbidden by this playbook. Sauvage
+          must use scripts/k3s_upgrade_sauvage_suc.sh rollback because its sudo
+          policy is intentionally interactive.
+
+    - name: Read current agent version from the Kubernetes API
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - get
+          - node
+          - "{{ inventory_hostname }}"
+          - -o
+          - "jsonpath={.status.nodeInfo.kubeletVersion}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: k3s_rollback_live_version
+
+    - name: Require the declared current version before any mutation
+      ansible.builtin.assert:
+        that:
+          - k3s_rollback_live_version.stdout == k3s_rollback_current_version_value
+        fail_msg: >-
+          {{ inventory_hostname }} reports {{ k3s_rollback_live_version.stdout }},
+          not declared current version {{ k3s_rollback_current_version_value }}.
+
+    - name: Require preserved rollback binary and checksum
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ k3s_rollback_backup_dir }}/k3s"
+        - "{{ k3s_rollback_backup_dir }}/k3s.sha256"
+      loop_control:
+        label: "{{ item | basename }}"
+      register: k3s_rollback_artifacts
+
+    - name: Verify rollback artifacts exist
+      ansible.builtin.assert:
+        that:
+          - k3s_rollback_artifacts.results[0].stat.exists
+          - k3s_rollback_artifacts.results[1].stat.exists
+
+    - name: Verify preserved rollback binary checksum before execution
+      ansible.builtin.command:
+        argv:
+          - sha256sum
+          - --check
+          - "{{ k3s_rollback_backup_dir }}/k3s.sha256"
+      changed_when: false
+
+    - name: Require preserved binary to match the requested rollback version
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_rollback_backup_dir }}/k3s"
+          - --version
+      changed_when: false
+      register: k3s_rollback_preserved_version
+      failed_when: >-
+        k3s_rollback_version_value not in k3s_rollback_preserved_version.stdout
+
+    - name: Require protected OpenClaw singletons off the agent rollback target
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - pre
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-agent-rollback-{{
+            inventory_hostname }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+          - --require-off-target
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Require all infrastructure gates before agent rollback
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - preflight
+          - --expected-versions
+          - "{{ k3s_rollback_version_value }},{{ k3s_rollback_current_version_value }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+  tasks:
+    - name: Cordon rollback node
+      ansible.builtin.command:
+        argv: ["{{ k3s_upgrade_kubectl }}", cordon, "{{ inventory_hostname }}"]
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Server-side dry-run rollback drain after cordon
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --dry-run=server
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Drain rollback node without bypassing PDBs
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Restore preserved K3s binary atomically
+      ansible.builtin.shell: |
+        set -euo pipefail
+        sha256sum --check "{{ k3s_rollback_backup_dir }}/k3s.sha256"
+        install -o root -g root -m 0755 "{{ k3s_rollback_backup_dir }}/k3s" /usr/local/bin/k3s.rollback
+        mv -f /usr/local/bin/k3s.rollback /usr/local/bin/k3s
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Restart rolled-back service
+      ansible.builtin.systemd:
+        name: "{{ k3s_rollback_service }}"
+        state: restarted
+        enabled: true
+
+    - name: Wait for rolled-back service
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ k3s_rollback_service }}"]
+      changed_when: false
+      register: k3s_rollback_active
+      retries: 30
+      delay: 10
+      until: k3s_rollback_active.stdout == 'active'
+
+    - name: Verify rolled-back binary version
+      ansible.builtin.command:
+        argv: [k3s, --version]
+      changed_when: false
+      register: k3s_rollback_version_check
+      failed_when: k3s_rollback_version_value not in k3s_rollback_version_check.stdout
+
+    - name: Verify cluster gates before returning rollback node to service
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - post-node
+          - --expected-versions
+          - "{{ k3s_rollback_version_value }},{{ k3s_rollback_current_version_value }}"
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Verify OpenClaw remains healthy after agent rollback
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - post
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-agent-rollback-{{
+            inventory_hostname }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Uncordon rolled-back node
+      ansible.builtin.command:
+        argv: ["{{ k3s_upgrade_kubectl }}", uncordon, "{{ inventory_hostname }}"]
+      delegate_to: localhost
+      become: false
+      changed_when: true

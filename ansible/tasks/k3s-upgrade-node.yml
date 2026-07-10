@@ -1,0 +1,492 @@
+---
+- name: Read node architecture from the Kubernetes API
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_upgrade_kubectl }}"
+      - get
+      - node
+      - "{{ inventory_hostname }}"
+      - -o
+      - "jsonpath={.metadata.labels.kubernetes\\.io/arch}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: k3s_upgrade_node_architecture
+
+- name: Map node service and rollback paths
+  ansible.builtin.set_fact:
+    k3s_upgrade_arch: "{{ k3s_upgrade_node_architecture.stdout }}"
+    k3s_upgrade_service: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
+    k3s_upgrade_backup_version_dir: >-
+      {{ k3s_upgrade_backup_root }}/{{ k3s_upgrade_from_version | regex_replace('[^A-Za-z0-9._-]', '-') }}
+
+- name: Reject unsupported node architectures
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_arch in ['amd64', 'arm64']
+    fail_msg: >-
+      Unsupported architecture {{ k3s_upgrade_node_architecture.stdout }} on
+      {{ inventory_hostname }}
+
+- name: Select pinned release asset
+  ansible.builtin.set_fact:
+    k3s_upgrade_release: "{{ k3s_upgrade_releases[k3s_upgrade_target_version][k3s_upgrade_arch] }}"
+    k3s_upgrade_download_url: >-
+      {{ 'https://github.com/k3s-io/k3s/releases/download/' ~
+         (k3s_upgrade_target_version | replace('+', '%2B')) ~ '/' ~
+         k3s_upgrade_releases[k3s_upgrade_target_version][k3s_upgrade_arch].asset }}
+
+- name: Read current Kubernetes node version
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_upgrade_kubectl }}"
+      - get
+      - node
+      - "{{ inventory_hostname }}"
+      - -o
+      - "jsonpath={.status.nodeInfo.kubeletVersion}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: k3s_upgrade_node_version_before
+
+- name: Require expected or already-upgraded node version
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_node_version_before.stdout in [k3s_upgrade_from_version, k3s_upgrade_target_version]
+    fail_msg: >-
+      {{ inventory_hostname }} is {{ k3s_upgrade_node_version_before.stdout }};
+      expected {{ k3s_upgrade_from_version }} or {{ k3s_upgrade_target_version }}.
+
+- name: Report resumable already-upgraded node
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} already runs {{ k3s_upgrade_target_version }}; mutation skipped."
+  when: k3s_upgrade_node_version_before.stdout == k3s_upgrade_target_version
+
+- name: Upgrade K3s node with automatic binary rollback
+  when: k3s_upgrade_node_version_before.stdout == k3s_upgrade_from_version
+  block:
+    - name: Initialise rollback state
+      ansible.builtin.set_fact:
+        k3s_upgrade_node_cordoned: false
+        k3s_upgrade_binary_replaced: false
+
+    - name: Require the on-disk K3s binary to match the source stage
+      ansible.builtin.command:
+        argv: [k3s, --version]
+      changed_when: false
+      register: k3s_upgrade_source_binary_version
+      failed_when: >-
+        k3s_upgrade_from_version not in k3s_upgrade_source_binary_version.stdout
+
+    - name: Verify bundled Traefik and ServiceLB stay disabled on servers
+      ansible.builtin.shell: |
+        set -euo pipefail
+        grep -Fxq '  - traefik' /etc/rancher/k3s/config.yaml
+        grep -Fxq '  - servicelb' /etc/rancher/k3s/config.yaml
+        grep -Fxq '  - local-storage' /etc/rancher/k3s/config.yaml
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Require local API and etcd readiness on every server
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - kubectl
+          - get
+          - --raw=/readyz?verbose
+      delegate_to: "{{ item }}"
+      become: true
+      loop: "{{ groups['k3s_servers'] }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      register: k3s_upgrade_all_servers_readyz
+      failed_when: >-
+        k3s_upgrade_all_servers_readyz.rc != 0 or
+        '[+]etcd ok' not in k3s_upgrade_all_servers_readyz.stdout or
+        '[+]etcd-readiness ok' not in k3s_upgrade_all_servers_readyz.stdout or
+        'readyz check passed' not in k3s_upgrade_all_servers_readyz.stdout
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Create root-only rollback directory
+      ansible.builtin.file:
+        path: "{{ k3s_upgrade_backup_version_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Preserve current K3s binary once
+      ansible.builtin.copy:
+        src: /usr/local/bin/k3s
+        dest: "{{ k3s_upgrade_backup_version_dir }}/k3s"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+        force: false
+
+    - name: Preserve node service and K3s configuration once
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if [[ ! -f "{{ k3s_upgrade_backup_version_dir }}/node-config.tgz" ]]; then
+          paths=(etc/rancher/k3s)
+          for candidate in \
+            "etc/systemd/system/{{ k3s_upgrade_service }}.service" \
+            "etc/systemd/system/{{ k3s_upgrade_service }}.service.env"; do
+            [[ -e "/${candidate}" ]] && paths+=("${candidate}")
+          done
+          tar -C / -czf "{{ k3s_upgrade_backup_version_dir }}/node-config.tgz" "${paths[@]}"
+          chmod 0600 "{{ k3s_upgrade_backup_version_dir }}/node-config.tgz"
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+      no_log: true
+
+    - name: Record rollback binary checksum once and verify on resume
+      ansible.builtin.shell: |
+        set -euo pipefail
+        checksum_file="{{ k3s_upgrade_backup_version_dir }}/k3s.sha256"
+        if [[ ! -f "$checksum_file" ]]; then
+          sha256sum "{{ k3s_upgrade_backup_version_dir }}/k3s" > "${checksum_file}.incoming"
+          chmod 0600 "${checksum_file}.incoming"
+          mv -f "${checksum_file}.incoming" "$checksum_file"
+        fi
+        sha256sum --check "$checksum_file"
+        chmod 0600 "{{ k3s_upgrade_backup_version_dir }}/k3s.sha256"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Require preserved rollback binary to match the source stage
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_backup_version_dir }}/k3s"
+          - --version
+      changed_when: false
+      register: k3s_upgrade_rollback_binary_version
+      failed_when: >-
+        k3s_upgrade_from_version not in k3s_upgrade_rollback_binary_version.stdout
+
+    - name: Download checksum-pinned K3s release
+      ansible.builtin.get_url:
+        url: "{{ k3s_upgrade_download_url }}"
+        dest: "{{ k3s_upgrade_backup_version_dir }}/k3s-{{ k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.incoming"
+        owner: root
+        group: root
+        mode: "0755"
+        checksum: "sha256:{{ k3s_upgrade_release.sha256 }}"
+        timeout: 120
+
+    - name: Capture OpenClaw state before draining a server
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - pre
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-failover-{{ inventory_hostname }}-{{
+            k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+          - --require-off-target
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Cordon node
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - cordon
+          - "{{ inventory_hostname }}"
+      delegate_to: localhost
+      become: false
+      register: k3s_upgrade_cordon_result
+      changed_when: "'already cordoned' not in k3s_upgrade_cordon_result.stdout"
+
+    - name: Mark node as cordoned for rescue
+      ansible.builtin.set_fact:
+        k3s_upgrade_node_cordoned: true
+
+    # CNPG and Longhorn use the persisted cordon signal to move primaries and
+    # relax their protective PDB only after another healthy copy is available.
+    # A dry-run before cordon is therefore a false negative on their primaries.
+    - name: Server-side dry-run of the drain after controllers observe cordon
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --dry-run=server
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Drain node without bypassing PDBs or unmanaged Pods
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Recheck both surviving API and etcd peers before server restart
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - kubectl
+          - get
+          - --raw=/readyz?verbose
+      delegate_to: "{{ item }}"
+      become: true
+      loop: "{{ groups['k3s_servers'] | difference([inventory_hostname]) }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      register: k3s_upgrade_surviving_servers_readyz
+      failed_when: >-
+        k3s_upgrade_surviving_servers_readyz.rc != 0 or
+        '[+]etcd ok' not in k3s_upgrade_surviving_servers_readyz.stdout or
+        '[+]etcd-readiness ok' not in k3s_upgrade_surviving_servers_readyz.stdout or
+        'readyz check passed' not in k3s_upgrade_surviving_servers_readyz.stdout
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Atomically replace K3s binary
+      ansible.builtin.shell: |
+        set -euo pipefail
+        install -o root -g root -m 0755 \
+          "{{ k3s_upgrade_backup_version_dir }}/k3s-{{ k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.incoming" \
+          /usr/local/bin/k3s.next
+        mv -f /usr/local/bin/k3s.next /usr/local/bin/k3s
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Mark binary as replaced for rescue
+      ansible.builtin.set_fact:
+        k3s_upgrade_binary_replaced: true
+
+    - name: Restart K3s service
+      ansible.builtin.systemd:
+        name: "{{ k3s_upgrade_service }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: Wait for K3s service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ k3s_upgrade_service }}"
+      changed_when: false
+      register: k3s_upgrade_service_active
+      retries: 30
+      delay: 10
+      until: k3s_upgrade_service_active.stdout == 'active'
+
+    - name: Wait for local API on servers
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - kubectl
+          - get
+          - --raw=/readyz
+      changed_when: false
+      register: k3s_upgrade_local_readyz
+      retries: 30
+      delay: 10
+      until: k3s_upgrade_local_readyz.rc == 0
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Verify installed K3s binary version
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - --version
+      changed_when: false
+      register: k3s_upgrade_binary_version
+      failed_when: k3s_upgrade_target_version not in k3s_upgrade_binary_version.stdout
+
+    - name: Wait for cluster, Argo CD, and Longhorn post-node gates
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - post-node
+          - --expected-versions
+          - "{{ k3s_upgrade_from_version }},{{ k3s_upgrade_target_version }}"
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: k3s_upgrade_post_node_gate
+      retries: 60
+      delay: 10
+      until: k3s_upgrade_post_node_gate.rc == 0
+
+    - name: Verify and record OpenClaw state after draining a server
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - post
+          - --state-file
+          - >-
+            {{ playbook_dir }}/../../.tools/openclaw-failover-{{ inventory_hostname }}-{{
+            k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: k3s_upgrade_openclaw_failover_gate
+      retries: 90
+      delay: 10
+      until: k3s_upgrade_openclaw_failover_gate.rc == 0
+      when: k3s_upgrade_service == 'k3s'
+
+    - name: Uncordon healthy upgraded node
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - uncordon
+          - "{{ inventory_hostname }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Clear cordon rollback state
+      ansible.builtin.set_fact:
+        k3s_upgrade_node_cordoned: false
+
+  rescue:
+    - name: Restore previous K3s binary after failed node upgrade
+      ansible.builtin.shell: |
+        set -euo pipefail
+        test -f "{{ k3s_upgrade_backup_version_dir }}/k3s"
+        sha256sum --check "{{ k3s_upgrade_backup_version_dir }}/k3s.sha256"
+        install -o root -g root -m 0755 "{{ k3s_upgrade_backup_version_dir }}/k3s" /usr/local/bin/k3s.rollback
+        mv -f /usr/local/bin/k3s.rollback /usr/local/bin/k3s
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Restart previous K3s binary
+      ansible.builtin.systemd:
+        name: "{{ k3s_upgrade_service }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Wait for previous K3s service
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ k3s_upgrade_service }}"
+      changed_when: false
+      register: k3s_upgrade_rollback_service
+      retries: 30
+      delay: 10
+      until: k3s_upgrade_rollback_service.stdout == 'active'
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Verify restored agent binary version
+      ansible.builtin.command:
+        argv: [k3s, --version]
+      changed_when: false
+      register: k3s_upgrade_rollback_binary_version
+      failed_when: >-
+        k3s_upgrade_from_version not in k3s_upgrade_rollback_binary_version.stdout
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Wait for rolled-back agent node to report Ready
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - wait
+          - "node/{{ inventory_hostname }}"
+          - --for=condition=Ready
+          - --timeout=5m
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Wait for rolled-back agent node to report source version
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - get
+          - node
+          - "{{ inventory_hostname }}"
+          - -o
+          - "jsonpath={.status.nodeInfo.kubeletVersion}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: k3s_upgrade_rollback_node_version
+      retries: 30
+      delay: 10
+      until: k3s_upgrade_rollback_node_version.stdout == k3s_upgrade_from_version
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
+
+    - name: Uncordon node after failed upgrade
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - uncordon
+          - "{{ inventory_hostname }}"
+      delegate_to: localhost
+      become: false
+      failed_when: false
+      changed_when: true
+      when:
+        - k3s_upgrade_node_cordoned | default(false) | bool
+        - not (k3s_upgrade_binary_replaced | default(false) | bool) or k3s_upgrade_service == 'k3s-agent'
+
+    - name: Stop the rolling wave after rollback
+      ansible.builtin.fail:
+        msg: >-
+          Upgrade failed on {{ inventory_hostname }}. An agent's prior binary is
+          restored automatically. A server that failed after replacement is
+          deliberately left on the target binary and cordoned: automatic server
+          downgrade after an etcd upgrade is unsafe. Stop and use the incident or
+          snapshot-restore runbook before resuming.
