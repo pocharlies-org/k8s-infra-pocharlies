@@ -20,3 +20,15 @@ jobs:
       run_docker_build: false
       kustomize_paths: "."
     secrets: inherit
+
+  keycloak-agentgateway-role-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Keycloak role reconciler contract
+        run: |
+          bash -n platform/keycloak-next/scripts/agentgateway-write-role.sh
+          sh -n platform/keycloak-next/scripts/openclaw-readonly-clients.sh
+          python3 -m unittest \
+            tests/test_keycloak_agentgateway_role_contract.py \
+            tests/test_openclaw_readonly_identity_contract.py

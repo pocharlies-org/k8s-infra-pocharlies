@@ -1,12 +1,27 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: keycloak
 resources:
   - namespace.yaml
   - database.yaml
   - keycloak.yaml
   - oauth2-proxy.yaml
   - oauth2-proxy-skirmshop.yaml
+  - oauth2-proxy-openclaw-readonly.yaml
   - routing.yaml
+  - agentgateway-write-role-job.yaml
+  - openclaw-readonly-clients.yaml
+configMapGenerator:
+  - name: keycloak-agentgateway-write-role
+    files:
+      - agentgateway-write-role.sh=scripts/agentgateway-write-role.sh
+  - name: keycloak-openclaw-readonly-clients
+    files:
+      - openclaw-readonly-clients.sh=scripts/openclaw-readonly-clients.sh
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/name: keycloak
 labels:
   - includeSelectors: false
     pairs:
