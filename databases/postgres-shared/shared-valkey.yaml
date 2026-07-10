@@ -396,6 +396,11 @@ spec:
                   # mismo Redis de colas/estado (offset getUpdates, FSM, rate-limit);
                   # sin esta entrada el bot recibe connection refused a shared-valkey.
                   - dgx-studio-bot
+                  # Private DGX Spark operations bot (dgx-infra
+                  # k8s/control-nexus/op-dgx-spark-bot-deployment.yaml). It uses
+                  # Valkey only for its Telegram poller lease, dedupe, rate limit
+                  # and one-shot user-bound action confirmations.
+                  - op-dgx-spark-bot
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
