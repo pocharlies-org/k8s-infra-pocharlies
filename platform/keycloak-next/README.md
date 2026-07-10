@@ -66,6 +66,20 @@ secrets and Google OAuth client exist:
 Protected services should reference the `keycloak/sso-chain` Traefik middleware
 or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
 
+## AgentGateway privileged write role
+
+`agentgateway-write-role-job.yaml` is an idempotent Argo PostSync hook for the
+existing confidential client `agentgateway-mcp`. It creates non-composite realm
+role `agentgateway-write`, maps it directly to only
+`service-account-agentgateway-mcp`, rejects any user or group mapping, and mints
+a fresh client-credentials JWT to verify `realm_access.roles` without logging
+the token or client secret.
+
+This role must be cut over together with the OpenClaw privileged-plane allowlist
+and the AgentGateway CEL policy. Do not sync this hook independently while the
+shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
+gate and explicit state rollback.
+
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
 Cloudflare and IPv6 resolution issues while preserving the public OIDC issuer.

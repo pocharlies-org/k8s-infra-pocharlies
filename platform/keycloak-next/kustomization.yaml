@@ -1,5 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: keycloak
 resources:
   - namespace.yaml
   - database.yaml
@@ -7,6 +8,16 @@ resources:
   - oauth2-proxy.yaml
   - oauth2-proxy-skirmshop.yaml
   - routing.yaml
+  - agentgateway-write-role-job.yaml
+configMapGenerator:
+  - name: keycloak-agentgateway-write-role
+    files:
+      - agentgateway-write-role.sh=scripts/agentgateway-write-role.sh
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-write-role
 labels:
   - includeSelectors: false
     pairs:
