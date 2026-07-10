@@ -2,10 +2,19 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ReadBackupBucketLocation",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::longhorn-backups"
+      ]
+    },
+    {
       "Sid": "ListOnlyTheOpenClawBackupPrefix",
       "Effect": "Allow",
       "Action": [
-        "s3:GetBucketLocation",
         "s3:ListBucket"
       ],
       "Resource": [
