@@ -1,7 +1,7 @@
-{% if k3s_cluster_init | default(false) %}
+{% if k3s_control_plane_cluster_init | default(false) %}
 cluster-init: true
 {% else %}
-server: "https://{{ k3s_first_server_ip }}:6443"
+server: "{{ k3s_control_plane_join_server_effective }}"
 {% endif %}
 token: "{{ lookup('env', 'K3S_TOKEN') }}"
 disable:
@@ -18,7 +18,7 @@ advertise-address: {{ tailscale_ipv4 }}
 node-ip: {{ tailscale_ipv4 }}
 node-name: {{ inventory_hostname }}
 flannel-iface: {{ k3s_flannel_iface }}
-write-kubeconfig-mode: "0644"
+write-kubeconfig-mode: "0600"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 28
 etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots

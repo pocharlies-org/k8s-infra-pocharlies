@@ -164,7 +164,7 @@ without writing it to Git.
 
 ```bash
 export K3S_TOKEN=...
-export K3S_JOIN_SERVER_IP=100.83.56.98
+export K3S_JOIN_SERVER_URL=https://k8s.lan.e-dani.com:6443
 cd ansible
 ansible-playbook playbooks/bootstrap-ks5.yml
 ```
@@ -182,7 +182,7 @@ Only after the three KS-5-A etcd members are Ready:
 
 ```bash
 export CONFIRM_DEMOTE_X86=demote-x86-after-ks5-quorum
-export K3S_JOIN_SERVER_IP=<ks5-cp-1-tailscale-ip>
+export K3S_JOIN_SERVER_URL=https://k8s.lan.e-dani.com:6443
 cd ansible
 ansible-playbook playbooks/demote-x86-to-worker.yml
 ```
