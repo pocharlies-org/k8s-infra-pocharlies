@@ -67,6 +67,10 @@ verify_static() {
   assert_pattern 'key: role' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'value: edge' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'key: pocharlies.io/pool' "$tmp/longhorn-rendered.yaml"
+  assert_pattern 'name: create-default-disk-labeled-nodes' "$tmp/infra-rendered.yaml"
+  assert_pattern 'name: system-managed-components-node-selector' "$tmp/infra-rendered.yaml"
+  assert_pattern 'name: taint-toleration' "$tmp/infra-rendered.yaml"
+  assert_pattern 'role=edge:NoSchedule' "$tmp/infra-rendered.yaml"
 
   assert_pattern 'name: longhorn-openclaw-encrypted' "$tmp/storage-rendered.yaml"
   assert_pattern 'encrypted: "true"' "$tmp/storage-rendered.yaml"
