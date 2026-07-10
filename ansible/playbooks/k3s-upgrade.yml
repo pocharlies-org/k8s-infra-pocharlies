@@ -1,0 +1,177 @@
+---
+- name: Validate K3s rolling upgrade stage
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_from_version: "{{ from_version | default('') }}"
+    k3s_upgrade_target_version: "{{ target_version | default('') }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+    k3s_upgrade_confirmation: >-
+      upgrade-{{ k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}
+  tasks:
+    - name: Require an allowed adjacent stage
+      ansible.builtin.assert:
+        that:
+          - k3s_upgrade_from_version == 'v1.32.5+k3s1' and k3s_upgrade_target_version == 'v1.32.13+k3s1' or
+            k3s_upgrade_from_version == 'v1.32.13+k3s1' and k3s_upgrade_target_version == 'v1.33.13+k3s1'
+          - k3s_upgrade_target_version in k3s_upgrade_releases
+          - k3s_upgrade_phase in ['all', 'servers', 'agents']
+        fail_msg: >-
+          Allowed stages are v1.32.5+k3s1 -> v1.32.13+k3s1 and
+          v1.32.13+k3s1 -> v1.33.13+k3s1.
+
+    - name: Require explicit per-stage production confirmation
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'CONFIRM_K3S_UPGRADE') == k3s_upgrade_confirmation
+        fail_msg: "Set CONFIRM_K3S_UPGRADE={{ k3s_upgrade_confirmation }}"
+
+    - name: Run immutable preflight gates
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - preflight
+          - --expected-versions
+          - "{{ k3s_upgrade_from_version }},{{ k3s_upgrade_target_version }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      changed_when: false
+
+- name: Create local and off-node S3 etcd snapshot
+  hosts: k3s_servers[0]
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_target_version: "{{ target_version }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+  tasks:
+    - name: Verify the restore token exists on the source server
+      ansible.builtin.stat:
+        path: /var/lib/rancher/k3s/server/token
+      register: k3s_upgrade_token_file
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+    - name: Require protected K3s restore token
+      ansible.builtin.assert:
+        that:
+          - k3s_upgrade_token_file.stat.exists
+          - k3s_upgrade_token_file.stat.mode == '0600'
+        fail_msg: "K3s restore token is missing or not mode 0600."
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+    - name: Allocate unique snapshot name
+      ansible.builtin.set_fact:
+        k3s_upgrade_snapshot_name: >-
+          pre-k3s-{{ k3s_upgrade_target_version | regex_replace('[^A-Za-z0-9._-]', '-') }}-{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ') }}
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+    - name: Save etcd snapshot locally and to S3
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - etcd-snapshot
+          - save
+          - "--name={{ k3s_upgrade_snapshot_name }}"
+          - --s3
+          - --s3-config-secret=etcd-s3-config
+      changed_when: true
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+    - name: Verify snapshot is listed in S3
+      ansible.builtin.command:
+        argv:
+          - k3s
+          - etcd-snapshot
+          - list
+          - --s3
+          - --s3-config-secret=etcd-s3-config
+      changed_when: false
+      register: k3s_upgrade_snapshot_list
+      failed_when: k3s_upgrade_snapshot_name not in k3s_upgrade_snapshot_list.stdout
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+- name: Upgrade K3s servers one at a time
+  hosts: k3s_servers
+  order: inventory
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_from_version: "{{ from_version }}"
+    k3s_upgrade_target_version: "{{ target_version }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+  tasks:
+    - name: Upgrade server node
+      ansible.builtin.include_tasks: ../tasks/k3s-upgrade-node.yml
+      when: k3s_upgrade_phase in ['all', 'servers']
+
+- name: Require all servers at target before agents
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_target_version: "{{ target_version }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+  tasks:
+    - name: Verify every server reached target version
+      ansible.builtin.shell: |
+        set -euo pipefail
+        "{{ k3s_upgrade_kubectl }}" get nodes -l node-role.kubernetes.io/control-plane -o json |
+          jq -e --arg version "{{ k3s_upgrade_target_version }}" '
+            .items | length == 3 and all(.status.nodeInfo.kubeletVersion == $version)
+          '
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+      changed_when: false
+      when: k3s_upgrade_phase in ['all', 'servers', 'agents']
+
+- name: Upgrade K3s agents one at a time
+  hosts: k3s_agents
+  order: inventory
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_from_version: "{{ from_version }}"
+    k3s_upgrade_target_version: "{{ target_version }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+  tasks:
+    - name: Upgrade agent node
+      ansible.builtin.include_tasks: ../tasks/k3s-upgrade-node.yml
+      when: k3s_upgrade_phase in ['all', 'agents']
+
+- name: Run final K3s stage gates
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_upgrade_from_version: "{{ from_version }}"
+    k3s_upgrade_target_version: "{{ target_version }}"
+    k3s_upgrade_phase: "{{ upgrade_phase | default('all') }}"
+  tasks:
+    - name: Verify final cluster, Argo CD, Longhorn, and snapshot health
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - final
+          - --expected-versions
+          - "{{ k3s_upgrade_target_version if k3s_upgrade_phase in ['all', 'agents'] else k3s_upgrade_from_version + ',' + k3s_upgrade_target_version }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      changed_when: false

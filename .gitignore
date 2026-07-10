@@ -4,6 +4,7 @@
 *.env
 .DS_Store
 .venv/
+.tools/
 __pycache__/
 .terraform/
 *.tfstate

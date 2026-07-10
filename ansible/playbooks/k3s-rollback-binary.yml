@@ -1,0 +1,108 @@
+---
+- name: Roll back one K3s node binary
+  hosts: k3s_cluster
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-upgrade.yml
+  vars:
+    k3s_rollback_version_value: "{{ rollback_version | default('') }}"
+    k3s_rollback_current_version_value: "{{ current_version | default('') }}"
+    k3s_rollback_backup_dir: >-
+      {{ k3s_upgrade_backup_root }}/{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}
+    k3s_rollback_service: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
+    k3s_rollback_confirmation: >-
+      rollback-{{ inventory_hostname }}-to-{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}
+  pre_tasks:
+    - name: Require exactly one explicitly limited node
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - k3s_rollback_version_value | length > 0
+          - k3s_rollback_current_version_value | length > 0
+          - lookup('env', 'CONFIRM_K3S_BINARY_ROLLBACK') == k3s_rollback_confirmation
+        fail_msg: >-
+          Use --limit with exactly one node and set CONFIRM_K3S_BINARY_ROLLBACK=
+          rollback-{{ inventory_hostname }}-to-{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}.
+
+    - name: Require explicit etcd risk acknowledgement for server rollback
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'CONFIRM_K3S_SERVER_ROLLBACK_RISK') == 'acknowledge-etcd-compatibility-risk'
+        fail_msg: >-
+          Server rollback after a successful datastore upgrade is not equivalent
+          to cluster rollback. Set CONFIRM_K3S_SERVER_ROLLBACK_RISK only under the
+          incident runbook, or restore the pre-upgrade etcd snapshot instead.
+      when: k3s_rollback_service == 'k3s'
+
+    - name: Require preserved rollback binary
+      ansible.builtin.stat:
+        path: "{{ k3s_rollback_backup_dir }}/k3s"
+      register: k3s_rollback_binary
+
+    - name: Verify rollback binary exists
+      ansible.builtin.assert:
+        that:
+          - k3s_rollback_binary.stat.exists
+
+  tasks:
+    - name: Cordon rollback node
+      ansible.builtin.command:
+        argv: ["{{ k3s_upgrade_kubectl }}", cordon, "{{ inventory_hostname }}"]
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Drain rollback node without bypassing PDBs
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Restore preserved K3s binary atomically
+      ansible.builtin.shell: |
+        set -euo pipefail
+        sha256sum --check "{{ k3s_rollback_backup_dir }}/k3s.sha256"
+        install -o root -g root -m 0755 "{{ k3s_rollback_backup_dir }}/k3s" /usr/local/bin/k3s.rollback
+        mv -f /usr/local/bin/k3s.rollback /usr/local/bin/k3s
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Restart rolled-back service
+      ansible.builtin.systemd:
+        name: "{{ k3s_rollback_service }}"
+        state: restarted
+        enabled: true
+
+    - name: Wait for rolled-back service
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ k3s_rollback_service }}"]
+      changed_when: false
+      register: k3s_rollback_active
+      retries: 30
+      delay: 10
+      until: k3s_rollback_active.stdout == 'active'
+
+    - name: Verify rolled-back binary version
+      ansible.builtin.command:
+        argv: [k3s, --version]
+      changed_when: false
+      register: k3s_rollback_version_check
+      failed_when: k3s_rollback_version_value not in k3s_rollback_version_check.stdout
+
+    - name: Uncordon rolled-back node
+      ansible.builtin.command:
+        argv: ["{{ k3s_upgrade_kubectl }}", uncordon, "{{ inventory_hostname }}"]
+      delegate_to: localhost
+      become: false
+      changed_when: true
