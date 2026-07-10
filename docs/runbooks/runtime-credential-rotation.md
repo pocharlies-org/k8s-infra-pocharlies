@@ -93,7 +93,13 @@ an out-of-band pre-existing Secret.
    client pod.
 
 6. End the overlap by replacing `previous` with `active`, force-refresh the
-   server Secret, and roll rag-app. Prove the old token returns HTTP 401. Remove
+   server Secret, and roll rag-app. Prove the old token returns HTTP 401.
+
+7. After the new deployments are healthy, remove the legacy
+   `CATALOG_SYNC_TOKEN` key from the manually managed `skirmshop/rag-secrets`
+   Secret and delete `offers-mcp/offers-mcp-secrets`. First prove no live
+   controller still references either source. Restart long-running clients so
+   the revoked value is no longer present in process environments. Remove
    `CATALOG_SYNC_TOKEN_PREVIOUS` in a follow-up release after the observation
    window.
 
