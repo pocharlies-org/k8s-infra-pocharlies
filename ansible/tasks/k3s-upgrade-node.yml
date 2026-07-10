@@ -324,7 +324,9 @@
       args:
         executable: /bin/bash
       changed_when: true
-      when: k3s_upgrade_binary_replaced | default(false) | bool
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
 
     - name: Restart previous K3s binary
       ansible.builtin.systemd:
@@ -332,7 +334,9 @@
         state: restarted
         enabled: true
         daemon_reload: true
-      when: k3s_upgrade_binary_replaced | default(false) | bool
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
 
     - name: Wait for previous K3s service
       ansible.builtin.command:
@@ -345,7 +349,9 @@
       retries: 30
       delay: 10
       until: k3s_upgrade_rollback_service.stdout == 'active'
-      when: k3s_upgrade_binary_replaced | default(false) | bool
+      when:
+        - k3s_upgrade_binary_replaced | default(false) | bool
+        - k3s_upgrade_service == 'k3s-agent'
 
     - name: Uncordon node after failed upgrade
       ansible.builtin.command:
@@ -357,11 +363,15 @@
       become: false
       failed_when: false
       changed_when: true
-      when: k3s_upgrade_node_cordoned | default(false) | bool
+      when:
+        - k3s_upgrade_node_cordoned | default(false) | bool
+        - not (k3s_upgrade_binary_replaced | default(false) | bool) or k3s_upgrade_service == 'k3s-agent'
 
     - name: Stop the rolling wave after rollback
       ansible.builtin.fail:
         msg: >-
-          Upgrade failed on {{ inventory_hostname }}. The prior binary was restored
-          when replacement had occurred, and the node was uncordoned. Stop and
-          investigate before resuming the stage.
+          Upgrade failed on {{ inventory_hostname }}. An agent's prior binary is
+          restored automatically. A server that failed after replacement is
+          deliberately left on the target binary and cordoned: automatic server
+          downgrade after an etcd upgrade is unsafe. Stop and use the incident or
+          snapshot-restore runbook before resuming.

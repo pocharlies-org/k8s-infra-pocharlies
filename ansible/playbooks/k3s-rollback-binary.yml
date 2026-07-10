@@ -15,6 +15,9 @@
     k3s_rollback_service: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
     k3s_rollback_confirmation: >-
       rollback-{{ inventory_hostname }}-to-{{ k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}
+    k3s_rollback_openclaw_state_file: >-
+      {{ playbook_dir }}/../../.tools/openclaw-rollback-{{ inventory_hostname }}-{{
+      k3s_rollback_version_value | regex_replace('[^A-Za-z0-9._-]', '-') }}.json
   pre_tasks:
     - name: Require exactly one explicitly limited node
       ansible.builtin.assert:
@@ -47,6 +50,23 @@
         that:
           - k3s_rollback_binary.stat.exists
 
+    - name: Require protected OpenClaw singletons off a server rollback target
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - pre
+          - --state-file
+          - "{{ k3s_rollback_openclaw_state_file }}"
+          - --target-node
+          - "{{ inventory_hostname }}"
+          - --require-off-target
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when: k3s_rollback_service == 'k3s'
+
   tasks:
     - name: Cordon rollback node
       ansible.builtin.command:
@@ -54,6 +74,20 @@
       delegate_to: localhost
       become: false
       changed_when: true
+
+    - name: Server-side dry-run rollback drain after cordon
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_upgrade_kubectl }}"
+          - drain
+          - "{{ inventory_hostname }}"
+          - --dry-run=server
+          - --ignore-daemonsets
+          - --delete-emptydir-data
+          - "--timeout={{ k3s_upgrade_drain_timeout }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
 
     - name: Drain rollback node without bypassing PDBs
       ansible.builtin.command:
@@ -99,6 +133,48 @@
       changed_when: false
       register: k3s_rollback_version_check
       failed_when: k3s_rollback_version_value not in k3s_rollback_version_check.stdout
+
+    - name: Verify local API after server rollback
+      ansible.builtin.command:
+        argv: [k3s, kubectl, get, --raw=/readyz]
+      changed_when: false
+      register: k3s_rollback_local_ready
+      retries: 30
+      delay: 10
+      until: k3s_rollback_local_ready.rc == 0
+      when: k3s_rollback_service == 'k3s'
+
+    - name: Verify cluster gates before returning rollback node to service
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/k3s_upgrade_gate.sh"
+          - post-node
+          - --expected-versions
+          - "{{ k3s_rollback_version_value }},{{ k3s_rollback_current_version_value }}"
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+        EXPECTED_KUBE_CONTEXT: "{{ k3s_upgrade_expected_context }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Verify OpenClaw after server rollback
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/openclaw_failover_gate.sh"
+          - post
+          - --state-file
+          - "{{ k3s_rollback_openclaw_state_file }}"
+          - --target-node
+          - "{{ inventory_hostname }}"
+      environment:
+        KUBECTL_BIN: "{{ k3s_upgrade_kubectl }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when: k3s_rollback_service == 'k3s'
 
     - name: Uncordon rolled-back node
       ansible.builtin.command:
