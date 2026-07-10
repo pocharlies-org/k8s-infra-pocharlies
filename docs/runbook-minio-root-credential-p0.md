@@ -55,20 +55,31 @@ back independently.
 
 1. Merge/sync the infra identity manifest and wait for
    `ExternalSecret/harbor-s3-credentials Ready=True`.
-2. Upgrade release `harbor` 1.19.0 with `platform/harbor/values.yaml` and wait
-   for all Harbor workloads. The registry and registryctl containers must both
-   reference `harbor-s3-credentials`.
-3. Push, pull, and delete a disposable artifact. Confirm registry health and
+2. Perform a credential-only upgrade of release `harbor` 1.19.0. Stream the
+   current user values through an in-memory transformer that removes the S3
+   `accesskey`/`secretkey` fields and adds only `existingSecret`; pipe the
+   sanitized result directly to `helm upgrade --atomic -f -`. Do not write the
+   values to disk and do not use `--reuse-values`, because that would retain
+   the revoked values in Helm release state. This prevents the existing,
+   unrelated Harbor node-selector drift from being bundled into the security
+   cutover. Reconcile that placement in a separate change.
+3. Wait for all Harbor workloads. The registry and registryctl containers must
+   both reference `harbor-s3-credentials`, and `helm get values` must contain
+   neither retired S3 credential field.
+4. Push, pull, and delete a disposable artifact. Confirm registry health and
    no S3 `AccessDenied` around a dry-run garbage-collection job.
-4. Rollback: `helm rollback harbor <previous-revision> --wait`. The old root
+5. Rollback: `helm rollback harbor <previous-revision> --wait`. The old root
    remains valid and the old `harbor-registry` Secret is not deleted yet.
 
 ### Velero
 
 1. Wait for `ExternalSecret/velero-s3-credentials Ready=True`.
-2. Upgrade release `velero` 12.0.1 with `platform/velero/values.yaml` and wait
-   for the Deployment. Confirm only `BackupStorageLocation/default` references
-   the new Secret; `x86-backup-minio` must retain its own credential.
+2. Stream current Velero user values through an in-memory transformer that
+   changes only `credentials.existingSecret` and the default
+   BackupStorageLocation credential name, then pipe directly to
+   `helm upgrade --atomic -f -`. Wait for the Deployment. Confirm only
+   `BackupStorageLocation/default` references the new Secret;
+   `x86-backup-minio` must retain its own credential.
 3. Create a disposable namespace and ConfigMap, back it up explicitly to
    `default`, delete it, restore it, and compare its data. Require backup and
    restore `Completed` plus `default=Available`.
