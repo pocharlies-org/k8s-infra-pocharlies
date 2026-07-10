@@ -26,6 +26,7 @@ resources:
   - networking/traefik-edge/skirmshop-s3-public.yaml
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
+  - storage/longhorn/csi-snapshot
   - storage/longhorn/capacity-settings.yaml
   - storage/longhorn/attach-only-settings.yaml
   - storage/longhorn/openclaw-sauvage-backup-target.yaml
