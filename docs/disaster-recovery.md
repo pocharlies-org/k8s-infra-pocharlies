@@ -26,6 +26,25 @@ curl -fsS --resolve "$DOMAIN:443:$CURRENT_SAUVAGE_PUBLIC_IP" "https://$DOMAIN/"
 
 ## k3s / etcd
 
+The normal join/rejoin endpoint is `https://k8s.lan.e-dani.com:6443`.
+It resolves inside the tailnet to the stable Tailscale Service
+`svc:k3s-api` (`k3s-api.taile0ad27.ts.net`), whose approved backends are the
+three KS-5 control-plane nodes. Do not point `server:` back to the retired x86
+worker `100.83.56.98`.
+
+Before using the endpoint for recovery, require all of the following:
+
+```bash
+dig +short k8s.lan.e-dani.com A
+tailscale status --json | jq '.Self.CapMap."service-host"'
+kubectl --server=https://k8s.lan.e-dani.com:6443 get --raw=/readyz
+```
+
+The K3s API certificate must contain `DNS:k8s.lan.e-dani.com`. Each
+control-plane persists its Service host mapping as
+`tcp:6443 -> localhost:6443`. A newly rebuilt host must be approved for
+`svc:k3s-api` in the Tailscale API/admin console before it can receive traffic.
+
 Keep the existing etcd snapshot runbook in `k8s-gitops-pocharlies` as the
 authoritative cluster restore flow. Before demoting x86, copy the latest
 snapshot to durable storage and verify it is present in MinIO.

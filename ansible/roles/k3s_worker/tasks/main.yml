@@ -1,15 +1,16 @@
 ---
-- name: Require K3S_TOKEN and join server
+- name: Resolve the stable K3s join endpoint
+  ansible.builtin.set_fact:
+    k3s_worker_join_server_effective: "{{ lookup('env', 'K3S_JOIN_SERVER_URL') | default(k3s_join_server, true) }}"
+
+- name: Require K3S_TOKEN and a recovery-safe join endpoint
   ansible.builtin.assert:
     that:
       - lookup('env', 'K3S_TOKEN') | length > 0
-      - lookup('env', 'K3S_JOIN_SERVER_IP') | length > 0
-    fail_msg: "Set K3S_TOKEN and K3S_JOIN_SERVER_IP before reinstalling x86 as worker."
+      - k3s_worker_join_server_effective | length > 0
+      - k3s_worker_join_server_effective != 'https://100.83.56.98:6443'
+    fail_msg: "Set K3S_TOKEN and use the HA K3S_JOIN_SERVER_URL before reinstalling x86 as worker."
   no_log: true
-
-- name: Set join server
-  ansible.builtin.set_fact:
-    k3s_join_server_ip: "{{ lookup('env', 'K3S_JOIN_SERVER_IP') }}"
 
 - name: Stop existing k3s server
   ansible.builtin.service:
@@ -45,6 +46,7 @@
     cmd: |
       set -euo pipefail
       curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent
+  changed_when: true
 
 - name: Ensure k3s-agent is running
   ansible.builtin.service:

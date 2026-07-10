@@ -1,19 +1,20 @@
 ---
-- name: Require K3S_TOKEN
+- name: Mark first server for cluster-init only in disaster-recovery mode
+  ansible.builtin.set_fact:
+    k3s_control_plane_cluster_init: "{{ lookup('env', 'K3S_CLUSTER_INIT') == 'true' and inventory_hostname == groups['ks5_control_plane'][0] }}"
+
+- name: Resolve the stable K3s join endpoint
+  ansible.builtin.set_fact:
+    k3s_control_plane_join_server_effective: "{{ lookup('env', 'K3S_JOIN_SERVER_URL') | default(k3s_join_server, true) }}"
+
+- name: Require K3S_TOKEN and a recovery-safe join endpoint
   ansible.builtin.assert:
     that:
       - lookup('env', 'K3S_TOKEN') | length > 0
-      - lookup('env', 'K3S_JOIN_SERVER_IP') | length > 0 or lookup('env', 'K3S_CLUSTER_INIT') == 'true'
-    fail_msg: "Set K3S_TOKEN and K3S_JOIN_SERVER_IP from the current x86 control-plane before joining KS-5 servers."
+      - k3s_control_plane_cluster_init or k3s_control_plane_join_server_effective | length > 0
+      - k3s_control_plane_cluster_init or k3s_control_plane_join_server_effective != 'https://100.83.56.98:6443'
+    fail_msg: "Set K3S_TOKEN and use the HA K3S_JOIN_SERVER_URL; the retired x86 worker endpoint is forbidden."
   no_log: true
-
-- name: Detect first control-plane server IP
-  ansible.builtin.set_fact:
-    k3s_first_server_ip: "{{ lookup('env', 'K3S_JOIN_SERVER_IP') | default(hostvars[groups['ks5_control_plane'][0]].tailscale_ipv4, true) }}"
-
-- name: Mark first server for cluster-init only in disaster-recovery mode
-  ansible.builtin.set_fact:
-    k3s_cluster_init: "{{ lookup('env', 'K3S_CLUSTER_INIT') == 'true' and inventory_hostname == groups['ks5_control_plane'][0] }}"
 
 - name: Create k3s config directory
   ansible.builtin.file:
@@ -47,8 +48,39 @@
 
 - name: Wait for local API
   ansible.builtin.command: k3s kubectl get --raw=/readyz
-  register: readyz
+  register: k3s_control_plane_readyz
   retries: 30
   delay: 10
-  until: readyz.rc == 0
+  until: k3s_control_plane_readyz.rc == 0
+  changed_when: false
+
+- name: Read the current Tailscale Services configuration
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - serve
+      - get-config
+      - --all
+  register: k3s_control_plane_tailscale_services_config
+  changed_when: false
+
+- name: Configure this control-plane as a K3s API Service host
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - serve
+      - --yes
+      - "--service={{ k3s_tailscale_service }}"
+      - --tcp=6443
+      - localhost:6443
+  when: k3s_tailscale_service not in k3s_control_plane_tailscale_services_config.stdout
+  changed_when: true
+
+- name: Ensure the K3s API Service host is advertised
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - serve
+      - advertise
+      - "{{ k3s_tailscale_service }}"
   changed_when: false
