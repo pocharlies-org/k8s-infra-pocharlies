@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set +x
+umask 077
+ulimit -c 0 >/dev/null 2>&1 || true
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXPECTED_CONTEXT="${EXPECTED_CONTEXT:-x86-k3s}"

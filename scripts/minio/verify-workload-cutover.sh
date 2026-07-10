@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set +x
+umask 077
+ulimit -c 0 >/dev/null 2>&1 || true
 
 EXPECTED_CONTEXT="${EXPECTED_CONTEXT:-x86-k3s}"
 [[ "$(kubectl config current-context)" == "$EXPECTED_CONTEXT" ]] || {
