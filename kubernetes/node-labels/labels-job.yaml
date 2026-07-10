@@ -50,8 +50,10 @@ spec:
               kubectl label node sauvage node-pool=ovh-heavy node-role=heavy-worker storage=bulk workload=heavy ingress=true topology=ovh role=edge region=ovh-lim --overwrite
               kubectl label node sauvage workload.openclaw=true workload.plugins=true workload.cpu=true --overwrite
               kubectl taint node sauvage pocharlies.io/pool=bulk:NoSchedule --overwrite
+              # Do not add storage-longhorn=true here. Attach-only admission is
+              # ordered and gated by enable-sauvage-longhorn-attach-only.yml.
 
               for node in ks5-cp-1 ks5-cp-2 ks5-cp-3; do
                 kubectl label node "$node" node-role.kubernetes.io/control-plane=true node-role.kubernetes.io/etcd=true --overwrite
-                kubectl label node "$node" node-pool=ks5-nvme storage=nvme db-storage=fast workload=core ingress=true topology=ovh region=ovh-rbx --overwrite
+                kubectl label node "$node" node-pool=ks5-nvme storage=nvme storage-longhorn=true db-storage=fast workload=core workload.openclaw=true ingress=true topology=ovh region=ovh-rbx --overwrite
               done

@@ -1,16 +1,22 @@
-# Longhorn — block storage. System-managed components + replicas run on nodes
-# labelled `storage-longhorn=true` (the LAN nodes ubuntu/dgx + the OVH KS-5-A
-# NVMe trio), NOT on the sauvage edge. The KS-5-A pool is reserved for fast
-# NVMe volumes via the longhorn-prod-nvme StorageClass (node-tag ks5-nvme +
-# disk-tag nvme — see kubernetes/storage/longhorn-prod-nvme.yaml).
+# Longhorn chart 1.11.2 — block storage.
+# System components run on nodes labelled `storage-longhorn=true`. Sauvage is
+# included only so a workload scheduled there can attach a volume; replica
+# scheduling is disabled on the Longhorn Node CR and it has no opted-in disk.
+# Production data remains on the three KS-5-A nodes through node tag ks5-nvme
+# and disk tag nvme (see kubernetes/storage/longhorn-prod-nvme.yaml).
 #
 # NOTE: nodes must carry the `storage-longhorn=true` label (applied via k3s
 # node-label for KS-5 in ansible/roles/k3s_control_plane, and on the LAN nodes)
 # and the KS-5 Longhorn prerequisites (ansible/roles/longhorn_prereqs:
 # open-iscsi, dm_crypt, multipathd disabled) or replicas cannot be scheduled.
 defaultSettings:
+  # Opt-in is essential for compute/attach-only nodes. With this false,
+  # Longhorn automatically creates /var/lib/longhorn on every newly admitted
+  # node, which would make Sauvage eligible for replica storage.
+  createDefaultDiskLabeledNodes: true
   defaultDataPath: /var/lib/longhorn
-  defaultReplicaCount: 3
+  # Longhorn 1.11 stores this setting per data engine, not as a legacy scalar.
+  defaultReplicaCount: '{"v1":"3","v2":"3"}'
   # The KS5 disks retain the default 30% root-filesystem reservation and the
   # 15% minimum-free guard. A bounded 110% logical ceiling gives Longhorn room
   # to repair degraded production replicas while keeping >20% physical reserve
@@ -25,14 +31,18 @@ defaultSettings:
   replicaZoneSoftAntiAffinity: true
   # Backup target — will configure post-MinIO
   # backupTarget: s3://longhorn-backups@us-east-1/
-  taintToleration: "dedicated=llm:NoSchedule"
+  # System-managed pods (CSI plugin, engine image, instance manager) must be
+  # able to run on the current role=edge taint. The legacy bulk taint remains
+  # tolerated until node-taint normalization is complete.
+  taintToleration: "dedicated=llm:NoSchedule;role=edge:NoSchedule;pocharlies.io/pool=bulk:NoSchedule"
 
 persistence:
   defaultClass: true
   defaultClassReplicaCount: 3
   reclaimPolicy: Retain
 
-# Node selector — storage nodes labelled storage-longhorn=true (excludes sauvage edge)
+# User-deployed Longhorn components. These tolerations are chart values; the
+# system-managed components use defaultSettings.taintToleration above.
 longhornManager:
   nodeSelector:
     storage-longhorn: "true"
@@ -40,6 +50,14 @@ longhornManager:
     - key: dedicated
       operator: Equal
       value: llm
+      effect: NoSchedule
+    - key: role
+      operator: Equal
+      value: edge
+      effect: NoSchedule
+    - key: pocharlies.io/pool
+      operator: Equal
+      value: bulk
       effect: NoSchedule
 
 longhornDriver:
@@ -50,13 +68,17 @@ longhornDriver:
       operator: Equal
       value: llm
       effect: NoSchedule
+    - key: role
+      operator: Equal
+      value: edge
+      effect: NoSchedule
+    - key: pocharlies.io/pool
+      operator: Equal
+      value: bulk
+      effect: NoSchedule
 
 longhornUI:
   replicas: 1
-  nodeSelector:
-    storage-longhorn: "true"
-
-longhornAdmissionWebhook:
   nodeSelector:
     storage-longhorn: "true"
 

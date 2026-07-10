@@ -12,6 +12,8 @@
       - "storage={{ node_label_sets.ks5.storage }}"
       - "db-storage={{ node_label_sets.ks5['db-storage'] }}"
       - "workload={{ node_label_sets.ks5.workload }}"
+      - "workload.openclaw={{ node_label_sets.ks5['workload.openclaw'] }}"
+      - "storage-longhorn={{ node_label_sets.ks5['storage-longhorn'] }}"
       - "ingress={{ node_label_sets.ks5.ingress }}"
       - "topology={{ node_label_sets.ks5.topology }}"
       - "region={{ node_label_sets.ks5.region }}"
