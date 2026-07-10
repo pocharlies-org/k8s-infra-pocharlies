@@ -8,8 +8,8 @@ metadata:
     arch: amd64
 spec:
   replicas: 1
-  # buildkitd holds a node-local cache PVC (RWO, local-path) -> Recreate avoids
-  # two pods racing the same volume during a rollout.
+  # buildkitd holds a replicated Longhorn cache PVC (RWO) -> Recreate avoids
+  # two pods racing the same cache during a rollout.
   strategy:
     type: Recreate
   selector:
@@ -22,31 +22,20 @@ spec:
         app: buildkitd
         arch: amd64
       annotations:
-        # Rootless buildkit requires AppArmor unconfined (no privileged escalation).
-        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
         # Disable Vault agent injection: the injector's MutatingWebhook resets
         # allowPrivilegeEscalation to false on ALL containers, breaking rootlesskit.
         vault.hashicorp.com/agent-inject: "false"
     spec:
-      # amd64 worker. Prefer the home node (ubuntu) which reaches harbor.lan +
-      # harbor.e-dani + ClusterIPs; tolerate its soft dev taint. Falls back to
-      # any amd64 node (ks5 control-plane / sauvage) if ubuntu is unavailable.
+      # The production amd64 builder is part of the OpenClaw release path. Keep
+      # both compute and cache on the three OVH KS5 nodes; it must not depend on
+      # the home/dev ubuntu node.
       nodeSelector:
         kubernetes.io/arch: amd64
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values: ["ubuntu"]
+        node-pool: ks5-nvme
       tolerations:
-        - key: pool
-          operator: Equal
-          value: dev
-          effect: PreferNoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       automountServiceAccountToken: false
       # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
       # setup. The container-level override alone is insufficient because k3s/runc
@@ -56,7 +45,7 @@ spec:
           type: Unconfined
       containers:
         - name: buildkitd
-          image: docker.io/moby/buildkit:v0.31.0-rootless
+          image: docker.io/moby/buildkit:v0.31.0-rootless@sha256:e335bfb48eec12110318aced51f75161f01e765dd13e6041c0f4600b7c93507f
           args:
             - --addr
             - unix:///run/user/1000/buildkit/buildkitd.sock
@@ -81,6 +70,10 @@ spec:
             # strips the ambient+inheritable caps across exec(), which prevents
             # newuidmap from using its setuid bit even if SETUID is in add[].
             seccompProfile:
+              type: Unconfined
+            # Structured AppArmor replaced the deprecated beta annotation in
+            # Kubernetes 1.30 and remains supported through the 1.35 target.
+            appArmorProfile:
               type: Unconfined
             runAsUser: 1000
             runAsGroup: 1000
@@ -108,7 +101,7 @@ spec:
       volumes:
         - name: cache
           persistentVolumeClaim:
-            claimName: buildkitd-amd64-cache
+            claimName: buildkitd-amd64-cache-longhorn
         - name: harbor-push
           secret:
             secretName: harbor-push
@@ -119,14 +112,14 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: buildkitd-amd64-cache
+  name: buildkitd-amd64-cache-longhorn
   namespace: buildkit
   labels:
     app: buildkitd
     arch: amd64
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: local-path
+  storageClassName: longhorn-prod-nvme
   resources:
     requests:
       storage: 30Gi

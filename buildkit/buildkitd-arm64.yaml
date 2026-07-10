@@ -22,8 +22,6 @@ spec:
         app: buildkitd
         arch: arm64
       annotations:
-        # Rootless buildkit requires AppArmor unconfined (no privileged escalation).
-        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
         # Disable Vault agent injection: the injector's MutatingWebhook resets
         # allowPrivilegeEscalation to false on ALL containers, breaking rootlesskit.
         vault.hashicorp.com/agent-inject: "false"
@@ -55,7 +53,7 @@ spec:
           type: Unconfined
       containers:
         - name: buildkitd
-          image: docker.io/moby/buildkit:v0.31.0-rootless
+          image: docker.io/moby/buildkit:v0.31.0-rootless@sha256:e335bfb48eec12110318aced51f75161f01e765dd13e6041c0f4600b7c93507f
           args:
             - --addr
             - unix:///run/user/1000/buildkit/buildkitd.sock
@@ -80,6 +78,8 @@ spec:
             # strips the ambient+inheritable caps across exec(), which prevents
             # newuidmap from using its setuid bit even if SETUID is in add[].
             seccompProfile:
+              type: Unconfined
+            appArmorProfile:
               type: Unconfined
             runAsUser: 1000
             runAsGroup: 1000
