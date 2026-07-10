@@ -73,23 +73,28 @@ create_policy() {
 }
 
 create_user() {
-  local key="$1" user="${USERS[$key]}" password="${PASSWORDS[$key]}"
-  printf '%s\n%s\n' "$user" "$password" |
+  local key="$1" policy="$2"
+  # Keep dependent expansions in separate declarations: Bash expands every
+  # assignment in one `local` command before the earlier assignment is usable.
+  local user="${USERS[$key]}"
+  local password="${PASSWORDS[$key]}"
+  # Register the rollback target before the remote operation. Removing a user
+  # that was not created is harmless, while losing a user after a partial
+  # add/attach sequence is not.
+  CREATED_USERS+=("$user")
+  printf '%s\n%s\n%s\n' "$user" "$password" "$policy" |
     kubectl -n minio exec -i minio-0 -- sh -eu -c '
       IFS= read -r user
       IFS= read -r password
+      IFS= read -r policy
       d=$(mktemp -d)
       trap "rm -rf $d" EXIT
       mc --config-dir "$d" alias set admin http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
       mc --config-dir "$d" admin user add admin "$user" "$password" >/dev/null
+      mc --config-dir "$d" admin user info admin "$user" >/dev/null
+      mc --config-dir "$d" admin policy attach admin "$policy" --user "$user" >/dev/null
       unset user password
     ' >/dev/null
-  CREATED_USERS+=("$user")
-}
-
-attach_policy() {
-  local user="$1" policy="$2"
-  minio_admin admin policy attach admin "$policy" --user "$user" >/dev/null
 }
 
 probe_bucket() {
@@ -194,17 +199,13 @@ for key in breakglass harbor velero loki; do
   vault_put "${PATHS[$key]}" "${USERS[$key]}" "${PASSWORDS[$key]}"
 done
 
-create_user breakglass
-attach_policy "${USERS[breakglass]}" consoleAdmin
+create_user breakglass consoleAdmin
 create_policy harbor-s3 "$ROOT/storage/minio/harbor-s3-policy.json"
-create_user harbor
-attach_policy "${USERS[harbor]}" harbor-s3
+create_user harbor harbor-s3
 create_policy velero-s3 "$ROOT/storage/minio/velero-s3-policy.json"
-create_user velero
-attach_policy "${USERS[velero]}" velero-s3
+create_user velero velero-s3
 create_policy loki-s3 "$ROOT/storage/minio/loki-s3-policy.json"
-create_user loki
-attach_policy "${USERS[loki]}" loki-s3
+create_user loki loki-s3
 
 probe_breakglass
 probe_bucket harbor harbor-blobs true
