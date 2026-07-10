@@ -38,8 +38,9 @@ pods. Run it from a trusted shell with history disabled and `set +x`.
    ```
 
    Capture the create response in memory. Do not print it. Build a Docker config
-   JSON in memory and write it as property `dockerconfigjson` at Vault path
-   `secret/infra/harbor/k8s-runtime-pull`.
+   JSON in memory with auth entries for both `harbor.e-dani.com` and
+   `harbor.lan.e-dani.com`, then write it as property `dockerconfigjson` at
+   Vault path `secret/infra/harbor/k8s-runtime-pull`.
 
 2. Before GitOps reconciliation, ask Harbor's token endpoint for scope
    `repository:homelab/offers-mcp:pull,push`. Decode only the JWT claims and
