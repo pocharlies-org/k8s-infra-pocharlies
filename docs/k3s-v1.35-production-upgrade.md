@@ -156,16 +156,19 @@ drain removes its data-protection gate.
 ### OpenClaw controlled failover
 
 Every server drain is also an OpenClaw availability event because the operator,
-isolated social, and read-only gateways are separate, stateful singletons
-constrained to the KS5 pool. Before cordoning a server, the playbook records all
-three fully Ready gateway pods/nodes and Telegram router counters. It refuses to
-start while any OpenClaw pod is Terminating, while a deployment is unavailable,
-or while any gateway is outside a non-Ubuntu KS5 node.
+isolated social, read-only gateway and Telegram router are separate, stateful
+singletons constrained to the KS5 pool. Before cordoning a server, the playbook
+records all four fully Ready pods/nodes and Telegram router counters. It
+refuses to start while any OpenClaw pod is Terminating, while a deployment is
+unavailable, or while any gateway is outside a non-Ubuntu KS5 node.
 
 The playbook deliberately refuses to cordon a node that hosts any protected
-singleton: its `minAvailable: 1` PDB must never be bypassed. First run the
-documented quiesce, router-pause, recreate-on-another-KS5, readiness, router
-resume, and queue-drain procedure; then resume the idempotent K3s wave. The
+singleton: its `minAvailable: 1` PDB must never be bypassed. First run
+[the reviewed failover helper](openclaw-k3s-maintenance-failover.md), which
+locks maintenance, freezes Argo reconciliation, quiesces, pauses, uses an
+UID-preconditioned Eviction, proves detach/attach, restores PDB/Argo state,
+runs paused and active smokes, and resumes the queue; then resume the idempotent
+K3s wave. The
 evidence must identify each singleton independently. In every case the gate
 then requires:
 

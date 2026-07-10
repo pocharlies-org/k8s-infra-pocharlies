@@ -20,3 +20,16 @@ jobs:
       run_docker_build: false
       kustomize_paths: "."
     secrets: inherit
+
+  openclaw-maintenance-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Validate controlled OpenClaw failover choreography
+        run: |
+          set -euo pipefail
+          bash -n scripts/openclaw_maintenance_failover.sh
+          bash -n scripts/openclaw_failover_gate.sh
+          python3 scripts/test_openclaw_maintenance_failover_contract.py
