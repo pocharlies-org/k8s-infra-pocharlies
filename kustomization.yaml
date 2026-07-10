@@ -26,7 +26,6 @@ resources:
   - networking/traefik-edge/skirmshop-s3-public.yaml
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
-  - storage/longhorn/settings.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml

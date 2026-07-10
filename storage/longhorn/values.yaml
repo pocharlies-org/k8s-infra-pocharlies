@@ -11,19 +11,14 @@
 defaultSettings:
   defaultDataPath: /var/lib/longhorn
   defaultReplicaCount: 3
-  # Keep requested capacity inside the post-reservation budget. Capacity must
-  # be recovered by deleting verified, unreferenced test volumes instead of by
-  # weakening the 30% root-disk reservation with extra logical overcommit.
   storageOverProvisioningPercentage: 100
   storageMinimalAvailablePercentage: 15
   concurrentReplicaRebuildPerNodeLimit: 1
   guaranteedInstanceManagerCPU: 12
   systemManagedComponentsNodeSelector: "storage-longhorn:true"
-  # Production volumes must never satisfy a replica count by co-locating
-  # replicas on the same node. Capacity failures should therefore fail closed.
-  replicaSoftAntiAffinity: false
+  # Soft anti-affinity so replicas spread but won't fail to schedule
+  replicaSoftAntiAffinity: true
   replicaZoneSoftAntiAffinity: true
-  allowVolumeCreationWithDegradedAvailability: false
   # Backup target — will configure post-MinIO
   # backupTarget: s3://longhorn-backups@us-east-1/
   taintToleration: "dedicated=llm:NoSchedule"

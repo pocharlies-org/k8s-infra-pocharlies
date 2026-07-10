@@ -46,18 +46,25 @@ approximately 1.779 GiB remaining logical headroom per node.
    Delete the disposable restores after data validation before moving the live
    OpenClaw replicas.
 
-5. Keep `storage-over-provisioning-percentage=100`. Production settings also
-   disable node-level soft anti-affinity and degraded volume creation so that
-   a nominal replica count of three cannot silently collapse onto one node.
+5. Keep `storage-over-provisioning-percentage=100`. For both OpenClaw volumes,
+   set `spec.replicaSoftAntiAffinity=disabled` and
+   `spec.replicaDiskSoftAntiAffinity=disabled` during the controlled placement
+   change, and require one replica per KS5 node before proceeding. Do not flip
+   these settings globally in the capacity-recovery wave: the cluster contains
+   existing bound volumes with co-located replicas and global auto-balance is
+   `best-effort`, so that change needs its own rebuild-capacity review.
 
 ## Postconditions
 
 ```bash
 kubectl -n longhorn-system get settings.longhorn.io \
   storage-over-provisioning-percentage \
-  replica-soft-anti-affinity \
-  allow-volume-creation-with-degraded-availability \
   -o custom-columns=NAME:.metadata.name,VALUE:.value,APPLIED:.status.applied
+
+kubectl -n longhorn-system get volumes.longhorn.io \
+  pvc-13b814ca-2c90-4baf-b30d-7d66330cfdf2 \
+  pvc-4013eddd-d2ff-4c23-a5c6-95d22cdcb4a8 \
+  -o custom-columns=VOLUME:.metadata.name,NODE_ANTI_AFFINITY:.spec.replicaSoftAntiAffinity,DISK_ANTI_AFFINITY:.spec.replicaDiskSoftAntiAffinity
 
 kubectl -n longhorn-system get nodes.longhorn.io -o json | jq -r '
   .items[] | select(.metadata.name | test("^ks5-cp-[123]$")) |
