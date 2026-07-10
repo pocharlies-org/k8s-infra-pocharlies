@@ -235,10 +235,10 @@ spec:
         - ipBlock: { cidr: 100.71.117.127/32 }
         - ipBlock: { cidr: 100.75.189.75/32 }
         - ipBlock: { cidr: 100.109.183.9/32 }
-        - ipBlock: { cidr: 141.94.73.52/32 }
-        - ipBlock: { cidr: 141.94.73.50/32 }
-        - ipBlock: { cidr: 145.239.194.168/32 }
-        - ipBlock: { cidr: 57.129.17.172/32 }
+        - ipBlock: { cidr: 10.42.3.0/32 }
+        - ipBlock: { cidr: 10.42.4.0/32 }
+        - ipBlock: { cidr: 10.42.5.0/32 }
+        - ipBlock: { cidr: 10.42.6.0/32 }
       ports:
         - { protocol: TCP, port: 4180 }
   egress:
