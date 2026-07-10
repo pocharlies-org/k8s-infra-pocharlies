@@ -18,7 +18,7 @@ configuration:
         s3Url: http://minio-s3.minio.svc.cluster.local:9000
         publicUrl: https://s3.lan.e-dani.com
       credential:
-        name: velero-minio-creds
+        name: velero-s3-credentials
         key: cloud
 
   volumeSnapshotLocation:
@@ -82,7 +82,7 @@ resources:
 # Don't create the credential secret via chart — we'll apply it separately
 credentials:
   useSecret: true
-  existingSecret: velero-minio-creds
+  existingSecret: velero-s3-credentials
 
 snapshotsEnabled: true
 backupsEnabled: true
