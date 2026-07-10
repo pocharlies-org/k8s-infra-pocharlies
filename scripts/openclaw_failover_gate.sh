@@ -85,22 +85,15 @@ main_gateway="$(gateway_record openclaw openclaw-qwen36-openclaw openclaw)"
 social_gateway="$(gateway_record social openclaw-qwen36-social social)"
 readonly_gateway="$(gateway_record readonly openclaw-qwen36-readonly readonly)"
 gateways="$(jq -s '.' < <(printf '%s\n%s\n%s\n' "$main_gateway" "$social_gateway" "$readonly_gateway"))"
+router_gateway="$(gateway_record telegram-router openclaw-qwen36-telegram-router telegram-router)"
+protected_singletons="$(jq -s '.' < <(printf '%s\n%s\n%s\n%s\n' \
+  "$main_gateway" "$social_gateway" "$readonly_gateway" "$router_gateway"))"
 
 deployments_json="$(kctl -n "$NAMESPACE" get deployments -o json)"
 unavailable="$(jq '[.items[] | select((.status.availableReplicas // 0) != (.spec.replicas // 0)) | .metadata.name] | length' <<<"$deployments_json")"
 [[ "$unavailable" == 0 ]] || fail "$unavailable OpenClaw deployment(s) are unavailable"
 
-router_json="$(jq '
-  [.items[] |
-    select(.metadata.labels["app.kubernetes.io/component"] == "telegram-router") |
-    select(.metadata.deletionTimestamp == null) |
-    select(.status.phase == "Running") |
-    select((.status.containerStatuses // []) | length > 0) |
-    select(all(.status.containerStatuses[]; .ready == true))]
-' <<<"$pods_json")"
-[[ "$(jq 'length' <<<"$router_json")" == 1 ]] ||
-  fail "expected exactly one fully Ready Telegram router pod"
-router_pod="$(jq -r '.[0].metadata.name' <<<"$router_json")"
+router_pod="$(jq -r '.pod' <<<"$router_gateway")"
 router_status="$(kctl -n "$NAMESPACE" exec "$router_pod" -c telegram-router -- node -e 'fetch("http://127.0.0.1:8787/status").then(async r=>{if(!r.ok)process.exit(1);process.stdout.write(await r.text())})')"
 jq -e '
   .paused == false and
@@ -113,17 +106,18 @@ jq -e '
   fail "Telegram router backend, ACK, pause, queue, or worker state is unsafe"
 
 if [[ "$MODE" == pre ]]; then
-  failover_components="$(jq --arg target "$TARGET_NODE" '[.[] | select(.node == $target) | .component]' <<<"$gateways")"
+  failover_components="$(jq --arg target "$TARGET_NODE" '[.[] | select(.node == $target) | .component]' <<<"$protected_singletons")"
   mkdir -p "$(dirname "$STATE_FILE")"
   jq -n \
     --argjson started "$(date +%s)" \
     --arg targetNode "$TARGET_NODE" \
     --argjson gateways "$gateways" \
+    --argjson protectedSingletons "$protected_singletons" \
     --argjson failoverComponents "$failover_components" \
     --argjson router "$router_status" \
-    '{startedEpoch:$started,targetNode:$targetNode,gateways:$gateways,failoverRequiredComponents:$failoverComponents,router:$router}' >"$STATE_FILE"
+    '{startedEpoch:$started,targetNode:$targetNode,gateways:$gateways,protectedSingletons:$protectedSingletons,failoverRequiredComponents:$failoverComponents,router:$router}' >"$STATE_FILE"
   chmod 0600 "$STATE_FILE"
-  jq '{targetNode,failoverRequiredComponents,gateways:[.gateways[] | {component,pod,node}],queueDepth:.router.queueDepth,deadCount:.router.deadCount}' "$STATE_FILE"
+  jq '{targetNode,failoverRequiredComponents,protectedSingletons:[.protectedSingletons[] | {component,pod,node}],queueDepth:.router.queueDepth,deadCount:.router.deadCount}' "$STATE_FILE"
   if [[ "$REQUIRE_OFF_TARGET" == true ]] &&
      [[ "$(jq 'length' <<<"$failover_components")" != 0 ]]; then
     fail "target $TARGET_NODE hosts protected singleton(s): $(jq -c . <<<"$failover_components"); perform a controlled failover first"
@@ -147,6 +141,12 @@ while IFS=$'\t' read -r component service container pod node; do
     'fetch("http://127.0.0.1:8080/readyz").then(async r=>{if(!r.ok)process.exit(1);const b=await r.json();if(b.ready!==true)process.exit(1)})'
 done < <(jq -r '.[] | [.component,.service,.container,.pod,.node] | @tsv' <<<"$gateways")
 
+source_router_node="$(jq -r '.protectedSingletons[] | select(.component == "telegram-router") | .node' "$STATE_FILE")"
+current_router_node="$(jq -r '.node' <<<"$router_gateway")"
+if [[ "$source_router_node" == "$TARGET_NODE" && "$current_router_node" == "$source_router_node" ]]; then
+  fail "Telegram router has not failed over from drained node $source_router_node"
+fi
+
 pvc_names_json="$(kctl -n "$NAMESPACE" get pvc -o json | jq '[.items[] | select((.spec.storageClassName // "") | startswith("longhorn")) | .spec.volumeName | select(. != null and startswith("pvc-"))]')"
 longhorn_json="$(kctl -n longhorn-system get volumes.longhorn.io -o json)"
 matched_pvcs="$(jq --argjson names "$pvc_names_json" '[.items[] | select(.metadata.name as $n | $names | index($n))] | length' <<<"$longhorn_json")"
@@ -164,7 +164,7 @@ post_dead="$(jq -r '.deadCount // 0' <<<"$router_status")"
 finished="$(date +%s)"
 started="$(jq -r '.startedEpoch' "$STATE_FILE")"
 rto_seconds=$((finished - started))
-moves="$(jq -n --argjson before "$(jq '.gateways' "$STATE_FILE")" --argjson after "$gateways" '
+moves="$(jq -n --argjson before "$(jq '.protectedSingletons' "$STATE_FILE")" --argjson after "$protected_singletons" '
   [$before[] as $old | $after[] | select(.component == $old.component) |
     {component:.component,sourceNode:$old.node,destinationNode:.node,pod:.pod,moved:($old.node != .node)}]
 ')"
