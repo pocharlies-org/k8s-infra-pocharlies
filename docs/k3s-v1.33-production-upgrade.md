@@ -44,6 +44,7 @@ Official references:
 - K3s etcd snapshots and restore: <https://docs.k3s.io/cli/etcd-snapshot>
 - Kubernetes v1.33 skew/order policy: <https://v1-33.docs.kubernetes.io/releases/version-skew-policy/>
 - Longhorn node maintenance: <https://longhorn.io/docs/1.11.2/maintenance/maintenance/>
+- K3s secrets encryption: <https://docs.k3s.io/cli/secrets-encrypt>
 
 ## Hard prerequisites
 
@@ -112,6 +113,28 @@ Never use `--disable-eviction`, `--force`, or ignore a blocked Longhorn drain.
 Investigate the PDB/events. Longhorn explicitly warns that bypassing a blocked
 drain removes its data-protection gate.
 
+### OpenClaw controlled failover
+
+Every server drain is also an OpenClaw availability event because the gateway
+is constrained to the KS5 pool. Before cordoning a server, the playbook records
+the fully Ready gateway pod/node and Telegram router counters. It refuses to
+start while any OpenClaw pod is Terminating, while a deployment is unavailable,
+or while the gateway is outside a non-Ubuntu KS5 node.
+
+If the gateway is on the node being drained, the post-drain gate requires it to
+move to a different KS5 node. In every case it then requires:
+
+- exactly one fully Ready gateway and one fully Ready Telegram router;
+- a ready, non-terminating gateway EndpointSlice endpoint and `/readyz=true`;
+- OpenClaw Longhorn volumes healthy, attached, and not attached to `ubuntu`;
+- router unpaused, delivery acknowledgements enabled, a live backend, and no
+  increase in the dead-letter count;
+- no OpenClaw pod left Terminating.
+
+The evidence file records source, destination, whether a move was required,
+queue/dead-letter counters, and an upper bound for failover time. Never start a
+second node while the post-drain gate is pending.
+
 ## Controller preparation
 
 Create a private inventory from the example. Real IPs and SSH options belong in
@@ -146,6 +169,11 @@ ansible-playbook \
   -e target_version=v1.32.13+k3s1
 ```
 
+For an intentionally split or resumed wave, use the same confirmation and run
+`-e upgrade_phase=servers` first. Only after all three servers are at target,
+run `-e upgrade_phase=agents`. The preflight accepts only the adjacent source
+and target versions, and already-upgraded nodes are verified and skipped.
+
 Stop and observe the full cluster after the final gate. Do not start stage 2
 while any Application, PDB, CNPG cluster, Longhorn volume, node, or API check is
 unhealthy.
@@ -166,15 +194,46 @@ Each node operation performs:
 1. current-version and architecture assertion;
 2. root-only backup of binary, config, unit, and SHA-256;
 3. official release download with a pinned SHA-256;
-4. server-side drain dry-run;
-5. cordon and real drain without PDB bypass;
-6. atomic binary replacement and one service restart;
-7. local service/API check;
-8. cluster, Argo, Longhorn, CNPG, and node-version gates;
-9. uncordon.
+4. OpenClaw pre-drain availability capture on servers;
+5. cordon, then server-side drain dry-run after CNPG and Longhorn observe it;
+6. real drain without PDB bypass;
+7. atomic binary replacement and one service restart;
+8. local service/API check;
+9. cluster, Argo, Longhorn, CNPG, node-version, and OpenClaw gates;
+10. uncordon.
 
 If a node operation fails after replacement, the Ansible rescue block restores
 the old binary, restarts it, uncordons the node, and aborts the whole wave.
+
+## Enable Kubernetes Secrets encryption at rest
+
+This is a separate post-upgrade operation. Do not mix it into either binary
+upgrade stage. The enable-existing-cluster procedure is available only from
+K3s `v1.33.10+k3s1`; therefore it is gated on every node being healthy at
+`v1.33.13+k3s1`.
+
+Do not apply the control-plane role merely to add `secrets-encryption: true` on
+an existing unencrypted cluster. The playbook must first initialise the shared
+encryption configuration on S1, following the official HA order.
+
+```bash
+export CONFIRM_K3S_SECRETS_ENCRYPTION=enable-after-v1.33.13-healthy
+ansible-playbook \
+  -i ansible/inventory/generated/k3s-production.ini \
+  ansible/playbooks/k3s-enable-secrets-encryption.yml
+```
+
+The playbook verifies the disabled state on all servers, takes and verifies an
+S3 etcd snapshot, runs `k3s secrets-encrypt enable` on S1, persists the flag and
+restarts S1/S2/S3 serially, requires the `start` stage with matching hashes,
+runs `rotate-keys` on S1, waits for `reencrypt_finished`, restarts S1/S2/S3
+serially again, verifies enabled state and matching hashes, takes a second S3
+snapshot, and reruns all production gates.
+
+Abort on any hash mismatch, non-ready server, or unexpected rotation stage.
+Do not attempt manual repair of an encryption configuration from memory: use
+the verified pre-encryption snapshot, original server token, and the official
+versioned recovery procedure.
 
 ## Rollback
 
