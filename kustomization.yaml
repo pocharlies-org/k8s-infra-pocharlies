@@ -27,6 +27,7 @@ resources:
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
   - storage/longhorn/capacity-settings.yaml
+  - kubernetes/storage/longhorn-openclaw-encrypted.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml

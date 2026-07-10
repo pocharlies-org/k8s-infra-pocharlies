@@ -1,0 +1,36 @@
+---
+# Encrypted, retained state for OpenClaw's in-Pod Codex app-server.
+#
+# Encryption is per PVC. The workload must create an Opaque Secret whose name
+# exactly matches the PVC in the PVC namespace before provisioning. Longhorn's
+# CSI driver resolves the templates below and consumes CRYPTO_KEY_VALUE plus
+# CRYPTO_KEY_PROVIDER=secret. The key itself remains in Vault/External Secrets.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-openclaw-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    storage.e-dani.com/purpose: openclaw-codex-home
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "3"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: ext4
+  encrypted: "true"
+  dataLocality: disabled
+  replicaAutoBalance: best-effort
+  diskSelector: nvme
+  nodeSelector: ks5-nvme
+  csi.storage.k8s.io/provisioner-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/provisioner-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-publish-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-publish-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-stage-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-stage-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-expand-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-expand-secret-namespace: "${pvc.namespace}"
