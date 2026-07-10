@@ -33,10 +33,11 @@ persistence:
     disableredirect: true   # never redirect blob fetches to S3 — node containerd can't resolve *.svc.cluster.local
     type: s3
     s3:
+      # ESO projects this Secret from Vault path secret/minio/harbor-s3.
+      # Required keys are defined by the Harbor chart.
+      existingSecret: harbor-s3-credentials
       region: us-east-1
       bucket: harbor-blobs
-      accesskey: dibanez
-      secretkey: "ChangeMe-MinIO-Bootstrap-2026!"
       regionendpoint: http://minio-s3.minio.svc.cluster.local:9000
       secure: false
       v4auth: true
