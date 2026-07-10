@@ -1,5 +1,10 @@
 # K3s production upgrade: v1.32.5+k3s1 to v1.35.6+k3s1
 
+> **Agent endpoint gate:** before stage 1, complete the serial migration in
+> [k3s-agent-ha-endpoint.md](k3s-agent-ha-endpoint.md) and rerun its audit.
+> No agent restart or minor upgrade may proceed while a persisted `K3S_URL`
+> still points to a single server or the retired x86 endpoint.
+
 Status: prepared; execution is gated. This runbook never permits skipping a
 minor version, parallel control-plane restarts, PDB bypass, or a Longhorn drain
 while replicas are degraded/rebuilding.

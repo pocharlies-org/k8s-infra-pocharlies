@@ -1,0 +1,597 @@
+---
+- name: Validate the K3s agent endpoint operation
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-agent-endpoint.yml
+  vars:
+    endpoint_operation_value: "{{ endpoint_operation | default('audit') }}"
+    endpoint_migration_id_value: "{{ migration_id | default('') }}"
+    endpoint_apply_confirmation: >-
+      migrate-k3s-agents-{{ endpoint_migration_id_value }}-to-k8s.lan.e-dani.com
+    endpoint_rollback_confirmation: >-
+      rollback-k3s-agent-endpoint-{{ endpoint_migration_id_value }}
+  tasks:
+    - name: Require the exact four-agent production inventory
+      ansible.builtin.assert:
+        that:
+          - groups['k3s_agents'] | sort == k3s_agent_endpoint_expected_nodes | sort
+        fail_msg: >-
+          The k3s_agents inventory must contain exactly ubuntu, sauvage,
+          nvidia-dgx and gx10-ec3d. Refuse a partial or expanded implicit scope.
+
+    - name: Require an allowed operation and migration identifier
+      ansible.builtin.assert:
+        that:
+          - endpoint_operation_value in ['audit', 'apply', 'rollback']
+          - >-
+            endpoint_operation_value == 'audit' or
+            endpoint_migration_id_value is match('^[a-z0-9][a-z0-9._-]{7,63}$')
+          - >-
+            endpoint_operation_value != 'apply' or
+            lookup('env', 'CONFIRM_K3S_AGENT_ENDPOINT_MIGRATION') == endpoint_apply_confirmation
+          - >-
+            endpoint_operation_value != 'rollback' or
+            lookup('env', 'CONFIRM_K3S_AGENT_ENDPOINT_ROLLBACK') == endpoint_rollback_confirmation
+        fail_msg: >-
+          Use audit, apply or rollback. Mutating operations require an 8-64
+          character migration_id and their exact CONFIRM_K3S_AGENT_ENDPOINT_*
+          value; see docs/k3s-agent-ha-endpoint.md.
+
+    - name: Require the expected kubectl context
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_agent_endpoint_kubectl }}"
+          - config
+          - current-context
+      changed_when: false
+      register: endpoint_controller_context
+      failed_when: >-
+        endpoint_controller_context.stdout != k3s_agent_endpoint_expected_context
+
+    - name: Require the current Kubernetes API to be ready
+      ansible.builtin.command:
+        argv: ["{{ k3s_agent_endpoint_kubectl }}", get, --raw=/readyz]
+      changed_when: false
+
+    - name: Require the HA name to resolve only to the TailVIP
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 - "{{ k3s_agent_ha_endpoint_host }}" "{{ k3s_agent_ha_endpoint_ip }}" <<'PY'
+        import socket
+        import sys
+
+        host, expected = sys.argv[1:]
+        addresses = sorted({
+            item[4][0]
+            for item in socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+        })
+        if addresses != [expected]:
+            raise SystemExit(f"{host} resolved to {addresses}, expected only {expected}")
+        print(f"{host} -> {expected}")
+        PY
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Verify authenticated TLS and readyz through the HA endpoint
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_agent_endpoint_kubectl }}"
+          - "--server={{ k3s_agent_ha_endpoint_url }}"
+          - --request-timeout=10s
+          - get
+          - --raw=/readyz
+      changed_when: false
+
+- name: Audit or migrate the persisted K3s endpoint one agent at a time
+  hosts: k3s_agents
+  order: inventory
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars/k3s-agent-endpoint.yml
+  vars:
+    endpoint_operation_value: "{{ endpoint_operation | default('audit') }}"
+    endpoint_migration_id_value: "{{ migration_id | default('') }}"
+    endpoint_backup_dir: >-
+      {{ k3s_agent_endpoint_backup_root }}/{{ endpoint_migration_id_value }}
+    endpoint_primary_env_file: /etc/systemd/system/k3s-agent.service.env
+    endpoint_candidate_env_files:
+      - /etc/systemd/system/k3s-agent.service.env
+      - /etc/default/k3s-agent
+      - /etc/sysconfig/k3s-agent
+  pre_tasks:
+    - name: Require an exact production agent target
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname in k3s_agent_endpoint_expected_nodes
+
+    - name: Capture the Kubernetes node identity before any restart
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_agent_endpoint_kubectl }}"
+          - get
+          - node
+          - "{{ inventory_hostname }}"
+          - -o
+          - json
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: endpoint_node_before_raw
+
+    - name: Record the immutable node baseline
+      ansible.builtin.set_fact:
+        endpoint_node_before: "{{ endpoint_node_before_raw.stdout | from_json }}"
+
+    - name: Require the node to be Ready before touching its supervisor
+      ansible.builtin.assert:
+        that:
+          - >-
+            endpoint_node_before.status.conditions |
+            selectattr('type', 'equalto', 'Ready') |
+            map(attribute='status') | first == 'True'
+        fail_msg: "{{ inventory_hostname }} is not Ready; endpoint migration is unsafe."
+
+    - name: Capture the pre-operation node lease
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_agent_endpoint_kubectl }}"
+          - -n
+          - kube-node-lease
+          - get
+          - lease
+          - "{{ inventory_hostname }}"
+          - -o
+          - "jsonpath={.spec.renewTime}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: endpoint_lease_before
+
+    - name: Require the K3s agent service to be active
+      ansible.builtin.command:
+        argv: [systemctl, is-active, k3s-agent]
+      changed_when: false
+      register: endpoint_service_before
+      failed_when: endpoint_service_before.stdout != 'active'
+
+    - name: Read only the effective K3S_URL from the running agent
+      ansible.builtin.shell: |
+        set -euo pipefail
+        pid="$(systemctl show k3s-agent --property MainPID --value)"
+        [[ "$pid" =~ ^[1-9][0-9]*$ ]]
+        mapfile -t urls < <(tr '\0' '\n' < "/proc/${pid}/environ" | sed -n 's/^K3S_URL=//p')
+        [[ -n "${urls[0]:-}" && -z "${urls[1]:-}" ]]
+        printf '%s\n%s\n' "$pid" "${urls[0]}"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: endpoint_effective_before
+      no_log: true
+
+    - name: Record the effective URL and process identity
+      ansible.builtin.set_fact:
+        endpoint_main_pid_before: "{{ endpoint_effective_before.stdout_lines[0] }}"
+        endpoint_url_before: "{{ endpoint_effective_before.stdout_lines[1] }}"
+
+    - name: Reject an ExecStart server flag that would override K3S_URL
+      ansible.builtin.shell: |
+        set -euo pipefail
+        exec_start="$(systemctl show k3s-agent --property ExecStart --value)"
+        if grep -Eq -- '(^|[[:space:]])--server([=[:space:]]|$)' <<<"$exec_start"; then
+          echo 'k3s-agent ExecStart contains an explicit --server override' >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Discover persisted environment files that define K3S_URL
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for candidate in {{ endpoint_candidate_env_files | map('quote') | join(' ') }}; do
+          [[ -f "$candidate" ]] || continue
+          count="$(grep -Ec '^[[:space:]]*(export[[:space:]]+)?K3S_URL[[:space:]]*=' "$candidate" || true)"
+          [[ "$count" -le 1 ]]
+          [[ "$count" -eq 1 ]] && printf '%s\n' "$candidate"
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: endpoint_env_sources
+      no_log: true
+
+    - name: Require the installer-owned service environment source
+      ansible.builtin.assert:
+        that:
+          - endpoint_primary_env_file in endpoint_env_sources.stdout_lines
+        fail_msg: >-
+          {{ endpoint_primary_env_file }} must exist with exactly one K3S_URL.
+          Refuse to guess at an unknown supervisor layout.
+
+    - name: Discover YAML configuration files that define server
+      ansible.builtin.shell: |
+        set -euo pipefail
+        while IFS= read -r -d '' candidate; do
+          count="$(grep -Ec '^[[:space:]]*server[[:space:]]*:' "$candidate" || true)"
+          [[ "$count" -le 1 ]]
+          [[ "$count" -eq 1 ]] && printf '%s\n' "$candidate"
+        done < <(find /etc/rancher/k3s -maxdepth 2 -type f \
+          \( -name '*.yaml' -o -name '*.yml' \) -print0)
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: endpoint_yaml_sources
+
+    - name: Verify the HA certificate from the agent with its cluster CA
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ca=/var/lib/rancher/k3s/agent/server-ca.crt
+        [[ -s "$ca" ]]
+        timeout 15 openssl s_client \
+          -connect "{{ k3s_agent_ha_endpoint_ip }}:{{ k3s_agent_ha_endpoint_port }}" \
+          -servername "{{ k3s_agent_ha_endpoint_host }}" \
+          -verify_hostname "{{ k3s_agent_ha_endpoint_host }}" \
+          -verify_return_error -CAfile "$ca" </dev/null 2>&1 |
+          grep -Fq 'Verify return code: 0 (ok)'
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Report the audited endpoint without exposing any join token
+      ansible.builtin.debug:
+        msg:
+          node: "{{ inventory_hostname }}"
+          effective_url: "{{ endpoint_url_before }}"
+          target_url: "{{ k3s_agent_ha_endpoint_url }}"
+          persisted_env_sources: "{{ endpoint_env_sources.stdout_lines }}"
+          yaml_server_sources: "{{ endpoint_yaml_sources.stdout_lines }}"
+          operation: "{{ endpoint_operation_value }}"
+
+  tasks:
+    - name: Apply the canonical HA endpoint with per-node rollback
+      when: endpoint_operation_value == 'apply'
+      block:
+        - name: Require protected OpenClaw singletons off this agent
+          ansible.builtin.shell: |
+            set -euo pipefail
+            "{{ k3s_agent_endpoint_kubectl }}" -n openclaw-qwen36 get pods -o json |
+              jq -e --arg node "{{ inventory_hostname }}" '
+                [.items[] |
+                  select(.metadata.deletionTimestamp == null) |
+                  select(.spec.nodeName == $node) |
+                  select(.metadata.labels["app.kubernetes.io/component"] as $c |
+                    ["openclaw", "social", "readonly", "telegram-router"] | index($c))
+                ] | length == 0
+              '
+          args:
+            executable: /bin/bash
+          delegate_to: localhost
+          become: false
+          changed_when: false
+
+        - name: Refuse to overwrite a previous migration record
+          ansible.builtin.stat:
+            path: "{{ endpoint_backup_dir }}"
+          register: endpoint_backup_before
+
+        - name: Require a new migration identifier on this node
+          ansible.builtin.assert:
+            that:
+              - not endpoint_backup_before.stat.exists
+            fail_msg: >-
+              {{ endpoint_backup_dir }} already exists. Use a new migration_id
+              or the explicit rollback operation; never overwrite evidence.
+
+        - name: Create the root-only migration record
+          ansible.builtin.file:
+            path: "{{ endpoint_backup_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+
+        - name: Preserve exact supervisor and K3s configuration
+          ansible.builtin.shell: |
+            set -euo pipefail
+            cd /
+            paths=()
+            for candidate in \
+              etc/systemd/system/k3s-agent.service \
+              etc/systemd/system/k3s-agent.service.env \
+              etc/systemd/system/k3s-agent.service.d \
+              etc/default/k3s-agent \
+              etc/sysconfig/k3s-agent \
+              etc/rancher/k3s/config.yaml \
+              etc/rancher/k3s/config.yaml.d; do
+              [[ -e "/${candidate}" ]] && paths+=("${candidate}")
+            done
+            [[ -n "${paths[0]:-}" ]]
+            tar -czf "{{ endpoint_backup_dir }}/configuration.tgz.incoming" "${paths[@]}"
+            chmod 0600 "{{ endpoint_backup_dir }}/configuration.tgz.incoming"
+            mv -f "{{ endpoint_backup_dir }}/configuration.tgz.incoming" \
+              "{{ endpoint_backup_dir }}/configuration.tgz"
+            sha256sum "{{ endpoint_backup_dir }}/configuration.tgz" > \
+              "{{ endpoint_backup_dir }}/configuration.tgz.sha256"
+            chmod 0600 "{{ endpoint_backup_dir }}/configuration.tgz.sha256"
+            printf '%s\n' "{{ endpoint_url_before }}" > "{{ endpoint_backup_dir }}/previous-url"
+            printf '%s\n' "{{ endpoint_node_before.metadata.uid }}" > "{{ endpoint_backup_dir }}/node-uid"
+            printf '%s\n' "{{ endpoint_node_before.status.nodeInfo.kubeletVersion }}" > \
+              "{{ endpoint_backup_dir }}/kubelet-version"
+            chmod 0600 "{{ endpoint_backup_dir }}/previous-url" \
+              "{{ endpoint_backup_dir }}/node-uid" \
+              "{{ endpoint_backup_dir }}/kubelet-version"
+          args:
+            executable: /bin/bash
+          changed_when: true
+          no_log: true
+
+        - name: Mark the rollback record as available
+          ansible.builtin.set_fact:
+            endpoint_backup_created: true
+
+        - name: Replace K3S_URL in every persisted environment source
+          ansible.builtin.replace:
+            path: "{{ item }}"
+            regexp: '^(?P<prefix>\s*(?:export\s+)?K3S_URL\s*=\s*).*$'
+            replace: '\g<prefix>"{{ k3s_agent_ha_endpoint_url }}"'
+            backup: false
+          loop: "{{ endpoint_env_sources.stdout_lines }}"
+          no_log: true
+          diff: false
+
+        - name: Align any YAML server keys with the HA endpoint
+          ansible.builtin.replace:
+            path: "{{ item }}"
+            regexp: '^(?P<prefix>\s*server\s*:\s*).*$'
+            replace: '\g<prefix>"{{ k3s_agent_ha_endpoint_url }}"'
+            backup: false
+          loop: "{{ endpoint_yaml_sources.stdout_lines }}"
+          no_log: true
+          diff: false
+
+        - name: Record the restart journal boundary
+          ansible.builtin.command:
+            argv: [date, +%s]
+          changed_when: false
+          register: endpoint_restart_epoch
+
+        - name: Reload systemd and restart only this K3s agent
+          ansible.builtin.systemd:
+            name: k3s-agent
+            state: restarted
+            enabled: true
+            daemon_reload: true
+
+        - name: Wait for the K3s agent service
+          ansible.builtin.command:
+            argv: [systemctl, is-active, k3s-agent]
+          changed_when: false
+          register: endpoint_service_after
+          retries: 30
+          delay: 5
+          until: endpoint_service_after.stdout == 'active'
+
+        - name: Require the restarted process to use the HA URL
+          ansible.builtin.shell: |
+            set -euo pipefail
+            pid="$(systemctl show k3s-agent --property MainPID --value)"
+            [[ "$pid" =~ ^[1-9][0-9]*$ && "$pid" != "{{ endpoint_main_pid_before }}" ]]
+            mapfile -t urls < <(tr '\0' '\n' < "/proc/${pid}/environ" | sed -n 's/^K3S_URL=//p')
+            [[ -n "${urls[0]:-}" && -z "${urls[1]:-}" ]]
+            [[ "${urls[0]}" == "{{ k3s_agent_ha_endpoint_url }}" ]]
+          args:
+            executable: /bin/bash
+          changed_when: false
+          no_log: true
+
+        - name: Wait for the same Kubernetes node to rejoin Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_agent_endpoint_kubectl }}"
+              - wait
+              - "node/{{ inventory_hostname }}"
+              - --for=condition=Ready
+              - --timeout=5m
+          delegate_to: localhost
+          become: false
+          changed_when: false
+
+        - name: Wait for a fresh node lease after the restart
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_agent_endpoint_kubectl }}"
+              - -n
+              - kube-node-lease
+              - get
+              - lease
+              - "{{ inventory_hostname }}"
+              - -o
+              - "jsonpath={.spec.renewTime}"
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          register: endpoint_lease_after
+          retries: 30
+          delay: 5
+          until:
+            - endpoint_lease_after.stdout | length > 0
+            - endpoint_lease_after.stdout != endpoint_lease_before.stdout
+
+        - name: Require node UID and K3s version to remain unchanged
+          ansible.builtin.shell: |
+            set -euo pipefail
+            "{{ k3s_agent_endpoint_kubectl }}" get node "{{ inventory_hostname }}" -o json |
+              jq -e --arg uid "{{ endpoint_node_before.metadata.uid }}" \
+                --arg version "{{ endpoint_node_before.status.nodeInfo.kubeletVersion }}" \
+                '.metadata.uid == $uid and .status.nodeInfo.kubeletVersion == $version'
+          args:
+            executable: /bin/bash
+          delegate_to: localhost
+          become: false
+          changed_when: false
+
+        - name: Reject endpoint authentication or TLS errors since restart
+          ansible.builtin.shell: |
+            set -euo pipefail
+            logs="$(journalctl -u k3s-agent --since "@{{ endpoint_restart_epoch.stdout }}" --no-pager)"
+            ! grep -Eqi 'x509:|certificate signed by unknown|failed to validate|not authorized|failed to get CA certs' <<<"$logs"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          no_log: true
+
+        - name: Mark this node migration complete
+          ansible.builtin.copy:
+            content: |
+              node={{ inventory_hostname }}
+              endpoint={{ k3s_agent_ha_endpoint_url }}
+              node_uid={{ endpoint_node_before.metadata.uid }}
+              kubelet_version={{ endpoint_node_before.status.nodeInfo.kubeletVersion }}
+              completed=true
+            dest: "{{ endpoint_backup_dir }}/COMPLETED"
+            owner: root
+            group: root
+            mode: "0600"
+
+      rescue:
+        - name: Verify the rollback archive before restoring it
+          ansible.builtin.command:
+            argv: [sha256sum, --check, "{{ endpoint_backup_dir }}/configuration.tgz.sha256"]
+          changed_when: false
+          when: endpoint_backup_created | default(false) | bool
+          no_log: true
+
+        - name: Restore the exact prior K3s and supervisor configuration
+          ansible.builtin.command:
+            argv: [tar, -xzf, "{{ endpoint_backup_dir }}/configuration.tgz", -C, /]
+          changed_when: true
+          when: endpoint_backup_created | default(false) | bool
+          no_log: true
+
+        - name: Restart the restored K3s agent
+          ansible.builtin.systemd:
+            name: k3s-agent
+            state: restarted
+            enabled: true
+            daemon_reload: true
+          when: endpoint_backup_created | default(false) | bool
+
+        - name: Wait for the rolled-back node to return Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_agent_endpoint_kubectl }}"
+              - wait
+              - "node/{{ inventory_hostname }}"
+              - --for=condition=Ready
+              - --timeout=5m
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          when: endpoint_backup_created | default(false) | bool
+
+        - name: Verify the restored process uses the previous URL
+          ansible.builtin.shell: |
+            set -euo pipefail
+            pid="$(systemctl show k3s-agent --property MainPID --value)"
+            tr '\0' '\n' < "/proc/${pid}/environ" |
+              grep -Fxq "K3S_URL={{ endpoint_url_before }}"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          no_log: true
+          when: endpoint_backup_created | default(false) | bool
+
+        - name: Stop the serial migration after automatic rollback
+          ansible.builtin.fail:
+            msg: >-
+              Endpoint migration failed on {{ inventory_hostname }}. Its exact
+              prior configuration was restored and the node returned Ready.
+              Do not continue until the failure is diagnosed.
+
+    - name: Roll back an explicitly selected migration record
+      when: endpoint_operation_value == 'rollback'
+      block:
+        - name: Inspect the required rollback evidence
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ endpoint_backup_dir }}/configuration.tgz"
+            - "{{ endpoint_backup_dir }}/configuration.tgz.sha256"
+            - "{{ endpoint_backup_dir }}/previous-url"
+            - "{{ endpoint_backup_dir }}/COMPLETED"
+          register: endpoint_rollback_artifacts
+
+        - name: Refuse rollback without complete evidence
+          ansible.builtin.assert:
+            that:
+              - endpoint_rollback_artifacts.results | map(attribute='stat.exists') | min
+
+        - name: Verify the rollback archive checksum
+          ansible.builtin.command:
+            argv: [sha256sum, --check, "{{ endpoint_backup_dir }}/configuration.tgz.sha256"]
+          changed_when: false
+          no_log: true
+
+        - name: Read the expected prior URL
+          ansible.builtin.slurp:
+            src: "{{ endpoint_backup_dir }}/previous-url"
+          register: endpoint_previous_url_raw
+          no_log: true
+
+        - name: Restore the exact prior configuration
+          ansible.builtin.command:
+            argv: [tar, -xzf, "{{ endpoint_backup_dir }}/configuration.tgz", -C, /]
+          changed_when: true
+          no_log: true
+
+        - name: Restart the restored K3s agent
+          ansible.builtin.systemd:
+            name: k3s-agent
+            state: restarted
+            enabled: true
+            daemon_reload: true
+
+        - name: Wait for the rolled-back node to rejoin Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_agent_endpoint_kubectl }}"
+              - wait
+              - "node/{{ inventory_hostname }}"
+              - --for=condition=Ready
+              - --timeout=5m
+          delegate_to: localhost
+          become: false
+          changed_when: false
+
+        - name: Verify rollback restored the previous effective URL
+          ansible.builtin.shell: |
+            set -euo pipefail
+            expected="{{ endpoint_previous_url_raw.content | b64decode | trim }}"
+            pid="$(systemctl show k3s-agent --property MainPID --value)"
+            tr '\0' '\n' < "/proc/${pid}/environ" | grep -Fxq "K3S_URL=${expected}"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          no_log: true
+
+        - name: Mark the explicit rollback without deleting evidence
+          ansible.builtin.copy:
+            content: |
+              node={{ inventory_hostname }}
+              rolled_back=true
+            dest: "{{ endpoint_backup_dir }}/ROLLED_BACK"
+            owner: root
+            group: root
+            mode: "0600"
+
+  post_tasks:
+    - name: Report completion for this serial agent
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} endpoint operation {{ endpoint_operation_value }}
+          completed; the next inventory agent may proceed.

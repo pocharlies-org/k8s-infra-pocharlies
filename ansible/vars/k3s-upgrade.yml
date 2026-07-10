@@ -5,6 +5,7 @@ k3s_upgrade_drain_timeout: 45m
 k3s_upgrade_kubectl: "{{ lookup('env', 'KUBECTL_BIN') | default('kubectl', true) }}"
 k3s_upgrade_expected_context: "{{ lookup('env', 'EXPECTED_KUBE_CONTEXT') | default('x86-k3s', true) }}"
 k3s_upgrade_openclaw_smoke_repo: "{{ lookup('env', 'OPENCLAW_SMOKE_REPO') | default('', true) }}"
+k3s_upgrade_agent_ha_endpoint: https://k8s.lan.e-dani.com:6443
 k3s_secrets_operation_root: "{{ k3s_upgrade_backup_root }}/secrets-encryption-v1.35.6"
 
 # SHA-256 values are copied from the official K3s release assets
