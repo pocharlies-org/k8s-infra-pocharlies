@@ -130,6 +130,35 @@ else
   fail "Argo CD Application CRD missing"
 fi
 
+if kctl get namespace openclaw-qwen36 >/dev/null 2>&1; then
+  openclaw_pods_json="$(kctl -n openclaw-qwen36 get pods -o json)"
+  openclaw_terminating="$(jq '[.items[] | select(.metadata.deletionTimestamp != null)] | length' <<<"$openclaw_pods_json")"
+  unsafe_openclaw_nodes="$(jq '[
+    .items[] |
+    select(.metadata.deletionTimestamp == null) |
+    select(.status.phase == "Running") |
+    select(
+      .spec.nodeName != "ks5-cp-1" and
+      .spec.nodeName != "ks5-cp-2" and
+      .spec.nodeName != "ks5-cp-3" and
+      .spec.nodeName != "sauvage"
+    ) |
+    {pod:.metadata.name,node:.spec.nodeName}
+  ]' <<<"$openclaw_pods_json")"
+  if [[ "$openclaw_terminating" == 0 ]]; then
+    pass "no OpenClaw pod is Terminating"
+  else
+    fail "$openclaw_terminating OpenClaw pod(s) are Terminating"
+  fi
+  if [[ "$(jq 'length' <<<"$unsafe_openclaw_nodes")" == 0 ]]; then
+    pass "all active OpenClaw pods are on the four approved OVH nodes"
+  else
+    fail "active OpenClaw pod outside approved OVH nodes: $(jq -c . <<<"$unsafe_openclaw_nodes")"
+  fi
+else
+  fail "OpenClaw namespace missing"
+fi
+
 if kctl get crd volumes.longhorn.io >/dev/null 2>&1; then
   longhorn_image="$(kctl -n longhorn-system get daemonset longhorn-manager -o json | jq -r '.spec.template.spec.containers[] | select(.name == "longhorn-manager") | .image')"
   if [[ "$longhorn_image" == docker.io/longhornio/longhorn-manager:v1.11.2 ]]; then

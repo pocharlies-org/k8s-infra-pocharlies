@@ -172,6 +172,8 @@ evidence must identify each singleton independently. In every case the gate
 then requires:
 
 - exactly one fully Ready operator gateway, social gateway, and Telegram router;
+- every active OpenClaw pod on one of the four approved OVH nodes
+  (`ks5-cp-1`, `ks5-cp-2`, `ks5-cp-3`, or `sauvage`), never `ubuntu` or a GPU node;
 - ready, non-terminating endpoints and `/readyz=true` for both gateways;
 - OpenClaw Longhorn volumes healthy, attached, and not attached to `ubuntu`;
 - router unpaused, delivery acknowledgements enabled, a live backend, and no
@@ -255,6 +257,14 @@ the official System Upgrade Controller v0.19.2, restricted by hostname to only
 that node. The helper verifies the release manifests by SHA-256 and pins the
 controller and per-K3s upgrade images by multi-architecture digest.
 
+The helper only performs a fresh controller installation: it refuses to adopt
+an existing namespace, CRD, ClusterRole, or binding. It rewrites and verifies
+the controller image digest before the Deployment is ever submitted, so an
+unpinned controller cannot win an image-pull race. Before every new node Plan,
+it requires zero stale Plans/Jobs; a resumable Plan is accepted only when its
+node selector, version, service account, concurrency, and prepare/upgrade image
+exactly match the reviewed contract.
+
 The helper does not let the controller drain the node. It first runs the same
 production preflight, performs the explicit PDB-safe drain without `--force` or
 `--disable-eviction`, and submits a one-node Plan only after the node is empty
@@ -274,13 +284,14 @@ ansible-playbook \
   -e upgrade_phase=servers
 ```
 
-For an intentionally split or resumed wave, use the same confirmation and run
-`-e upgrade_phase=servers` first. Only after all three servers are at target,
-upgrade `sauvage` with the commands below, then run
-`-e upgrade_phase=agents`. The Ansible agent phase verifies and skips the
-already-upgraded `sauvage` without opening a sudo session. The preflight accepts
-only the adjacent source and target versions, and already-upgraded nodes are
-verified and skipped.
+The split sequence is mandatory: the playbook rejects an implicit or `all`
+phase. Run `-e upgrade_phase=servers` first. Only after all three servers are at
+target, upgrade `sauvage` with the commands below, then run
+`-e upgrade_phase=agents`. Before touching any Ansible-managed agent, that phase
+requires the Kubernetes API to report `sauvage` already at the target version;
+it then verifies and skips `sauvage` without opening a sudo session. The
+preflight accepts only the adjacent source and target versions, and
+already-upgraded nodes are verified and skipped.
 
 ```bash
 export CONFIRM_K3S_SAUVAGE_SUC=install-sauvage-system-upgrade-controller
@@ -401,12 +412,15 @@ Each node operation performs:
 2. root-only backup of binary, config, unit, and SHA-256;
 3. official release download with a pinned SHA-256;
 4. OpenClaw pre-drain availability capture on servers;
-5. cordon, then server-side drain dry-run after CNPG and Longhorn observe it;
-6. real drain without PDB bypass;
-7. atomic binary replacement and one service restart;
-8. local service/API check;
-9. cluster, Argo, Longhorn, CNPG, node-version, and OpenClaw gates;
-10. uncordon.
+5. on server operations, direct local `/readyz?verbose` checks on all three API
+   servers, including both `etcd` readiness checks;
+6. cordon, then server-side drain dry-run after CNPG and Longhorn observe it;
+7. real drain without PDB bypass, followed by another direct readiness check on
+   both surviving etcd/API peers immediately before the server restart;
+8. atomic binary replacement and one service restart;
+9. local service/API check;
+10. cluster, Argo, Longhorn, CNPG, node-version, and OpenClaw gates;
+11. uncordon.
 
 If an agent operation fails after replacement, the Ansible rescue block restores
 the old binary, restarts it, uncordons the node, and aborts the whole wave. A
@@ -469,19 +483,43 @@ Do not attempt manual repair of an encryption configuration from memory: use
 the verified pre-encryption snapshot, original server token, and the official
 versioned recovery procedure.
 
+### Finalise the canonical Ansible defaults
+
+This preparation branch deliberately keeps `k3s_version` at the verified live
+`v1.32.5+k3s1` value and `k3s_secrets_encryption_enabled: false`. Advancing
+either default before the guarded operations complete would create a second,
+unguarded path that can skip minor versions or start a server with the
+encryption flag before the shared configuration has been initialised.
+
+Only after all seven nodes are exactly `v1.35.6+k3s1`, the final infrastructure
+and OpenClaw gates pass, `k3s secrets-encrypt status` reports Enabled /
+`reencrypt_finished` / all hashes match, and the post-encryption S3 snapshot is
+verified, merge a separate finalisation change that sets:
+
+```yaml
+k3s_version: "v1.35.6+k3s1"
+k3s_secrets_encryption_enabled: true
+```
+
+Do not run the generic control-plane or worker bootstrap roles during the
+rolling window. If a node must be replaced mid-wave, stop the wave and bootstrap
+it explicitly at the currently completed cluster stage; never rely on the
+canonical default while the cluster is intentionally mixed-version.
+
 ## Rollback
 
-### Immediate single-node binary rollback
+### Immediate single-agent binary rollback
 
 Use only during the mixed-version rolling stage, before declaring that stage
-complete. Agents are safe to roll back to the prior binary. A server rollback
-requires explicit acknowledgement because rolling back one executable is not a
-substitute for restoring a datastore after a successful etcd upgrade.
+complete. The playbook accepts only one explicitly limited agent and only the
+immediately preceding stage. It verifies the declared live version and all
+production gates before cordon. Server binary rollback is intentionally
+forbidden: rolling back one server executable is not a datastore rollback and
+the official K3s procedure requires restoration of the snapshot taken on the
+older minor.
 
 ```bash
 export CONFIRM_K3S_BINARY_ROLLBACK=rollback-<node>-to-v1.34.9-k3s1
-# Servers only:
-export CONFIRM_K3S_SERVER_ROLLBACK_RISK=acknowledge-etcd-compatibility-risk
 ansible-playbook \
   -i ansible/inventory/generated/k3s-production.ini \
   ansible/playbooks/k3s-rollback-binary.yml \
@@ -489,6 +527,11 @@ ansible-playbook \
   -e current_version=v1.35.6+k3s1 \
   -e rollback_version=v1.34.9+k3s1
 ```
+
+Do not pass a control-plane node to this playbook. For a failed server after
+binary replacement, keep it cordoned on the target binary and follow the
+cluster/datastore restore section below if quorum or API integrity cannot be
+recovered.
 
 For `sauvage`, leave the node cordoned and use its verified on-host backup:
 

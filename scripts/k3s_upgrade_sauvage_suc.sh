@@ -75,12 +75,33 @@ verified_controller_manifests() {
 }
 
 install_controller() {
-  local temporary
+  local temporary pinned_manifest installed_image
+  for resource in \
+    namespace/system-upgrade \
+    crd/plans.upgrade.cattle.io \
+    clusterrole/system-upgrade-controller \
+    clusterrole/system-upgrade-controller-drainer \
+    clusterrolebinding/system-upgrade \
+    clusterrolebinding/system-upgrade-drainer; do
+    if kctl get "$resource" >/dev/null 2>&1; then
+      fail "refusing to adopt pre-existing System Upgrade Controller resource: $resource"
+    fi
+  done
   temporary="$(mktemp -d)"
   verified_controller_manifests "$temporary"
-  kctl apply -f "$temporary/crd.yaml" -f "$temporary/controller.yaml"
-  kctl -n "$NAMESPACE" set image deployment/system-upgrade-controller \
-    "system-upgrade-controller=$SUC_IMAGE"
+  pinned_manifest="$temporary/controller-pinned.yaml"
+  sed \
+    "s|image: rancher/system-upgrade-controller:v0.19.2|image: $SUC_IMAGE|" \
+    "$temporary/controller.yaml" >"$pinned_manifest"
+  [[ "$(grep -Fc "image: $SUC_IMAGE" "$pinned_manifest")" == 1 ]] ||
+    fail "failed to render exactly one digest-pinned controller image"
+  ! grep -Fq 'image: rancher/system-upgrade-controller:v0.19.2' "$pinned_manifest" ||
+    fail "unpinned controller image remained in rendered manifest"
+  kctl apply -f "$temporary/crd.yaml" -f "$pinned_manifest"
+  installed_image="$(kctl -n "$NAMESPACE" get deployment system-upgrade-controller \
+    -o jsonpath='{.spec.template.spec.containers[?(@.name=="system-upgrade-controller")].image}')"
+  [[ "$installed_image" == "$SUC_IMAGE" ]] ||
+    fail "controller Deployment image is not the reviewed digest"
   kctl -n "$NAMESPACE" rollout status deployment/system-upgrade-controller --timeout=5m
   rm -rf "$temporary"
 }
@@ -94,9 +115,86 @@ assert_node_ready() {
     fail "$NODE is not Ready"
 }
 
+wait_for_node_ready() {
+  local deadline=$((SECONDS + 300))
+  while ((SECONDS < deadline)); do
+    if [[ "$(kctl get node "$NODE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" == True ]]; then
+      return 0
+    fi
+    sleep 10
+  done
+  fail "$NODE did not become Ready within 300 seconds"
+}
+
+assert_controller_state_for_upgrade() {
+  local current="$1" from="$2" target="$3" image="$4" plan="$5"
+  local installed_image plans_json jobs_json unexpected_plans unexpected_jobs
+  installed_image="$(kctl -n "$NAMESPACE" get deployment system-upgrade-controller \
+    -o jsonpath='{.spec.template.spec.containers[?(@.name=="system-upgrade-controller")].image}')"
+  [[ "$installed_image" == "$SUC_IMAGE" ]] ||
+    fail "System Upgrade Controller is absent or not pinned to the reviewed digest"
+
+  plans_json="$(kctl -n "$NAMESPACE" get plans.upgrade.cattle.io -o json)"
+  jobs_json="$(kctl -n "$NAMESPACE" get jobs -o json)"
+  unexpected_plans="$(jq --arg plan "$plan" '[.items[] | select(.metadata.name != $plan)] | length' <<<"$plans_json")"
+  unexpected_jobs="$(jq --arg plan "$plan" '[
+    .items[] |
+    select(.metadata.labels["upgrade.cattle.io/plan"] != $plan)
+  ] | length' <<<"$jobs_json")"
+  ((unexpected_plans == 0)) || fail "unexpected System Upgrade Controller Plan exists"
+  ((unexpected_jobs == 0)) || fail "unexpected System Upgrade Controller Job exists"
+
+  if [[ "$current" == "$from" ]]; then
+    [[ "$(jq '.items | length' <<<"$plans_json")" == 0 ]] ||
+      fail "a stale Plan exists before a new Sauvage upgrade"
+    [[ "$(jq '.items | length' <<<"$jobs_json")" == 0 ]] ||
+      fail "a stale upgrade Job exists before a new Sauvage upgrade"
+    return
+  fi
+
+  if [[ "$(jq '.items | length' <<<"$plans_json")" == 1 ]]; then
+    jq -e \
+      --arg plan "$plan" \
+      --arg node "$NODE" \
+      --arg target "$target" \
+      --arg image "$image" '
+        .items[0] |
+        .metadata.name == $plan and
+        .spec.concurrency == 1 and
+        .spec.version == $target and
+        .spec.serviceAccountName == "system-upgrade" and
+        .spec.prepare.image == $image and
+        .spec.upgrade.image == $image and
+        (.spec.nodeSelector.matchExpressions | length) == 1 and
+        .spec.nodeSelector.matchExpressions[0].key == "kubernetes.io/hostname" and
+        .spec.nodeSelector.matchExpressions[0].operator == "In" and
+        .spec.nodeSelector.matchExpressions[0].values == [$node]
+      ' <<<"$plans_json" >/dev/null ||
+      fail "resumable Sauvage Plan does not match the reviewed immutable contract"
+  fi
+}
+
+assert_controller_idle_for_rollback() {
+  local allowed_job="$1" installed_image plans jobs unexpected_jobs active_jobs
+  installed_image="$(kctl -n "$NAMESPACE" get deployment system-upgrade-controller \
+    -o jsonpath='{.spec.template.spec.containers[?(@.name=="system-upgrade-controller")].image}')"
+  [[ "$installed_image" == "$SUC_IMAGE" ]] ||
+    fail "System Upgrade Controller is absent or not pinned to the reviewed digest"
+  plans="$(kctl -n "$NAMESPACE" get plans.upgrade.cattle.io -o json | jq '.items | length')"
+  ((plans == 0)) || fail "refusing rollback while a System Upgrade Controller Plan exists"
+  jobs="$(kctl -n "$NAMESPACE" get jobs -o json)"
+  unexpected_jobs="$(jq --arg allowed "$allowed_job" '[
+    .items[] | select(.metadata.name != $allowed)
+  ] | length' <<<"$jobs")"
+  ((unexpected_jobs == 0)) || fail "unexpected System Upgrade Controller Job exists"
+  active_jobs="$(jq '[.items[] | select((.status.active // 0) > 0)] | length' <<<"$jobs")"
+  ((active_jobs == 0)) || fail "refusing to replace an active rollback Job"
+}
+
 apply_plan() {
-  local from="$1" target="$2" image="$3" plan="$4" backup_dir
+  local from="$1" target="$2" image="$3" plan="$4" backup_dir backup_incoming
   backup_dir="/host/var/lib/k3s-upgrade-backups/$(slug "$from")"
+  backup_incoming="${backup_dir}.incoming"
   kctl apply -f - <<EOF
 apiVersion: upgrade.cattle.io/v1
 kind: Plan
@@ -120,16 +218,30 @@ spec:
       - |
         umask 077
         test -x /host/usr/local/bin/k3s
-        mkdir -p $backup_dir
-        if [ ! -e $backup_dir/k3s ]; then
-          cp -p /host/usr/local/bin/k3s $backup_dir/k3s
-          cp -a /host/etc/rancher/k3s $backup_dir/config
+        mkdir -p /host/var/lib/k3s-upgrade-backups
+        if [ ! -e $backup_dir/backup.complete ]; then
+          rm -rf $backup_incoming
+          mkdir -p $backup_incoming
+          cp -p /host/usr/local/bin/k3s $backup_incoming/k3s
+          cp -a /host/etc/rancher/k3s $backup_incoming/config
           if [ -e /host/etc/systemd/system/k3s-agent.service ]; then
-            cp -p /host/etc/systemd/system/k3s-agent.service $backup_dir/
+            cp -p /host/etc/systemd/system/k3s-agent.service $backup_incoming/
           fi
-          sha256sum $backup_dir/k3s >$backup_dir/k3s.sha256
-          chmod -R go-rwx $backup_dir
+          cd $backup_incoming
+          sha256sum k3s >k3s.sha256
+          sha256sum -c k3s.sha256
+          touch backup.complete
+          chmod -R go-rwx $backup_incoming
+          if [ -e $backup_dir ]; then
+            mv $backup_dir "${backup_dir}.incomplete-\$(date -u +%Y%m%dT%H%M%SZ)"
+          fi
+          mv $backup_incoming $backup_dir
         fi
+        test -f $backup_dir/backup.complete
+        test -d $backup_dir/config
+        cd $backup_dir
+        sha256sum -c k3s.sha256
+        ./k3s --version | grep -F '$from'
   upgrade:
     image: $image
 EOF
@@ -140,7 +252,7 @@ wait_for_target() {
   deadline=$((SECONDS + 1200))
   while ((SECONDS < deadline)); do
     if [[ "$(node_version)" == "$target" ]]; then
-      assert_node_ready
+      wait_for_node_ready
       return 0
     fi
     failed_jobs="$(kctl -n "$NAMESPACE" get jobs -l "upgrade.cattle.io/plan=$plan" -o json | jq '[.items[] | select((.status.failed // 0) > 0)] | length')"
@@ -160,8 +272,9 @@ upgrade_node() {
   require_confirmation "$confirmation"
   current="$(node_version)"
   unschedulable="$(kctl get node "$NODE" -o jsonpath='{.spec.unschedulable}')"
+  assert_controller_state_for_upgrade "$current" "$from" "$target" "$image" "$plan"
   if [[ "$current" == "$target" && "$unschedulable" == true ]]; then
-    assert_node_ready
+    wait_for_node_ready
     "$(dirname "$0")/k3s_upgrade_gate.sh" post-node \
       --expected-versions "$from,$target" --target-node "$NODE"
     kctl uncordon "$NODE"
@@ -205,6 +318,7 @@ upgrade_node() {
 
 rollback_node() {
   local current="$1" rollback="$2" image job backup_dir confirmation
+  require_adjacent_upgrade "$rollback" "$current"
   image="$(release_image "$current")"
   job="sauvage-rollback-$(slug "$rollback")"
   backup_dir="/host/var/lib/k3s-upgrade-backups/$(slug "$rollback")"
@@ -213,6 +327,7 @@ rollback_node() {
   [[ "$(node_version)" == "$current" ]] || fail "$NODE does not run $current"
   [[ "$(kctl get node "$NODE" -o jsonpath='{.spec.unschedulable}')" == true ]] ||
     fail "$NODE must remain cordoned for rollback"
+  assert_controller_idle_for_rollback "$job"
   kctl -n "$NAMESPACE" delete job "$job" --ignore-not-found --wait=true
   kctl apply -f - <<EOF
 apiVersion: batch/v1
@@ -235,6 +350,8 @@ spec:
           command: ["/bin/sh", "-ceu"]
           args:
             - |
+              test -f $backup_dir/backup.complete
+              test -d $backup_dir/config
               test -f $backup_dir/k3s
               cd $backup_dir
               sha256sum -c k3s.sha256
@@ -258,10 +375,11 @@ EOF
   local deadline=$((SECONDS + 600))
   while ((SECONDS < deadline)); do
     if [[ "$(node_version)" == "$rollback" ]]; then
-      assert_node_ready
+      wait_for_node_ready
       "$(dirname "$0")/k3s_upgrade_gate.sh" post-node \
         --expected-versions "$rollback,$current" --target-node "$NODE"
       kctl uncordon "$NODE"
+      kctl -n "$NAMESPACE" delete job "$job" --wait=true
       return 0
     fi
     sleep 10
@@ -270,9 +388,11 @@ EOF
 }
 
 cleanup_controller() {
-  local temporary
+  local temporary jobs
   [[ "$(kctl -n "$NAMESPACE" get plans.upgrade.cattle.io -o json 2>/dev/null | jq '.items | length')" == 0 ]] ||
     fail "delete or resolve all upgrade Plans before cleanup"
+  jobs="$(kctl -n "$NAMESPACE" get jobs -o json 2>/dev/null | jq '.items | length')"
+  ((jobs == 0)) || fail "wait for deletion of all upgrade/rollback Jobs before cleanup"
   temporary="$(mktemp -d)"
   verified_controller_manifests "$temporary"
   kctl delete -f "$temporary/controller.yaml" -f "$temporary/crd.yaml" --ignore-not-found
