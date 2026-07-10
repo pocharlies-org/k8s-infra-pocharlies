@@ -32,6 +32,10 @@ the volume:
   `k8s-infra` Application. The live Helm release only records the four CSI
   replica-count overrides, so this values file must be applied explicitly or
   Longhorn must first be migrated to an Argo-managed Helm source.
+- The minimum controlled transition keeps the chart at Helm release revision 4
+  while Argo owns the three safety-critical Setting CRs through
+  `storage/longhorn/attach-only-settings.yaml`. This prevents desired-state
+  drift without attempting to adopt the existing Helm release in-place.
 - `sauvage` is Ready, `amd64`, Ubuntu 24.04, tainted
   `role=edge:NoSchedule`, and does not yet have `storage-longhorn=true` or a
   Longhorn `Node` resource.
@@ -162,6 +166,11 @@ Expected:
 If `APPLIED=false`, do not label Sauvage. Follow the Longhorn selector-change
 procedure, which may require detaching remaining volumes, and wait for all
 components to become Ready.
+
+The Setting CRs are GitOps-managed, but Longhorn deliberately leaves
+`status.applied=false` while any volume is attached. Argo `Synced` is therefore
+not equivalent to the operational gate: the playbook requires Longhorn's own
+`status.applied=true` before it labels Sauvage.
 
 ## Phase 3 — admit Sauvage as attach-only
 
