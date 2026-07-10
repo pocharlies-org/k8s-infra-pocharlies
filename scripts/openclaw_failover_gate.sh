@@ -83,7 +83,8 @@ gateway_record() {
 
 main_gateway="$(gateway_record openclaw openclaw-qwen36-openclaw openclaw)"
 social_gateway="$(gateway_record social openclaw-qwen36-social social)"
-gateways="$(jq -s '.' < <(printf '%s\n%s\n' "$main_gateway" "$social_gateway"))"
+readonly_gateway="$(gateway_record readonly openclaw-qwen36-readonly readonly)"
+gateways="$(jq -s '.' < <(printf '%s\n%s\n%s\n' "$main_gateway" "$social_gateway" "$readonly_gateway"))"
 
 deployments_json="$(kctl -n "$NAMESPACE" get deployments -o json)"
 unavailable="$(jq '[.items[] | select((.status.availableReplicas // 0) != (.spec.replicas // 0)) | .metadata.name] | length' <<<"$deployments_json")"
