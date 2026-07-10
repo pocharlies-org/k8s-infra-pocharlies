@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velero-node-agent-config
+  namespace: velero
+data:
+  node-agent-config.json: |
+    {
+      "loadConcurrency": {
+        "globalConfig": 1,
+        "prepareQueueLength": 12
+      },
+      "podResources": {
+        "cpuRequest": "100m",
+        "cpuLimit": "1000m",
+        "memoryRequest": "256Mi",
+        "memoryLimit": "1Gi"
+      }
+    }

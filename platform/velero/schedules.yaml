@@ -42,7 +42,7 @@ spec:
 #    Redis data-aiops-redis-ks5-0 15Gi, FalkorDB 2Gi) so the critical platform
 #    backup window is unaffected if the brain volumes grow,
 #  * staggered to 03:30 UTC to avoid contending with daily-critical at 03:00
-#    for the single LAN-pinned node-agent / MinIO target.
+#    for bounded per-node data-mover capacity and the shared MinIO target.
 #
 # Scope: the FULL `aiops` namespace (all 3 PVCs) is backed up for DR coverage,
 # not just the Qdrant offer collections. Redis is included deliberately — it is

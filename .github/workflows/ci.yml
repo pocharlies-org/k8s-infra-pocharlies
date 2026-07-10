@@ -32,3 +32,10 @@ jobs:
           python3 -m unittest \
             tests/test_keycloak_agentgateway_role_contract.py \
             tests/test_openclaw_readonly_identity_contract.py
+
+  velero-operability-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Velero operability contract
+        run: python3 -m unittest tests/test_velero_operability_contract.py
