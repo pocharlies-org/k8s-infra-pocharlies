@@ -1,6 +1,7 @@
 ---
-# Apply Longhorn storage-node prerequisites to all amd64 Ubuntu control-plane
-# nodes (x86 + the 3 KS-5-A) so they are reproducible / reinstallable.
+# Apply Longhorn prerequisites to every node that can host a Longhorn volume.
+# Sauvage is attach-only: it needs iSCSI and dm-crypt, but replica scheduling is
+# disabled separately by enable-sauvage-longhorn-attach-only.yml.
 # Idempotent — safe to re-run. Run with:
 #   ansible-playbook -i ansible/inventory/generated/ks5.ini ansible/playbooks/longhorn-prereqs.yml
 - name: Longhorn prerequisites — KS-5-A control-plane storage nodes
@@ -13,6 +14,13 @@
 - name: Longhorn prerequisites — x86 control-plane (local execution)
   hosts: ubuntu
   connection: local
+  become: true
+  gather_facts: true
+  roles:
+    - longhorn_prereqs
+
+- name: Longhorn prerequisites — Sauvage attach-only worker
+  hosts: sauvage
   become: true
   gather_facts: true
   roles:
