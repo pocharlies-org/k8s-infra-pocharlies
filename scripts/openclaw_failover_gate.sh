@@ -36,12 +36,26 @@ kctl get --raw=/readyz >/dev/null || fail "Kubernetes API readyz failed"
 pods_json="$(kctl -n "$NAMESPACE" get pods -o json)"
 terminating="$(jq '[.items[] | select(.metadata.deletionTimestamp != null)] | length' <<<"$pods_json")"
 [[ "$terminating" == 0 ]] || fail "$terminating OpenClaw pod(s) are still Terminating"
+unsafe_nodes="$(jq '[
+  .items[] |
+  select(.metadata.deletionTimestamp == null) |
+  select(.status.phase == "Running") |
+  select(
+    .spec.nodeName != "ks5-cp-1" and
+    .spec.nodeName != "ks5-cp-2" and
+    .spec.nodeName != "ks5-cp-3" and
+    .spec.nodeName != "sauvage"
+  ) |
+  {pod:.metadata.name,node:.spec.nodeName}
+]' <<<"$pods_json")"
+[[ "$(jq 'length' <<<"$unsafe_nodes")" == 0 ]] ||
+  fail "active OpenClaw pod outside the four approved OVH nodes: $(jq -c . <<<"$unsafe_nodes")"
 
 gateway_record() {
   local component="$1"
   local service="$2"
   local container="$3"
-  local matches pod node node_pool
+  local matches pod node
   matches="$(jq --arg component "$component" '
     [.items[] |
       select(.metadata.labels["app.kubernetes.io/component"] == $component) |
@@ -54,9 +68,10 @@ gateway_record() {
     fail "expected exactly one fully Ready $component gateway pod"
   pod="$(jq -r '.[0].metadata.name' <<<"$matches")"
   node="$(jq -r '.[0].spec.nodeName' <<<"$matches")"
-  node_pool="$(kctl get node "$node" -o jsonpath='{.metadata.labels.node-pool}')"
-  [[ "$node" != ubuntu && "$node_pool" == ks5-nvme ]] ||
-    fail "$component gateway is on $node/$node_pool, expected non-Ubuntu KS5"
+  case "$node" in
+    ks5-cp-1|ks5-cp-2|ks5-cp-3|sauvage) ;;
+    *) fail "$component gateway is on $node, outside the four approved OVH nodes" ;;
+  esac
   jq -n \
     --arg component "$component" \
     --arg service "$service" \
