@@ -32,6 +32,10 @@ Create these Vault paths before adding this stack to the root
   - `client_id`
   - `client_secret`
   - `cookie_secret`
+- `secret/keycloak-next/openclaw-readonly`
+  - `ui_client_secret`
+  - `cookie_secret`
+  - `agentgateway_client_secret`
 
 The oauth2-proxy client must be a confidential Keycloak client in the `edani`
 realm. Use this callback:
@@ -83,3 +87,24 @@ gate and explicit state rollback.
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
 Cloudflare and IPv6 resolution issues while preserving the public OIDC issuer.
+
+## OpenClaw read-only operator identity
+
+`openclaw-readonly-clients.yaml` and its PostSync reconciler create two
+dedicated clients for the independent `info@e-dani.com` plane:
+
+- `openclaw-readonly-ui` has browser standard flow but no service account;
+- `openclaw-readonly-agentgateway` has client credentials, the exact
+  `mcp.lan.e-dani.com` audience and no effective `agentgateway-write` role.
+
+The dedicated oauth2-proxy additionally accepts only the one email from its
+mounted `authenticated_emails_file`; it forwards email/groups but no bearer to
+Traefik. Both the proxy and reconciliation hook are fixed to the KS5 OVH pool,
+tokenless and network-isolated from everything except Keycloak/DNS (plus
+Traefik ingress for the proxy).
+
+Do not sync these resources until the Vault path above is seeded and the
+AgentGateway signed-role policy is live. The OpenClaw chart remains disabled
+until the sanitized PostSync result reports `"write_role_present":false`.
+State rollback is explicit and excluded from Argo:
+`manual/openclaw-readonly-clients-rollback-job.yaml`.
