@@ -172,10 +172,19 @@ mapper_uuid_optional() {
   mapper_name="$2"
   rows="$(kget "clients/${client_uuid}/protocol-mappers/models" \
     --fields id,name --format csv --noquotes | \
-    awk -F, -v expected="${mapper_name}" '$2 == expected {print $1}' | nonempty_lines)"
+    filter_mapper_id "${mapper_name}" | nonempty_lines)"
   count="$(printf '%s\n' "${rows}" | line_count)"
   [ "${count}" -le 1 ] || fail "duplicate protocol mapper ${mapper_name}"
   printf '%s' "${rows}"
+}
+
+filter_mapper_id() {
+  expected="$1"
+  while IFS=, read -r mapper_id mapper_name; do
+    if [ "${mapper_name}" = "${expected}" ]; then
+      printf '%s\n' "${mapper_id}"
+    fi
+  done
 }
 
 upsert_groups_mapper() {
