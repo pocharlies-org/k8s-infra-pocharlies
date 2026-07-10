@@ -1,7 +1,9 @@
 # Velero — cluster backups to MinIO (S3-compatible)
 initContainers:
   - name: velero-plugin-for-aws
-    image: velero/velero-plugin-for-aws:v1.13.0
+    # v1.14.x is the supported AWS plugin line for Velero 1.18.x. Pin the
+    # multi-arch index so a mutable tag cannot change the rollout payload.
+    image: docker.io/velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a
     volumeMounts:
       - mountPath: /target
         name: plugins
@@ -27,49 +29,58 @@ configuration:
       config:
         region: us-east-1
 
-  defaultRepoMaintenanceFrequency: 168h0m0s
+  defaultRepoMaintainFrequency: 168h0m0s
   garbageCollectionFrequency: 1h0m0s
   features: EnableCSI
   logLevel: info
-  # Pin kopia maintenance jobs to x86 — dgx/sauvage nodes can't reach MinIO
-  # ClusterIP because the flannel overlay doesn't cross the WG tunnel from LAN→sauvage.
+  # Velero 1.18 maintenance Jobs do not inherit the server nodeSelector. The
+  # controller consumes only the first loadAffinity entry, so keep one exact
+  # KS5 selector here and never add Ubuntu/LAN as a fallback.
   repositoryMaintenanceJob:
     repositoryConfigData:
       global:
         keepLatestMaintenanceJobs: 3
         podResources:
-          cpuRequest: "50m"
-          memoryRequest: "128Mi"
-          memoryLimit: "512Mi"
+          cpuRequest: "100m"
+          cpuLimit: "1"
+          memoryRequest: "512Mi"
+          memoryLimit: "2Gi"
         loadAffinity:
           - nodeSelector:
               matchExpressions:
-                - key: kubernetes.io/arch
+                - key: node-pool
                   operator: In
-                  values: ["amd64"]
-                - key: topology
-                  operator: In
-                  values: ["lan"]
+                  values: ["ks5-nvme"]
 
-# Use node-agent for filesystem backups (CSI volumes)
+# Use node-agent for filesystem backups and CSI snapshot data movement.
 deployNodeAgent: true
 nodeAgent:
-  privileged: true
-  nodeSelector:
-    topology: lan
+  # Node-agent must run wherever protected Pods can land. Cover LAN and KS5
+  # while excluding the remote Sauvage node whose overlay cannot reach MinIO.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: topology
+                operator: In
+                values: ["lan", "ovh"]
   tolerations:
     - key: dedicated
       operator: Equal
       value: llm
       effect: NoSchedule
+  extraArgs:
+    - --node-agent-configmap=velero-node-agent-config
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
+      cpu: "1"
       memory: 1Gi
 
-# Velero server (off ubuntu to ks5; node-agent + kopia maintenance stay LAN-pinned)
+# Velero server and serialized Kopia maintenance Jobs stay on KS5.
 nodeSelector:
   node-pool: ks5-nvme
 resources:

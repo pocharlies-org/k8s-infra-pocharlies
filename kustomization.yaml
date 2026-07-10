@@ -34,6 +34,7 @@ resources:
   - platform/kyverno/policies.yaml
   - platform/vault/auto-unseal.yaml
   - platform/external-secrets/runtime-credentials.yaml
+  - platform/velero/node-agent-config.yaml
   - platform/velero/schedules.yaml
   - storage/minio/minio.yaml
   - storage/minio/harbor-identity.yaml
