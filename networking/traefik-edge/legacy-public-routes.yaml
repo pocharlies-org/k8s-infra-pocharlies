@@ -253,6 +253,20 @@ spec:
     replacement: https://sii.e-dani.com/sii/${1}
     permanent: false
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse-gateway-k8s
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: synapse-gateway-k8s
+spec:
+  type: ExternalName
+  externalName: synapse-gateway.synapse.svc.cluster.local
+  ports:
+    - name: http
+      port: 18790
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -485,7 +499,7 @@ spec:
   - kind: Rule
     match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
     services:
-    - name: sauvage-localhost
+    - name: synapse-gateway-k8s
       port: 18790
   - kind: Rule
     match: Host(`synapse.e-dani.com`)
