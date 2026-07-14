@@ -62,9 +62,13 @@ set -Eeuo pipefail
 test "$(kubectl config current-context)" = x86-k3s
 
 test "$(kubectl -n velero get backups.velero.io -o json | jq '[.items[] |
-  select(.status.phase | test("InProgress|Waiting|Finalizing"))] | length')" = 0
+  (.status.phase // "") as $phase |
+  select((["Completed", "PartiallyFailed", "Failed", "FailedValidation"] |
+    index($phase)) == null)] | length')" = 0
 test "$(kubectl -n velero get restores.velero.io -o json | jq '[.items[] |
-  select(.status.phase | test("InProgress|Waiting|Finalizing"))] | length')" = 0
+  (.status.phase // "") as $phase |
+  select((["Completed", "PartiallyFailed", "Failed", "FailedValidation"] |
+    index($phase)) == null)] | length')" = 0
 test "$(kubectl -n velero get jobs -l velero.io/repo-name -o json | jq
   '[.items[] | select((.status.active // 0) > 0)] | length')" = 0
 
@@ -164,9 +168,10 @@ kubectl -n velero get backuprepositories.velero.io -o json | jq -e '
 ' >/dev/null
 ```
 
-The migrator rechecks active backups, restores and maintenance Jobs plus both
-BSLs immediately before its first patch. It changes only the exact old value;
-any custom frequency is logged and left untouched.
+The migrator rechecks backups, restores and maintenance Jobs plus both BSLs
+immediately before its first patch. Backup and Restore phases use a terminal
+allowlist; an active, unknown or missing phase fails closed. It changes only
+the exact old value; any custom frequency is logged and left untouched.
 
 Changing existing repositories from seven days to one day makes overdue
 maintenance immediately eligible. Let Velero drain it serially; do not delete
