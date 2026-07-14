@@ -257,3 +257,35 @@ This is deliberate incident behavior, including when the service client has
 accidentally acquired `agentgateway-write`. Already minted JWTs remain valid
 until their short expiry, so keep the read-only Ingress/Deployment disabled
 through at least that interval.
+
+## 9. Synapse SRE service identity
+
+The private SRE routes use one dedicated confidential service client,
+`synapse-sre-orchestrator`, and one non-composite realm role,
+`synapse-sre-m2m`. Neither the general `agentgateway-mcp` client nor a human
+operator receives this role. The client has only the explicit
+`mcp.lan.e-dani.com` audience and `fullScopeAllowed=false`.
+
+Seed a new random value in
+`secret/agentgateway/prod#synapse_sre_orchestrator_client_secret`; never reuse
+an OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. Keep
+`SRE_M2M_ENABLED=false` while syncing this identity. The PostSync hook must
+finish with sanitized output:
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-synapse-sre-client --timeout=300s
+kubectl -n keycloak logs job/keycloak-synapse-sre-client -c reconcile-client
+```
+
+The reconciler verifies the minted token contains the exact `azp`, audience
+and SRE realm role, rejects `agentgateway-write`, and fails if the SRE role is
+effective for any other service account, user or group. Only after this check,
+the private Synapse/OpenClaw backends and their negative authorization smokes
+may the AgentGateway kill switch be enabled by a separate PR.
+
+For rollback, first set the AgentGateway kill switch false and wait one token
+lifetime. The emergency rollback Job is deliberately excluded from Kustomize;
+it deletes only the immutable client and its now-unmapped realm role. Run it
+only during an authorized incident while the versioned ConfigMap still exists,
+then verify its sanitized `"present":false` result and remove the Job.
