@@ -16,6 +16,8 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', script)
         self.assertIn('FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"', script)
         self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"', script)
+        self.assertIn("synapse-draft-orchestrator:synapse-draft-m2m", script)
+        self.assertIn('CLIENT_SECRET="${SYNAPSE_DRAFT_CLIENT_SECRET:-}"', script)
         self.assertIn("unsupported reconcile contract version", script)
         self.assertIn("serviceAccountsEnabled=true", script)
         self.assertIn("standardFlowEnabled=false", script)
@@ -37,9 +39,12 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
 
     def test_manifest_uses_one_vault_property_and_a_hardened_postsync_job(self):
         manifest = (BASE / "synapse-sre-client.yaml").read_text()
-        self.assertEqual(manifest.count("kind: ExternalSecret"), 1)
+        self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
         self.assertIn("key: secret/agentgateway/prod", manifest)
         self.assertIn("property: synapse_sre_orchestrator_client_secret", manifest)
+        self.assertIn("property: synapse_draft_orchestrator_client_secret", manifest)
+        self.assertIn("name: CLIENT_ID, value: synapse-draft-orchestrator", manifest)
+        self.assertIn("name: ROLE_NAME, value: synapse-draft-m2m", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
         self.assertIn('argocd.argoproj.io/sync-wave: "22"', manifest)
         self.assertIn('synapse.e-dani.com/reconcile-contract-version: "1"', manifest)
@@ -70,6 +75,8 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         )
         self.assertIn("keycloak-synapse-sre-client", result.stdout)
         self.assertIn("synapse-sre-keycloak-bootstrap", result.stdout)
+        self.assertIn("keycloak-synapse-draft-client", result.stdout)
+        self.assertIn("synapse-draft-keycloak-bootstrap", result.stdout)
 
 
 if __name__ == "__main__":

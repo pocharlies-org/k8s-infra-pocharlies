@@ -10,6 +10,7 @@ class SynapseSrePostgresRolesTest(unittest.TestCase):
     def test_roles_are_login_only_without_broad_inheritance(self) -> None:
         cluster = (ROOT / "databases/postgres-shared/cluster.yaml").read_text()
         for role, secret in (
+            ("synapse_agent_m2m", "synapse-agent-m2m-db-credentials"),
             ("synapse_sre_m2m", "synapse-sre-m2m-db-credentials"),
             ("synapse_sre_reporter", "synapse-sre-reporter-db-credentials"),
         ):
@@ -34,8 +35,10 @@ class SynapseSrePostgresRolesTest(unittest.TestCase):
         for suffix in ("m2m", "reporter"):
             self.assertIn(f"name: synapse-sre-{suffix}-db-credentials", credentials)
             self.assertIn(f"key: secret/synapse/sre-{suffix}", credentials)
+        self.assertIn("name: synapse-agent-m2m-db-credentials", credentials)
+        self.assertIn("key: secret/synapse/agent-m2m", credentials)
         self.assertEqual(
-            credentials.count('argocd.argoproj.io/sync-wave: "-1"'), 2
+            credentials.count('argocd.argoproj.io/sync-wave: "-1"'), 3
         )
         self.assertGreaterEqual(credentials.count("property: DB_USER"), 2)
         self.assertGreaterEqual(credentials.count("property: DB_PASSWORD"), 2)
@@ -44,7 +47,7 @@ class SynapseSrePostgresRolesTest(unittest.TestCase):
     def test_cluster_reconciles_after_secret_wave(self) -> None:
         cluster = (ROOT / "databases/postgres-shared/cluster.yaml").read_text()
         self.assertIn(
-            'synapse.e-dani.com/sre-role-credentials-generation: "1"', cluster
+            'synapse.e-dani.com/agent-role-credentials-generation: "2"', cluster
         )
 
 
