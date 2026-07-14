@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: velero-repository-frequency-migrator
+  namespace: velero
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: velero-repository-frequency-migrator
+  namespace: velero
+rules:
+  - apiGroups: ["velero.io"]
+    resources: ["backuprepositories"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["velero.io"]
+    resources: ["backups", "restores", "backupstoragelocations"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: velero-repository-frequency-migrator
+  namespace: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: velero-repository-frequency-migrator
+subjects:
+  - kind: ServiceAccount
+    name: velero-repository-frequency-migrator
+    namespace: velero
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: velero-repository-frequency-24h-v1
+  namespace: velero
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: velero-repository-frequency-migrator
+        spec:
+          serviceAccountName: velero-repository-frequency-migrator
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          nodeSelector:
+            node-pool: ks5-nvme
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: migrate
+              image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-c"]
+              args:
+                - |
+                  import json
+                  import ssl
+                  import urllib.request
+
+                  api = "https://kubernetes.default.svc"
+                  path = "/apis/velero.io/v1/namespaces/velero/backuprepositories"
+                  token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                  ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                  with open(token_path, encoding="utf-8") as handle:
+                      token = handle.read().strip()
+                  context = ssl.create_default_context(cafile=ca_path)
+                  headers = {"Authorization": f"Bearer {token}"}
+
+                  def get_items(resource_path):
+                      request = urllib.request.Request(api + resource_path, headers=headers)
+                      with urllib.request.urlopen(
+                          request, context=context, timeout=30
+                      ) as response:
+                          return json.load(response)["items"]
+
+                  active_backup_phases = {
+                      "InProgress",
+                      "WaitingForPluginOperations",
+                      "WaitingForPluginOperationsPartiallyFailed",
+                      "Finalizing",
+                      "FinalizingPartiallyFailed",
+                  }
+                  backups = get_items(
+                      "/apis/velero.io/v1/namespaces/velero/backups"
+                  )
+                  restores = get_items(
+                      "/apis/velero.io/v1/namespaces/velero/restores"
+                  )
+                  locations = get_items(
+                      "/apis/velero.io/v1/namespaces/velero/backupstoragelocations"
+                  )
+                  maintenance_jobs = get_items(
+                      "/apis/batch/v1/namespaces/velero/jobs"
+                      "?labelSelector=velero.io%2Frepo-name"
+                  )
+                  if any(
+                      item.get("status", {}).get("phase") in active_backup_phases
+                      for item in backups + restores
+                  ):
+                      raise RuntimeError("active backup or restore; refusing migration")
+                  if any(
+                      item.get("status", {}).get("active", 0) > 0
+                      for item in maintenance_jobs
+                  ):
+                      raise RuntimeError("active repository maintenance; refusing migration")
+                  if len(locations) != 2 or any(
+                      item.get("status", {}).get("phase") != "Available"
+                      for item in locations
+                  ):
+                      raise RuntimeError("BackupStorageLocations are not both Available")
+
+                  repositories = get_items(path)
+
+                  patched = 0
+                  unchanged = 0
+                  skipped = 0
+                  for repository in repositories:
+                      name = repository["metadata"]["name"]
+                      current = repository.get("spec", {}).get("maintenanceFrequency", "")
+                      if current == "24h0m0s":
+                          unchanged += 1
+                          continue
+                      if current != "168h0m0s":
+                          print(f"skip {name}: custom maintenanceFrequency={current!r}")
+                          skipped += 1
+                          continue
+                      body = json.dumps(
+                          {"spec": {"maintenanceFrequency": "24h0m0s"}}
+                      ).encode()
+                      patch_headers = {
+                          **headers,
+                          "Content-Type": "application/merge-patch+json",
+                      }
+                      patch = urllib.request.Request(
+                          f"{api}{path}/{name}",
+                          data=body,
+                          headers=patch_headers,
+                          method="PATCH",
+                      )
+                      with urllib.request.urlopen(patch, context=context, timeout=30) as response:
+                          if response.status != 200:
+                              raise RuntimeError(f"patch {name} returned HTTP {response.status}")
+                      patched += 1
+
+                  print(
+                      f"repositories={len(repositories)} patched={patched} "
+                      f"unchanged={unchanged} custom_skipped={skipped}"
+                  )
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
