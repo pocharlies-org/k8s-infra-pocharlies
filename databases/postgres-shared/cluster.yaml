@@ -145,11 +145,31 @@ spec:
         passwordSecret:
           name: synapse-gateway-db-credentials
         comment: "Synapse HTTP gateway (synapse-gateway.service)"
+      # Canonical NOLOGIN owner for checksummed Synapse migrations. Runtime
+      # logins are members only when they must transfer legacy ownership or
+      # execute the isolated migrator; agent identities never inherit it.
+      - name: synapse_owner
+        ensure: present
+        login: false
+        inherit: true
+        disablePassword: true
+        comment: "Canonical owner role for Synapse schema objects"
+      # Existing login/password is retained from the restored production DB;
+      # its credential remains projected only into the isolated migration Job.
+      - name: synapse_migration
+        ensure: present
+        login: true
+        inherit: true
+        inRoles:
+          - synapse_owner
+        comment: "K8s-native checksummed Synapse migration runner"
       - name: synapse_admin
         ensure: present
         login: true
         inherit: true
         bypassrls: true
+        inRoles:
+          - synapse_owner
         passwordSecret:
           name: synapse-admin-db-credentials
         comment: "Synapse Admin UI (synapse-admin.service); BYPASSRLS for cross-tenant operations"
