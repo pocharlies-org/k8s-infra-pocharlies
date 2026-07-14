@@ -106,7 +106,20 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         self.assertIn("suspend: true", FREQUENCY_MIGRATION)
         self.assertIn("concurrencyPolicy: Forbid", FREQUENCY_MIGRATION)
         self.assertNotIn("argocd.argoproj.io/hook", FREQUENCY_MIGRATION)
-        self.assertIn("active backup or restore; refusing migration", FREQUENCY_MIGRATION)
+        self.assertIn(
+            "active, unknown, or phase-less backup/restore; refusing migration",
+            FREQUENCY_MIGRATION,
+        )
+        self.assertIn("terminal_operation_phases", FREQUENCY_MIGRATION)
+        for phase in (
+            "Completed",
+            "PartiallyFailed",
+            "Failed",
+            "FailedValidation",
+        ):
+            self.assertIn(f'"{phase}"', FREQUENCY_MIGRATION)
+        self.assertIn("not in terminal_operation_phases", FREQUENCY_MIGRATION)
+        self.assertNotIn("active_backup_phases", FREQUENCY_MIGRATION)
         self.assertIn("active repository maintenance; refusing migration", FREQUENCY_MIGRATION)
         self.assertIn(
             "BackupStorageLocations are not both Available", FREQUENCY_MIGRATION

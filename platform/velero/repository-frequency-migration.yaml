@@ -94,12 +94,11 @@ spec:
                       ) as response:
                           return json.load(response)["items"]
 
-                  active_backup_phases = {
-                      "InProgress",
-                      "WaitingForPluginOperations",
-                      "WaitingForPluginOperationsPartiallyFailed",
-                      "Finalizing",
-                      "FinalizingPartiallyFailed",
+                  terminal_operation_phases = {
+                      "Completed",
+                      "PartiallyFailed",
+                      "Failed",
+                      "FailedValidation",
                   }
                   backups = get_items(
                       "/apis/velero.io/v1/namespaces/velero/backups"
@@ -114,11 +113,21 @@ spec:
                       "/apis/batch/v1/namespaces/velero/jobs"
                       "?labelSelector=velero.io%2Frepo-name"
                   )
-                  if any(
-                      item.get("status", {}).get("phase") in active_backup_phases
+                  non_terminal_operations = [
+                      (
+                          item.get("kind", "unknown"),
+                          item.get("metadata", {}).get("name", "unknown"),
+                          item.get("status", {}).get("phase"),
+                      )
                       for item in backups + restores
-                  ):
-                      raise RuntimeError("active backup or restore; refusing migration")
+                      if item.get("status", {}).get("phase")
+                      not in terminal_operation_phases
+                  ]
+                  if non_terminal_operations:
+                      raise RuntimeError(
+                          "active, unknown, or phase-less backup/restore; refusing migration: "
+                          + repr(non_terminal_operations[:10])
+                      )
                   if any(
                       item.get("status", {}).get("active", 0) > 0
                       for item in maintenance_jobs
