@@ -29,13 +29,24 @@ progress() {
   printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
 }
 
-[ "${CLIENT_ID}" = "synapse-sre-orchestrator" ] || fail "CLIENT_ID is immutable"
-[ "${ROLE_NAME}" = "synapse-sre-m2m" ] || fail "ROLE_NAME is immutable"
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
 [ "${RECONCILE_CONTRACT_VERSION}" = "1" ] || fail "unsupported reconcile contract version"
+case "${CLIENT_ID}:${ROLE_NAME}" in
+  synapse-sre-orchestrator:synapse-sre-m2m)
+    CLIENT_SECRET="${SYNAPSE_SRE_CLIENT_SECRET:-}"
+    MAPPER_NAME=synapse-sre-agentgateway-audience
+    ROLE_DESCRIPTION='Allows only the typed Synapse and OpenClaw SRE M2M planes'
+    ;;
+  synapse-draft-orchestrator:synapse-draft-m2m)
+    CLIENT_SECRET="${SYNAPSE_DRAFT_CLIENT_SECRET:-}"
+    MAPPER_NAME=synapse-draft-agentgateway-audience
+    ROLE_DESCRIPTION='Allows only the typed Synapse and OpenClaw draft M2M planes'
+    ;;
+  *) fail "unsupported immutable client/role pair" ;;
+esac
 case "${MODE}" in
   ensure|audit)
-    [ -n "${SYNAPSE_SRE_CLIENT_SECRET:-}" ] || fail "client secret is empty"
+    [ -n "${CLIENT_SECRET}" ] || fail "client secret is empty"
     ;;
   rollback) ;;
   *) fail "unsupported MODE=${MODE}" ;;
@@ -108,7 +119,7 @@ upsert_client() {
     -s serviceAccountsEnabled=true \
     -s fullScopeAllowed=false \
     -s protocol=openid-connect \
-    -s "secret=${SYNAPSE_SRE_CLIENT_SECRET}" >/dev/null 2>&1 || \
+    -s "secret=${CLIENT_SECRET}" >/dev/null 2>&1 || \
     fail "failed to reconcile ${CLIENT_ID}"
   CLIENT_UUID="$(require_client)"
 }
@@ -132,7 +143,7 @@ mapper_uuid_optional() {
 }
 
 upsert_audience_mapper() {
-  mapper_name=synapse-sre-agentgateway-audience
+  mapper_name="${MAPPER_NAME}"
   mapper_uuid="$(mapper_uuid_optional "${mapper_name}")"
   endpoint="clients/${CLIENT_UUID}/protocol-mappers/models"
   action=create
@@ -159,7 +170,7 @@ ensure_role() {
   if ! role_exists; then
     "${KCADM}" create roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
       -s "name=${ROLE_NAME}" \
-      -s 'description=Allows only the typed Synapse and OpenClaw SRE M2M planes' \
+      -s "description=${ROLE_DESCRIPTION}" \
       -s composite=false >/dev/null 2>&1 || fail "failed to create ${ROLE_NAME}"
   fi
   verify_role
@@ -242,7 +253,7 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" directAccessGrantsEnabled false
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled true
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
-  [ -n "$(mapper_uuid_optional synapse-sre-agentgateway-audience)" ] || fail "audience mapper missing"
+  [ -n "$(mapper_uuid_optional "${MAPPER_NAME}")" ] || fail "audience mapper missing"
   role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
   resolve_service_account
   target_has_direct_role || fail "direct realm role missing"
@@ -255,7 +266,7 @@ mint_claims() {
     --server "${KEYCLOAK_URL}" \
     --realm "${REALM}" \
     --client "${CLIENT_ID}" \
-    --secret "${SYNAPSE_SRE_CLIENT_SECRET}" >/dev/null 2>&1 || fail "client token mint failed"
+    --secret "${CLIENT_SECRET}" >/dev/null 2>&1 || fail "client token mint failed"
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${CLIENT_CONFIG}" | head -n1)"
   [ -n "${token}" ] || fail "access token is missing"
   payload="$(printf '%s' "${token}" | cut -d. -f2)"
@@ -274,11 +285,11 @@ mint_claims() {
 
 verify_minted_claims() {
   claims="$(mint_claims)"
-  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"synapse-sre-orchestrator"' || \
+  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
     fail "minted token has wrong azp"
   printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || fail "audience missing"
-  printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"synapse-sre-m2m"' || \
-    fail "SRE realm role missing"
+  printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"'"${ROLE_NAME}"'"' || \
+    fail "dedicated realm role missing"
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"agentgateway-write"'; then
     fail "minted token contains forbidden realm role"
   fi
