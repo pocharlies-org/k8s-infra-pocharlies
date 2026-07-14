@@ -34,9 +34,18 @@ class SynapseSrePostgresRolesTest(unittest.TestCase):
         for suffix in ("m2m", "reporter"):
             self.assertIn(f"name: synapse-sre-{suffix}-db-credentials", credentials)
             self.assertIn(f"key: secret/synapse/sre-{suffix}", credentials)
+        self.assertEqual(
+            credentials.count('argocd.argoproj.io/sync-wave: "-1"'), 2
+        )
         self.assertGreaterEqual(credentials.count("property: DB_USER"), 2)
         self.assertGreaterEqual(credentials.count("property: DB_PASSWORD"), 2)
         self.assertNotIn("dataFrom:", credentials)
+
+    def test_cluster_reconciles_after_secret_wave(self) -> None:
+        cluster = (ROOT / "databases/postgres-shared/cluster.yaml").read_text()
+        self.assertIn(
+            'synapse.e-dani.com/sre-role-credentials-generation: "1"', cluster
+        )
 
 
 if __name__ == "__main__":
