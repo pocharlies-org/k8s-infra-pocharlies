@@ -171,6 +171,24 @@ verify_role() {
   [ "${composite}" = "false" ] || fail "${ROLE_NAME} must remain non-composite"
 }
 
+role_scope_has_direct_role() {
+  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${ROLE_NAME}"
+}
+
+ensure_role_scope_mapping() {
+  if ! role_scope_has_direct_role; then
+    role_id="$(kget "roles/${ROLE_NAME}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${ROLE_NAME} id is empty"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${ROLE_NAME}")"
+    "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to map ${ROLE_NAME} into the client role scope"
+    unset role_body role_id
+  fi
+  role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
+}
+
 resolve_service_account() {
   SERVICE_ACCOUNT_ID="$(kget "clients/${CLIENT_UUID}/service-account-user" \
     --fields id --format csv --noquotes | nonempty_lines)"
@@ -225,6 +243,7 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled true
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
   [ -n "$(mapper_uuid_optional synapse-sre-agentgateway-audience)" ] || fail "audience mapper missing"
+  role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
   resolve_service_account
   target_has_direct_role || fail "direct realm role missing"
   assert_exclusive_role_mapping
@@ -290,6 +309,8 @@ case "${MODE}" in
     progress client-reconciled
     upsert_audience_mapper
     ensure_role
+    ensure_role_scope_mapping
+    progress role-scope-verified
     resolve_service_account
     ensure_role_mapping
     progress role-mapping-verified
