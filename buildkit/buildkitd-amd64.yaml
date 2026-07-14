@@ -127,10 +127,10 @@ spec:
   storageClassName: longhorn-prod-nvme
   resources:
     requests:
-      # The cache is disposable. Keep it below the bounded KS5 scheduling
-      # headroom so Longhorn can maintain one replica on every control plane
-      # without weakening the cluster-wide reserve or overcommit guard.
-      storage: 20Gi
+      # The cache is disposable, but PVC requests cannot be shrunk. Keep the
+      # GitOps request aligned with the already-bound 25Gi volume so Argo can
+      # reconcile forward-only without attempting an invalid resize.
+      storage: 25Gi
 ---
 apiVersion: v1
 kind: Service
