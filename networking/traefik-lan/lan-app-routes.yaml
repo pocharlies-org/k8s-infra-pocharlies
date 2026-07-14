@@ -29,6 +29,20 @@ endpoints:
       - 100.109.183.9
     conditions: {}
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse-admin-k8s
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: synapse-admin-k8s
+spec:
+  type: ExternalName
+  externalName: synapse-admin.synapse.svc.cluster.local
+  ports:
+    - name: http
+      port: 18795
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -42,7 +56,7 @@ spec:
       match: Host(`synapse.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
       priority: 300
       services:
-        - name: synapse-lan-host
+        - name: synapse-admin-k8s
           port: 18795
     - kind: Rule
       match: Host(`synapse.lan.e-dani.com`)
@@ -51,7 +65,7 @@ spec:
         - name: sso-chain
           namespace: keycloak
       services:
-        - name: synapse-lan-host
+        - name: synapse-admin-k8s
           port: 18795
   tls:
     store:
