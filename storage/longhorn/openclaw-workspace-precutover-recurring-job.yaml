@@ -1,0 +1,19 @@
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: openclaw-workspace-precutover-snapshot
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: longhorn
+    storage.e-dani.com/purpose: openclaw-shared-workspace-precutover
+spec:
+  cron: "15 2 * * *"
+  task: snapshot
+  groups:
+    - openclaw-workspace-precutover
+  retain: 2
+  concurrency: 1
+  labels:
+    storage.e-dani.com/purpose: openclaw-shared-workspace-precutover
