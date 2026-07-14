@@ -166,6 +166,22 @@ spec:
         passwordSecret:
           name: synapse-outbox-gc-db-credentials
         comment: "Synapse Outbox GC (synapse-outbox-gc.service; hourly oneshot timer)"
+      # Dedicated SRE identities deliberately do not inherit synapse_app.
+      # Migration 0084 grants only the table/column privileges each plane needs.
+      - name: synapse_sre_m2m
+        ensure: present
+        login: true
+        inherit: false
+        passwordSecret:
+          name: synapse-sre-m2m-db-credentials
+        comment: "Private Synapse SRE AgentGateway mutation plane"
+      - name: synapse_sre_reporter
+        ensure: present
+        login: true
+        inherit: false
+        passwordSecret:
+          name: synapse-sre-reporter-db-credentials
+        comment: "Read-mostly weekly Synapse SRE reporter"
 
   backup:
     retentionPolicy: "30d"
