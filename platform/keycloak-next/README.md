@@ -88,6 +88,12 @@ and the AgentGateway CEL policy. Do not sync this hook independently while the
 shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
+`agentgateway-domain-roles-job.yaml` creates the nine reviewed domain roles
+without assigning them to any user, group or service account. The hook fails if
+one is composite or already assigned. Assignment stays blocked until dedicated
+Keycloak clients and an explicit role-to-client map are reviewed together; the
+global `agentgateway-mcp` client is not granted these roles by this hook.
+
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
 Cloudflare and IPv6 resolution issues while preserving the public OIDC issuer.
