@@ -29,7 +29,9 @@ configuration:
       config:
         region: us-east-1
 
-  defaultRepoMaintainFrequency: 168h0m0s
+  # Daily maintenance keeps high-churn Kopia repositories below the index
+  # blob warning threshold. Jobs remain serialized and resource-bounded.
+  defaultRepoMaintainFrequency: 24h0m0s
   garbageCollectionFrequency: 1h0m0s
   features: EnableCSI
   logLevel: info
@@ -39,7 +41,7 @@ configuration:
   repositoryMaintenanceJob:
     repositoryConfigData:
       global:
-        keepLatestMaintenanceJobs: 3
+        keepLatestMaintenanceJobs: 1
         podResources:
           cpuRequest: "100m"
           cpuLimit: "1"
