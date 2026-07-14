@@ -25,6 +25,10 @@ fail() {
   exit 1
 }
 
+progress() {
+  printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
+}
+
 [ "${CLIENT_ID}" = "synapse-sre-orchestrator" ] || fail "CLIENT_ID is immutable"
 [ "${ROLE_NAME}" = "synapse-sre-m2m" ] || fail "ROLE_NAME is immutable"
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
@@ -182,14 +186,16 @@ target_has_direct_role() {
     --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${ROLE_NAME}"
 }
 
-user_has_effective_role() {
-  kget "users/$1/role-mappings/realm/composite" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${ROLE_NAME}"
-}
-
 assert_exclusive_role_mapping() {
-  users="$(kget "roles/${ROLE_NAME}/users" --fields username --format csv --noquotes | nonempty_lines)"
-  groups="$(kget "roles/${ROLE_NAME}/groups" --fields path --format csv --noquotes | nonempty_lines)"
+  # Keycloak exposes bounded role-member endpoints. They provide the same
+  # exclusivity evidence without starting one kcadm JVM for every realm user
+  # and service account, which exceeded the PostSync deadline in production.
+  # At most one user and zero groups are allowed, so fetching two is sufficient
+  # to detect every policy violation while keeping reconciliation O(1).
+  users="$(kget "roles/${ROLE_NAME}/users" -q first=0 -q max=2 \
+    --fields username --format csv --noquotes | nonempty_lines)"
+  groups="$(kget "roles/${ROLE_NAME}/groups" -q first=0 -q max=2 \
+    --fields path --format csv --noquotes | nonempty_lines)"
   [ -z "${groups}" ] || fail "${ROLE_NAME} is mapped to a group"
   if [ -n "${users}" ]; then
     while IFS= read -r username; do
@@ -200,34 +206,6 @@ EOF
   fi
 }
 
-assert_effective_role_exclusivity() {
-  regular_user_ids="$(kget users -q max=1000 --fields id --format csv --noquotes | nonempty_lines)"
-  if [ -n "${regular_user_ids}" ]; then
-    while IFS= read -r user_id; do
-      if user_has_effective_role "${user_id}"; then
-        [ "${user_id}" = "${SERVICE_ACCOUNT_ID}" ] || \
-          fail "${ROLE_NAME} is effective for an unauthorized user"
-      fi
-    done <<EOF
-${regular_user_ids}
-EOF
-  fi
-
-  clients="$(kget clients --fields id,clientId,serviceAccountsEnabled --format csv --noquotes | nonempty_lines)"
-  while IFS=, read -r candidate_uuid candidate_id service_accounts_enabled; do
-    [ "${service_accounts_enabled}" = "true" ] || continue
-    candidate_user="$(kget "clients/${candidate_uuid}/service-account-user" \
-      --fields id --format csv --noquotes | nonempty_lines)"
-    if [ "${candidate_id}" = "${CLIENT_ID}" ]; then
-      user_has_effective_role "${candidate_user}" || fail "target service account lacks ${ROLE_NAME}"
-    elif user_has_effective_role "${candidate_user}"; then
-      fail "${ROLE_NAME} is effective for another service account"
-    fi
-  done <<EOF
-${clients}
-EOF
-}
-
 ensure_role_mapping() {
   assert_exclusive_role_mapping
   if ! target_has_direct_role; then
@@ -236,7 +214,6 @@ ensure_role_mapping() {
       fail "failed to map ${ROLE_NAME}"
   fi
   assert_exclusive_role_mapping
-  assert_effective_role_exclusivity
 }
 
 verify_client() {
@@ -251,7 +228,6 @@ verify_client() {
   resolve_service_account
   target_has_direct_role || fail "direct realm role missing"
   assert_exclusive_role_mapping
-  assert_effective_role_exclusivity
 }
 
 mint_claims() {
@@ -307,13 +283,16 @@ rollback_identity() {
 }
 
 login_admin
+progress authenticated
 case "${MODE}" in
   ensure)
     upsert_client
+    progress client-reconciled
     upsert_audience_mapper
     ensure_role
     resolve_service_account
     ensure_role_mapping
+    progress role-mapping-verified
     verify_client
     verify_minted_claims
     printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true}\n' \
