@@ -10,6 +10,7 @@ CLIENT_ID="${CLIENT_ID:-synapse-sre-orchestrator}"
 ROLE_NAME="${ROLE_NAME:-synapse-sre-m2m}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
+RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-synapse-sre-admin.config
 CLIENT_CONFIG=/tmp/kcadm-synapse-sre-client.config
@@ -27,6 +28,7 @@ fail() {
 [ "${CLIENT_ID}" = "synapse-sre-orchestrator" ] || fail "CLIENT_ID is immutable"
 [ "${ROLE_NAME}" = "synapse-sre-m2m" ] || fail "ROLE_NAME is immutable"
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
+[ "${RECONCILE_CONTRACT_VERSION}" = "1" ] || fail "unsupported reconcile contract version"
 case "${MODE}" in
   ensure|audit)
     [ -n "${SYNAPSE_SRE_CLIENT_SECRET:-}" ] || fail "client secret is empty"

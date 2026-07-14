@@ -272,6 +272,10 @@ an OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. Keep
 `SRE_M2M_ENABLED=false` while syncing this identity. The PostSync hook must
 finish with sanitized output:
 
+The first reconciliation must be a full Argo CD sync of the reviewed commit.
+Argo CD deliberately skips hooks during a selective resource sync; do not
+pre-apply the identity resources or create the reconciliation Job manually.
+
 ```bash
 kubectl -n keycloak wait --for=condition=complete \
   job/keycloak-synapse-sre-client --timeout=300s
