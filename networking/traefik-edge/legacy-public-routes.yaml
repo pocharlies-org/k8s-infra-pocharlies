@@ -267,6 +267,20 @@ spec:
     - name: http
       port: 18790
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse-admin-k8s
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: synapse-admin-k8s
+spec:
+  type: ExternalName
+  externalName: synapse-admin.synapse.svc.cluster.local
+  ports:
+    - name: http
+      port: 18795
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -494,7 +508,7 @@ spec:
   - kind: Rule
     match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
     services:
-    - name: synapse-edge-host
+    - name: synapse-admin-k8s
       port: 18795
   - kind: Rule
     match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
@@ -506,7 +520,7 @@ spec:
     middlewares:
     - name: synapse-admin-allowlist
     services:
-    - name: synapse-edge-host
+    - name: synapse-admin-k8s
       port: 18795
   tls:
     store:
