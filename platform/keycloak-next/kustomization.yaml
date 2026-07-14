@@ -11,6 +11,7 @@ resources:
   - routing.yaml
   - agentgateway-write-role-job.yaml
   - openclaw-readonly-clients.yaml
+  - synapse-sre-client.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -18,6 +19,9 @@ configMapGenerator:
   - name: keycloak-openclaw-readonly-clients
     files:
       - openclaw-readonly-clients.sh=scripts/openclaw-readonly-clients.sh
+  - name: keycloak-synapse-sre-client
+    files:
+      - synapse-sre-client.sh=scripts/synapse-sre-client.sh
 generatorOptions:
   disableNameSuffixHash: true
   labels:
