@@ -7,7 +7,7 @@ metadata:
     # Bump only by PR after the corresponding ExternalSecrets are healthy.
     # This makes CNPG re-read passwordSecret when a role was first observed
     # before ESO had materialized its Secret.
-    synapse.e-dani.com/sre-role-credentials-generation: "1"
+    synapse.e-dani.com/agent-role-credentials-generation: "2"
   labels:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: postgres
@@ -171,8 +171,8 @@ spec:
         passwordSecret:
           name: synapse-outbox-gc-db-credentials
         comment: "Synapse Outbox GC (synapse-outbox-gc.service; hourly oneshot timer)"
-      # Dedicated SRE identities deliberately do not inherit synapse_app.
-      # Migration 0084 grants only the table/column privileges each plane needs.
+      # Dedicated agent identities deliberately do not inherit synapse_app.
+      # Synapse migrations grant only the table/column privileges each plane needs.
       - name: synapse_sre_m2m
         ensure: present
         login: true
@@ -187,6 +187,13 @@ spec:
         passwordSecret:
           name: synapse-sre-reporter-db-credentials
         comment: "Read-mostly weekly Synapse SRE reporter"
+      - name: synapse_agent_m2m
+        ensure: present
+        login: true
+        inherit: false
+        passwordSecret:
+          name: synapse-agent-m2m-db-credentials
+        comment: "Private durable Synapse agent-run callback plane"
 
   backup:
     retentionPolicy: "30d"
