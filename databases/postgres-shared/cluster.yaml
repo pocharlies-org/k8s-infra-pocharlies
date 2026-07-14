@@ -3,6 +3,11 @@ kind: Cluster
 metadata:
   name: postgres-shared
   namespace: databases
+  annotations:
+    # Bump only by PR after the corresponding ExternalSecrets are healthy.
+    # This makes CNPG re-read passwordSecret when a role was first observed
+    # before ESO had materialized its Secret.
+    synapse.e-dani.com/sre-role-credentials-generation: "1"
   labels:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: postgres
