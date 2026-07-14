@@ -12,6 +12,7 @@ resources:
   - agentgateway-write-role-job.yaml
   - openclaw-readonly-clients.yaml
   - synapse-sre-client.yaml
+  - agentgateway-domain-roles-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -22,6 +23,12 @@ configMapGenerator:
   - name: keycloak-synapse-sre-client
     files:
       - synapse-sre-client.sh=scripts/synapse-sre-client.sh
+  - name: keycloak-agentgateway-domain-roles
+    files:
+      - agentgateway-domain-roles.sh=scripts/agentgateway-domain-roles.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-domain-roles
 generatorOptions:
   disableNameSuffixHash: true
   labels:

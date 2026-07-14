@@ -27,11 +27,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Keycloak role reconciler contract
         run: |
-          bash -n platform/keycloak-next/scripts/agentgateway-write-role.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-write-role.sh
           sh -n platform/keycloak-next/scripts/openclaw-readonly-clients.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-domain-roles.sh
           python3 -m unittest \
             tests/test_keycloak_agentgateway_role_contract.py \
-            tests/test_openclaw_readonly_identity_contract.py
+            tests/test_openclaw_readonly_identity_contract.py \
+            tests/test_keycloak_agentgateway_domain_roles_contract.py
 
   velero-operability-contract:
     runs-on: arc-k8s
