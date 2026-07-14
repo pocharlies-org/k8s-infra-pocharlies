@@ -7,6 +7,43 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SynapseSrePostgresRolesTest(unittest.TestCase):
+    def test_migration_owner_is_nologin_and_membership_is_bounded(self) -> None:
+        cluster = (ROOT / "databases/postgres-shared/cluster.yaml").read_text()
+
+        owner = re.search(
+            r"      - name: synapse_owner\n(?P<body>.*?)(?=      - name:|\n  backup:)",
+            cluster,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(owner)
+        owner_body = owner.group("body")
+        self.assertIn("ensure: present", owner_body)
+        self.assertIn("login: false", owner_body)
+        self.assertIn("disablePassword: true", owner_body)
+        self.assertNotIn("passwordSecret:", owner_body)
+        self.assertNotIn("superuser: true", owner_body)
+        self.assertNotIn("bypassrls: true", owner_body)
+
+        for role in ("synapse_migration", "synapse_admin"):
+            block = re.search(
+                rf"      - name: {role}\n(?P<body>.*?)(?=      - name:|\n  backup:)",
+                cluster,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(block, role)
+            body = block.group("body")
+            self.assertIn("inRoles:\n          - synapse_owner", body)
+
+        migration = re.search(
+            r"      - name: synapse_migration\n(?P<body>.*?)(?=      - name:|\n  backup:)",
+            cluster,
+            re.DOTALL,
+        )
+        migration_body = migration.group("body")
+        self.assertIn("login: true", migration_body)
+        self.assertNotIn("passwordSecret:", migration_body)
+        self.assertNotIn("synapse_admin", migration_body)
+
     def test_roles_are_login_only_without_broad_inheritance(self) -> None:
         cluster = (ROOT / "databases/postgres-shared/cluster.yaml").read_text()
         for role, secret in (
