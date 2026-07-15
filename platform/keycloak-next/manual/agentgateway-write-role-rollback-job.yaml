@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/component: agentgateway-write-role
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 900
   ttlSecondsAfterFinished: 600
   template:
     metadata:
