@@ -1,6 +1,12 @@
 # Traefik LAN values — internal ingress, exposed via MetalLB VIP 192.168.50.240
 deployment:
-  replicas: 1
+  # Two OVH endpoints keep in-cluster traffic independent of the home LAN;
+  # two non-Ubuntu LAN endpoints preserve the MetalLB VIP and client IPs.
+  replicas: 4
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 3
 
 ingressClass:
   enabled: true
@@ -54,6 +60,9 @@ service:
   annotations:
     metallb.io/loadBalancerIPs: 192.168.50.240
   spec:
+    # Preserve the original client address: several LAN routes use ClientIP()
+    # authorization. MetalLB advertises only from Ready LAN nodes that have a
+    # local endpoint, while cluster callers use the Service and can reach OVH.
     externalTrafficPolicy: Local
 
 # Dashboard — internal only, will protect with SSO later
@@ -80,9 +89,52 @@ resources:
   limits:
     memory: 512Mi
 
-# MetalLB L2 announces the LAN VIP from the node running this pod, so it must
-# stay on a physical LAN node (not the OVH ones). Do not tolerate the GPU
-# dedicated taint here: if nvidia-dgx/gx10 are under pressure, Harbor and all
-# LAN ingress should keep running on an untainted LAN node.
-nodeSelector:
-  topology: lan
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        # OVH endpoints keep cluster-internal Harbor/release traffic alive even
+        # if the whole physical LAN disappears.
+        - matchExpressions:
+            - key: node-pool
+              operator: In
+              values: [ks5-nvme]
+        # LAN endpoints preserve source IP and the RFC1918 VIP. Never schedule
+        # on the failed home-lab Ubuntu node.
+        - matchExpressions:
+            - key: topology
+              operator: In
+              values: [lan]
+            - key: kubernetes.io/hostname
+              operator: NotIn
+              values: [ubuntu]
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: traefik-lan-traefik-lan
+            app.kubernetes.io/name: traefik
+        topologyKey: kubernetes.io/hostname
+
+# The only two healthy physical-LAN nodes are dedicated GPU nodes. Traefik uses
+# no GPU and its bounded 100m/128Mi request is intentionally tolerated so the
+# LAN ingress does not fall back to the failed Ubuntu machine.
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+
+# With four replicas and two eligible failure domains this yields 2 LAN + 2 OVH
+# endpoints. Required hostname anti-affinity keeps every replica on a distinct
+# server; a failed domain still leaves the other domain serving cluster traffic.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology
+    whenUnsatisfiable: DoNotSchedule
+    nodeAffinityPolicy: Honor
+    nodeTaintsPolicy: Honor
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: traefik-lan-traefik-lan
+        app.kubernetes.io/name: traefik

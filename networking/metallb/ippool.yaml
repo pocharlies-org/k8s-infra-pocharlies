@@ -17,3 +17,14 @@ metadata:
 spec:
   ipAddressPools:
     - lan-pool
+  # RFC1918 VIPs must be announced only on nodes that are physically attached
+  # to the home LAN. Services using externalTrafficPolicy=Local additionally
+  # require a healthy local endpoint; Traefik supplies two non-Ubuntu ones.
+  nodeSelectors:
+    - matchExpressions:
+        - key: topology
+          operator: In
+          values: [lan]
+        - key: kubernetes.io/hostname
+          operator: NotIn
+          values: [ubuntu]
