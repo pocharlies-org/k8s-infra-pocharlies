@@ -134,14 +134,20 @@ spec:
       nodeSelector: { workload: core }
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector: { matchLabels: { app: shared-valkey } }
-                topologyKey: kubernetes.io/hostname
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector: { matchLabels: { app: shared-valkey } }
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 3
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeAffinityPolicy: Honor
+          nodeTaintsPolicy: Honor
+          labelSelector: { matchLabels: { app: shared-valkey } }
       containers:
         - name: valkey
-          image: valkey/valkey:8-alpine
+          image: docker.io/valkey/valkey@sha256:77643d152547b446fc15cbafaff22004545663fcd40c6b28038ad283837baa75
           command: ["/bin/sh", "/scripts/start-valkey.sh"]
           env:
             - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
@@ -172,7 +178,7 @@ spec:
             requests: { cpu: 50m, memory: 256Mi }
             limits: { memory: 2560Mi }
         - name: sentinel
-          image: valkey/valkey:8-alpine
+          image: docker.io/valkey/valkey@sha256:77643d152547b446fc15cbafaff22004545663fcd40c6b28038ad283837baa75
           command: ["/bin/sh", "/scripts/start-sentinel.sh"]
           env:
             - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
@@ -195,7 +201,7 @@ spec:
             requests: { cpu: 20m, memory: 32Mi }
             limits: { memory: 96Mi }
         - name: exporter
-          image: oliver006/redis_exporter:v1.66.0
+          image: docker.io/oliver006/redis_exporter@sha256:d98e6db8094f491b95791e9f776b0ba30a20aeacb90e18334935d5e51bf2e6a1
           args:
             - --redis.addr=redis://localhost:6379
             - --redis.user=sentinel
@@ -228,6 +234,20 @@ spec:
         resources:
           requests:
             storage: 2Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: shared-valkey
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: shared-valkey
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -295,7 +315,7 @@ spec:
       nodeSelector: { workload: core }
       containers:
         - name: labeler
-          image: alpine/k8s:1.32.5
+          image: docker.io/alpine/k8s@sha256:bb8e5be4a1ed2d24bf7f7ccab74b594849c6b59feab1b9c8c0f39554e69678c1
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -442,6 +462,17 @@ spec:
                   - libreplay-web
                   - libreplay-worker
                   - libreplay-db-seed
+      ports:
+        - { protocol: TCP, port: 6379 }
+    # LiteLLM is admitted only to the Valkey data plane. Its current manifests
+    # do not configure a Sentinel-aware client, so port 26379 stays closed.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: litellm
+          podSelector:
+            matchLabels:
+              app: litellm
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
