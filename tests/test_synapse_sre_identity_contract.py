@@ -46,6 +46,7 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertIn("name: CLIENT_ID, value: synapse-draft-orchestrator", manifest)
         self.assertIn("name: ROLE_NAME, value: synapse-draft-m2m", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
+        self.assertEqual(manifest.count("activeDeadlineSeconds: 900"), 2)
         self.assertIn('argocd.argoproj.io/sync-wave: "22"', manifest)
         self.assertIn('synapse.e-dani.com/reconcile-contract-version: "1"', manifest)
         self.assertIn('name: RECONCILE_CONTRACT_VERSION, value: "1"', manifest)
@@ -62,6 +63,7 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertIn("scripts/synapse-sre-client.sh", kustomization)
         self.assertNotIn("manual/synapse-sre-client-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
+        self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertNotIn("SYNAPSE_SRE_CLIENT_SECRET", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
 

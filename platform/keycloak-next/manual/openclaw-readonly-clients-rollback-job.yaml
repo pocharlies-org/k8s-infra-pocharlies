@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/component: openclaw-readonly-clients
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 900
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
