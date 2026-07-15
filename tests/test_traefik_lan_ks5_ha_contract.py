@@ -120,7 +120,22 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
     def test_lan_vips_are_announced_only_from_physical_lan_nodes(self) -> None:
         self.assertEqual(
             self.l2_advertisement["spec"]["nodeSelectors"],
-            [{"matchLabels": {"topology": "lan"}}],
+            [
+                {
+                    "matchExpressions": [
+                        {
+                            "key": "topology",
+                            "operator": "In",
+                            "values": ["lan"],
+                        },
+                        {
+                            "key": "kubernetes.io/hostname",
+                            "operator": "NotIn",
+                            "values": ["ubuntu"],
+                        },
+                    ]
+                }
+            ],
         )
 
     def test_harbor_lan_resolves_to_the_cluster_service(self) -> None:
