@@ -21,6 +21,18 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
             )
         )
         self.coredns = documents[0]
+        metallb_documents = list(
+            yaml.safe_load_all(
+                (ROOT / "networking/metallb/ippool.yaml").read_text(
+                    encoding="utf-8"
+                )
+            )
+        )
+        self.l2_advertisement = next(
+            document
+            for document in metallb_documents
+            if document["kind"] == "L2Advertisement"
+        )
 
     def test_traefik_lan_is_ha_on_the_ks5_pool(self) -> None:
         self.assertGreaterEqual(self.values["deployment"]["replicas"], 2)
@@ -44,6 +56,15 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
                 "app.kubernetes.io/instance": "traefik-lan-traefik-lan",
                 "app.kubernetes.io/name": "traefik",
             },
+        )
+        self.assertEqual(
+            self.values["service"]["spec"]["externalTrafficPolicy"], "Cluster"
+        )
+
+    def test_lan_vips_are_announced_only_from_physical_lan_nodes(self) -> None:
+        self.assertEqual(
+            self.l2_advertisement["spec"]["nodeSelectors"],
+            [{"matchLabels": {"topology": "lan"}}],
         )
 
     def test_harbor_lan_resolves_to_the_cluster_service(self) -> None:
