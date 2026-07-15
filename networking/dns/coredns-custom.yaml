@@ -5,13 +5,17 @@ metadata:
   name: coredns-custom
   namespace: kube-system
 data:
-  # Cluster workloads must never hairpin through the home-lab MetalLB VIP.
-  # Preserve the TLS/SNI hostname while resolving it to the HA Traefik Service.
-  harbor-lan.override: |
-    rewrite name exact harbor.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
   edani-public-lan.server: |
     e-dani.com:53 {
       errors
+      # This more-specific e-dani.com server block wins over the root block.
+      # Rewrite Harbor here, then resolve the service through Kubernetes while
+      # preserving the original hostname in the answer for TLS/SNI.
+      rewrite name exact harbor.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+      }
       hosts {
         100.83.56.98 dgx.e-dani.com
         100.83.56.98 s3.e-dani.com

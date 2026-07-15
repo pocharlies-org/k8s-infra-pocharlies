@@ -139,13 +139,15 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
         )
 
     def test_harbor_lan_resolves_to_the_cluster_service(self) -> None:
-        rewrite = self.coredns["data"]["harbor-lan.override"].strip()
-        self.assertEqual(
-            rewrite,
+        self.assertNotIn("harbor-lan.override", self.coredns["data"])
+        server = self.coredns["data"]["edani-public-lan.server"]
+        self.assertIn(
             "rewrite name exact harbor.lan.e-dani.com "
             "traefik-lan.traefik-lan.svc.cluster.local",
+            server,
         )
-        self.assertNotIn("192.168.50.240", rewrite)
+        self.assertIn("kubernetes cluster.local in-addr.arpa ip6.arpa", server)
+        self.assertNotIn("192.168.50.240", server)
 
 
 if __name__ == "__main__":
