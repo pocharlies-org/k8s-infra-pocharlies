@@ -17,3 +17,10 @@ metadata:
 spec:
   ipAddressPools:
     - lan-pool
+  # RFC1918 VIPs must be announced only on nodes that are physically attached
+  # to the home LAN. With externalTrafficPolicy=Cluster the announcer may
+  # forward to healthy endpoints on OVH; the failed Ubuntu node is therefore
+  # not a runtime dependency and another Ready LAN speaker takes over.
+  nodeSelectors:
+    - matchLabels:
+        topology: lan

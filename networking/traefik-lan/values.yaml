@@ -58,7 +58,11 @@ service:
   annotations:
     metallb.io/loadBalancerIPs: 192.168.50.240
   spec:
-    externalTrafficPolicy: Local
+    # The Traefik workloads run on OVH, while MetalLB advertises this RFC1918
+    # VIP only from real LAN nodes. Cluster policy lets those announcers route
+    # traffic across the CNI to the HA OVH endpoints without requiring an
+    # ingress pod on the home-lab Ubuntu host.
+    externalTrafficPolicy: Cluster
 
 # Dashboard — internal only, will protect with SSO later
 ingressRoute:
