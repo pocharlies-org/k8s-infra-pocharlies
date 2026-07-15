@@ -34,16 +34,43 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
             if document["kind"] == "L2Advertisement"
         )
 
-    def test_traefik_lan_is_ha_on_the_ks5_pool(self) -> None:
-        self.assertGreaterEqual(self.values["deployment"]["replicas"], 2)
-        self.assertEqual(
-            self.values["nodeSelector"],
-            {"kubernetes.io/arch": "amd64", "node-pool": "ks5-nvme"},
-        )
-        self.assertNotIn("topology: lan", self.values_text)
+    def test_traefik_lan_is_ha_across_ovh_and_non_ubuntu_lan(self) -> None:
+        self.assertGreaterEqual(self.values["deployment"]["replicas"], 4)
+        self.assertNotIn("nodeSelector", self.values)
         self.assertEqual(
             self.values["podDisruptionBudget"],
-            {"enabled": True, "minAvailable": 1},
+            {"enabled": True, "minAvailable": 3},
+        )
+        node_terms = self.values["affinity"]["nodeAffinity"][
+            "requiredDuringSchedulingIgnoredDuringExecution"
+        ]["nodeSelectorTerms"]
+        self.assertEqual(
+            node_terms,
+            [
+                {
+                    "matchExpressions": [
+                        {
+                            "key": "node-pool",
+                            "operator": "In",
+                            "values": ["ks5-nvme"],
+                        }
+                    ]
+                },
+                {
+                    "matchExpressions": [
+                        {
+                            "key": "topology",
+                            "operator": "In",
+                            "values": ["lan"],
+                        },
+                        {
+                            "key": "kubernetes.io/hostname",
+                            "operator": "NotIn",
+                            "values": ["ubuntu"],
+                        },
+                    ]
+                },
+            ],
         )
         terms = self.values["affinity"]["podAntiAffinity"][
             "requiredDuringSchedulingIgnoredDuringExecution"
@@ -58,7 +85,36 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            self.values["service"]["spec"]["externalTrafficPolicy"], "Cluster"
+            self.values["service"]["spec"]["externalTrafficPolicy"], "Local"
+        )
+        self.assertEqual(
+            self.values["tolerations"],
+            [
+                {
+                    "key": "dedicated",
+                    "operator": "Equal",
+                    "value": "llm",
+                    "effect": "NoSchedule",
+                }
+            ],
+        )
+        self.assertEqual(
+            self.values["topologySpreadConstraints"],
+            [
+                {
+                    "maxSkew": 1,
+                    "topologyKey": "topology",
+                    "whenUnsatisfiable": "DoNotSchedule",
+                    "nodeAffinityPolicy": "Honor",
+                    "nodeTaintsPolicy": "Honor",
+                    "labelSelector": {
+                        "matchLabels": {
+                            "app.kubernetes.io/instance": "traefik-lan-traefik-lan",
+                            "app.kubernetes.io/name": "traefik",
+                        }
+                    },
+                }
+            ],
         )
 
     def test_lan_vips_are_announced_only_from_physical_lan_nodes(self) -> None:
