@@ -1,0 +1,774 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-system-backup-window
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/name: longhorn-system-backup
+    app.kubernetes.io/part-of: longhorn
+data:
+  # Fail-closed by default. A reviewed, time-bounded GitOps window must change
+  # these values and pause every expected Velero Schedule before a Job is
+  # derived manually from the permanently suspended CronJob below.
+  authorized: "false"
+  runId: closed
+  expiresAt: "1970-01-01T00:00:00Z"
+  changeRef: closed
+  expectedVeleroSchedules: >-
+    daily-aiops,daily-critical,daily-x86-critical,weekly-all
+  k8sInfraRollbackRevision: unset
+  dgxInfraRollbackRevision: unset
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-system-backup
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/name: longhorn-system-backup
+    app.kubernetes.io/part-of: longhorn
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-system-backup
+  namespace: longhorn-system
+rules:
+  # Read only the reviewed GitOps window. The runner cannot authorize itself.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["longhorn-system-backup-window"]
+    verbs: ["get"]
+  # The runner can create and retire only SystemBackup objects. Longhorn's own
+  # controller performs the backup; no restore mutation is granted here.
+  - apiGroups: ["longhorn.io"]
+    resources: ["systembackups"]
+    verbs: ["get", "list", "create", "delete"]
+  # Read-only preflight: target independence, volume health, backup activity,
+  # and the explicit absence of a SystemRestore.
+  - apiGroups: ["longhorn.io"]
+    resources: ["backuptargets", "backups", "volumes", "systemrestores"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-system-backup
+  namespace: longhorn-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-system-backup
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-system-backup
+    namespace: longhorn-system
+---
+# Cross-namespace read-only gate. A manual SystemBackup window requires every
+# known Velero Schedule to be paused and no Velero Backup to be active.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-system-backup-velero-reader
+  namespace: velero
+rules:
+  - apiGroups: ["velero.io"]
+    resources: ["backups", "schedules"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-system-backup-velero-reader
+  namespace: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-system-backup-velero-reader
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-system-backup
+    namespace: longhorn-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-system-backup
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/name: longhorn-system-backup
+    app.kubernetes.io/part-of: longhorn
+spec:
+  # This is a manual Job template, not a recurring schedule. Kubernetes
+  # requires a schedule field, but suspend must remain true permanently.
+  schedule: "0 0 1 1 *"
+  timeZone: Etc/UTC
+  # Never enable recurrence: the runner cannot prevent an independently
+  # authorized Velero write after its read-only gate. Use the reviewed GitOps
+  # window and derive exactly one Job manually.
+  suspend: true
+  # Defense in depth only if suspend is changed by mistake. This does not
+  # serialize Jobs derived manually; their deterministic SystemBackup does.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 900
+  jobTemplate:
+    spec:
+      # Do not create a second SystemBackup automatically after any uncertain
+      # result. An operator must classify it and open a new GitOps window.
+      backoffLimit: 0
+      # Jobs derived manually do not use CronJob history limits. Delete their
+      # pods and Job object one week after completion, after evidence export.
+      ttlSecondsAfterFinished: 604800
+      # Longhorn can wait up to 24 hours for volume backups. Keep the observer
+      # alive slightly longer; the deterministic SystemBackup is the lock.
+      activeDeadlineSeconds: 93600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: longhorn-system-backup
+            app.kubernetes.io/part-of: longhorn
+        spec:
+          serviceAccountName: longhorn-system-backup
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          enableServiceLinks: false
+          nodeSelector:
+            node-pool: ks5-nvme
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reconcile
+              image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-c"]
+              args:
+                - |
+                  import datetime
+                  import json
+                  import os
+                  import re
+                  import ssl
+                  import time
+                  import urllib.error
+                  import urllib.parse
+                  import urllib.request
+
+                  api = "https://kubernetes.default.svc"
+                  longhorn_namespace = "longhorn-system"
+                  velero_namespace = "velero"
+                  retain = int(os.environ["RETAIN"])
+                  max_wait_seconds = int(os.environ["MAX_WAIT_SECONDS"])
+                  poll_seconds = int(os.environ["POLL_SECONDS"])
+                  job_name = os.environ.get("JOB_NAME", "")
+                  manager_label_key = "backup.e-dani.com/managed-by"
+                  manager_label_value = "longhorn-system-backup"
+                  required_failure_domain = "external"
+                  window_name = "longhorn-system-backup-window"
+                  required_velero_schedules = {
+                      "daily-aiops",
+                      "daily-critical",
+                      "daily-x86-critical",
+                      "weekly-all",
+                  }
+
+                  token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                  ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                  with open(token_path, encoding="utf-8") as handle:
+                      token = handle.read().strip()
+                  context = ssl.create_default_context(cafile=ca_path)
+                  base_headers = {
+                      "Accept": "application/json",
+                      "Authorization": f"Bearer {token}",
+                  }
+
+                  def emit(level, event, **fields):
+                      record = {
+                          "ts": datetime.datetime.now(datetime.UTC).isoformat(),
+                          "level": level,
+                          "event": event,
+                          **fields,
+                      }
+                      print(json.dumps(record, sort_keys=True), flush=True)
+
+                  def request(method, path, body=None):
+                      headers = dict(base_headers)
+                      data = None
+                      if body is not None:
+                          headers["Content-Type"] = "application/json"
+                          data = json.dumps(body).encode()
+                      req = urllib.request.Request(
+                          api + path,
+                          data=data,
+                          headers=headers,
+                          method=method,
+                      )
+                      try:
+                          with urllib.request.urlopen(
+                              req, context=context, timeout=30
+                          ) as response:
+                              payload = response.read()
+                              return json.loads(payload) if payload else {}
+                      except urllib.error.HTTPError as exc:
+                          detail = exc.read().decode(errors="replace")[:1000]
+                          raise RuntimeError(
+                              f"Kubernetes API {method} {path} returned "
+                              f"HTTP {exc.code}: {detail}"
+                          ) from exc
+
+                  def list_items(path):
+                      return request("GET", path).get("items", [])
+
+                  def longhorn_path(resource, name=None):
+                      path = (
+                          "/apis/longhorn.io/v1beta2/namespaces/"
+                          f"{longhorn_namespace}/{resource}"
+                      )
+                      if name:
+                          path += "/" + urllib.parse.quote(name, safe="")
+                      return path
+
+                  def fail(event, **fields):
+                      emit("error", event, **fields)
+                      raise RuntimeError(event)
+
+                  def parse_rfc3339(value, field):
+                      try:
+                          parsed = datetime.datetime.fromisoformat(
+                              value.replace("Z", "+00:00")
+                          )
+                      except (AttributeError, ValueError) as exc:
+                          fail("invalid_window_timestamp", field=field, value=value)
+                      if parsed.tzinfo is None:
+                          fail("invalid_window_timestamp", field=field, value=value)
+                      return parsed.astimezone(datetime.UTC)
+
+                  def read_authorized_window(
+                      require_full_duration=False,
+                      expected_window=None,
+                  ):
+                      config = request(
+                          "GET",
+                          f"/api/v1/namespaces/{longhorn_namespace}/"
+                          f"configmaps/{window_name}",
+                      )
+                      data = config.get("data", {})
+                      if data.get("authorized") != "true":
+                          fail("system_backup_window_not_authorized")
+
+                      run_id = data.get("runId", "")
+                      if not re.fullmatch(
+                          r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?",
+                          run_id,
+                      ):
+                          fail("invalid_system_backup_run_id", run_id=run_id)
+                      expires_at = parse_rfc3339(
+                          data.get("expiresAt", ""), "expiresAt"
+                      )
+                      now = datetime.datetime.now(datetime.UTC)
+                      if expires_at <= now:
+                          fail(
+                              "system_backup_window_expired",
+                              expires_at=expires_at.isoformat(),
+                          )
+                      if require_full_duration:
+                          minimum_expiry = now + datetime.timedelta(
+                              seconds=max_wait_seconds + 600
+                          )
+                          maximum_expiry = now + datetime.timedelta(hours=30)
+                          if expires_at < minimum_expiry:
+                              fail(
+                                  "system_backup_window_too_short",
+                                  expires_at=expires_at.isoformat(),
+                                  required_until=minimum_expiry.isoformat(),
+                              )
+                          if expires_at > maximum_expiry:
+                              fail(
+                                  "system_backup_window_too_long",
+                                  expires_at=expires_at.isoformat(),
+                                  maximum_until=maximum_expiry.isoformat(),
+                              )
+
+                      change_ref = data.get("changeRef", "")
+                      if change_ref in {"", "closed", "unset"}:
+                          fail("invalid_system_backup_change_ref")
+                      rollback_revisions = {}
+                      for field in (
+                          "k8sInfraRollbackRevision",
+                          "dgxInfraRollbackRevision",
+                      ):
+                          revision = data.get(field, "")
+                          if not re.fullmatch(r"[0-9a-f]{40}", revision):
+                              fail(
+                                  "invalid_system_backup_rollback_revision",
+                                  field=field,
+                              )
+                          rollback_revisions[field] = revision
+
+                      expected_schedules = {
+                          value.strip()
+                          for value in data.get(
+                              "expectedVeleroSchedules", ""
+                          ).split(",")
+                          if value.strip()
+                      }
+                      if expected_schedules != required_velero_schedules:
+                          fail(
+                              "velero_schedule_inventory_mismatch",
+                              expected=sorted(required_velero_schedules),
+                              configured=sorted(expected_schedules),
+                          )
+                      normalized_window = {
+                          "run_id": run_id,
+                          "expires_at": expires_at,
+                          "change_ref": change_ref,
+                          "expected_schedules": tuple(
+                              sorted(expected_schedules)
+                          ),
+                          **rollback_revisions,
+                      }
+                      if (
+                          expected_window is not None
+                          and normalized_window != expected_window
+                      ):
+                          changed_fields = sorted(
+                              key
+                              for key in normalized_window
+                              if normalized_window.get(key)
+                              != expected_window.get(key)
+                          )
+                          fail(
+                              "system_backup_window_changed",
+                              changed_fields=changed_fields,
+                          )
+                      return normalized_window
+
+                  terminal_velero_phases = {
+                      "Completed",
+                      "PartiallyFailed",
+                      "Failed",
+                      "FailedValidation",
+                      "Canceled",
+                      "Cancelled",
+                  }
+
+                  def validate_velero_exclusion(expected_snapshot=None):
+                      schedules = list_items(
+                          f"/apis/velero.io/v1/namespaces/"
+                          f"{velero_namespace}/schedules"
+                      )
+                      schedules_by_name = {
+                          item.get("metadata", {}).get("name", "unknown"): item
+                          for item in schedules
+                      }
+                      actual_schedules = set(schedules_by_name)
+                      if actual_schedules != required_velero_schedules:
+                          fail(
+                              "velero_schedule_inventory_mismatch",
+                              expected=sorted(required_velero_schedules),
+                              actual=sorted(actual_schedules),
+                          )
+                      unpaused_schedules = sorted(
+                          name
+                          for name, item in schedules_by_name.items()
+                          if item.get("spec", {}).get("paused") is not True
+                      )
+                      if unpaused_schedules:
+                          fail(
+                              "velero_schedules_not_paused",
+                              schedules=unpaused_schedules,
+                          )
+                      schedule_fingerprint = []
+                      for name, item in schedules_by_name.items():
+                          metadata = item.get("metadata", {})
+                          uid = metadata.get("uid", "")
+                          generation = metadata.get("generation")
+                          if not uid or not isinstance(generation, int):
+                              fail(
+                                  "velero_schedule_identity_missing",
+                                  schedule=name,
+                              )
+                          schedule_fingerprint.append(
+                              (name, uid, generation)
+                          )
+                      schedule_fingerprint = tuple(
+                          sorted(schedule_fingerprint)
+                      )
+
+                      velero_backups = list_items(
+                          f"/apis/velero.io/v1/namespaces/"
+                          f"{velero_namespace}/backups"
+                      )
+                      active_velero_backups = [
+                          item.get("metadata", {}).get("name", "unknown")
+                          for item in velero_backups
+                          if item.get("status", {}).get("phase")
+                          not in terminal_velero_phases
+                      ]
+                      if active_velero_backups:
+                          fail(
+                              "active_or_unknown_velero_backup",
+                              backups=active_velero_backups[:20],
+                          )
+                      backup_names_by_uid = {}
+                      for item in velero_backups:
+                          metadata = item.get("metadata", {})
+                          uid = metadata.get("uid", "")
+                          if not uid:
+                              fail(
+                                  "velero_backup_identity_missing",
+                                  backup=metadata.get("name", "unknown"),
+                              )
+                          backup_names_by_uid[uid] = metadata.get(
+                              "name", "unknown"
+                          )
+                      backup_uids = frozenset(backup_names_by_uid)
+                      snapshot = {
+                          "schedule_fingerprint": schedule_fingerprint,
+                          "backup_uids": backup_uids,
+                      }
+                      if expected_snapshot is not None:
+                          if (
+                              schedule_fingerprint
+                              != expected_snapshot["schedule_fingerprint"]
+                          ):
+                              fail("velero_schedule_changed_during_window")
+                          new_backup_uids = (
+                              backup_uids - expected_snapshot["backup_uids"]
+                          )
+                          if new_backup_uids:
+                              fail(
+                                  "velero_backup_created_during_window",
+                                  backups=sorted(
+                                      backup_names_by_uid[uid]
+                                      for uid in new_backup_uids
+                                  )[:20],
+                              )
+                      return snapshot
+
+                  if retain != 4:
+                      fail("invalid_retention", expected=4, actual=retain)
+
+                  window = read_authorized_window(require_full_duration=True)
+                  run_id = window["run_id"]
+                  expected_job_name = f"longhorn-system-backup-job-{run_id}"
+                  if job_name != expected_job_name:
+                      fail(
+                          "system_backup_job_name_mismatch",
+                          expected=expected_job_name,
+                          actual=job_name or "unset",
+                      )
+                  backup_name = f"longhorn-system-backup-{run_id}"
+                  velero_snapshot = validate_velero_exclusion()
+
+                  backup_targets = list_items(longhorn_path("backuptargets"))
+                  targets_by_name = {
+                      item["metadata"]["name"]: item for item in backup_targets
+                  }
+
+                  def validate_external_target(target_name):
+                      target = targets_by_name.get(target_name)
+                      if target is None:
+                          fail("backup_target_missing", target=target_name)
+                      if target.get("status", {}).get("available") is not True:
+                          fail("backup_target_unavailable", target=target_name)
+                      labels = target.get("metadata", {}).get("labels", {})
+                      failure_domain = labels.get(
+                          "backup.e-dani.com/failure-domain", ""
+                      )
+                      if failure_domain != required_failure_domain:
+                          fail(
+                              "backup_target_not_external",
+                              target=target_name,
+                              failure_domain=failure_domain or "unset",
+                          )
+                      target_url = target.get("spec", {}).get("backupTargetURL", "")
+                      internal_markers = (
+                          "100.83.56.98",
+                          ".svc.cluster.local",
+                          "localhost",
+                          "127.0.0.1",
+                      )
+                      if not target_url or any(
+                          marker in target_url for marker in internal_markers
+                      ):
+                          fail(
+                              "backup_target_url_internal_or_empty",
+                              target=target_name,
+                              target_url=target_url,
+                          )
+
+                  # Longhorn always stores the resource bundle in target/default.
+                  validate_external_target("default")
+
+                  system_backups = list_items(longhorn_path("systembackups"))
+                  if any(
+                      item.get("metadata", {}).get("name") == backup_name
+                      for item in system_backups
+                  ):
+                      # The deterministic name is the one-shot lock. Concurrent
+                      # Jobs race on one Kubernetes object and a crashed Job
+                      # cannot replay while this retained record exists. Git
+                      # history is the durable no-reuse ledger for old run IDs.
+                      fail(
+                          "system_backup_window_already_consumed",
+                          name=backup_name,
+                      )
+                  active_system_backups = [
+                      item.get("metadata", {}).get("name", "unknown")
+                      for item in system_backups
+                      if item.get("status", {}).get("state")
+                      not in {"Ready", "Error"}
+                  ]
+                  if active_system_backups:
+                      fail(
+                          "active_or_unknown_system_backup",
+                          backups=active_system_backups[:20],
+                      )
+
+                  # Restore is deliberately outside this controller's authority.
+                  # Even a completed leftover object blocks the backup schedule
+                  # until an operator classifies it.
+                  system_restores = list_items(longhorn_path("systemrestores"))
+                  if system_restores:
+                      fail(
+                          "system_restore_present",
+                          restores=[
+                              item.get("metadata", {}).get("name", "unknown")
+                              for item in system_restores[:20]
+                          ],
+                      )
+
+                  longhorn_backups = list_items(longhorn_path("backups"))
+                  terminal_longhorn_backup_states = {
+                      "Completed",
+                      "Error",
+                  }
+                  active_longhorn_backups = [
+                      item.get("metadata", {}).get("name", "unknown")
+                      for item in longhorn_backups
+                      if item.get("status", {}).get("state")
+                      not in terminal_longhorn_backup_states
+                  ]
+                  if active_longhorn_backups:
+                      fail(
+                          "active_or_unknown_longhorn_backup",
+                          backups=active_longhorn_backups[:20],
+                      )
+
+                  volumes = list_items(longhorn_path("volumes"))
+                  if not volumes:
+                      fail("no_longhorn_volumes")
+                  unsafe_volumes = []
+                  for item in volumes:
+                      name = item.get("metadata", {}).get("name", "unknown")
+                      status = item.get("status", {})
+                      state = status.get("state") or "unset"
+                      robustness = status.get("robustness") or "unset"
+                      safe = (
+                          state == "attached" and robustness == "healthy"
+                      ) or (
+                          state == "detached"
+                          and robustness in {"healthy", "unknown"}
+                      )
+                      if not safe:
+                          unsafe_volumes.append(
+                              {
+                                  "name": name,
+                                  "state": state,
+                                  "robustness": robustness,
+                              }
+                          )
+                  if unsafe_volumes:
+                      fail(
+                          "unsafe_longhorn_volume_state",
+                          count=len(unsafe_volumes),
+                          volumes=unsafe_volumes[:20],
+                      )
+
+                  eligible_volumes = [
+                      item
+                      for item in volumes
+                      if item.get("status", {}).get("isStandby") is not True
+                      and item.get("spec", {}).get("cloneMode") != "linked-clone"
+                  ]
+                  missing_last_backup = [
+                      item.get("metadata", {}).get("name", "unknown")
+                      for item in eligible_volumes
+                      if not item.get("status", {}).get("lastBackup")
+                  ]
+                  if missing_last_backup:
+                      fail(
+                          "volumes_without_last_backup",
+                          count=len(missing_last_backup),
+                          volumes=missing_last_backup[:20],
+                      )
+
+                  referenced_targets = sorted(
+                      {
+                          item.get("spec", {}).get("backupTargetName") or "default"
+                          for item in eligible_volumes
+                      }
+                  )
+                  for target_name in referenced_targets:
+                      validate_external_target(target_name)
+
+                  backup_body = {
+                      "apiVersion": "longhorn.io/v1beta2",
+                      "kind": "SystemBackup",
+                      "metadata": {
+                          "name": backup_name,
+                          "namespace": longhorn_namespace,
+                          "labels": {
+                              manager_label_key: manager_label_value,
+                              "backup.e-dani.com/volume-policy": "if-not-present",
+                              "backup.e-dani.com/window-run-id": run_id,
+                          },
+                          "annotations": {
+                              "backup.e-dani.com/change-ref": window["change_ref"],
+                              "backup.e-dani.com/window-expires-at": window[
+                                  "expires_at"
+                              ].isoformat(),
+                          },
+                      },
+                      "spec": {"volumeBackupPolicy": "if-not-present"},
+                  }
+                  # Re-read both gates immediately before the only create. The
+                  # surrounding change freeze is still mandatory: read-only
+                  # RBAC cannot lock out an independently authorized writer.
+                  read_authorized_window(
+                      require_full_duration=True,
+                      expected_window=window,
+                  )
+                  validate_velero_exclusion(
+                      expected_snapshot=velero_snapshot
+                  )
+                  emit(
+                      "info",
+                      "creating_system_backup",
+                      name=backup_name,
+                      eligible_volumes=len(eligible_volumes),
+                      targets=referenced_targets,
+                  )
+                  request("POST", longhorn_path("systembackups"), backup_body)
+
+                  deadline = time.monotonic() + max_wait_seconds
+                  while True:
+                      read_authorized_window(expected_window=window)
+                      validate_velero_exclusion(
+                          expected_snapshot=velero_snapshot
+                      )
+                      system_backup = request(
+                          "GET", longhorn_path("systembackups", backup_name)
+                      )
+                      state = system_backup.get("status", {}).get("state", "")
+                      if state == "Ready":
+                          break
+                      if state == "Error":
+                          fail(
+                              "system_backup_error",
+                              name=backup_name,
+                              conditions=system_backup.get("status", {}).get(
+                                  "conditions", []
+                              ),
+                          )
+                      if time.monotonic() >= deadline:
+                          fail(
+                              "system_backup_wait_timeout",
+                              name=backup_name,
+                              state=state or "unset",
+                          )
+                      emit(
+                          "info",
+                          "waiting_for_system_backup",
+                          name=backup_name,
+                          state=state or "unset",
+                      )
+                      time.sleep(poll_seconds)
+
+                  # Retention is applied only after a new Ready backup exists.
+                  # Only backups created by this runner and already Ready may be
+                  # deleted. Manual and Error backups remain untouched.
+                  read_authorized_window(expected_window=window)
+                  validate_velero_exclusion(
+                      expected_snapshot=velero_snapshot
+                  )
+                  managed_ready = [
+                      item
+                      for item in list_items(longhorn_path("systembackups"))
+                      if item.get("metadata", {}).get("labels", {}).get(
+                          manager_label_key
+                      )
+                      == manager_label_value
+                      and item.get("status", {}).get("state") == "Ready"
+                  ]
+                  managed_ready.sort(
+                      key=lambda item: item.get("status", {}).get("createdAt")
+                      or item.get("metadata", {}).get("creationTimestamp", ""),
+                      reverse=True,
+                  )
+                  expired = managed_ready[retain:]
+                  for item in expired:
+                      expired_name = item["metadata"]["name"]
+                      emit(
+                          "info",
+                          "deleting_expired_system_backup",
+                          name=expired_name,
+                      )
+                      request(
+                          "DELETE",
+                          longhorn_path("systembackups", expired_name),
+                      )
+
+                  emit(
+                      "info",
+                      "system_backup_ready",
+                      name=backup_name,
+                      retained=min(len(managed_ready), retain),
+                      expired_deleted=len(expired),
+                  )
+              env:
+                - name: JOB_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['batch.kubernetes.io/job-name']
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: HOME
+                  value: /tmp
+                - name: TMPDIR
+                  value: /tmp
+                - name: RETAIN
+                  value: "4"
+                - name: MAX_WAIT_SECONDS
+                  value: "90000"
+                - name: POLL_SECONDS
+                  value: "15"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 48Mi
+                limits:
+                  cpu: 200m
+                  memory: 192Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 32Mi
