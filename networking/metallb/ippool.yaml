@@ -18,9 +18,8 @@ spec:
   ipAddressPools:
     - lan-pool
   # RFC1918 VIPs must be announced only on nodes that are physically attached
-  # to the home LAN. With externalTrafficPolicy=Cluster the announcer may
-  # forward to healthy endpoints on OVH; the failed Ubuntu node is therefore
-  # not a runtime dependency and another Ready LAN speaker takes over.
+  # to the home LAN. Services using externalTrafficPolicy=Local additionally
+  # require a healthy local endpoint; Traefik supplies two non-Ubuntu ones.
   nodeSelectors:
     - matchLabels:
         topology: lan
