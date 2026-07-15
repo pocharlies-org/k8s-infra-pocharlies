@@ -42,6 +42,13 @@ jobs:
       - name: Validate Velero operability contract
         run: python3 -m unittest tests/test_velero_operability_contract.py
 
+  longhorn-systembackup-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fail-closed Longhorn SystemBackup contract
+        run: python3 -m unittest tests/test_longhorn_systembackup_contract.py
+
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
     steps:
