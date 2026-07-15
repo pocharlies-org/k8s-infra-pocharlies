@@ -13,11 +13,19 @@ RUNBOOK = ROOT / "docs" / "runbook-litellm-shared-valkey-ha-prerequisite.md"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 TEST_LOCK = ROOT / "tests" / "requirements-shared-valkey-ha.lock"
 
-CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"
+CHECKOUT_SHA = "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 SETUP_PYTHON_SHA = "ece7cb06caefa5fff74198d8649806c4678c61a1"
 PYYAML_SHA256 = "80bab7bfc629882493af4aa31a4cfa43a4c57c83813253626916b8c7ada83476"
 KUBECTL_VERSION = "v1.36.0"
 KUBECTL_SHA256 = "123d8c8844f46b1244c547fffb3c17180c0c26dac9890589fe7e67763298748e"
+VALKEY_IMAGE = (
+    "docker.io/valkey/valkey"
+    "@sha256:77643d152547b446fc15cbafaff22004545663fcd40c6b28038ad283837baa75"
+)
+EXPORTER_IMAGE = (
+    "docker.io/oliver006/redis_exporter"
+    "@sha256:d98e6db8094f491b95791e9f776b0ba30a20aeacb90e18334935d5e51bf2e6a1"
+)
 
 
 def load_documents(text: str):
@@ -127,6 +135,22 @@ class SharedValkeyLitellmHaContractTest(unittest.TestCase):
         self.assertEqual(claim["resources"]["requests"]["storage"], "2Gi")
         self.assertFalse(any(doc["kind"] == "Secret" for doc in self.documents))
 
+    def test_runtime_images_are_pinned_to_live_proven_digests(self) -> None:
+        statefulset = find_resource(self.documents, "StatefulSet", "shared-valkey")
+        containers = {
+            container["name"]: container
+            for container in statefulset["spec"]["template"]["spec"]["containers"]
+        }
+        self.assertEqual(containers["valkey"]["image"], VALKEY_IMAGE)
+        self.assertEqual(containers["sentinel"]["image"], VALKEY_IMAGE)
+        self.assertEqual(containers["exporter"]["image"], EXPORTER_IMAGE)
+        self.assertTrue(
+            all(
+                "@sha256:" in container["image"]
+                for container in containers.values()
+            )
+        )
+
     def test_runbook_keeps_litellm_cutover_fail_closed(self) -> None:
         runbook = RUNBOOK.read_text(encoding="utf-8")
         self.assertIn("Do not scale LiteLLM above one replica", runbook)
@@ -135,6 +159,11 @@ class SharedValkeyLitellmHaContractTest(unittest.TestCase):
         self.assertIn("remains closed", runbook)
         self.assertIn("Make-before-break blocker for LiteLLM", runbook)
         self.assertIn("controlled Valkey failover", runbook)
+        self.assertIn("pre-change live baseline is intentionally heterogeneous", runbook)
+        self.assertIn("`8-alpine` tag was mutable", runbook)
+        self.assertIn("8.1.7", runbook)
+        self.assertIn("to 8.1.8 patch update", runbook)
+        self.assertIn("live `imageID` values to converge", runbook)
 
     def test_ci_job_pins_actions_and_hashed_minimal_dependency(self) -> None:
         workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))

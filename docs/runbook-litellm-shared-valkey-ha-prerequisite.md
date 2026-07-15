@@ -15,6 +15,9 @@ out-of-Git `shared-valkey-acl` Secret.
   voluntary disruptions.
 - The existing Sentinel services, quorum, master-labeler, AOF settings,
   `ReadWriteOnce` Longhorn claims, and Service ports are unchanged.
+- Valkey/Sentinel and exporter images are fixed to immutable registry digests.
+  The Valkey digest is the 8.1.8 image already serving ordinals 0 and 2; the
+  exporter digest is already common to all three ordinals.
 - NetworkPolicy admits `litellm/app=litellm` only on TCP `6379`. TCP `26379`
   remains closed because the current LiteLLM manifest does not configure a
   Sentinel-aware client.
@@ -57,3 +60,12 @@ three schedulable `workload=core` hostnames exist. Before syncing, verify three
 Ready eligible nodes, healthy Longhorn volumes/backups, one Valkey master and two
 replicas, and zero active maintenance. Roll one ordinal at a time and stop if
 any pod, PVC attachment, Sentinel quorum, replication, or AOF check is unhealthy.
+
+The pre-change live baseline is intentionally heterogeneous because the old
+`8-alpine` tag was mutable: ordinals 0 and 2 serve Valkey 8.1.8 at digest
+`77643d152547...`, while ordinal 1 serves Valkey 8.1.7 at digest
+`b02723532650...`. The controlled rollout therefore includes an explicit 8.1.7
+to 8.1.8 patch update for ordinal 1. Do not sync this as an unattended bulk
+restart: take the required backup, verify quorum after each ordinal, and require
+all three live `imageID` values to converge to the declared digest before
+closing the operation.
