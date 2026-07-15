@@ -29,6 +29,7 @@ class KeycloakAgentGatewayRoleContractTest(unittest.TestCase):
     def test_job_is_postsync_nonroot_pinned_and_tokenless(self):
         manifest = (BASE / "agentgateway-write-role-job.yaml").read_text()
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
+        self.assertIn("activeDeadlineSeconds: 900", manifest)
         self.assertIn("automountServiceAccountToken: false", manifest)
         self.assertIn("runAsNonRoot: true", manifest)
         self.assertIn("readOnlyRootFilesystem: true", manifest)
@@ -45,6 +46,7 @@ class KeycloakAgentGatewayRoleContractTest(unittest.TestCase):
         self.assertIn("scripts/agentgateway-write-role.sh", kustomization)
         self.assertNotIn("manual/agentgateway-write-role-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
+        self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
 
 
