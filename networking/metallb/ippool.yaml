@@ -21,5 +21,10 @@ spec:
   # to the home LAN. Services using externalTrafficPolicy=Local additionally
   # require a healthy local endpoint; Traefik supplies two non-Ubuntu ones.
   nodeSelectors:
-    - matchLabels:
-        topology: lan
+    - matchExpressions:
+        - key: topology
+          operator: In
+          values: [lan]
+        - key: kubernetes.io/hostname
+          operator: NotIn
+          values: [ubuntu]
