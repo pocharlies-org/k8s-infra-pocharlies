@@ -315,7 +315,7 @@ spec:
       nodeSelector: { workload: core }
       containers:
         - name: labeler
-          image: alpine/k8s:1.32.5
+          image: docker.io/alpine/k8s@sha256:bb8e5be4a1ed2d24bf7f7ccab74b594849c6b59feab1b9c8c0f39554e69678c1
           command: ["/bin/sh", "-c"]
           args:
             - |

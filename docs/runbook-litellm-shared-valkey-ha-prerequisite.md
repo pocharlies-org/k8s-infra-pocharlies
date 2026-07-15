@@ -15,9 +15,11 @@ out-of-Git `shared-valkey-acl` Secret.
   voluntary disruptions.
 - The existing Sentinel services, quorum, master-labeler, AOF settings,
   `ReadWriteOnce` Longhorn claims, and Service ports are unchanged.
-- Valkey/Sentinel and exporter images are fixed to immutable registry digests.
+- Valkey/Sentinel, exporter and the RBAC-bearing master-labeler images are fixed
+  to immutable registry digests.
   The Valkey digest is the 8.1.8 image already serving ordinals 0 and 2; the
-  exporter digest is already common to all three ordinals.
+  exporter digest is already common to all three ordinals, and the labeler
+  digest is the live-proven Kubernetes 1.32.5 client image.
 - NetworkPolicy admits `litellm/app=litellm` only on TCP `6379`. TCP `26379`
   remains closed because the current LiteLLM manifest does not configure a
   Sentinel-aware client.

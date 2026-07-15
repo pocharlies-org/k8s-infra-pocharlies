@@ -26,6 +26,10 @@ EXPORTER_IMAGE = (
     "docker.io/oliver006/redis_exporter"
     "@sha256:d98e6db8094f491b95791e9f776b0ba30a20aeacb90e18334935d5e51bf2e6a1"
 )
+LABELER_IMAGE = (
+    "docker.io/alpine/k8s"
+    "@sha256:bb8e5be4a1ed2d24bf7f7ccab74b594849c6b59feab1b9c8c0f39554e69678c1"
+)
 
 
 def load_documents(text: str):
@@ -150,6 +154,14 @@ class SharedValkeyLitellmHaContractTest(unittest.TestCase):
                 for container in containers.values()
             )
         )
+
+        labeler = find_resource(
+            self.documents, "Deployment", "shared-valkey-master-labeler"
+        )
+        labeler_containers = labeler["spec"]["template"]["spec"]["containers"]
+        self.assertEqual(len(labeler_containers), 1)
+        self.assertEqual(labeler_containers[0]["name"], "labeler")
+        self.assertEqual(labeler_containers[0]["image"], LABELER_IMAGE)
 
     def test_runbook_keeps_litellm_cutover_fail_closed(self) -> None:
         runbook = RUNBOOK.read_text(encoding="utf-8")
