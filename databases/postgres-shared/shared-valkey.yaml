@@ -134,11 +134,17 @@ spec:
       nodeSelector: { workload: core }
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector: { matchLabels: { app: shared-valkey } }
-                topologyKey: kubernetes.io/hostname
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector: { matchLabels: { app: shared-valkey } }
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 3
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeAffinityPolicy: Honor
+          nodeTaintsPolicy: Honor
+          labelSelector: { matchLabels: { app: shared-valkey } }
       containers:
         - name: valkey
           image: valkey/valkey:8-alpine
@@ -228,6 +234,20 @@ spec:
         resources:
           requests:
             storage: 2Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: shared-valkey
+  namespace: databases
+  labels:
+    app: shared-valkey
+    app.kubernetes.io/component: shared-valkey
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: shared-valkey
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -442,6 +462,17 @@ spec:
                   - libreplay-web
                   - libreplay-worker
                   - libreplay-db-seed
+      ports:
+        - { protocol: TCP, port: 6379 }
+    # LiteLLM is admitted only to the Valkey data plane. Its current manifests
+    # do not configure a Sentinel-aware client, so port 26379 stays closed.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: litellm
+          podSelector:
+            matchLabels:
+              app: litellm
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
