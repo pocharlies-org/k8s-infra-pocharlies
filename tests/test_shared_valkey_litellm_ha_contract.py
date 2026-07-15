@@ -16,6 +16,8 @@ TEST_LOCK = ROOT / "tests" / "requirements-shared-valkey-ha.lock"
 CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"
 SETUP_PYTHON_SHA = "ece7cb06caefa5fff74198d8649806c4678c61a1"
 PYYAML_SHA256 = "80bab7bfc629882493af4aa31a4cfa43a4c57c83813253626916b8c7ada83476"
+KUBECTL_VERSION = "v1.36.0"
+KUBECTL_SHA256 = "123d8c8844f46b1244c547fffb3c17180c0c26dac9890589fe7e67763298748e"
 
 
 def load_documents(text: str):
@@ -156,6 +158,24 @@ class SharedValkeyLitellmHaContractTest(unittest.TestCase):
         self.assertIn("--require-hashes --only-binary=PyYAML", install)
         self.assertIn("tests/requirements-shared-valkey-ha.lock", install)
         self.assertNotIn("requirements.txt", install)
+
+        kubectl_install = steps[3]
+        self.assertEqual(kubectl_install["name"], "Install pinned kubectl")
+        self.assertEqual(
+            kubectl_install["env"],
+            {
+                "KUBECTL_VERSION": KUBECTL_VERSION,
+                "KUBECTL_SHA256": KUBECTL_SHA256,
+            },
+        )
+        kubectl_script = kubectl_install["run"]
+        self.assertIn(
+            'https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl',
+            kubectl_script,
+        )
+        self.assertIn("sha256sum --check --strict -", kubectl_script)
+        self.assertIn('>> "${GITHUB_PATH}"', kubectl_script)
+        self.assertNotIn("stable.txt", kubectl_script)
 
         lock = TEST_LOCK.read_text(encoding="utf-8")
         self.assertIn("PyYAML==6.0.2", lock)

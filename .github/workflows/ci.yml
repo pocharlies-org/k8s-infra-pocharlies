@@ -69,6 +69,22 @@ jobs:
           python -m pip install --disable-pip-version-check \
             --require-hashes --only-binary=PyYAML \
             -r tests/requirements-shared-valkey-ha.lock
+      - name: Install pinned kubectl
+        env:
+          KUBECTL_VERSION: v1.36.0
+          KUBECTL_SHA256: 123d8c8844f46b1244c547fffb3c17180c0c26dac9890589fe7e67763298748e
+        run: |
+          test "$(uname -m)" = x86_64
+          install_dir="${RUNNER_TEMP}/kubectl-bin"
+          mkdir -p "${install_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --silent --show-error \
+            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+            --output "${install_dir}/kubectl"
+          printf '%s  %s\n' "${KUBECTL_SHA256}" "${install_dir}/kubectl" \
+            | sha256sum --check --strict -
+          chmod 0755 "${install_dir}/kubectl"
+          printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
       - name: Validate shared Valkey HA and LiteLLM admission contract
         run: |
           kubectl version --client
