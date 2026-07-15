@@ -9,12 +9,12 @@ data:
     {
       "loadConcurrency": {
         "globalConfig": 1,
-        "prepareQueueLength": 12
+        "prepareQueueLength": 6
       },
       "podResources": {
-        "cpuRequest": "100m",
+        "cpuRequest": "10m",
         "cpuLimit": "1000m",
-        "memoryRequest": "256Mi",
+        "memoryRequest": "128Mi",
         "memoryLimit": "1Gi"
       }
     }

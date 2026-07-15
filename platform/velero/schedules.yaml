@@ -24,6 +24,9 @@ spec:
       - kube-system
     snapshotMoveData: true
     defaultVolumesToFsBackup: true
+    resourcePolicy:
+      kind: ConfigMap
+      name: velero-fsb-volume-policy
     storageLocation: default
     volumeSnapshotLocations:
       - default
@@ -64,6 +67,9 @@ spec:
       - aiops
     snapshotMoveData: true
     defaultVolumesToFsBackup: true
+    resourcePolicy:
+      kind: ConfigMap
+      name: velero-fsb-volume-policy
     storageLocation: default
     volumeSnapshotLocations:
       - default
@@ -85,6 +91,9 @@ spec:
       - kube-node-lease
     snapshotMoveData: true
     defaultVolumesToFsBackup: true
+    resourcePolicy:
+      kind: ConfigMap
+      name: velero-fsb-volume-policy
     storageLocation: default
     volumeSnapshotLocations:
       - default
