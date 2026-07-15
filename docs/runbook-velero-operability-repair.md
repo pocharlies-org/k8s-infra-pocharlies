@@ -1,5 +1,10 @@
 # Velero 1.18 operability repair
 
+> The 2026-07-10 repair below is historical. For the 2026-07-15 follow-up
+> (emptyDir selection, daily Kopia maintenance and saturated-node scheduling),
+> use `runbook-velero-fsb-maintenance-followup.md`. Its values and gates
+> supersede the frequency, queue length and data-mover requests below.
+
 This runbook repairs two independent production faults without scheduling the
 Velero server or repository-maintenance jobs on `ubuntu`:
 
