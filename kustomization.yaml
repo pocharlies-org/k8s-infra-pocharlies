@@ -30,6 +30,7 @@ resources:
   - storage/longhorn/attach-only-settings.yaml
   - storage/longhorn/openclaw-sauvage-backup-target.yaml
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
+  - storage/longhorn/system-backup-cron.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
