@@ -59,12 +59,16 @@ jobs:
   shared-valkey-litellm-ha-contract:
     runs-on: arc-k8s
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
       - name: Install manifest test dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
+        run: |
+          test "$(uname -m)" = x86_64
+          python -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary=PyYAML \
+            -r tests/requirements-shared-valkey-ha.lock
       - name: Validate shared Valkey HA and LiteLLM admission contract
         run: |
           kubectl version --client

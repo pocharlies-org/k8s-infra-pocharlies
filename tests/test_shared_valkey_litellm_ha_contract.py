@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "databases" / "postgres-shared"
 MANIFEST = BASE / "shared-valkey.yaml"
 RUNBOOK = ROOT / "docs" / "runbook-litellm-shared-valkey-ha-prerequisite.md"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+TEST_LOCK = ROOT / "tests" / "requirements-shared-valkey-ha.lock"
+
+CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"
+SETUP_PYTHON_SHA = "ece7cb06caefa5fff74198d8649806c4678c61a1"
+PYYAML_SHA256 = "80bab7bfc629882493af4aa31a4cfa43a4c57c83813253626916b8c7ada83476"
 
 
 def load_documents(text: str):
@@ -127,6 +133,40 @@ class SharedValkeyLitellmHaContractTest(unittest.TestCase):
         self.assertIn("remains closed", runbook)
         self.assertIn("Make-before-break blocker for LiteLLM", runbook)
         self.assertIn("controlled Valkey failover", runbook)
+
+    def test_ci_job_pins_actions_and_hashed_minimal_dependency(self) -> None:
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+        job = workflow["jobs"]["shared-valkey-litellm-ha-contract"]
+        steps = job["steps"]
+        self.assertEqual(steps[0]["uses"], f"actions/checkout@{CHECKOUT_SHA}")
+        self.assertEqual(
+            steps[1]["uses"], f"actions/setup-python@{SETUP_PYTHON_SHA}"
+        )
+        self.assertEqual(steps[1]["with"]["python-version"], "3.12")
+        self.assertTrue(
+            all(
+                "@v" not in step.get("uses", "")
+                for step in steps
+                if "uses" in step
+            )
+        )
+
+        install = steps[2]["run"]
+        self.assertIn('test "$(uname -m)" = x86_64', install)
+        self.assertIn("--require-hashes --only-binary=PyYAML", install)
+        self.assertIn("tests/requirements-shared-valkey-ha.lock", install)
+        self.assertNotIn("requirements.txt", install)
+
+        lock = TEST_LOCK.read_text(encoding="utf-8")
+        self.assertIn("PyYAML==6.0.2", lock)
+        self.assertIn(f"--hash=sha256:{PYYAML_SHA256}", lock)
+        self.assertNotIn(">=", lock)
+        requirement_lines = [
+            line
+            for line in lock.splitlines()
+            if line and not line.startswith("#") and not line.startswith(" ")
+        ]
+        self.assertEqual(requirement_lines, ["PyYAML==6.0.2 \\"])
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_postgres_shared_kustomization_renders_the_contract(self) -> None:
