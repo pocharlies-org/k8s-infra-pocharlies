@@ -12,7 +12,12 @@ metadata:
     argocd.argoproj.io/sync-wave: "19"
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 300
+  # kcadm starts a JVM for every role/audit request. The nine-role reconcile
+  # took 269s in production on 2026-07-15, leaving only 31s before Kubernetes
+  # killed an otherwise healthy PostSync hook. Keep enough room for one slow
+  # Keycloak response and the configured retry without weakening fail-closed
+  # role validation.
+  activeDeadlineSeconds: 900
   ttlSecondsAfterFinished: 3600
   template:
     metadata:

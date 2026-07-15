@@ -63,7 +63,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "21"
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: 900
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
