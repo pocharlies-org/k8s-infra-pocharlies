@@ -194,13 +194,14 @@ spec:
         kubernetes.io/arch: amd64
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: shared-rabbitmq
-                topologyKey: kubernetes.io/hostname
+          # required: with cluster_partition_handling=pause_minority, 2-of-3 nodes
+          # co-located on a failed host leaves the survivor a paused minority —
+          # whole broker down. One replica per node is a hard constraint.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: shared-rabbitmq
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: rabbitmq
           # 2026-06-15: rabbitmq:3.13.7-management + rabbitmq_delayed_message_exchange
