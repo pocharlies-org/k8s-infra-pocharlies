@@ -134,11 +134,12 @@ spec:
       nodeSelector: { workload: core }
       affinity:
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector: { matchLabels: { app: shared-valkey } }
-                topologyKey: kubernetes.io/hostname
+          # required: 3 replicas across the 3 workload=core nodes. Preferred allowed
+          # 2 sentinels on one node (seen live 2026-07-21), putting quorum one node
+          # failure away from loss.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector: { matchLabels: { app: shared-valkey } }
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: valkey
           image: valkey/valkey:8-alpine

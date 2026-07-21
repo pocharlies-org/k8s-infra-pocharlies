@@ -235,7 +235,10 @@ spec:
         jobs: 2
 
   affinity:
-    podAntiAffinityType: preferred
+    # required: with only 2 instances, co-location turns one node failure into a
+    # full outage with no failover target (incident 2026-07-20: both instances on
+    # the frozen `ubuntu` node, 9h down). A visible Pending beats silent co-location.
+    podAntiAffinityType: required
     topologyKey: kubernetes.io/hostname
     tolerations:
       - key: node.kubernetes.io/not-ready
