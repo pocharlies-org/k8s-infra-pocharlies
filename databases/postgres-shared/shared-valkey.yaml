@@ -339,6 +339,18 @@ spec:
       ports:
         - { protocol: TCP, port: 6379 }
         - { protocol: TCP, port: 26379 }
+    # blackbox-exporter TCP probe (VMProbe shared-datastores-tcp in
+    # k8s-observability): service-level reachability alerting for the shared
+    # datastores after the 2026-07-20 silent outage. L4 connect only, no AUTH.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
+      ports:
+        - { protocol: TCP, port: 6379 }
     - from:
         - namespaceSelector:
             matchLabels:
