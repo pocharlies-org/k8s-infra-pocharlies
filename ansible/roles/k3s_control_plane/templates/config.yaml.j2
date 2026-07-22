@@ -39,8 +39,6 @@ kubelet-arg:
   # past 100 GiB per node. Start GC earlier and keep a useful 10% hysteresis.
   - image-gc-high-threshold=65
   - image-gc-low-threshold=55
-  # Keep infrequently used weekly-job images, but remove genuinely stale cache.
-  - image-maximum-gc-age=168h
 node-label:
   - ingress=true
   - workload=core
