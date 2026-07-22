@@ -20,13 +20,13 @@ node-name: {{ inventory_hostname }}
 flannel-iface: {{ k3s_flannel_iface }}
 write-kubeconfig-mode: "0644"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
-etcd-snapshot-retention: 28
+# Four snapshots/day. Keep 48 hours locally on every control-plane node;
+# seven days of off-node history are maintained by etcd-s3-snapshot.timer.
+etcd-snapshot-retention: 8
 etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots
-# Off-node DR: also upload scheduled snapshots to the x86 backup-minio bucket
-# k3s-etcd-snapshots. Creds/endpoint live in kube-system secret etcd-s3-config
-# (NOT in git). Applied on next k3s restart.
-etcd-s3: true
-etcd-s3-config-secret: etcd-s3-config
+# Off-node DR is intentionally run only from ks5-cp-1 by the dedicated
+# etcd-s3-snapshot.timer. Enabling etcd-s3 here would upload the same cluster
+# snapshot independently from all three control-plane nodes.
 kube-controller-manager-arg:
   - bind-address=0.0.0.0
 kube-scheduler-arg:
