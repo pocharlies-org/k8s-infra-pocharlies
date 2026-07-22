@@ -42,6 +42,13 @@ jobs:
       - name: Validate Velero operability contract
         run: python3 -m unittest tests/test_velero_operability_contract.py
 
+  external-dns-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate external-dns ownership boundary
+        run: python3 -m unittest tests/test_external_dns_contract.py
+
   longhorn-systembackup-contract:
     runs-on: arc-k8s
     steps:
