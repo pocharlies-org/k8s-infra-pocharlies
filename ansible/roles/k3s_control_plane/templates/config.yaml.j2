@@ -35,6 +35,12 @@ kube-proxy-arg:
   - metrics-bind-address=0.0.0.0
 kubelet-arg:
   - max-pods=200
+  # The kubelet defaults (85%/80%) allowed unused container images to grow
+  # past 100 GiB per node. Start GC earlier and keep a useful 10% hysteresis.
+  - image-gc-high-threshold=65
+  - image-gc-low-threshold=55
+  # Keep infrequently used weekly-job images, but remove genuinely stale cache.
+  - image-maximum-gc-age=168h
 node-label:
   - ingress=true
   - workload=core
