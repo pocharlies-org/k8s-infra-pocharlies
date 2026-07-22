@@ -2,8 +2,8 @@
 # Scheduled off-node etcd snapshots WITHOUT a k3s restart: a systemd timer on
 # ks5-cp-1 runs `k3s etcd-snapshot save --s3 --s3-config-secret=etcd-s3-config`
 # every 6h → uploads to the x86 backup-minio k3s-etcd-snapshots bucket (DR).
-# (The config.yaml etcd-s3 setting also covers the built-in schedule once a node
-# is restarted/reinstalled; this timer activates DR now, no pod churn.)
+# Only ks5-cp-1 uploads off-node snapshots. The built-in schedule remains local
+# on all three control-plane nodes to avoid triplicating uploads of the same DB.
 - name: Off-node etcd snapshot timer (DR, no k3s restart)
   hosts: ks5-cp-1
   become: true
@@ -23,6 +23,10 @@
           [Service]
           Type=oneshot
           ExecStart=/usr/local/bin/k3s etcd-snapshot save --s3 --s3-config-secret=etcd-s3-config --name scheduled-offnode
+          # Retain seven days in S3 (4/day), but only the latest duplicate on
+          # the control-plane filesystem after a successful upload.
+          ExecStartPost=/usr/local/bin/k3s etcd-snapshot prune --name scheduled-offnode --etcd-snapshot-retention 28 --s3 --s3-config-secret=etcd-s3-config
+          ExecStartPost=/usr/local/bin/k3s etcd-snapshot prune --name scheduled-offnode --etcd-snapshot-retention 1
 
     - name: Install etcd-s3-snapshot.timer (every 6h, offset from built-in)
       ansible.builtin.copy:
