@@ -13,6 +13,13 @@ policy: upsert-only   # never delete records — safe during migration
 domainFilters:
   - e-dani.com
   - skirmshop.es   # affiliate app public domain (needs CF token with skirmshop.es Zone access)
+# Cloudflare already has an authoritative *.lan.e-dani.com A record pointing
+# at the Traefik LAN VIP. Publishing every LAN route separately duplicates the
+# same answer and consumes two records per hostname (A + TXT ownership). Keep
+# the wildcard and the intentionally distinct k8s.lan.e-dani.com record out of
+# external-dns ownership instead.
+excludeDomains:
+  - lan.e-dani.com
 txtOwnerId: k3s-x86-home
 interval: 1m
 logLevel: info
