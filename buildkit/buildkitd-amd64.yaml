@@ -57,6 +57,11 @@ spec:
             - --addr
             - tcp://0.0.0.0:1234
             - --oci-worker-no-process-sandbox
+            # Keep the disposable cache bounded on the 25Gi PVC. Values are
+            # reserved space, desired free space and maximum used space (MiB).
+            - --oci-worker-gc
+            - --oci-worker-gc-keepstorage
+            - 8192,8192,12288
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
