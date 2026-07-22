@@ -59,7 +59,12 @@ data:
     cookie_domains = [ ".e-dani.com" ]
     cookie_secure = true
     cookie_samesite = "lax"
-    cookie_expire = "12h"
+    # Must stay below the realm's ssoSessionMaxLifespan (30d): once the Keycloak
+    # session dies the refresh fails and the cookie is worthless anyway.
+    cookie_expire = "720h"
+    # Must stay below ssoSessionIdleTimeout (7d). It used to be the other way
+    # round -- refresh every 1h against a session that idled out after 30min --
+    # which is what forced a full re-login on every visit.
     cookie_refresh = "1h"
 
     whitelist_domains = [ ".e-dani.com" ]
