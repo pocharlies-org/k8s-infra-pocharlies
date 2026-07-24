@@ -1,4 +1,4 @@
-server: "https://{{ k3s_join_server_ip }}:6443"
+server: "{{ k3s_worker_join_server_effective }}"
 token: "{{ lookup('env', 'K3S_TOKEN') }}"
 node-ip: {{ ansible_host }}
 flannel-iface: {{ k3s_flannel_iface }}

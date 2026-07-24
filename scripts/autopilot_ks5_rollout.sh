@@ -223,9 +223,6 @@ maybe_demote_x86() {
     return 0
   fi
 
-  local ks5_api
-  ks5_api="$(kubectl get node ks5-cp-1 -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
-  export K3S_JOIN_SERVER_IP="$ks5_api"
   run ansible-playbook -i "$INVENTORY" "$ROOT/ansible/playbooks/demote-x86-to-worker.yml"
 }
 

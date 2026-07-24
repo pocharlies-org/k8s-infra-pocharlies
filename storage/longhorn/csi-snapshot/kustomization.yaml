@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kube-system
+
+# external-snapshotter v8.5.0, pinned to the immutable tag commit.
+resources:
+  - https://github.com/kubernetes-csi/external-snapshotter/client/config/crd?ref=5aab051d1af135e2c852f6fb7fc27fa709d877bf
+  - https://github.com/kubernetes-csi/external-snapshotter/deploy/kubernetes/snapshot-controller?ref=5aab051d1af135e2c852f6fb7fc27fa709d877bf
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "-1"
+
+images:
+  - name: registry.k8s.io/sig-storage/snapshot-controller
+    newName: registry.k8s.io/sig-storage/snapshot-controller
+    digest: sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8
+
+patches:
+  # The live v6.3.1 Deployment uses app=snapshot-controller. Preserve that
+  # immutable selector so the controller can roll forward without deletion.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: snapshot-controller
+      namespace: kube-system
+    patch: |-
+      - op: replace
+        path: /spec/selector/matchLabels
+        value:
+          app: snapshot-controller
+      - op: replace
+        path: /spec/template/metadata/labels
+        value:
+          app: snapshot-controller
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+  # CRDs must precede the controller. A server dry-run confirms these v8.5.0
+  # CRDs remain below the client-side apply annotation limit, allowing safe
+  # adoption from the existing kubectl-managed v6.3.1 resources.
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+    patch: |-
+      - op: add
+        path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+        value: "-2"
