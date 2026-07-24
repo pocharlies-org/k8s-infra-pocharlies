@@ -42,7 +42,7 @@ ports:
   metrics:
     port: 9100
     expose:
-      default: true
+      default: false
     exposedPort: 9100
     protocol: TCP
 
@@ -60,6 +60,8 @@ service:
   annotations:
     metallb.io/loadBalancerIPs: 192.168.50.240
   spec:
+    # MetalLB routes the VIP directly; the backing NodePorts are unnecessary.
+    allocateLoadBalancerNodePorts: false
     # Preserve the original client address: several LAN routes use ClientIP()
     # authorization. MetalLB advertises only from Ready LAN nodes that have a
     # local endpoint, while cluster callers use the Service and can reach OVH.
@@ -80,6 +82,9 @@ logs:
 metrics:
   prometheus:
     entryPoint: metrics
+    # Chart 40.2.0 renders this as a dedicated ClusterIP Service.
+    service:
+      enabled: true
 
 # Allow some resilience
 resources:
