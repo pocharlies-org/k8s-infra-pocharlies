@@ -49,6 +49,13 @@ jobs:
       - name: Validate external-dns ownership boundary
         run: python3 -m unittest tests/test_external_dns_contract.py
 
+  private-service-exposure-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private service exposure boundaries
+        run: python3 -m unittest tests/test_private_service_exposure_contract.py
+
   longhorn-systembackup-contract:
     runs-on: arc-k8s
     steps:
