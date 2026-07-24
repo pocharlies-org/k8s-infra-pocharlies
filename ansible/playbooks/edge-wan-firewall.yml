@@ -1,0 +1,9 @@
+---
+- name: Manage the WAN-only health-check NodePort guard
+  hosts: edge_wan_firewall
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - edge_wan_firewall

@@ -1,0 +1,9 @@
+# Managed by Ansible. This isolated table intentionally guards only the
+# Kubernetes health-check NodePort on verified public interfaces.
+table inet {{ edge_wan_firewall_table }} {
+  chain wan_input {
+    type filter hook input priority {{ edge_wan_firewall_hook_priority }}; policy accept;
+
+    iifname { {% for interface in edge_wan_firewall_interfaces %}"{{ interface }}"{% if not loop.last %}, {% endif %}{% endfor %} } tcp dport { {% for port in edge_wan_firewall_blocked_tcp_ports %}{{ port }}{% if not loop.last %}, {% endif %}{% endfor %} } counter reject with tcp reset comment "block public k8s healthcheck NodePort"
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=Public health-check NodePort guard
+Documentation=https://github.com/pocharlies/k8s-infra-pocharlies
+After=local-fs.target
+Before=k3s.service k3s-agent.service
+
+[Service]
+Type=oneshot
+ExecStart={{ edge_wan_firewall_script_path }} apply
+ExecReload={{ edge_wan_firewall_script_path }} apply
+ExecStop={{ edge_wan_firewall_script_path }} remove
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

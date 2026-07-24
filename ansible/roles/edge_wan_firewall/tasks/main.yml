@@ -1,0 +1,224 @@
+---
+- name: Validate edge WAN firewall lifecycle state
+  ansible.builtin.assert:
+    that:
+      - edge_wan_firewall_state in ['present', 'absent']
+    fail_msg: >-
+      edge_wan_firewall_state must be present or absent. Use absent for the
+      documented rollback.
+
+- name: Validate exact edge WAN firewall scope
+  ansible.builtin.assert:
+    that:
+      - >-
+        inventory_hostname in (
+          groups.get('edge_wan_firewall', [])
+          + groups.get('ks5_control_plane', [])
+        )
+      - ansible_default_ipv4.interface is defined
+      - edge_wan_firewall_interfaces | type_debug == 'list'
+      - edge_wan_firewall_interfaces | length == 1
+      - edge_wan_firewall_interfaces == [ansible_default_ipv4.interface]
+      - edge_wan_firewall_interfaces | difference(ansible_interfaces) | length == 0
+      - edge_wan_firewall_interfaces | intersect(['lo', 'tailscale0']) | length == 0
+      - edge_wan_firewall_blocked_tcp_ports | map('int') | list == [32763]
+      - edge_wan_firewall_blocked_tcp_ports | intersect([80, 443, 4444]) | length == 0
+      - edge_wan_firewall_table is match('^[A-Za-z][A-Za-z0-9_]{0,31}$')
+      - edge_wan_firewall_hook_priority | int < 0
+      - edge_wan_firewall_hook_priority | int > -200
+    fail_msg: >-
+      Refusing to alter the firewall: the role must target exactly the verified
+      default-route WAN interface and TCP/32763, never loopback, tailscale0, or
+      the public service ports.
+  when: edge_wan_firewall_state == 'present'
+
+- name: Install nftables userspace without enabling its global service
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: false
+    policy_rc_d: 101
+  when: edge_wan_firewall_state == 'present'
+
+- name: Check that the global nftables service remains disabled
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - is-enabled
+      - nftables.service
+  register: edge_wan_firewall_global_nftables_enabled
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  when: edge_wan_firewall_state == 'present'
+
+- name: Refuse to coexist with an enabled global nftables service
+  ansible.builtin.assert:
+    that:
+      - edge_wan_firewall_global_nftables_enabled.rc != 0
+      - edge_wan_firewall_global_nftables_enabled.stdout != 'enabled'
+    fail_msg: >-
+      The global nftables.service is enabled. This role intentionally manages
+      only its dedicated unit and will not change the global service.
+  when: edge_wan_firewall_state == 'present'
+
+- name: Ensure the dedicated nftables rules directory exists
+  ansible.builtin.file:
+    path: "{{ edge_wan_firewall_ruleset_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: edge_wan_firewall_state == 'present'
+
+- name: Render the dedicated pre-KUBE WAN ruleset
+  ansible.builtin.template:
+    src: edge-wan-firewall.nft.j2
+    dest: "{{ edge_wan_firewall_ruleset_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: edge_wan_firewall_ruleset
+  when: edge_wan_firewall_state == 'present'
+
+- name: Install the atomic nftables apply and rollback helper
+  ansible.builtin.template:
+    src: edge-wan-firewall.sh.j2
+    dest: "{{ edge_wan_firewall_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  register: edge_wan_firewall_script
+  when: edge_wan_firewall_state == 'present'
+
+- name: Install the dedicated edge WAN firewall unit
+  ansible.builtin.template:
+    src: edge-wan-firewall.service.j2
+    dest: "/etc/systemd/system/{{ edge_wan_firewall_unit_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: edge_wan_firewall_unit
+  when: edge_wan_firewall_state == 'present'
+
+- name: Enable and apply the dedicated edge WAN firewall
+  ansible.builtin.systemd_service:
+    name: "{{ edge_wan_firewall_unit_name }}"
+    daemon_reload: "{{ edge_wan_firewall_unit.changed }}"
+    enabled: true
+    state: >-
+      {{
+        'restarted'
+        if (
+          edge_wan_firewall_ruleset.changed
+          or edge_wan_firewall_script.changed
+          or edge_wan_firewall_unit.changed
+        )
+        else 'started'
+      }}
+  when: edge_wan_firewall_state == 'present'
+
+- name: Verify the dedicated table is loaded
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nft
+      - list
+      - table
+      - inet
+      - "{{ edge_wan_firewall_table }}"
+  register: edge_wan_firewall_loaded
+  changed_when: false
+  when:
+    - edge_wan_firewall_state == 'present'
+    - not ansible_check_mode
+
+- name: Verify the loaded table retains the exact narrow scope
+  ansible.builtin.assert:
+    that:
+      - "'hook input' in edge_wan_firewall_loaded.stdout"
+      - "'policy accept' in edge_wan_firewall_loaded.stdout"
+      - "'iifname \"' ~ edge_wan_firewall_interfaces[0] ~ '\"' in edge_wan_firewall_loaded.stdout"
+      - "'tcp dport 32763' in edge_wan_firewall_loaded.stdout"
+      - "'tcp dport 80' not in edge_wan_firewall_loaded.stdout"
+      - "'tcp dport 443' not in edge_wan_firewall_loaded.stdout"
+      - "'tcp dport 4444' not in edge_wan_firewall_loaded.stdout"
+    fail_msg: "The loaded nftables table does not match the reviewed WAN-only contract."
+  when:
+    - edge_wan_firewall_state == 'present'
+    - not ansible_check_mode
+
+- name: Check whether the dedicated unit exists before rollback
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ edge_wan_firewall_unit_name }}"
+  register: edge_wan_firewall_unit_file
+  when: edge_wan_firewall_state == 'absent'
+
+- name: Stop and disable only the dedicated edge WAN firewall unit
+  ansible.builtin.systemd_service:
+    name: "{{ edge_wan_firewall_unit_name }}"
+    state: stopped
+    enabled: false
+  when:
+    - edge_wan_firewall_state == 'absent'
+    - edge_wan_firewall_unit_file.stat.exists
+
+- name: Check whether the dedicated nftables table remains after stop
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nft
+      - list
+      - table
+      - inet
+      - "{{ edge_wan_firewall_table }}"
+  register: edge_wan_firewall_table_after_stop
+  check_mode: false
+  changed_when: false
+  failed_when: edge_wan_firewall_table_after_stop.rc not in [0, 1]
+  when: edge_wan_firewall_state == 'absent'
+
+- name: Remove a remaining dedicated table during rollback
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nft
+      - delete
+      - table
+      - inet
+      - "{{ edge_wan_firewall_table }}"
+  changed_when: true
+  when:
+    - edge_wan_firewall_state == 'absent'
+    - not ansible_check_mode
+    - edge_wan_firewall_table_after_stop.rc == 0
+
+- name: Remove only the dedicated firewall artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/systemd/system/{{ edge_wan_firewall_unit_name }}"
+    - "{{ edge_wan_firewall_script_path }}"
+    - "{{ edge_wan_firewall_ruleset_path }}"
+  register: edge_wan_firewall_removed_files
+  when: edge_wan_firewall_state == 'absent'
+
+- name: Reload systemd after removing the dedicated unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when:
+    - edge_wan_firewall_state == 'absent'
+    - edge_wan_firewall_removed_files.changed
+
+- name: Verify the dedicated table is absent after rollback
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nft
+      - list
+      - table
+      - inet
+      - "{{ edge_wan_firewall_table }}"
+  register: edge_wan_firewall_absent
+  changed_when: false
+  failed_when: edge_wan_firewall_absent.rc != 1
+  when:
+    - edge_wan_firewall_state == 'absent'
+    - not ansible_check_mode

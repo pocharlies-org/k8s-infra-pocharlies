@@ -1,0 +1,15 @@
+---
+# Keep this role deliberately narrow. It is a pre-KUBE guard for the single
+# Kubernetes LoadBalancer health-check NodePort observed on the public NICs.
+edge_wan_firewall_state: present
+edge_wan_firewall_interfaces:
+  - "{{ edge_wan_interface | default(ansible_default_ipv4.interface) }}"
+edge_wan_firewall_blocked_tcp_ports:
+  - 32763
+edge_wan_firewall_table: edge_wan_guard
+# Kubernetes/iptables filter chains run at priority 0. A negative priority
+# evaluates this exact-port guard first, while remaining after conntrack.
+edge_wan_firewall_hook_priority: -10
+edge_wan_firewall_ruleset_path: /etc/nftables.d/edge-wan-firewall.nft
+edge_wan_firewall_script_path: /usr/local/sbin/edge-wan-firewall
+edge_wan_firewall_unit_name: edge-wan-firewall.service
