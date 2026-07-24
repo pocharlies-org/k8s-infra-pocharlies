@@ -116,7 +116,9 @@
         )
         else 'started'
       }}
-  when: edge_wan_firewall_state == 'present'
+  when:
+    - edge_wan_firewall_state == 'present'
+    - not ansible_check_mode
 
 - name: Verify the dedicated table is loaded
   ansible.builtin.command:

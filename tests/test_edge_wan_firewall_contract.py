@@ -139,6 +139,18 @@ class EdgeWanFirewallContractTest(unittest.TestCase):
         self.assertNotIn("ansible.builtin.shell", self.tasks_text)
         self.assertNotIn("ssh ", self.tasks_text.lower())
 
+    def test_check_mode_does_not_start_a_unit_that_has_not_been_created(self) -> None:
+        tasks = yaml.safe_load(self.tasks_text)
+        systemd_task = next(
+            task
+            for task in tasks
+            if task["name"] == "Enable and apply the dedicated edge WAN firewall"
+        )
+        conditions = systemd_task["when"]
+        if isinstance(conditions, str):
+            conditions = [conditions]
+        self.assertIn("not ansible_check_mode", conditions)
+
     def test_day_two_playbook_is_serial_and_targets_only_public_edges(
         self,
     ) -> None:
