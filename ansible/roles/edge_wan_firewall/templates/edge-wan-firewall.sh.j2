@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+nft=/usr/sbin/nft
+family=inet
+table={{ edge_wan_firewall_table | quote }}
+ruleset={{ edge_wan_firewall_ruleset_path | quote }}
+
+apply_ruleset() {
+  local batch
+  batch="$(mktemp /run/edge-wan-firewall.XXXXXX)"
+  trap 'rm -f "$batch"' RETURN
+
+  if "$nft" list table "$family" "$table" >/dev/null 2>&1; then
+    printf "delete table %s %s\n" "$family" "$table" >"$batch"
+  else
+    : >"$batch"
+  fi
+  cat "$ruleset" >>"$batch"
+
+  # Validation and replacement both cover the complete transaction. The
+  # active table survives any validation failure.
+  "$nft" --check --file "$batch"
+  "$nft" --file "$batch"
+  "$nft" list table "$family" "$table" >/dev/null
+}
+
+remove_ruleset() {
+  if "$nft" list table "$family" "$table" >/dev/null 2>&1; then
+    "$nft" delete table "$family" "$table"
+  fi
+}
+
+case "${1:-}" in
+  apply)
+    apply_ruleset
+    ;;
+  remove)
+    remove_ruleset
+    ;;
+  check)
+    "$nft" --check --file "$ruleset"
+    ;;
+  *)
+    echo "Usage: $0 {apply|remove|check}" >&2
+    exit 2
+    ;;
+esac

@@ -9,6 +9,7 @@
     - longhorn_prereqs
     - tailscale
     - k3s_control_plane
+    - edge_wan_firewall
 
 - name: Apply Kubernetes labels after KS-5 nodes join
   hosts: localhost

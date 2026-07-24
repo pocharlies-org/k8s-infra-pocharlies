@@ -206,6 +206,57 @@ export CONFIRM_DNS_TARGET_REWRITE=update-ha-targets
 python3 scripts/update_external_dns_targets.py --repo-root . --targets "$PUBLIC_EDGE_TARGETS" --write
 ```
 
+## Public health-check NodePort guard
+
+The Traefik LAN `externalTrafficPolicy: Local` health check currently reserves
+`TCP/32763`. Kubernetes installs its `KUBE-*` accept path before UFW, so this
+one port needs a dedicated pre-KUBE guard on every public k3s edge: the three
+KS-5 control planes and `sauvage`.
+
+The Ansible role creates only the `inet edge_wan_guard` table and the
+`edge-wan-firewall.service` unit. It does not enable or modify the global
+`nftables.service`, and it does not alter UFW. The table has an accept policy
+and rejects only `TCP/32763` received on the verified WAN interface. Public
+`80/tcp`, `443/tcp`, `tailscale0`, and non-WAN/LAN traffic remain outside the
+rule. The role does not open `4444/tcp` (or any other port); any pre-existing
+per-host policy for it remains unchanged.
+
+Use the Tailnet inventory and Ansible's configured `become` authorization; no
+direct public SSH or nested `sudo ssh` is used. First record the global
+nftables service state:
+
+```bash
+cd ansible
+ansible edge_wan_firewall -i inventory/ks5-tailscale.ini -b \
+  -m command -a 'systemctl is-enabled nftables.service'
+ansible-playbook -i inventory/ks5-tailscale.ini \
+  playbooks/edge-wan-firewall.yml --limit ks5-cp-1 --check --diff
+ansible-playbook -i inventory/ks5-tailscale.ini \
+  playbooks/edge-wan-firewall.yml --limit ks5-cp-1
+```
+
+Before continuing, verify from an external probe that `32763/tcp` is closed on
+the canary while its intentionally published `80/tcp` and `443/tcp` remain
+available. If `4444/tcp` was intentionally published on that host, verify it
+was not changed; do not open it as part of this rollout. Verify from the
+Tailnet that SSH, the Kubernetes API, and node readiness remain healthy. Then
+apply serially to all four edge hosts:
+
+```bash
+ansible-playbook -i inventory/ks5-tailscale.ini \
+  playbooks/edge-wan-firewall.yml
+ansible edge_wan_firewall -i inventory/ks5-tailscale.ini -b \
+  -m command -a 'systemctl is-enabled nftables.service'
+```
+
+Rollback removes only the dedicated table, helper, ruleset, and unit:
+
+```bash
+ansible-playbook -i inventory/ks5-tailscale.ini \
+  playbooks/edge-wan-firewall.yml \
+  -e edge_wan_firewall_state=absent
+```
+
 ## Ports
 
 Public:
