@@ -281,3 +281,17 @@ spec:
   owner: keep
   cluster:
     name: postgres-shared
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: aurora
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: aurora
+  owner: aurora
+  cluster:
+    name: postgres-shared

@@ -220,6 +220,12 @@ spec:
         passwordSecret:
           name: keep-db-credentials
         comment: "Keep alert hub — sistema de récord de alertas (repo: pocharlies/k8s-observability-pocharlies)"
+      - name: aurora
+        ensure: present
+        login: true
+        passwordSecret:
+          name: aurora-db-credentials
+        comment: "Aurora — investigación de incidentes disparada por Keep (repo: pocharlies/k8s-observability-pocharlies)"
 
   backup:
     retentionPolicy: "30d"
