@@ -15,7 +15,23 @@ toolkit:
 devicePlugin:
   enabled: true
   config:
-    name: ""  # default config; time-slicing added later via ConfigMap
+    create: true
+    name: dgx-device-plugin-config
+    # Fail closed on every node unless it is explicitly labeled with
+    # nvidia.com/device-plugin.config=gx10-timeslice-2.
+    default: ""
+    data:
+      gx10-timeslice-2: |-
+        version: v1
+        flags:
+          migStrategy: none
+        sharing:
+          timeSlicing:
+            renameByDefault: false
+            failRequestsGreaterThanOne: true
+            resources:
+              - name: nvidia.com/gpu
+                replicas: 2
 
 cdi:
   enabled: true
