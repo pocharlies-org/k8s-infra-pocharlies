@@ -260,17 +260,29 @@ through at least that interval.
 
 ## 9. Synapse SRE service identity
 
-The private SRE routes use one dedicated confidential service client,
-`synapse-sre-orchestrator`, and one non-composite realm role,
-`synapse-sre-m2m`. Neither the general `agentgateway-mcp` client nor a human
-operator receives this role. The client has only the explicit
+> **RETIRED (2026-07-27).** The SRE identity — client
+> `synapse-sre-orchestrator`, realm role `synapse-sre-m2m` — is being removed:
+> alerting moved out of Synapse to Keep + Aurora. Its bootstrap ExternalSecret
+> and PostSync Job are gone from `synapse-agent-clients.yaml`. To delete the
+> client and role from Keycloak itself, run
+> `manual/synapse-sre-client-rollback-job.yaml` (MODE=rollback), then remove
+> that Job, the `synapse-sre-orchestrator:synapse-sre-m2m` branch of the
+> reconciler script, and the Vault key
+> `secret/agentgateway/prod#synapse_sre_orchestrator_client_secret`.
+>
+> Everything below describes the same pattern as applied to the surviving
+> **draft** identity (`synapse-draft-orchestrator` / `synapse-draft-m2m`),
+> which is business, not SRE, and reuses the same reconciler script.
+
+The private routes use one dedicated confidential service client and one
+non-composite realm role. Neither the general `agentgateway-mcp` client nor a
+human operator receives that role. The client has only the explicit
 `mcp.lan.e-dani.com` audience and `fullScopeAllowed=false`.
 
-Seed a new random value in
-`secret/agentgateway/prod#synapse_sre_orchestrator_client_secret`; never reuse
-an OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. Keep
-`SRE_M2M_ENABLED=false` while syncing this identity. The PostSync hook must
-finish with sanitized output:
+Seed a new random value in the matching
+`secret/agentgateway/prod#<client>_client_secret` property; never reuse an
+OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. The PostSync
+hook must finish with sanitized output:
 
 The first reconciliation must be a full Argo CD sync of the reviewed commit.
 Argo CD deliberately skips hooks during a selective resource sync; do not

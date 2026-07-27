@@ -11,7 +11,7 @@ resources:
   - routing.yaml
   - agentgateway-write-role-job.yaml
   - openclaw-readonly-clients.yaml
-  - synapse-sre-client.yaml
+  - synapse-agent-clients.yaml
   - agentgateway-domain-roles-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
@@ -20,6 +20,9 @@ configMapGenerator:
   - name: keycloak-openclaw-readonly-clients
     files:
       - openclaw-readonly-clients.sh=scripts/openclaw-readonly-clients.sh
+  # Name kept deliberately: the draft client's Job mounts this ConfigMap by
+  # name and runs the script by path. Renaming either would churn a live object
+  # for cosmetics. The script is generic — the SRE pair was only its default.
   - name: keycloak-synapse-sre-client
     files:
       - synapse-sre-client.sh=scripts/synapse-sre-client.sh

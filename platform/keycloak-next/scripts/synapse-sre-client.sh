@@ -6,8 +6,11 @@ umask 077
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
-CLIENT_ID="${CLIENT_ID:-synapse-sre-orchestrator}"
-ROLE_NAME="${ROLE_NAME:-synapse-sre-m2m}"
+# No defaults on purpose: the SRE pair used to be the fallback, so a stray
+# invocation with no environment would bootstrap a client that is being
+# retired. Both callers (the draft Job and the rollback Job) set these.
+CLIENT_ID="${CLIENT_ID:?CLIENT_ID is required}"
+ROLE_NAME="${ROLE_NAME:?ROLE_NAME is required}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"
@@ -32,6 +35,9 @@ progress() {
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
 [ "${RECONCILE_CONTRACT_VERSION}" = "1" ] || fail "unsupported reconcile contract version"
 case "${CLIENT_ID}:${ROLE_NAME}" in
+  # RETIRED. Kept only so `manual/synapse-sre-client-rollback-job.yaml` can
+  # still run MODE=rollback and delete the client + role from Keycloak. Remove
+  # this branch, that Job, and the Vault key together once the rollback has run.
   synapse-sre-orchestrator:synapse-sre-m2m)
     CLIENT_SECRET="${SYNAPSE_SRE_CLIENT_SECRET:-}"
     MAPPER_NAME=synapse-sre-agentgateway-audience
