@@ -193,20 +193,22 @@ spec:
         comment: "Synapse Outbox GC (synapse-outbox-gc.service; hourly oneshot timer)"
       # Dedicated agent identities deliberately do not inherit synapse_app.
       # Synapse migrations grant only the table/column privileges each plane needs.
+      #
+      # The two SRE roles are being DROPPED: alerting moved out of Synapse to
+      # Keep + Aurora and nothing logs in as either of them any more. They are
+      # kept as explicit `absent` entries rather than deleted from this list,
+      # because removing an entry only makes CNPG stop managing the role — it
+      # does not drop it, and the role would linger unmanaged forever.
+      #
+      # ORDER: PostgreSQL refuses to drop a role that still holds privileges,
+      # and `synapse_sre_reporter` holds SELECT on `tenants` (a table that
+      # stays). Synapse migration 0100 revokes all of them. Do not merge this
+      # before that migration has run, or CNPG will retry a DROP ROLE that
+      # cannot succeed.
       - name: synapse_sre_m2m
-        ensure: present
-        login: true
-        inherit: false
-        passwordSecret:
-          name: synapse-sre-m2m-db-credentials
-        comment: "Private Synapse SRE AgentGateway mutation plane"
+        ensure: absent
       - name: synapse_sre_reporter
-        ensure: present
-        login: true
-        inherit: false
-        passwordSecret:
-          name: synapse-sre-reporter-db-credentials
-        comment: "Read-mostly weekly Synapse SRE reporter"
+        ensure: absent
       - name: synapse_agent_m2m
         ensure: present
         login: true

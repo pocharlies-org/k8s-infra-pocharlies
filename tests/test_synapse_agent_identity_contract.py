@@ -8,11 +8,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 
 
-class SynapseSreIdentityContractTest(unittest.TestCase):
+class SynapseAgentIdentityContractTest(unittest.TestCase):
     def test_reconciler_is_fixed_scope_and_verifies_minted_claims(self):
         script = (BASE / "scripts" / "synapse-sre-client.sh").read_text()
-        self.assertIn('CLIENT_ID="${CLIENT_ID:-synapse-sre-orchestrator}"', script)
-        self.assertIn('ROLE_NAME="${ROLE_NAME:-synapse-sre-m2m}"', script)
+        # No fallback: defaulting to the retired SRE pair meant a stray
+        # invocation with no environment would bootstrap it.
+        self.assertIn('CLIENT_ID="${CLIENT_ID:?CLIENT_ID is required}"', script)
+        self.assertIn('ROLE_NAME="${ROLE_NAME:?ROLE_NAME is required}"', script)
         self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', script)
         self.assertIn('FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"', script)
         self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"', script)
@@ -38,15 +40,14 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertNotIn('echo "${token}"', script)
 
     def test_manifest_uses_one_vault_property_and_a_hardened_postsync_job(self):
-        manifest = (BASE / "synapse-sre-client.yaml").read_text()
-        self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
+        manifest = (BASE / "synapse-agent-clients.yaml").read_text()
+        self.assertEqual(manifest.count("kind: ExternalSecret"), 1)
         self.assertIn("key: secret/agentgateway/prod", manifest)
-        self.assertIn("property: synapse_sre_orchestrator_client_secret", manifest)
         self.assertIn("property: synapse_draft_orchestrator_client_secret", manifest)
         self.assertIn("name: CLIENT_ID, value: synapse-draft-orchestrator", manifest)
         self.assertIn("name: ROLE_NAME, value: synapse-draft-m2m", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
-        self.assertEqual(manifest.count("activeDeadlineSeconds: 900"), 2)
+        self.assertEqual(manifest.count("activeDeadlineSeconds: 900"), 1)
         self.assertIn('argocd.argoproj.io/sync-wave: "22"', manifest)
         self.assertIn('synapse.e-dani.com/reconcile-contract-version: "1"', manifest)
         self.assertIn('name: RECONCILE_CONTRACT_VERSION, value: "1"', manifest)
@@ -59,7 +60,8 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
     def test_kustomization_excludes_manual_rollback(self):
         kustomization = (BASE / "kustomization.yaml").read_text()
         rollback = (BASE / "manual" / "synapse-sre-client-rollback-job.yaml").read_text()
-        self.assertIn("synapse-sre-client.yaml", kustomization)
+        self.assertIn("synapse-agent-clients.yaml", kustomization)
+        self.assertNotIn("synapse-sre-client.yaml", kustomization)
         self.assertIn("scripts/synapse-sre-client.sh", kustomization)
         self.assertNotIn("manual/synapse-sre-client-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
@@ -75,8 +77,9 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
             text=True,
             capture_output=True,
         )
+        # ConfigMap name kept on purpose: the draft Job mounts it by name.
         self.assertIn("keycloak-synapse-sre-client", result.stdout)
-        self.assertIn("synapse-sre-keycloak-bootstrap", result.stdout)
+        self.assertNotIn("synapse-sre-keycloak-bootstrap", result.stdout)
         self.assertIn("keycloak-synapse-draft-client", result.stdout)
         self.assertIn("synapse-draft-keycloak-bootstrap", result.stdout)
 

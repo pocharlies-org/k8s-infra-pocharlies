@@ -30,10 +30,12 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-write-role.sh
           sh -n platform/keycloak-next/scripts/openclaw-readonly-clients.sh
           sh -n platform/keycloak-next/scripts/agentgateway-domain-roles.sh
+          sh -n platform/keycloak-next/scripts/synapse-sre-client.sh
           python3 -m unittest \
             tests/test_keycloak_agentgateway_role_contract.py \
             tests/test_openclaw_readonly_identity_contract.py \
-            tests/test_keycloak_agentgateway_domain_roles_contract.py
+            tests/test_keycloak_agentgateway_domain_roles_contract.py \
+            tests/test_synapse_agent_identity_contract.py
 
   velero-operability-contract:
     runs-on: arc-k8s
@@ -63,9 +65,9 @@ jobs:
       - name: Validate fail-closed Longhorn SystemBackup contract
         run: python3 -m unittest tests/test_longhorn_systembackup_contract.py
 
-  synapse-sre-postgres-role-contract:
+  synapse-postgres-role-contract:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
-      - name: Validate least-privilege SRE database roles
+      - name: Validate least-privilege database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
