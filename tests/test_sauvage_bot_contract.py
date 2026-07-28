@@ -184,8 +184,22 @@ class SauvageBotContractTest(unittest.TestCase):
                     "kubernetes.io/metadata.name"
                 ]
                 for peer in ingress[0]["from"]
+                if "namespaceSelector" in peer
             },
             {"traefik-edge", "traefik-lan"},
+        )
+        self.assertEqual(
+            {
+                peer["ipBlock"]["cidr"]
+                for peer in ingress[0]["from"]
+                if "ipBlock" in peer
+            },
+            {
+                "100.107.21.89/32",
+                "100.71.117.127/32",
+                "100.75.189.75/32",
+                "100.109.183.9/32",
+            },
         )
         self.assertEqual(
             ingress[0]["ports"],
