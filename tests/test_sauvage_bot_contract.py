@@ -49,6 +49,11 @@ class SauvageBotContractTest(unittest.TestCase):
             config["COMMUNITY_DASHBOARD_URL"],
             "https://sauvage-bot.e-dani.com",
         )
+        self.assertEqual(
+            container["image"],
+            "ghcr.io/pocharlies/shield@sha256:"
+            "260038b60dfd9168e19faa3221b5a8800245820e2fcb1a186da97d7c6403f10c",
+        )
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
         self.assertEqual(deployment["spec"]["strategy"]["type"], "Recreate")
