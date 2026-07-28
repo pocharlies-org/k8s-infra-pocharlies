@@ -53,6 +53,8 @@ jobs:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate private service exposure boundaries
         run: python3 -m unittest tests/test_private_service_exposure_contract.py
 
@@ -60,6 +62,8 @@ jobs:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate Sauvage dashboard deployment contract
         run: python3 -m unittest tests/test_sauvage_bot_contract.py
 
