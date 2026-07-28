@@ -32,7 +32,6 @@ metadata:
 spec:
   entryPoints:
     - websecure
-  ingressClassName: traefik-lan
   routes:
     - kind: Rule
       match: Host(`sauvage-bot.lan.e-dani.com`)
