@@ -13,7 +13,7 @@ metadata:
 data:
   INSTANCE_ID: sauvage
   FILES_DYNAMIC: /srv/data
-  FILES_SAMPLES: /srv/data/empty-samples
+  FILES_SAMPLES: /srv/data
   CONVERT: disabled
   MAX_BACKUPS: "0"
 
