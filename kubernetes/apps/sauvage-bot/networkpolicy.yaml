@@ -27,6 +27,16 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: traefik-lan
+        # Traefik Edge runs with hostNetwork, so the backend sees the exact
+        # node addresses instead of a namespaced pod address.
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+        - ipBlock:
+            cidr: 100.109.183.9/32
       ports:
         - protocol: TCP
           port: 8080
