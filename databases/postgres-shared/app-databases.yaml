@@ -57,6 +57,20 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
+  name: sauvage-bot
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: sauvage_bot
+  owner: sauvage_bot
+  cluster:
+    name: postgres-shared
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
   name: labels
   namespace: databases
   labels:

@@ -56,6 +56,13 @@ jobs:
       - name: Validate private service exposure boundaries
         run: python3 -m unittest tests/test_private_service_exposure_contract.py
 
+  sauvage-bot-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Sauvage dashboard deployment contract
+        run: python3 -m unittest tests/test_sauvage_bot_contract.py
+
   longhorn-systembackup-contract:
     runs-on: arc-k8s
     steps:
