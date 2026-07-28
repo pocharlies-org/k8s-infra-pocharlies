@@ -58,6 +58,15 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
         self.assertEqual(deployment["spec"]["strategy"]["type"], "Recreate")
+        self.assertEqual(
+            container["startupProbe"],
+            {
+                "httpGet": {"path": "/readyz", "port": "probes"},
+                "periodSeconds": 5,
+                "timeoutSeconds": 3,
+                "failureThreshold": 36,
+            },
+        )
         self.assertNotIn(
             "TELEGRAM_TOKEN",
             {
@@ -132,6 +141,13 @@ class SauvageBotContractTest(unittest.TestCase):
                         {"name": "sso-chain", "namespace": "keycloak"},
                     ],
                 )
+                if hostname.endswith(".lan.e-dani.com"):
+                    self.assertNotIn("ingressClassName", route["spec"])
+                else:
+                    self.assertEqual(
+                        route["spec"]["ingressClassName"],
+                        "traefik-edge",
+                    )
 
         public_route = find_document(
             load_documents(
