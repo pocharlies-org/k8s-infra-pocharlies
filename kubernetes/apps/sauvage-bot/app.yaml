@@ -25,9 +25,8 @@ data:
   SERVER_FORWARD_AUTH_EMAILS: me@e-dani.com
   SERVER_FORWARD_AUTH_PROXY_CIDRS: 10.42.0.0/16,100.107.21.89/32,100.71.117.127/32,100.75.189.75/32,100.109.183.9/32
 
-  # Telegram polling is enabled only after a dedicated BotFather token is
-  # projected into the Deployment. Until then the app is a dashboard-only
-  # dry-run and cannot compete with an existing bot poller.
+  # Poll exactly this group with one replica. DRY and
+  # COMMUNITY_APPLY_ACTIONS remain independent enforcement gates.
   TELEGRAM_GROUPS: "-1003672565710"
 
   OPENAI_API_BASE: http://litellm.litellm.svc.cluster.local:4000/v1
@@ -132,6 +131,11 @@ spec:
                 secretKeyRef:
                   name: sauvage-bot-runtime
                   key: OPENAI_TOKEN
+            - name: TELEGRAM_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sauvage-bot-runtime
+                  key: TELEGRAM_TOKEN
           ports:
             - name: http
               containerPort: 8080
