@@ -100,6 +100,12 @@ spec:
         passwordSecret:
           name: whatsappmcp-db-credentials
         comment: "WhatsApp MCP/socialmedia (repo: pocharlies/k8s-socialmedia-pocharlies)"
+      - name: sauvage_bot
+        ensure: present
+        login: true
+        passwordSecret:
+          name: sauvage-bot-db-credentials
+        comment: "Sauvage Shield moderation bot and operations dashboard"
       - name: skirmshop
         ensure: present
         login: true

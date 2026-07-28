@@ -69,16 +69,29 @@ class SynapseSrePostgresRolesTest(unittest.TestCase):
         credentials = (
             ROOT / "databases/postgres-shared/app-credentials.yaml"
         ).read_text()
-        for suffix in ("m2m", "reporter"):
-            self.assertIn(f"name: synapse-sre-{suffix}-db-credentials", credentials)
-            self.assertIn(f"key: secret/synapse/sre-{suffix}", credentials)
-        self.assertIn("name: synapse-agent-m2m-db-credentials", credentials)
-        self.assertIn("key: secret/synapse/agent-m2m", credentials)
-        self.assertEqual(
-            credentials.count('argocd.argoproj.io/sync-wave: "-1"'), 3
-        )
-        self.assertGreaterEqual(credentials.count("property: DB_USER"), 2)
-        self.assertGreaterEqual(credentials.count("property: DB_PASSWORD"), 2)
+        documents = credentials.split("\n---\n")
+        for name, vault_key in (
+            ("synapse-agent-m2m-db-credentials", "secret/synapse/agent-m2m"),
+            ("synapse-sre-m2m-db-credentials", "secret/synapse/sre-m2m"),
+            (
+                "synapse-sre-reporter-db-credentials",
+                "secret/synapse/sre-reporter",
+            ),
+        ):
+            document = next(
+                (
+                    document
+                    for document in documents
+                    if f"  name: {name}\n" in document
+                ),
+                None,
+            )
+            self.assertIsNotNone(document, name)
+            self.assertIn('argocd.argoproj.io/sync-wave: "-1"', document)
+            self.assertIn("type: kubernetes.io/basic-auth", document)
+            self.assertIn(f"key: {vault_key}", document)
+            self.assertIn("property: DB_USER", document)
+            self.assertIn("property: DB_PASSWORD", document)
         self.assertNotIn("dataFrom:", credentials)
 
     def test_cluster_reconciles_after_secret_wave(self) -> None:

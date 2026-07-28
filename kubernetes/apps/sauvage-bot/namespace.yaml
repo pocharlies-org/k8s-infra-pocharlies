@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sauvage-bot
+  labels:
+    kubernetes.io/metadata.name: sauvage-bot
+    app.kubernetes.io/part-of: sauvage-moderation

@@ -10,6 +10,7 @@ resources:
   - networking/traefik-lan/lan-app-routes.yaml
   - networking/traefik-lan/dgx-public-host-lan.yaml
   - networking/traefik-lan/openclaw-lan.yaml
+  - networking/traefik-lan/sauvage-bot-lan.yaml
   - networking/traefik-lan/synapse-email-attachments-lan.yaml
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/networkpolicy.yaml
@@ -22,6 +23,7 @@ resources:
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
+  - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
   - networking/traefik-edge/skirmshop-s3-public.yaml
   - networking/traefik-edge/wildcard-cert.yaml
@@ -46,5 +48,6 @@ resources:
   - storage/minio/synapse-email-attachments.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - buildkit
+  - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
   - kubernetes/workloads/sauvage-pod-reaper.yaml
