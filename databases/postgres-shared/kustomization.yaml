@@ -8,6 +8,7 @@ resources:
   - cluster.yaml
   - app-databases.yaml
   - role-settings.yaml
+  - monitoring.yaml
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml

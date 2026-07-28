@@ -1,0 +1,139 @@
+# Observabilidad de conexiones de postgres-shared.
+#
+# El incidente de saturación del 28-07-2026 (367/400 conexiones, 361 ociosas,
+# la transacción abandonada más vieja de 17h18m) fue INVISIBLE: no había ni una
+# serie de Postgres en VictoriaMetrics. El cluster expone /metrics en el puerto
+# 9187 desde siempre, pero `monitoring.enablePodMonitor` está en false y, aunque
+# estuviera en true, CNPG genera un PodMonitor de monitoring.coreos.com — un CRD
+# que en este cluster no existe, porque el stack es VictoriaMetrics. De ahí que
+# el scrape vaya como VMPodScrape escrito a mano.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: postgres-shared
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres
+spec:
+  namespaceSelector:
+    matchNames:
+      - databases
+  selector:
+    matchLabels:
+      cnpg.io/cluster: postgres-shared
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      interval: 30s
+      scrapeTimeout: 10s
+---
+# Umbrales, y por qué estos:
+#
+#   max_connections = 400 (por instancia).
+#
+#   Tras el saneamiento del 28-07-2026 el régimen normal está en ~200, de las
+#   que ~105 son la flota Synapse (45 pods con pools explícitos y acotados) y el
+#   resto consumidores ya limitados. 240 (60%) es por tanto "algo ha crecido de
+#   más"; 300 (75%) es el techo que un rolling update no debe superar y coincide
+#   con el criterio de aceptación del incidente.
+#
+# La división es `on(pod)` a propósito: max_connections es un límite POR
+# INSTANCIA, así que agregar las conexiones de primary y réplica y compararlas
+# contra un solo 400 daría un porcentaje sin sentido.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: postgres-shared-connections
+  namespace: databases
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: shared-infrastructure
+spec:
+  groups:
+    - name: postgres-shared.connections
+      rules:
+        - alert: PostgresSharedMetricsMissing
+          expr: absent(cnpg_backends_total{namespace="databases"})
+          for: 10m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: postgres-shared no está exportando métricas
+            description: >-
+              Sin series cnpg_backends_total durante 10m. Es exactamente la
+              ceguera que dejó pasar la saturación del 28-07-2026: revisa el
+              VMPodScrape postgres-shared y el endpoint 9187 de los pods.
+
+        - alert: PostgresSharedConnectionsHigh
+          expr: >-
+            sum by (pod) (cnpg_backends_total{namespace="databases"})
+            / on (pod) group_left() cnpg_pg_settings_setting{namespace="databases",name="max_connections"}
+            > 0.60
+          for: 15m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: postgres-shared por encima del 60% de max_connections
+            description: >-
+              {{ $labels.pod }} lleva 15m con {{ $value | humanizePercentage }}
+              de max_connections en uso. Régimen normal esperado ~50%. Mira qué
+              consumidor ha crecido con
+              `sum by (datname,usename,application_name) (cnpg_backends_total)`
+              antes de que un rolling update duplique pools.
+
+        - alert: PostgresSharedConnectionsCritical
+          expr: >-
+            sum by (pod) (cnpg_backends_total{namespace="databases"})
+            / on (pod) group_left() cnpg_pg_settings_setting{namespace="databases",name="max_connections"}
+            > 0.75
+          for: 5m
+          labels:
+            severity: critical
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: postgres-shared por encima del 75% de max_connections
+            description: >-
+              {{ $labels.pod }} está al {{ $value | humanizePercentage }} de
+              max_connections. Por debajo de la reserva de 100 conexiones: un
+              rolling update de cualquier consumidor puede agotar el cluster y
+              provocar `too many clients`.
+
+        - alert: PostgresSharedIdleInTransaction
+          expr: >-
+            max by (datname, usename) (
+              cnpg_backends_max_tx_duration_seconds{namespace="databases",state="idle in transaction"}
+            ) > 300
+          for: 5m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: transacción abandonada en {{ $labels.datname }}
+            description: >-
+              {{ $labels.usename }} lleva {{ $value | humanizeDuration }} con una
+              transacción abierta y ociosa en {{ $labels.datname }}. Su xmin
+              bloquea el vacuum de esa base. El rol `keep` ya tiene
+              idle_in_transaction_session_timeout=5min (ver role-settings.yaml);
+              si esto salta para otro rol, hay que arreglar el ciclo de
+              transacción en el cliente o darle el mismo corte.
+
+        - alert: PostgresSharedBackendsWaiting
+          expr: max by (pod) (cnpg_backends_waiting_total{namespace="databases"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: hay backends esperando un lock en postgres-shared
+            description: >-
+              {{ $value }} backends llevan 5m bloqueados esperando un lock en
+              {{ $labels.pod }}. Suele acompañar a transacciones abandonadas.
