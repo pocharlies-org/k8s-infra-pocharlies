@@ -42,6 +42,7 @@ class SauvageBotContractTest(unittest.TestCase):
 
         self.assertEqual(config["DRY"], "true")
         self.assertEqual(config["COMMUNITY_APPLY_ACTIONS"], "false")
+        self.assertEqual(config["FILES_SAMPLES"], "/srv/data")
         self.assertEqual(config["SERVER_FORWARD_AUTH_EMAILS"], "me@e-dani.com")
         self.assertEqual(config["OPENAI_MODEL"], "ornith-1.0")
         self.assertEqual(config["COMMUNITY_CHAT_ID"], "-1003672565710")
@@ -84,6 +85,22 @@ class SauvageBotContractTest(unittest.TestCase):
                 item["remoteRef"]["key"] == "sauvage-bot"
                 for item in runtime_secret["spec"]["data"]
             )
+        )
+
+    def test_database_secret_triggers_cnpg_password_reload(self) -> None:
+        database_secret = find_document(
+            load_documents(
+                "databases/postgres-shared/app-credentials.yaml"
+            ),
+            "ExternalSecret",
+            "sauvage-bot-db-credentials",
+        )
+
+        self.assertEqual(
+            database_secret["spec"]["target"]["template"]["metadata"][
+                "labels"
+            ]["cnpg.io/reload"],
+            "true",
         )
 
     def test_public_and_lan_routes_require_keycloak_sso(self) -> None:
