@@ -7,6 +7,7 @@ resources:
   - app-credentials.yaml
   - cluster.yaml
   - app-databases.yaml
+  - role-settings.yaml
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml

@@ -1,0 +1,83 @@
+# Ajustes por rol (pg_db_role_setting) que el CRD Cluster de CNPG no expone:
+# `spec.managed.roles` gestiona atributos y pertenencias, no GUCs de sesión.
+#
+# Por qué existe este Job — incidente de saturación del 28-07-2026:
+# postgres-shared llegó a 367/400 conexiones. 21 de ellas eran `idle in
+# transaction` del rol `keep`, la más antigua de 17h18m, todas paradas en el
+# mismo SELECT por PK sobre `alertenrichment`.
+#
+# La causa está en el upstream de Keep (chart keephq 0.1.96), en
+# keep/api/core/db.py::enrich_alert:
+#
+#     session.commit()
+#     session.refresh(enrichment)   # abre una transacción NUEVA
+#     return enrichment             # y nadie la cierra
+#
+# `refresh()` después de `commit()` arranca otra transacción para releer la
+# fila, y la función devuelve sin commit ni rollback. La sesión la inyecta el
+# llamante, así que la conexión se queda `idle in transaction` indefinidamente
+# y su xmin bloquea el vacuum de la base `keep`.
+#
+# No es código nuestro y la imagen es de terceros, así que la mitigación
+# gestionable es cortarlo en el servidor. 5 minutos es dos órdenes de magnitud
+# más que cualquier transacción legítima de Keep (todas sub-segundo) y coincide
+# con el criterio de aceptación del incidente.
+#
+# Se aplica SOLO al rol `keep`. Deliberadamente no es un parámetro de cluster:
+# `synapse_migration` / `synapse_owner` ejecutan migraciones que pueden quedar
+# legítimamente en espera dentro de una transacción (pg_advisory_lock), y
+# matarlas a media migración es peor que el problema que arregla.
+#
+# Requiere DATABASE_POOL_PRE_PING en Keep (KEEP_DB_PRE_PING_ENABLED=true, ya
+# puesto en k8s-observability-pocharlies/keep/values.yaml): sin pre-ping, la
+# primera reutilización de una conexión cortada por el servidor explota en la
+# aplicación en vez de reponerse de forma transparente.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-shared-role-settings
+  namespace: databases
+  annotations:
+    # PostSync y no Sync: el hook corre cuando el Cluster ya está aplicado y
+    # sano. Si esto fuese un hook de Sync, un postgres caído bloquearía el
+    # propio sync que tiene que levantarlo.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shared-infrastructure
+        app.kubernetes.io/component: postgres-role-settings
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          env:
+            - name: PGHOST
+              value: postgres-shared-rw.databases.svc.cluster.local
+            - name: PGDATABASE
+              value: postgres
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: password }
+          command:
+            - psql
+            - -v
+            - ON_ERROR_STOP=1
+            - -c
+            # ALTER ROLE ... SET es idempotente y persiste en el catálogo
+            # (pg_db_role_setting), así que sobrevive a reinicio y failover.
+            # Para revertir: ALTER ROLE keep RESET idle_in_transaction_session_timeout;
+            - ALTER ROLE keep SET idle_in_transaction_session_timeout = '5min';
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
