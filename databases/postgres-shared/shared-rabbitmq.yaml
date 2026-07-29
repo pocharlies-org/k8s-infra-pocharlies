@@ -192,6 +192,12 @@ spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/arch: amd64
+        # 2026-07-29: workload=core confines the broker to the ks5 pool
+        # (ks5-cp-1/2/3). arch=amd64 alone also matched `ubuntu`, a fragile dev
+        # box that reboots: its reboot on 01:12 CEST left the queue process
+        # stopped by supervisor and crashlooped adapter-product-creator-recategorize
+        # for ~5h. Dev nodes are labelled workload=cpu and must never host it.
+        workload: core
       affinity:
         podAntiAffinity:
           # required: with cluster_partition_handling=pause_minority, 2-of-3 nodes
