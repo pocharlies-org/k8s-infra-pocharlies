@@ -269,3 +269,8 @@ spec:
         tolerationSeconds: 300
     nodeSelector:
       kubernetes.io/arch: amd64
+      # 2026-07-29: required anti-affinity (above) stopped co-location but still
+      # allowed one instance — the primary — to sit on `ubuntu`, the dev box that
+      # reboots. It did, and its 01:12 CEST reboot forced a failover. workload=core
+      # keeps the cluster on the ks5 pool; dev/edge nodes are workload=cpu.
+      workload: core
