@@ -27,6 +27,7 @@ data:
 
   # Poll exactly this group with one replica. DRY and
   # COMMUNITY_APPLY_ACTIONS remain independent enforcement gates.
+  TELEGRAM_GROUP: "-1003672565710"
   TELEGRAM_GROUPS: "-1003672565710"
 
   OPENAI_API_BASE: http://litellm.litellm.svc.cluster.local:4000/v1
