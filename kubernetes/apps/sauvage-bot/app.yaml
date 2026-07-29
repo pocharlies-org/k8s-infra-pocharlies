@@ -50,7 +50,6 @@ data:
   COMMUNITY_PRESENTATION_THREAD_ID: "3"
   COMMUNITY_CONTEST_THREAD_ID: "6"
   COMMUNITY_CONTEST_ID: rollout-2026-07-28
-  COMMUNITY_PRIVATE_CONSENT_TERMS: acepto privados,no acepto privados,privados sí,privados no
   COMMUNITY_DAILY_DIGEST: "false"
   COMMUNITY_DAILY_DIGEST_HOUR: "9"
   COMMUNITY_DAILY_DIGEST_TIMEZONE: Europe/Madrid
@@ -109,7 +108,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shield
-          image: ghcr.io/pocharlies/shield@sha256:a86c09d75a88adab76d9b5d2ef643daa9814e7da96422c3fdc38546a42afff9d
+          image: ghcr.io/pocharlies/shield@sha256:5a68317878f4470ea3831ef902783db1cf525d56c0bc0c9bad563b640fde1dda
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

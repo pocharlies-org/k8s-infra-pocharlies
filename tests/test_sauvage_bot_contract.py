@@ -48,6 +48,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(config["TELEGRAM_GROUP"], "-1003672565710")
         self.assertEqual(config["TELEGRAM_GROUPS"], "-1003672565710")
         self.assertEqual(config["COMMUNITY_CHAT_ID"], "-1003672565710")
+        self.assertNotIn("COMMUNITY_PRIVATE_CONSENT_TERMS", config)
         self.assertEqual(
             config["COMMUNITY_DASHBOARD_URL"],
             "https://sauvage-bot.e-dani.com",
@@ -55,7 +56,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(
             container["image"],
             "ghcr.io/pocharlies/shield@sha256:"
-            "a86c09d75a88adab76d9b5d2ef643daa9814e7da96422c3fdc38546a42afff9d",
+            "5a68317878f4470ea3831ef902783db1cf525d56c0bc0c9bad563b640fde1dda",
         )
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
