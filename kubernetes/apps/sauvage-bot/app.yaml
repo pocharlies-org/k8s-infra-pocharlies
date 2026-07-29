@@ -109,7 +109,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shield
-          image: ghcr.io/pocharlies/shield@sha256:03f0407275a8ebec613f481216da69f1e61431b4b6a37053ca0f04fcc44e928b
+          image: ghcr.io/pocharlies/shield@sha256:a86c09d75a88adab76d9b5d2ef643daa9814e7da96422c3fdc38546a42afff9d
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
