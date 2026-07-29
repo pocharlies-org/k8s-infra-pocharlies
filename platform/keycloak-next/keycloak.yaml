@@ -46,6 +46,9 @@ spec:
       enableServiceLinks: false
       nodeSelector:
         kubernetes.io/arch: amd64
+        # 2026-07-29: single replica — a reboot of the dev box `ubuntu` takes SSO
+        # with it until it reschedules. Pin to the ks5 pool like its database.
+        workload: core
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.6.2

@@ -126,10 +126,17 @@ spec:
         jobs: 2
 
   affinity:
-    podAntiAffinityType: preferred
+    # 2026-07-29: was `preferred`, and both instances had drifted onto `ubuntu` —
+    # the dev box that reboots. A reboot there took the whole Keycloak database
+    # down, and with it SSO for everything behind oauth2-proxy. Same failure the
+    # postgres-shared comment records for 2026-07-20 (9h down); that cluster was
+    # hardened then, this one was missed.
+    podAntiAffinityType: required
     topologyKey: kubernetes.io/hostname
     nodeSelector:
       kubernetes.io/arch: amd64
+      # workload=core confines the cluster to the ks5 pool. Dev/edge are workload=cpu.
+      workload: core
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
