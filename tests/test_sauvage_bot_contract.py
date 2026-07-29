@@ -45,6 +45,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(config["FILES_SAMPLES"], "/srv/data")
         self.assertEqual(config["SERVER_FORWARD_AUTH_EMAILS"], "me@e-dani.com")
         self.assertEqual(config["OPENAI_MODEL"], "ornith-1.0")
+        self.assertEqual(config["TELEGRAM_GROUPS"], "-1003672565710")
         self.assertEqual(config["COMMUNITY_CHAT_ID"], "-1003672565710")
         self.assertEqual(
             config["COMMUNITY_DASHBOARD_URL"],
@@ -67,15 +68,17 @@ class SauvageBotContractTest(unittest.TestCase):
                 "failureThreshold": 36,
             },
         )
-        self.assertNotIn(
-            "TELEGRAM_TOKEN",
-            {
-                variable["name"]
-                for variable in container.get("env", [])
-            },
+        telegram_token = next(
+            variable
+            for variable in container.get("env", [])
+            if variable["name"] == "TELEGRAM_TOKEN"
+        )
+        self.assertEqual(
+            telegram_token["valueFrom"]["secretKeyRef"],
+            {"name": "sauvage-bot-runtime", "key": "TELEGRAM_TOKEN"},
         )
 
-    def test_runtime_secret_contains_only_database_and_llm_credentials(self) -> None:
+    def test_runtime_secret_contains_only_required_credentials(self) -> None:
         runtime_secret = yaml.safe_load(
             (
                 ROOT / "kubernetes/apps/sauvage-bot/secrets.yaml"
@@ -87,7 +90,7 @@ class SauvageBotContractTest(unittest.TestCase):
                 item["secretKey"]
                 for item in runtime_secret["spec"]["data"]
             },
-            {"DB_USER", "DB_PASSWORD", "OPENAI_TOKEN"},
+            {"DB_USER", "DB_PASSWORD", "OPENAI_TOKEN", "TELEGRAM_TOKEN"},
         )
         self.assertTrue(
             all(
