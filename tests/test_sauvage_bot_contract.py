@@ -56,7 +56,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(
             container["image"],
             "ghcr.io/pocharlies/shield@sha256:"
-            "5a68317878f4470ea3831ef902783db1cf525d56c0bc0c9bad563b640fde1dda",
+            "3d8fed4715d507f9036efce9d15140116cbd0e5c807ddc40e941859508dd41d2",
         )
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
