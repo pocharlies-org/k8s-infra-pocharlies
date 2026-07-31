@@ -65,11 +65,20 @@ spec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 5
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
           livenessProbe:
-            exec:
-              command: ["buildctl", "debug", "workers"]
+            # A worker RPC can legitimately stall while NVCC saturates the two
+            # allocated CPUs.  Killing buildkitd then aborts the active remote
+            # build and discards its in-flight state.  Liveness only verifies
+            # that the daemon is accepting TCP; readiness retains the stronger
+            # worker-RPC check above.
+            tcpSocket:
+              port: buildkit
             initialDelaySeconds: 10
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
           securityContext:
             # Rootless buildkit needs SETUID+SETGID so newuidmap/newgidmap can
             # configure the user-namespace UID/GID map. Not privileged; Kyverno
