@@ -300,6 +300,16 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+      # 2026-07-31: no declaraba colocacion ninguna, y monta el PVC
+      # `synapse-brain-feedback-queue` de storageClass longhorn. Sin restriccion
+      # el scheduler podia mandarlo a `sauvage`, el UNICO nodo del cluster sin el
+      # driver driver.longhorn.io: el pod se queda en ContainerCreating para
+      # siempre con "CSINode sauvage does not contain driver driver.longhorn.io"
+      # (le paso a synapse-tools-mcp el 29-07). Tambien podia caer en `ubuntu`,
+      # el nodo x86 de desarrollo que se reinicia sin aviso. Por la politica de
+      # colocacion por disco, lo que necesita NVMe/longhorn va al pool ks5.
+      nodeSelector:
+        node-pool: ks5-nvme
       containers:
         - name: handler
           image: python:3.12-alpine
