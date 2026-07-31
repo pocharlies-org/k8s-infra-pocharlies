@@ -61,6 +61,36 @@ spec:
       enableServiceLinks: false
       nodeSelector:
         kubernetes.io/arch: amd64
+      # 2026-07-31: sin esto solo pedia amd64, asi que podia aterrizar en
+      # `ubuntu` — el nodo x86 de DESARROLLO, que se reinicia sin aviso y que ya
+      # se llevo por delante el SSO cuando alojaba las dos instancias de
+      # keycloak-postgres. Es stateless (no monta PVC), asi que por la politica
+      # de colocacion por disco su sitio es sauvage, con ks5 de reserva.
+      # `required` cubre ubuntu, que no lleva ninguna de las dos etiquetas.
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+              - matchExpressions:
+                  - key: node-pool
+                    operator: In
+                    values: [ks5-nvme]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
       containers:
         - name: oauth2-proxy
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
