@@ -98,13 +98,16 @@ spec:
                 - SETUID
                 - SETGID
           resources:
-            # Modest caps: gx10 GB10 has 81% memory reserved by LLM workloads.
+            # NVCC for SM121/CUTLASS can exceed 4 GiB even with one compile job.
+            # The node has ample headroom while builds run (17% live usage on
+            # 2026-07-31); 8 GiB prevents cgroup exit 137 without reserving that
+            # memory permanently or involving the GPU device.
             requests:
               cpu: "500m"
-              memory: 1Gi
+              memory: 2Gi
             limits:
               cpu: "2"
-              memory: 4Gi
+              memory: 8Gi
           ports:
             - name: buildkit
               containerPort: 1234
