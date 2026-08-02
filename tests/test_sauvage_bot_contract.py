@@ -43,7 +43,8 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(config["DRY"], "true")
         self.assertEqual(config["COMMUNITY_APPLY_ACTIONS"], "false")
         self.assertEqual(config["FILES_SAMPLES"], "/srv/data")
-        self.assertEqual(config["SERVER_FORWARD_AUTH_EMAILS"], "me@e-dani.com")
+        self.assertEqual(config["SERVER_AUTH"], "")
+        self.assertNotIn("SERVER_FORWARD_AUTH_EMAILS", config)
         self.assertEqual(config["OPENAI_MODEL"], "ornith-1.0")
         self.assertEqual(config["TELEGRAM_GROUP"], "-1003672565710")
         self.assertEqual(config["TELEGRAM_GROUPS"], "-1003672565710")
@@ -56,7 +57,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(
             container["image"],
             "ghcr.io/pocharlies/shield@sha256:"
-            "97a98de92621ac0d5f25b4506b7a4779b0a1f3575a5322905badecdf512710b4",
+            "eaed3bc20418bfeedafe5c00d5d00b2ba414583ddd5540d651aea3194e9e16e8",
         )
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
@@ -79,6 +80,15 @@ class SauvageBotContractTest(unittest.TestCase):
             telegram_token["valueFrom"]["secretKeyRef"],
             {"name": "sauvage-bot-runtime", "key": "TELEGRAM_TOKEN"},
         )
+        auth_hash = next(
+            variable
+            for variable in container.get("env", [])
+            if variable["name"] == "SERVER_AUTH_HASH"
+        )
+        self.assertEqual(
+            auth_hash["valueFrom"]["secretKeyRef"],
+            {"name": "sauvage-bot-runtime", "key": "SERVER_AUTH_HASH"},
+        )
 
     def test_runtime_secret_contains_only_required_credentials(self) -> None:
         runtime_secret = yaml.safe_load(
@@ -92,7 +102,13 @@ class SauvageBotContractTest(unittest.TestCase):
                 item["secretKey"]
                 for item in runtime_secret["spec"]["data"]
             },
-            {"DB_USER", "DB_PASSWORD", "OPENAI_TOKEN", "TELEGRAM_TOKEN"},
+            {
+                "DB_USER",
+                "DB_PASSWORD",
+                "OPENAI_TOKEN",
+                "TELEGRAM_TOKEN",
+                "SERVER_AUTH_HASH",
+            },
         )
         self.assertTrue(
             all(
@@ -117,7 +133,7 @@ class SauvageBotContractTest(unittest.TestCase):
             "true",
         )
 
-    def test_public_and_lan_routes_require_keycloak_sso(self) -> None:
+    def test_public_and_lan_routes_pass_basic_auth_to_the_app(self) -> None:
         cases = (
             (
                 "networking/traefik-edge/sauvage-bot-public.yaml",
@@ -141,11 +157,16 @@ class SauvageBotContractTest(unittest.TestCase):
                 self.assertEqual(rule["match"], f"Host(`{hostname}`)")
                 self.assertEqual(
                     rule["middlewares"],
-                    [
-                        {"name": "sauvage-bot-strip-auth-headers"},
-                        {"name": "sso-chain", "namespace": "keycloak"},
-                    ],
+                    [{"name": "sauvage-bot-strip-auth-headers"}],
                 )
+                middleware = find_document(
+                    documents, "Middleware", "sauvage-bot-strip-auth-headers"
+                )
+                stripped_headers = middleware["spec"]["headers"][
+                    "customRequestHeaders"
+                ]
+                self.assertNotIn("Authorization", stripped_headers)
+                self.assertEqual(stripped_headers["X-Auth-Request-Email"], "")
                 if hostname.endswith(".lan.e-dani.com"):
                     self.assertNotIn("ingressClassName", route["spec"])
                 else:
