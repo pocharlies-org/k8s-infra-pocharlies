@@ -19,6 +19,7 @@ metadata:
 spec:
   headers:
     customRequestHeaders:
+      Authorization: ""
       X-Auth-Request-Email: ""
       X-Auth-Request-Groups: ""
       X-Auth-Request-User: ""
@@ -36,6 +37,8 @@ spec:
       match: Host(`sauvage-bot.lan.e-dani.com`)
       middlewares:
         - name: sauvage-bot-strip-auth-headers
+        - name: sso-chain
+          namespace: keycloak
       services:
         - name: sauvage-bot-ext
           port: 8080

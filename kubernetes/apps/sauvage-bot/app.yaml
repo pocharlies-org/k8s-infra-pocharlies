@@ -20,7 +20,10 @@ data:
   SERVER_ENABLED: "true"
   SERVER_LISTEN: :8080
   SERVER_PROBE_LISTEN: :9090
-  SERVER_AUTH: ""
+  SERVER_AUTH: auto
+  SERVER_FORWARD_AUTH_HEADER: X-Auth-Request-Email
+  SERVER_FORWARD_AUTH_EMAILS: me@e-dani.com
+  SERVER_FORWARD_AUTH_PROXY_CIDRS: 10.42.0.0/16,100.107.21.89/32,100.71.117.127/32,100.75.189.75/32,100.109.183.9/32
 
   # Poll exactly this group with one replica. DRY and
   # COMMUNITY_APPLY_ACTIONS remain independent enforcement gates.
@@ -133,11 +136,6 @@ spec:
                 secretKeyRef:
                   name: sauvage-bot-runtime
                   key: TELEGRAM_TOKEN
-            - name: SERVER_AUTH_HASH
-              valueFrom:
-                secretKeyRef:
-                  name: sauvage-bot-runtime
-                  key: SERVER_AUTH_HASH
           ports:
             - name: http
               containerPort: 8080
