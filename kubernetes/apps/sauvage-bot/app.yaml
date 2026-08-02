@@ -20,10 +20,7 @@ data:
   SERVER_ENABLED: "true"
   SERVER_LISTEN: :8080
   SERVER_PROBE_LISTEN: :9090
-  SERVER_AUTH: auto
-  SERVER_FORWARD_AUTH_HEADER: X-Auth-Request-Email
-  SERVER_FORWARD_AUTH_EMAILS: me@e-dani.com
-  SERVER_FORWARD_AUTH_PROXY_CIDRS: 10.42.0.0/16,100.107.21.89/32,100.71.117.127/32,100.75.189.75/32,100.109.183.9/32
+  SERVER_AUTH: ""
 
   # Poll exactly this group with one replica. DRY and
   # COMMUNITY_APPLY_ACTIONS remain independent enforcement gates.
@@ -108,7 +105,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shield
-          image: ghcr.io/pocharlies/shield@sha256:97a98de92621ac0d5f25b4506b7a4779b0a1f3575a5322905badecdf512710b4
+          image: ghcr.io/pocharlies/shield@sha256:eaed3bc20418bfeedafe5c00d5d00b2ba414583ddd5540d651aea3194e9e16e8
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -136,6 +133,11 @@ spec:
                 secretKeyRef:
                   name: sauvage-bot-runtime
                   key: TELEGRAM_TOKEN
+            - name: SERVER_AUTH_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: sauvage-bot-runtime
+                  key: SERVER_AUTH_HASH
           ports:
             - name: http
               containerPort: 8080
