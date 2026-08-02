@@ -18,4 +18,4 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
   labels:
     app.kubernetes.io/part-of: longhorn
-value: "110"
+value: "112"
