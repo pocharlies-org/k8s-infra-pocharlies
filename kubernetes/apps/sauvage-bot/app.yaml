@@ -105,7 +105,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shield
-          image: ghcr.io/pocharlies/shield@sha256:eaed3bc20418bfeedafe5c00d5d00b2ba414583ddd5540d651aea3194e9e16e8
+          image: ghcr.io/pocharlies/shield@sha256:db9642066b6ec724a895b534181c64b6a1238f92f19f4cc5b20315b9776fc3b1
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -138,6 +138,11 @@ spec:
                 secretKeyRef:
                   name: sauvage-bot-runtime
                   key: SERVER_AUTH_HASH
+            - name: SERVER_SAUVAGE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sauvage-bot-runtime
+                  key: SAUVAGE_INTERNAL_TOKEN
           ports:
             - name: http
               containerPort: 8080

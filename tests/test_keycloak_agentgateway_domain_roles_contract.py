@@ -27,7 +27,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertNotIn("add-roles", script)
         self.assertNotIn("set -x", script)
 
-    def test_reconciler_creates_exactly_nine_roles_without_assigning_them(self):
+    def test_reconciler_creates_exactly_ten_roles_without_assigning_them(self):
         script = BASE / "scripts" / "agentgateway-domain-roles.sh"
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary = pathlib.Path(temporary_directory)
@@ -71,8 +71,8 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             )
             calls = log.read_text().splitlines()
             creations = [call for call in calls if call.startswith("create roles ")]
-            self.assertEqual(9, len(creations))
-            self.assertIn('"roles":9,"created":9,"assigned":false', result.stdout)
+            self.assertEqual(10, len(creations))
+            self.assertIn('"roles":10,"created":10,"assigned":false', result.stdout)
             self.assertFalse(any("add-roles" in call for call in calls))
 
     def test_job_is_postsync_nonroot_pinned_and_network_limited(self):

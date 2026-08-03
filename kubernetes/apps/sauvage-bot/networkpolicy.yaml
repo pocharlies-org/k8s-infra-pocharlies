@@ -27,6 +27,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: traefik-lan
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentgateway
         # Traefik Edge runs with hostNetwork. Cross-node traffic is SNATed to
         # the source node's Flannel host address (the PodCIDR network address)
         # before it reaches the backend. Keep both the node InternalIPs and the
