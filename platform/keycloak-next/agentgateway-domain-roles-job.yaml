@@ -12,7 +12,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "19"
 spec:
   backoffLimit: 1
-  # kcadm starts a JVM for every role/audit request. The nine-role reconcile
+  # kcadm starts a JVM for every role/audit request. The ten-role reconcile
   # took 269s in production on 2026-07-15, leaving only 31s before Kubernetes
   # killed an otherwise healthy PostSync hook. Keep enough room for one slow
   # Keycloak response and the configured retry without weakening fail-closed
@@ -46,7 +46,7 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - name: ROLE_NAMES
-              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers
+              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }
