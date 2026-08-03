@@ -57,7 +57,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(
             container["image"],
             "ghcr.io/pocharlies/shield@sha256:"
-            "eaed3bc20418bfeedafe5c00d5d00b2ba414583ddd5540d651aea3194e9e16e8",
+            "db9642066b6ec724a895b534181c64b6a1238f92f19f4cc5b20315b9776fc3b1",
         )
         self.assertNotIn("TELEGRAM_TOKEN", config)
         self.assertEqual(deployment["spec"]["replicas"], 1)
@@ -108,6 +108,7 @@ class SauvageBotContractTest(unittest.TestCase):
                 "OPENAI_TOKEN",
                 "TELEGRAM_TOKEN",
                 "SERVER_AUTH_HASH",
+                "SAUVAGE_INTERNAL_TOKEN",
             },
         )
         self.assertTrue(
@@ -212,7 +213,7 @@ class SauvageBotContractTest(unittest.TestCase):
                 for peer in ingress[0]["from"]
                 if "namespaceSelector" in peer
             },
-            {"traefik-edge", "traefik-lan"},
+            {"traefik-edge", "traefik-lan", "agentgateway"},
         )
         self.assertEqual(
             {
