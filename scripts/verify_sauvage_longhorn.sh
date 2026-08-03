@@ -61,7 +61,7 @@ verify_static() {
     "$ROOT/ansible/playbooks/enable-sauvage-longhorn-attach-only.yml" >/dev/null
 
   assert_pattern 'create-default-disk-labeled-nodes: true' "$tmp/longhorn-rendered.yaml"
-  assert_pattern 'storage-over-provisioning-percentage: "110"' "$tmp/longhorn-rendered.yaml"
+  assert_pattern 'storage-over-provisioning-percentage: "112"' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'default-replica-count: .*v1.*v2' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'storage-longhorn: "true"' "$tmp/longhorn-rendered.yaml"
   assert_pattern 'key: role' "$tmp/longhorn-rendered.yaml"
