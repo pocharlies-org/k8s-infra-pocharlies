@@ -87,9 +87,24 @@ after the cleanup. The cluster therefore manages these two settings through
 Argo CD:
 
 - `concurrent-replica-rebuild-per-node-limit=1` throttles repair I/O;
-- `storage-over-provisioning-percentage=110` provides bounded logical room.
+- `storage-over-provisioning-percentage=112` provides bounded logical room.
 
 The 30% per-disk reservation and 15% minimum-free guard remain unchanged. Do
 not raise the logical ceiling again without a fresh requested-vs-actual
 capacity report and a restore drill. During the controlled wave, require each
 OpenClaw replica to land on a different KS5 node.
+
+### Capacity checkpoint — 2026-08-02
+
+The three KS5 disks reported 416.406, 468.066 and 494.141 GiB physically free,
+while the 110% logical ceiling left only 8.2, 0.2 and 0.2 GiB schedulable. A new
+encrypted 10 GiB, three-replica Qdrant volume therefore could not schedule even
+though physical capacity was healthy. The bounded ceiling was raised by two
+points to 112%; the 30% reservation, 15% minimum-free guard, encrypted volume
+contract and three-replica placement remain unchanged. Before syncing the
+Setting, capture the exact set and robustness of every existing Longhorn
+volume. The rollout gate is: one healthy Qdrant replica on each KS5 node, a
+successful encrypted attach, no increase in the captured degraded-volume
+count, and no robustness regression for any pre-existing volume. Pre-existing
+degraded volumes are a baseline to preserve, not an impossible global-zero
+assertion; record their full volume IDs with the deployment evidence.

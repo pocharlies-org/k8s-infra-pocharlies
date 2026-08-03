@@ -18,10 +18,12 @@ defaultSettings:
   # Longhorn 1.11 stores this setting per data engine, not as a legacy scalar.
   defaultReplicaCount: '{"v1":"3","v2":"3"}'
   # The KS5 disks retain the default 30% root-filesystem reservation and the
-  # 15% minimum-free guard. A bounded 110% logical ceiling gives Longhorn room
+  # 15% minimum-free guard. A bounded 112% logical ceiling gives Longhorn room
   # to repair degraded production replicas while keeping >20% physical reserve
-  # even if every scheduled volume reaches its requested size.
-  storageOverProvisioningPercentage: 110
+  # even if every scheduled volume reaches its requested size. The 2026-08-02
+  # capacity gate measured 416-494 GiB physically free per KS5 node before this
+  # two-point increase; see docs/runbook-longhorn-ks5-capacity.md.
+  storageOverProvisioningPercentage: 112
   storageMinimalAvailablePercentage: 15
   concurrentReplicaRebuildPerNodeLimit: 1
   guaranteedInstanceManagerCPU: 12
