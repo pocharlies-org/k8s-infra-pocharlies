@@ -360,6 +360,18 @@ spec:
               app.kubernetes.io/instance: affiliate
       ports:
         - { protocol: TCP, port: 6379 }
+    # Deterministic commerce inbox, replay, leases, sessions and rate limits.
+    # Only the dedicated runtime pods may use its isolated logical DB/prefix.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: skirmshop
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: skirmshop-chatbot
+              app.kubernetes.io/instance: deterministic
+      ports:
+        - { protocol: TCP, port: 6379 }
     - from:
         - namespaceSelector:
             matchLabels:
