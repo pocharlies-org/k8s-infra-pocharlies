@@ -113,6 +113,7 @@ providers:
       - openclaw-qwen36
       - tomorrowland
       - bambulab
+      - libreplay
       - libreplay-staging
       - serpientetool
       - openclaw-staging
