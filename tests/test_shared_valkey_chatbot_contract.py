@@ -100,6 +100,13 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn('env EXPECTED_ACL_SHA256="$expected_acl_sha256"', script)
         self.assertIn('projected_sha256="$(sha256sum /acl/users.acl', script)
         self.assertIn('[ "$projected_sha256" = "$EXPECTED_ACL_SHA256" ]', script)
+        self.assertIn("PRE-LOAD SECURITY BOUNDARY", script)
+        self.assertIn('chatbot_line_count" = 1', script)
+        self.assertIn('chatbot_password_count" = 1', script)
+        self.assertLess(
+            script.index("PRE-LOAD SECURITY BOUNDARY"),
+            script.index('result="$(valkey-cli -p 6379 --user sentinel'),
+        )
         self.assertIn("ACL LOAD", script)
         self.assertIn("ACL DRYRUN chatbot HSET", script)
         self.assertIn("actual_acl_tokens", script)

@@ -55,10 +55,32 @@ done
 for pod in "${pods[@]}"; do
   kubectl -n "$namespace" exec "$pod" -c valkey -- \
     env EXPECTED_ACL_SHA256="$expected_acl_sha256" sh -ec '
+    expected_acl_tokens="$(printf '\''%s\n'\'' \
+      on \
+      '~skirmshop:commerce:v1:*' \
+      +auth +del +eval +exists +hdel +hget +hset +incr +pexpire +ping +pttl +quit +time \
+      | LC_ALL=C sort)"
     attempt=1
     while [ "$attempt" -le 60 ]; do
       projected_sha256="$(sha256sum /acl/users.acl | awk '\''{print $1}'\'')"
       if [ "$projected_sha256" = "$EXPECTED_ACL_SHA256" ]; then
+        # PRE-LOAD SECURITY BOUNDARY: reject an expanded rule before any
+        # Valkey process is allowed to load the reconciled file.
+        chatbot_line_count="$(awk '\''$1 == "user" && $2 == "chatbot" { count += 1 } END { print count + 0 }'\'' /acl/users.acl)"
+        chatbot_password_count="$(awk '\''
+          $1 == "user" && $2 == "chatbot" {
+            for (i = 3; i <= NF; i += 1) if ($i ~ /^>.+$/) count += 1
+          }
+          END { print count + 0 }
+        '\'' /acl/users.acl)"
+        actual_acl_tokens="$(awk '\''
+          $1 == "user" && $2 == "chatbot" {
+            for (i = 3; i <= NF; i += 1) if ($i !~ /^>/) print $i
+          }
+        '\'' /acl/users.acl | LC_ALL=C sort)"
+        [ "$chatbot_line_count" = 1 ]
+        [ "$chatbot_password_count" = 1 ]
+        [ "$actual_acl_tokens" = "$expected_acl_tokens" ]
         exit 0
       fi
       attempt=$((attempt + 1))
