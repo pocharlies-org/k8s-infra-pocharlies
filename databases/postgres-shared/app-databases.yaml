@@ -309,3 +309,23 @@ spec:
   owner: aurora
   cluster:
     name: postgres-shared
+---
+# Benchmark results. A separate database rather than a schema inside `litellm`: LiteLLM
+# runs Prisma against that one and `prisma db push` diffs the whole search path.
+# The bench.* schema is created idempotently by bench/db.py::ensure_schema() on backend
+# startup; it was validated against this cluster in a transaction and rolled back before
+# landing.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: dgxbench
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: dgxbench
+  owner: dgxbench
+  cluster:
+    name: postgres-shared
+

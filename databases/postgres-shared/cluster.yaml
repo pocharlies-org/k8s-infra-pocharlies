@@ -112,6 +112,12 @@ spec:
         passwordSecret:
           name: skirmshop-db-credentials
         comment: "SkirmShop shared apps and labels (shopify-* repos)"
+      - name: dgxbench
+        ensure: present
+        login: true
+        passwordSecret:
+          name: dgxbench-db-credentials
+        comment: "DGX benchmark results (dgx-infra services/dashboard/bench); pool capped at 3"
       # Synapse host stack (41 services in sauvage), migrated from docker shared-postgres
       # to CNPG (2026-06-08). Mirrors the role topology in docker: synapse_app is a NOLOGIN
       # group; the 6 login roles inherit from it. synapse_engine + synapse_admin BYPASSRLS.
