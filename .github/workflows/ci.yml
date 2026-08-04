@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   standard:
-    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-ci.yml@main
+    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-ci.yml@96ec4d91e103d5b62159fe5ac3d5ae9f84340063
     with:
       runner: arc-k8s
       run_node: false
@@ -86,3 +86,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
+
+  shared-valkey-chatbot-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate shared Valkey ACL reconciliation and activation gate
+        run: |
+          bash -n scripts/valkey/activate-shared-valkey-acl.sh
+          python3 -m unittest tests/test_shared_valkey_chatbot_contract.py
