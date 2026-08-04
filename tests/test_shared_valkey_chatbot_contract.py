@@ -103,10 +103,15 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn("PRE-LOAD SECURITY BOUNDARY", script)
         self.assertIn('chatbot_line_count" = 1', script)
         self.assertIn('chatbot_password_count" = 1', script)
-        self.assertLess(
-            script.index("PRE-LOAD SECURITY BOUNDARY"),
-            script.index('result="$(valkey-cli -p 6379 --user sentinel'),
+        acl_load_position = script.index(
+            'result="$(valkey-cli -p 6379 --user sentinel'
         )
+        for preload_assertion in (
+            '[ "$chatbot_line_count" = 1 ]',
+            '[ "$chatbot_password_count" = 1 ]',
+            '[ "$actual_acl_tokens" = "$expected_acl_tokens" ]',
+        ):
+            self.assertLess(script.index(preload_assertion), acl_load_position)
         self.assertIn("ACL LOAD", script)
         self.assertIn("ACL DRYRUN chatbot HSET", script)
         self.assertIn("actual_acl_tokens", script)
