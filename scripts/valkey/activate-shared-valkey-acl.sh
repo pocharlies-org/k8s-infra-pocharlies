@@ -38,6 +38,13 @@ done
 actual_keys="$(kubectl -n "$namespace" get "secret/${secret_name}" -o go-template='{{range $key, $_ := .data}}{{printf "%s\n" $key}}{{end}}' | LC_ALL=C sort)"
 expected_keys="$(printf '%s\n' replication-password sentinel-password sentinel-valkey-password users.acl | LC_ALL=C sort)"
 [[ "$actual_keys" == "$expected_keys" ]] || fail "Secret key set is incomplete or contains unexpected keys"
+expected_acl_sha256="$(
+  kubectl -n "$namespace" get "secret/${secret_name}" -o jsonpath='{.data.users\.acl}' \
+    | base64 -d \
+    | sha256sum \
+    | awk '{print $1}'
+)"
+[[ "$expected_acl_sha256" =~ ^[0-9a-f]{64}$ ]] || fail "could not hash the reconciled ACL file"
 
 for pod in "${pods[@]}"; do
   kubectl -n "$namespace" wait --for=condition=Ready "pod/${pod}" --timeout=120s >/dev/null
@@ -46,10 +53,12 @@ done
 # Wait until kubelet has projected the reconciled ACL file on every pod before
 # changing any process. This keeps a retry from leaving members on two files.
 for pod in "${pods[@]}"; do
-  kubectl -n "$namespace" exec "$pod" -c valkey -- sh -ec '
+  kubectl -n "$namespace" exec "$pod" -c valkey -- \
+    env EXPECTED_ACL_SHA256="$expected_acl_sha256" sh -ec '
     attempt=1
     while [ "$attempt" -le 60 ]; do
-      if grep -q "^user chatbot " /acl/users.acl; then
+      projected_sha256="$(sha256sum /acl/users.acl | awk '\''{print $1}'\'')"
+      if [ "$projected_sha256" = "$EXPECTED_ACL_SHA256" ]; then
         exit 0
       fi
       attempt=$((attempt + 1))
@@ -91,6 +100,31 @@ for pod in "${pods[@]}"; do
       valkey-cli -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning "$@"
     }
 
+    # The password is intentionally excluded from this comparison. Every
+    # capability token is otherwise exact so a broad command category cannot
+    # silently survive a Vault edit.
+    actual_acl_tokens="$(awk '\''
+      $1 == "user" && $2 == "chatbot" {
+        for (i = 3; i <= NF; i += 1) {
+          if ($i !~ /^>/) print $i
+        }
+      }
+    '\'' /acl/users.acl | LC_ALL=C sort)"
+    expected_acl_tokens="$(printf '\''%s\n'\'' \
+      on \
+      '~skirmshop:commerce:v1:*' \
+      +auth +del +eval +exists +hdel +hget +hset +incr +pexpire +ping +pttl +quit +time \
+      | LC_ALL=C sort)"
+    [ "$actual_acl_tokens" = "$expected_acl_tokens" ]
+
+    assert_command_denied() {
+      denied="$(admin ACL DRYRUN chatbot "$@" 2>&1 || true)"
+      case "$denied" in
+        *"no permissions to run"*) ;;
+        *) exit 1 ;;
+      esac
+    }
+
     [ "$(admin ACL DRYRUN chatbot PING)" = "OK" ]
     [ "$(admin ACL DRYRUN chatbot HSET skirmshop:commerce:v1:acl-activation-probe field value)" = "OK" ]
     denied="$(admin ACL DRYRUN chatbot HSET rho:forbidden:acl-activation-probe field value 2>&1 || true)"
@@ -98,6 +132,12 @@ for pod in "${pods[@]}"; do
       User\ chatbot\ has\ no\ permissions\ to\ access\ the\ *rho:forbidden:acl-activation-probe*key) ;;
       *) exit 1 ;;
     esac
+    assert_command_denied CLIENT PAUSE 1000
+    assert_command_denied CLIENT KILL TYPE normal
+    assert_command_denied CLIENT UNBLOCK 1
+    assert_command_denied COMMAND INFO ACL
+    assert_command_denied SELECT 0
+    assert_command_denied FLUSHDB
 
     chatbot_password="$(awk '\''$1 == "user" && $2 == "chatbot" { for (i = 3; i <= NF; i += 1) if ($i ~ /^>/) { print substr($i, 2); exit } }'\'' /acl/users.acl)"
     [ -n "$chatbot_password" ]

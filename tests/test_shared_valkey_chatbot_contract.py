@@ -96,14 +96,31 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn('reason" == "SecretSynced"', script)
         self.assertIn(r'{{printf "%s\n" $key}}', script)
         self.assertNotIn(r'{{printf "%s\\n" $key}}', script)
-        self.assertIn('grep -q "^user chatbot "', script)
+        self.assertIn("expected_acl_sha256", script)
+        self.assertIn('env EXPECTED_ACL_SHA256="$expected_acl_sha256"', script)
+        self.assertIn('projected_sha256="$(sha256sum /acl/users.acl', script)
+        self.assertIn('[ "$projected_sha256" = "$EXPECTED_ACL_SHA256" ]', script)
         self.assertIn("ACL LOAD", script)
         self.assertIn("ACL DRYRUN chatbot HSET", script)
+        self.assertIn("actual_acl_tokens", script)
+        self.assertIn("expected_acl_tokens", script)
+        self.assertIn("+auth +del +eval +exists +hdel +hget +hset +incr", script)
+        self.assertIn("+pexpire +ping +pttl +quit +time", script)
+        self.assertNotIn("+@connection", script)
         self.assertIn(
             "User\\ chatbot\\ has\\ no\\ permissions\\ to\\ access\\ the\\ "
             "*rho:forbidden:acl-activation-probe*key",
             script,
         )
+        for denied_probe in (
+            "CLIENT PAUSE 1000",
+            "CLIENT KILL TYPE normal",
+            "CLIENT UNBLOCK 1",
+            "COMMAND INFO ACL",
+            "SELECT 0",
+            "FLUSHDB",
+        ):
+            self.assertIn(f"assert_command_denied {denied_probe}", script)
         self.assertIn("NOPERM*", script)
         self.assertEqual(script.count('REDISCLI_AUTH="$chatbot_password"'), 5)
         self.assertNotIn("VALKEYCLI_AUTH", script)
