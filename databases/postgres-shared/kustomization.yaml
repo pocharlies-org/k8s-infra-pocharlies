@@ -12,6 +12,7 @@ resources:
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml
+  - shared-valkey-secrets.yaml
   - shared-valkey.yaml
   - scheduledbackup.yaml
 labels:
