@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-ci.yml@main
+    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-ci.yml@96ec4d91e103d5b62159fe5ac3d5ae9f84340063
     with:
       runner: arc-k8s
       run_node: false
@@ -29,7 +29,7 @@ jobs:
 
   release:
     needs: [ci]
-    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-manifest-release.yml@main
+    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-manifest-release.yml@96ec4d91e103d5b62159fe5ac3d5ae9f84340063
     with:
       runner: arc-k8s
       source_path: "."
