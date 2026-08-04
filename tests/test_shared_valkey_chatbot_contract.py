@@ -99,6 +99,14 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn('grep -q "^user chatbot "', script)
         self.assertIn("ACL LOAD", script)
         self.assertIn("ACL DRYRUN chatbot HSET", script)
+        self.assertIn(
+            "User\\ chatbot\\ has\\ no\\ permissions\\ to\\ access\\ the\\ "
+            "*rho:forbidden:acl-activation-probe*key",
+            script,
+        )
+        self.assertIn("NOPERM*", script)
+        self.assertEqual(script.count('REDISCLI_AUTH="$chatbot_password"'), 5)
+        self.assertNotIn("VALKEYCLI_AUTH", script)
         self.assertIn("shared-valkey-0 shared-valkey-1 shared-valkey-2", script)
         self.assertIn("expected one master and two replicas", script)
         self.assertIn('exec "$master_pod" -c valkey', script)

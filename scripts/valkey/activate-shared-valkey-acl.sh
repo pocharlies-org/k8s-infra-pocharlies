@@ -95,15 +95,21 @@ for pod in "${pods[@]}"; do
     [ "$(admin ACL DRYRUN chatbot HSET skirmshop:commerce:v1:acl-activation-probe field value)" = "OK" ]
     denied="$(admin ACL DRYRUN chatbot HSET rho:forbidden:acl-activation-probe field value 2>&1 || true)"
     case "$denied" in
-      *NOPERM*) ;;
+      User\ chatbot\ has\ no\ permissions\ to\ access\ the\ *rho:forbidden:acl-activation-probe*key) ;;
       *) exit 1 ;;
     esac
 
     chatbot_password="$(awk '\''$1 == "user" && $2 == "chatbot" { for (i = 3; i <= NF; i += 1) if ($i ~ /^>/) { print substr($i, 2); exit } }'\'' /acl/users.acl)"
     [ -n "$chatbot_password" ]
-    VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning PING | grep -qx PONG
-    VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
+    REDISCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning PING | grep -qx PONG
+    REDISCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
       HGET skirmshop:commerce:v1:acl-activation-probe field >/dev/null
+    denied="$(REDISCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
+      HSET rho:forbidden:acl-activation-probe field value 2>&1 || true)"
+    case "$denied" in
+      NOPERM*) ;;
+      *) exit 1 ;;
+    esac
     unset chatbot_password
   ' || fail "chatbot ACL verification failed on ${pod}"
 done
@@ -113,9 +119,9 @@ done
 kubectl -n "$namespace" exec "$master_pod" -c valkey -- sh -ec '
   chatbot_password="$(awk '\''$1 == "user" && $2 == "chatbot" { for (i = 3; i <= NF; i += 1) if ($i ~ /^>/) { print substr($i, 2); exit } }'\'' /acl/users.acl)"
   [ -n "$chatbot_password" ]
-  VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
+  REDISCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
     HSET skirmshop:commerce:v1:acl-activation-probe field value | grep -Eq '\''^[01]$'\''
-  VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
+  REDISCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
     DEL skirmshop:commerce:v1:acl-activation-probe >/dev/null
   unset chatbot_password
 ' || fail "authenticated chatbot write probe failed on ${master_pod}"
