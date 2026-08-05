@@ -8,7 +8,7 @@ metadata:
 spec:
   schedule: "0 3 * * *"   # 03:00 UTC daily
   template:
-    ttl: 720h0m0s   # 30 days retention
+    ttl: 336h0m0s   # 14 days retention
     includedNamespaces:
       - vault
       - harbor
@@ -62,7 +62,7 @@ metadata:
 spec:
   schedule: "30 3 * * *"   # 03:30 UTC daily (staggered after daily-critical)
   template:
-    ttl: 720h0m0s   # 30 days retention
+    ttl: 336h0m0s   # 14 days retention
     includedNamespaces:
       - aiops
     snapshotMoveData: true
