@@ -1,9 +1,12 @@
 ---
 # Daily window (UTC) in which a node reboots if /var/run/reboot-required exists.
 # Each host in the group gets base_hour + (group index * stagger) so two
-# control-planes are never down at once (boot ~3min << 30min stagger).
+# control-planes are never down at once. The stagger must exceed the drain
+# budget below: the peer guard only checks Ready, and a cordoned node that
+# is still draining reports Ready, so a shorter stagger would let two
+# control-planes drain simultaneously (2026-08-07).
 post_upgrade_reboot_base_hour: 4
-post_upgrade_reboot_stagger_minutes: 30
+post_upgrade_reboot_stagger_minutes: 60
 
 # Tailscale IPs of all etcd peers (static; MagicDNS may be down when this
 # script matters most — see incident 2026-06-10, resolved/journald dead).
@@ -12,5 +15,9 @@ post_upgrade_reboot_peer_ips: "{{ ks5_tailscale_ips }}"
 # kubectl drain budget before the reboot is aborted for this window
 # (incident 2026-06-11: undrained reboot -> Longhorn iSCSI shutdown hang,
 # dirty CNPG/RabbitMQ ext4, OVH tech power-cycled the node mid-boot).
-# Must stay well under the service TimeoutStartSec and the 30min stagger.
-post_upgrade_reboot_drain_timeout_seconds: 420
+# TimeoutStartSec del unit se deriva de este valor, no lo dupliques a mano.
+# 2026-08-07: subido de 420s. Con 420 el drain llegaba al ultimo pod y
+# expiraba: la cadena es secuencial (pods terminan -> volumenes Longhorn
+# se desmontan -> replicas paran -> Longhorn suelta el PDB del
+# instance-manager) y con 100+ pods no cabe en 7 min.
+post_upgrade_reboot_drain_timeout_seconds: 1800
