@@ -42,6 +42,39 @@ DRY_RUN=0
 
 log() { logger -t post-upgrade-reboot -- "$*"; echo "post-upgrade-reboot: $*"; }
 
+FAILCOUNT="$MARKER_DIR/consecutive-drain-failures"
+
+# A bare "drain failed" hides WHY, and a node can then retry every night for
+# weeks unnoticed (2026-07-28..2026-08-06: 9 windows, kernel never applied,
+# and the daily 7-min eviction storm corrupted a Velero data-path). Name the
+# blockers so the journal alone is enough to act on.
+report_drain_blockers() {
+  local pods pdbs n
+  log "---- why the drain could not finish on $SELF ----"
+
+  pods=$(timeout 30 k3s kubectl get pods -A --field-selector "spec.nodeName=$SELF" \
+           -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name} owner={.metadata.ownerReferences[0].kind}{"\n"}{end}' \
+         2>/dev/null | grep -v ' owner=DaemonSet$' | grep -v '^/ ')
+  n=$(grep -c . <<<"${pods:-}")
+  log "evictable pods still on the node: ${n:-0}"
+  [[ -n "${pods:-}" ]] && head -20 <<<"$pods" | while read -r p; do [[ -n "$p" ]] && log "  pod $p"; done
+  (( n > 20 )) && log "  ... and $((n - 20)) more"
+
+  pdbs=$(timeout 30 k3s kubectl get pdb -A \
+           -o jsonpath='{range .items[?(@.status.disruptionsAllowed==0)]}{.metadata.namespace}/{.metadata.name} expected={.status.expectedPods}{"\n"}{end}' \
+         2>/dev/null | grep -v '^/ ')
+  n=$(grep -c . <<<"${pdbs:-}")
+  log "PDBs at 0 allowed disruptions (cluster-wide): ${n:-0}"
+  [[ -n "${pdbs:-}" ]] && head -20 <<<"$pdbs" | while read -r b; do [[ -n "$b" ]] && log "  pdb $b"; done
+
+  local fails=0
+  [[ -f "$FAILCOUNT" ]] && fails=$(cat "$FAILCOUNT" 2>/dev/null || echo 0)
+  fails=$((fails + 1))
+  echo "$fails" > "$FAILCOUNT" 2>/dev/null || true
+  log "ERROR: consecutive failed drain windows: $fails (kernel stays unapplied until this clears)"
+  log "------------------------------------------------"
+}
+
 if [[ ! -f "$FLAG" ]]; then
   if [[ "$DRY_RUN" == "1" ]]; then
     log "dry-run: no $FLAG, continuing checks anyway"
@@ -129,8 +162,10 @@ else
        --ignore-daemonsets --delete-emptydir-data --force \
        --timeout="${DRAIN_TIMEOUT}s" 2>&1 | logger -t post-upgrade-reboot; then
     log "drain complete"
+    rm -f "$FAILCOUNT" 2>/dev/null || true
   else
     log "WARNING: drain failed/timed out; uncordoning and skipping this window"
+    report_drain_blockers
     if timeout 30 k3s kubectl uncordon "$SELF" >/dev/null 2>&1; then
       rm -f "$MARKER"
     else
