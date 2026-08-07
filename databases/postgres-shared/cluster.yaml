@@ -258,6 +258,10 @@ spec:
         compression: gzip
         jobs: 2
 
+  # 2026-08-07: after a cordon the primary took 123 min and 452 attempts to find
+  # a node. Preempt ordinary workloads instead of queueing behind them.
+  priorityClassName: data-critical
+
   affinity:
     # required: with only 2 instances, co-location turns one node failure into a
     # full outage with no failover target (incident 2026-07-20: both instances on

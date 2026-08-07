@@ -1,0 +1,20 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: data-critical
+# 2026-08-07: the ks5 pool is only 3 schedulable nodes (ks5-cp-1/2/3, 8 CPU
+# each). Cordoning one for maintenance leaves two, and with CPU requests at
+# 94-99% on cp-1/cp-2 the broker and the database had nowhere to land:
+# postgres-shared took 123 min and 452 scheduling attempts to come back.
+#
+# data-critical lets the scheduler preempt ordinary workloads to make room for
+# the two stateful services everything else depends on. It sits BELOW
+# longhorn-critical (1000000000) on purpose: without its storage layer the
+# database cannot start, so Longhorn must always outrank it.
+value: 900000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: >-
+  Shared stateful data plane (postgres-shared, shared-rabbitmq). Preempts
+  ordinary workloads so a cordoned node never leaves the fabric without a
+  scheduling target. Ranks below longhorn-critical.

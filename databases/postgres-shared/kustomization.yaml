@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: databases
 resources:
   - namespace.yaml
+  - priorityclass.yaml
   - minio-credentials.yaml
   - app-credentials.yaml
   - cluster.yaml
