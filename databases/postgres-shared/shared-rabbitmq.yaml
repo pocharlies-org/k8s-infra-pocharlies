@@ -190,6 +190,9 @@ spec:
       enableServiceLinks: false
       serviceAccountName: shared-rabbitmq
       terminationGracePeriodSeconds: 60
+      # 2026-08-07: cordoning a ks5 node left the broker Pending because the
+      # other two sit at 94-99% CPU requests. Preempt instead of waiting.
+      priorityClassName: data-critical
       nodeSelector:
         kubernetes.io/arch: amd64
         # 2026-07-29: workload=core confines the broker to the ks5 pool
