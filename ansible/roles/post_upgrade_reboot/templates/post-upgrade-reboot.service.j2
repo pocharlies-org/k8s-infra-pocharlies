@@ -6,6 +6,8 @@ Documentation=file:/usr/local/sbin/post-upgrade-reboot.sh
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/post-upgrade-reboot.sh
-# Worst case: drain ({{ post_upgrade_reboot_drain_timeout_seconds }}s) + etcd
-# snapshot (90s) + 90s wait for a stuck PID 1 before reboot -f, plus margin.
-TimeoutStartSec=25min
+# Worst case: drain ({{ post_upgrade_reboot_drain_timeout_seconds }}s) + 60s
+# outer guard + etcd snapshot (90s) + 90s wait for a stuck PID 1 before
+# reboot -f. Derivado de la variable a proposito: hardcodearlo dejo un
+# 25min que habria matado el servicio a mitad de drain (2026-08-07).
+TimeoutStartSec={{ (post_upgrade_reboot_drain_timeout_seconds | int) + 600 }}s
