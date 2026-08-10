@@ -28,15 +28,20 @@ metadata:
     app.kubernetes.io/component: forward-auth
 spec:
   errors:
+    # SOLO 401 = "no hay sesión SSO" → manda al login. El 403 NO se reescribe:
+    # es una decisión de autorización YA autenticada (oauth2-proxy: grupo no
+    # permitido; o la app: `requirePlatformAdmin` de skirmbooks lanza 403). Si se
+    # reescribe a /oauth2/sign_in, el SSO responde "ya estás dentro", la app vuelve
+    # a dar 403 y el navegador entra en ERR_TOO_MANY_REDIRECTS (10-08-2026:
+    # info@e-dani.com, que no es platform-admin, en /admin/descargas-facturas).
     status:
-      - "401-403"
+      - "401"
     service:
       name: oauth2-proxy
       port: 4180
     query: /oauth2/sign_in?rd={url}
     statusRewrites:
       "401": 302
-      "403": 302
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
