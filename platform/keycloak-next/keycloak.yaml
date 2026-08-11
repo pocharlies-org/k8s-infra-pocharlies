@@ -34,9 +34,7 @@ metadata:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: sso
 spec:
-  # Migration hold: keep writers stopped while the final logical dump is moved
-  # from keycloak-postgres to postgres-shared. The cutover commit restores 1.
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: keycloak
@@ -70,7 +68,7 @@ spec:
             - { name: KC_METRICS_ENABLED, value: "true" }
             - { name: KC_DB, value: postgres }
             - name: KC_DB_URL_HOST
-              value: keycloak-postgres-rw.keycloak.svc.cluster.local
+              value: postgres-shared-rw.databases.svc.cluster.local
             - { name: KC_DB_URL_DATABASE, value: keycloak }
             - name: KC_DB_USERNAME
               valueFrom:
