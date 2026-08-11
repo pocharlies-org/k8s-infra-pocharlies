@@ -7,6 +7,9 @@ redirects here for old bookmarks.
 ## Target shape
 
 - `auth-next.e-dani.com` serves Keycloak.
+- Keycloak stores its dedicated `keycloak` database and owner role in the
+  shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
+  from Vault path `secret/keycloak-next/postgres`.
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
 - Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
   namespace:
@@ -73,6 +76,27 @@ secrets and Google OAuth client exist:
 
 Protected services should reference the `keycloak/sso-chain` Traefik middleware
 or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
+
+## PostgreSQL rollback window
+
+Keycloak moved from `keycloak/keycloak-postgres` to
+`databases/postgres-shared/keycloak` on 2026-08-11. The old CNPG cluster,
+ScheduledBackup and PVCs are intentionally retained through 2026-08-25; do not
+delete or repurpose them before that date. The forward and reverse one-shot Jobs
+live under `manual/` and are deliberately excluded from Kustomize.
+
+Rollback is stop-copy-switch, so post-cutover writes are preserved:
+
+1. commit `spec.replicas: 0` for Deployment `keycloak`, sync `k8s-infra` and
+   wait until no Keycloak pod remains;
+2. apply `manual/rollback-to-dedicated-postgres-job.yaml`, wait for completion
+   and inspect its sanitized validation counts;
+3. change `KC_DB_URL_HOST` back to
+   `keycloak-postgres-rw.keycloak.svc.cluster.local`, restore one replica,
+   commit/push and sync `k8s-infra`;
+4. verify `/health/ready`, the `edani` login page and a client-credentials token;
+5. keep `databases/postgres-shared/keycloak` intact until the rollback decision
+   is closed.
 
 ## AgentGateway privileged write role
 
