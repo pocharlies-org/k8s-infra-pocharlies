@@ -8,6 +8,11 @@ expose:
 
 externalURL: https://harbor.lan.e-dani.com
 
+# jobservice and registry use ReadWriteOnce PVCs. Stop the old pod before
+# starting its replacement so upgrades cannot deadlock on multi-attach.
+updateStrategy:
+  type: Recreate
+
 # pin storage type to S3 (MinIO)
 persistence:
   enabled: true
