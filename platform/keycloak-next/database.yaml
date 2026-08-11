@@ -59,10 +59,18 @@ kind: Cluster
 metadata:
   name: keycloak-postgres
   namespace: keycloak
+  annotations:
+    migration.skirmshop.es/state: rollback-standby
+    migration.skirmshop.es/target: databases/postgres-shared/keycloak
+    migration.skirmshop.es/retain-until: "2026-08-25"
   labels:
     app.kubernetes.io/name: keycloak-postgres
     app.kubernetes.io/component: database
 spec:
+  # Rollback source for the 2026-08-11 migration to postgres-shared. Keep this
+  # cluster and its PVCs running and unmodified through the retain-until date.
+  # Keycloak no longer points here after cutover, but a rollback may need the
+  # frozen data or a reverse restore from postgres-shared.
   instances: 2
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
   primaryUpdateStrategy: unsupervised
