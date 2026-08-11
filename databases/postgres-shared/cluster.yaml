@@ -43,6 +43,28 @@ spec:
       max_wal_senders: "20"
       max_replication_slots: "32"
 
+      # ── Volumen de WAL (2026-08-11) ────────────────────────────────────
+      # MEDIDO: 7.028 segmentos archivados en 7 días = ~16 GB/día de WAL
+      # para una base de datos que ENTERA ocupa 15 GB. Por eso el archivo de
+      # barman llegó a ~460 GB con 30 días de retención.
+      #
+      # No es volumen de datos, son imágenes de página completa. Con
+      # full_page_writes=on, el primer cambio a una página DESPUÉS de cada
+      # checkpoint mete los 8 KB enteros en el WAL. Con checkpoint_timeout a
+      # 5 min y max_wal_size a 1 GB los checkpoints eran constantes, y la
+      # carga es de UPDATE puro (competitor_intel 9,5 M updates, synapse
+      # 3,2 M, back_in_stock 1,9 M sobre una base de 27 MB), así que se
+      # reescribían las mismas páginas una y otra vez.
+      #
+      # Espaciar los checkpoints reduce cuántas páginas completas se emiten;
+      # wal_compression las comprime antes de escribirlas, así que baja el
+      # WAL en disco Y lo archivado. zstd está disponible en PG 17.
+      # Los tres son SIGHUP: no reinician el cluster.
+      wal_compression: "zstd"
+      checkpoint_timeout: "15min"
+      max_wal_size: "4GB"
+      min_wal_size: "1GB"
+
   storage:
     storageClass: longhorn
     size: 80Gi
