@@ -28,6 +28,14 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
             "name": "shared-valkey-acl",
             "creationPolicy": "Orphan",
             "deletionPolicy": "Retain",
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "argocd.argoproj.io/tracking-id": "",
+                        "argocd.argoproj.io/compare-options": "IgnoreExtraneous",
+                    },
+                },
+            },
         })
         self.assertEqual(
             {
