@@ -64,6 +64,12 @@ spec:
 
   managed:
     roles:
+      - name: keycloak
+        ensure: present
+        login: true
+        passwordSecret:
+          name: keycloak-db-credentials
+        comment: "Keycloak SSO; migrated from keycloak/keycloak-postgres on 2026-08-11"
       - name: n8n
         ensure: present
         login: true
