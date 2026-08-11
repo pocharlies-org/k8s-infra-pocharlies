@@ -8,15 +8,9 @@ Keycloak is the active SSO stack. `auth-next.e-dani.com` is canonical and
 Since 2026-08-11 Keycloak uses database `keycloak`, owned by role `keycloak`,
 on `postgres-shared-rw.databases.svc.cluster.local`. Both namespaces project the
 same Vault credential from `secret/keycloak-next/postgres`; no password is
-stored in Git. The former `keycloak/keycloak-postgres` cluster is a rollback
-standby through 2026-08-25 and must not be deleted with its PVCs before then.
-
-The cutover used `manual/migrate-to-shared-postgres-job.yaml` while Keycloak was
-stopped. For rollback, stop Keycloak again, run
-`manual/rollback-to-dedicated-postgres-job.yaml`, validate the sanitized counts,
-then restore the old hostname in `keycloak.yaml` and one replica. The rollback
-Job refreshes the dedicated database from the shared source before switching,
-so changes made after cutover are retained.
+stored in Git. The former `keycloak/keycloak-postgres` cluster and its PVCs were
+decommissioned on 2026-08-11 after the operator closed the rollback window.
+Database recovery now follows the `postgres-shared` backup and restore runbook.
 
 ## 1. Seed Vault secrets
 
