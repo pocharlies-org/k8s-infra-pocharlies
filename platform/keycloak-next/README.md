@@ -77,26 +77,13 @@ secrets and Google OAuth client exist:
 Protected services should reference the `keycloak/sso-chain` Traefik middleware
 or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
 
-## PostgreSQL rollback window
+## PostgreSQL compartido
 
-Keycloak moved from `keycloak/keycloak-postgres` to
-`databases/postgres-shared/keycloak` on 2026-08-11. The old CNPG cluster,
-ScheduledBackup and PVCs are intentionally retained through 2026-08-25; do not
-delete or repurpose them before that date. The forward and reverse one-shot Jobs
-live under `manual/` and are deliberately excluded from Kustomize.
-
-Rollback is stop-copy-switch, so post-cutover writes are preserved:
-
-1. commit `spec.replicas: 0` for Deployment `keycloak`, sync `k8s-infra` and
-   wait until no Keycloak pod remains;
-2. apply `manual/rollback-to-dedicated-postgres-job.yaml`, wait for completion
-   and inspect its sanitized validation counts;
-3. change `KC_DB_URL_HOST` back to
-   `keycloak-postgres-rw.keycloak.svc.cluster.local`, restore one replica,
-   commit/push and sync `k8s-infra`;
-4. verify `/health/ready`, the `edani` login page and a client-credentials token;
-5. keep `databases/postgres-shared/keycloak` intact until the rollback decision
-   is closed.
+Keycloak moved from the dedicated `keycloak/keycloak-postgres` cluster to
+`databases/postgres-shared/keycloak` on 2026-08-11. After the cutover and login
+checks passed, the operator closed the rollback window the same day. The former
+CNPG cluster, ScheduledBackup, four PVCs and obsolete one-shot migration Jobs
+were removed. Recovery now uses the backups of `postgres-shared`.
 
 ## AgentGateway privileged write role
 
