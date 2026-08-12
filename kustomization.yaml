@@ -24,6 +24,7 @@ resources:
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
   - networking/traefik-edge/opencode-public.yaml
+  - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
   - networking/traefik-edge/skirmshop-s3-public.yaml
