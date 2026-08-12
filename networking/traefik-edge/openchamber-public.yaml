@@ -1,0 +1,74 @@
+---
+# Public OpenChamber web UI backed by the x86 host over Tailscale.
+# Cloudflare → traefik-edge (Keycloak SSO) → x86:3000.
+# OpenCode remains independently available at code.e-dani.com: the web UI
+# talks to that same local OpenCode runtime through OpenChamber's API gate.
+apiVersion: v1
+kind: Service
+metadata:
+  name: openchamber-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: openchamber-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: openchamber-edge-host
+  namespace: traefik-edge
+  labels:
+    kubernetes.io/service-name: openchamber-edge-host
+    app.kubernetes.io/name: openchamber-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 3000
+endpoints:
+  - addresses:
+      - 100.83.56.98
+    conditions: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-openchamber-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: chamber.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`chamber.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 200
+      services:
+        - name: openchamber-edge-host
+          namespace: traefik-edge
+          port: 3000
+    - kind: Rule
+      match: Host(`chamber.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: openchamber-edge-host
+          namespace: traefik-edge
+          port: 3000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
