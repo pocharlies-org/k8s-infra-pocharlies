@@ -41,6 +41,19 @@ spec:
         - name: openchamber-edge-host
           namespace: traefik-edge
           port: 3000
+    # Authenticate API and application-auth requests without the generic
+    # 401→SSO redirect middleware. OpenChamber intentionally uses 401 on these
+    # paths to display and maintain its own UI-password session.
+    - kind: Rule
+      match: Host(`chamber.e-dani.com`) && (PathPrefix(`/api`) || PathPrefix(`/auth`))
+      priority: 150
+      middlewares:
+        - name: sso-forward-auth
+          namespace: keycloak
+      services:
+        - name: openchamber-edge-host
+          namespace: traefik-edge
+          port: 3000
     - kind: Rule
       match: Host(`chamber.e-dani.com`)
       priority: 100
