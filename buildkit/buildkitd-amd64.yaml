@@ -129,7 +129,12 @@ metadata:
     arch: amd64
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: longhorn-prod-nvme
+  # longhorn-single (1 replica), not longhorn-prod-nvme (3): this is a build
+  # cache. Replicating it three times protected nothing — losing it costs one
+  # slower build — while it held 49.2 GiB per replica on the ks5 nodes, which
+  # were at 82-89% and could not place a third postgres-shared-2 replica.
+  # Recreated on 2026-08-13; the cache rebuilds itself on the next build.
+  storageClassName: longhorn-single
   resources:
     requests:
       # The cache is disposable, but PVC requests cannot be shrunk. Keep the
