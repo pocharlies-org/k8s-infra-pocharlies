@@ -15,3 +15,16 @@ data:
             - emptyDir
         action:
           type: skip
+      # CNPG volumes are backed up by CNPG itself, not by Velero: barman does a
+      # daily base backup plus continuous WAL archiving to s3://cnpg-backups,
+      # which is a real PITR. A Velero file-system backup of a running Postgres
+      # is only crash-consistent — no checkpoint or fsfreeze coordination — so
+      # it would cost ~32 GiB nightly to produce something strictly worse than
+      # what already exists. The `databases` namespace is in daily-critical for
+      # its MANIFESTS (Cluster CR, secrets, ScheduledBackup): without them the
+      # data is safe but there is nothing to restore it INTO.
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/managed-by: cloudnative-pg
+        action:
+          type: skip
