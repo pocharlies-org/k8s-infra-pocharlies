@@ -34,6 +34,7 @@ def test_public_opencode_always_uses_keycloak():
 
 def test_lan_opencode_bypasses_sso_only_for_trusted_networks():
     documents = _documents("networking/traefik-lan/opencode-lan.yaml")
+    service = _resource(documents, "Service", "opencode-lan-host")
     route = _resource(documents, "IngressRoute", "lan-opencode-public-host")
     [trusted] = route["spec"]["routes"]
 
@@ -42,3 +43,5 @@ def test_lan_opencode_bypasses_sso_only_for_trusted_networks():
     assert "Host(`code.e-dani.com`)" in trusted["match"]
     assert trusted["services"] == [{"name": "opencode-lan-host", "port": 19900}]
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"

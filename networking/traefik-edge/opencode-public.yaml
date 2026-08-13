@@ -3,7 +3,7 @@
 # Cloudflare → traefik-edge → Service opencode-edge-host
 # (ExternalName-less + EndpointSlice → x86 Tailscale IP).
 # The public route uses Keycloak as its only authentication authority. OpenCode does
-# not emit a second Basic challenge; trusted networks can therefore bypass SSO safely.
+# not emit a second Basic challenge; trusted networks bypass SSO on traefik-lan.
 apiVersion: v1
 kind: Service
 metadata:
