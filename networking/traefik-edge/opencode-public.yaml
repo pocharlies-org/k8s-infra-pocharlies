@@ -1,9 +1,10 @@
 ---
 # Public edge route for the opencode web server (coding agent) running on x86 host.
-# Cloudflare → traefik-edge (Keycloak SSO via sso-chain@keycloak) →
-# Service opencode-edge-host (ExternalName-less + EndpointSlice → x86 Tailscale IP).
-# LAN clients bypass SSO (home network trusted); basic auth (OPENCODE_SERVER_PASSWORD)
-# protects direct/Tailscale access to the host service.
+# Cloudflare → traefik-edge → Service opencode-edge-host
+# (ExternalName-less + EndpointSlice → x86 Tailscale IP).
+# OpenCode's basic auth (OPENCODE_SERVER_PASSWORD) is the authentication authority
+# on every path. Do not wrap this route in sso-chain: its error middleware rewrites
+# OpenCode's legitimate 401 Basic challenge to the SSO login and creates a redirect loop.
 apiVersion: v1
 kind: Service
 metadata:
@@ -62,9 +63,6 @@ spec:
     - kind: Rule
       match: Host(`code.e-dani.com`)
       priority: 100
-      middlewares:
-        - name: sso-chain
-          namespace: keycloak
       services:
         - name: opencode-edge-host
           namespace: traefik-edge
