@@ -28,6 +28,13 @@ spec:
       # on the same /dev/md3 array as this one. Two copies on one array is
       # not redundancy, just ~153 GiB of it.
       - backup-hub
+      # Added 2026-08-13 for its MANIFESTS, not its volumes. The data is
+      # already protected by CNPG barman (PITR) and the nightly logical dumps,
+      # but nothing was backing up the Cluster CR, its secrets or the
+      # ScheduledBackup -- so a namespace loss left the data intact with no
+      # definition to restore it into. The CNPG PVCs are skipped by
+      # volume-policy.yaml (pvcLabels app.kubernetes.io/managed-by=cloudnative-pg).
+      - databases
     snapshotMoveData: true
     defaultVolumesToFsBackup: true
     resourcePolicy:
