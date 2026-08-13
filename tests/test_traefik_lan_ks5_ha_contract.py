@@ -34,108 +34,27 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
             if document["kind"] == "L2Advertisement"
         )
 
-    def test_traefik_lan_is_ha_across_ovh_and_non_ubuntu_lan(self) -> None:
-        self.assertGreaterEqual(self.values["deployment"]["replicas"], 4)
-        self.assertNotIn("nodeSelector", self.values)
+    def test_traefik_lan_runs_only_on_x86_infrastructure(self) -> None:
+        self.assertEqual(self.values["deployment"]["replicas"], 1)
+        self.assertEqual(
+            self.values["nodeSelector"],
+            {"kubernetes.io/hostname": "ubuntu"},
+        )
         self.assertEqual(
             self.values["podDisruptionBudget"],
-            {"enabled": True, "minAvailable": 3},
-        )
-        node_terms = self.values["affinity"]["nodeAffinity"][
-            "requiredDuringSchedulingIgnoredDuringExecution"
-        ]["nodeSelectorTerms"]
-        self.assertEqual(
-            node_terms,
-            [
-                {
-                    "matchExpressions": [
-                        {
-                            "key": "node-pool",
-                            "operator": "In",
-                            "values": ["ks5-nvme"],
-                        }
-                    ]
-                },
-                {
-                    "matchExpressions": [
-                        {
-                            "key": "topology",
-                            "operator": "In",
-                            "values": ["lan"],
-                        },
-                        {
-                            "key": "kubernetes.io/hostname",
-                            "operator": "NotIn",
-                            "values": ["ubuntu"],
-                        },
-                    ]
-                },
-            ],
-        )
-        terms = self.values["affinity"]["podAntiAffinity"][
-            "requiredDuringSchedulingIgnoredDuringExecution"
-        ]
-        self.assertEqual(len(terms), 1)
-        self.assertEqual(terms[0]["topologyKey"], "kubernetes.io/hostname")
-        self.assertEqual(
-            terms[0]["labelSelector"]["matchLabels"],
-            {
-                "app.kubernetes.io/instance": "traefik-lan-traefik-lan",
-                "app.kubernetes.io/name": "traefik",
-            },
+            {"enabled": False},
         )
         self.assertEqual(
             self.values["service"]["spec"]["externalTrafficPolicy"], "Local"
         )
-        self.assertEqual(
-            self.values["tolerations"],
-            [
-                {
-                    "key": "dedicated",
-                    "operator": "Equal",
-                    "value": "llm",
-                    "effect": "NoSchedule",
-                }
-            ],
-        )
-        self.assertEqual(
-            self.values["topologySpreadConstraints"],
-            [
-                {
-                    "maxSkew": 1,
-                    "topologyKey": "topology",
-                    "whenUnsatisfiable": "DoNotSchedule",
-                    "nodeAffinityPolicy": "Honor",
-                    "nodeTaintsPolicy": "Honor",
-                    "labelSelector": {
-                        "matchLabels": {
-                            "app.kubernetes.io/instance": "traefik-lan-traefik-lan",
-                            "app.kubernetes.io/name": "traefik",
-                        }
-                    },
-                }
-            ],
-        )
+        self.assertNotIn("tolerations", self.values)
+        self.assertNotIn("affinity", self.values)
+        self.assertNotIn("topologySpreadConstraints", self.values)
 
     def test_lan_vips_are_announced_only_from_physical_lan_nodes(self) -> None:
         self.assertEqual(
             self.l2_advertisement["spec"]["nodeSelectors"],
-            [
-                {
-                    "matchExpressions": [
-                        {
-                            "key": "topology",
-                            "operator": "In",
-                            "values": ["lan"],
-                        },
-                        {
-                            "key": "kubernetes.io/hostname",
-                            "operator": "NotIn",
-                            "values": ["ubuntu"],
-                        },
-                    ]
-                }
-            ],
+            [{"matchLabels": {"kubernetes.io/hostname": "ubuntu"}}],
         )
 
     def test_harbor_lan_resolves_to_the_cluster_service(self) -> None:

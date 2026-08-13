@@ -1,12 +1,11 @@
 # Traefik LAN values — internal ingress, exposed via MetalLB VIP 192.168.50.240
 deployment:
-  # Two OVH endpoints keep in-cluster traffic independent of the home LAN;
-  # two non-Ubuntu LAN endpoints preserve the MetalLB VIP and client IPs.
-  replicas: 4
+  # LAN ingress is an x86 infrastructure responsibility. Keep GPU workers free
+  # for GPU workloads and serve the RFC1918 VIP from the physical LAN host.
+  replicas: 1
 
 podDisruptionBudget:
-  enabled: true
-  minAvailable: 3
+  enabled: false
 
 ingressClass:
   enabled: true
@@ -94,52 +93,5 @@ resources:
   limits:
     memory: 512Mi
 
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        # OVH endpoints keep cluster-internal Harbor/release traffic alive even
-        # if the whole physical LAN disappears.
-        - matchExpressions:
-            - key: node-pool
-              operator: In
-              values: [ks5-nvme]
-        # LAN endpoints preserve source IP and the RFC1918 VIP. Never schedule
-        # on the failed home-lab Ubuntu node.
-        - matchExpressions:
-            - key: topology
-              operator: In
-              values: [lan]
-            - key: kubernetes.io/hostname
-              operator: NotIn
-              values: [ubuntu]
-  podAntiAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      - labelSelector:
-          matchLabels:
-            app.kubernetes.io/instance: traefik-lan-traefik-lan
-            app.kubernetes.io/name: traefik
-        topologyKey: kubernetes.io/hostname
-
-# The only two healthy physical-LAN nodes are dedicated GPU nodes. Traefik uses
-# no GPU and its bounded 100m/128Mi request is intentionally tolerated so the
-# LAN ingress does not fall back to the failed Ubuntu machine.
-tolerations:
-  - key: dedicated
-    operator: Equal
-    value: llm
-    effect: NoSchedule
-
-# With four replicas and two eligible failure domains this yields 2 LAN + 2 OVH
-# endpoints. Required hostname anti-affinity keeps every replica on a distinct
-# server; a failed domain still leaves the other domain serving cluster traffic.
-topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: topology
-    whenUnsatisfiable: DoNotSchedule
-    nodeAffinityPolicy: Honor
-    nodeTaintsPolicy: Honor
-    labelSelector:
-      matchLabels:
-        app.kubernetes.io/instance: traefik-lan-traefik-lan
-        app.kubernetes.io/name: traefik
+nodeSelector:
+  kubernetes.io/hostname: ubuntu
