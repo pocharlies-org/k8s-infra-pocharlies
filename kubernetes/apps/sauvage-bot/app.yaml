@@ -89,6 +89,8 @@ spec:
       app.kubernetes.io/name: sauvage-bot
   template:
     metadata:
+      annotations:
+        config.k8s.e-dani.com/revision: shield-local-tooling-20260813
       labels:
         app.kubernetes.io/name: sauvage-bot
         app.kubernetes.io/part-of: sauvage-moderation
