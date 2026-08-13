@@ -28,7 +28,9 @@ data:
   TELEGRAM_GROUPS: "-1003672565710"
 
   OPENAI_API_BASE: http://litellm.litellm.svc.cluster.local:4000/v1
-  OPENAI_MODEL: ornith-1.0
+  # Capability alias: LiteLLM resolves this to the current local tooling
+  # resident and owns availability fallback independently of Shield.
+  OPENAI_MODEL: tooling
   OPENAI_RETRY_COUNT: "1"
   OPENAI_CHECK_SHORT_MESSAGES: "true"
   LLM_MODE: always

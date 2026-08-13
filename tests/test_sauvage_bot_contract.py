@@ -30,7 +30,7 @@ def find_document(
 
 
 class SauvageBotContractTest(unittest.TestCase):
-    def test_dashboard_stays_dry_run_and_uses_ornith(self) -> None:
+    def test_dashboard_stays_dry_run_and_uses_local_tooling(self) -> None:
         documents = load_documents("kubernetes/apps/sauvage-bot/app.yaml")
         config = find_document(
             documents, "ConfigMap", "sauvage-bot-config"
@@ -45,7 +45,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(config["FILES_SAMPLES"], "/srv/data")
         self.assertEqual(config["SERVER_AUTH"], "")
         self.assertNotIn("SERVER_FORWARD_AUTH_EMAILS", config)
-        self.assertEqual(config["OPENAI_MODEL"], "ornith-1.0")
+        self.assertEqual(config["OPENAI_MODEL"], "tooling")
         self.assertEqual(config["TELEGRAM_GROUP"], "-1003672565710")
         self.assertEqual(config["TELEGRAM_GROUPS"], "-1003672565710")
         self.assertEqual(config["COMMUNITY_CHAT_ID"], "-1003672565710")
