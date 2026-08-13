@@ -95,3 +95,13 @@ resources:
 
 nodeSelector:
   kubernetes.io/hostname: ubuntu
+
+# Explicit empty maps/lists clear the former multi-node placement under Argo's
+# server-side apply. The x86 node carries a soft dev-pool taint by design.
+affinity: {}
+topologySpreadConstraints: []
+tolerations:
+  - key: pool
+    operator: Equal
+    value: dev
+    effect: PreferNoSchedule
