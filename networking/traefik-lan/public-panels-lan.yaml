@@ -1,0 +1,94 @@
+---
+# Split-horizon routes for human-facing panels. AdGuard sends these public
+# names to Traefik LAN; Internet continues through traefik-edge + Keycloak.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-openchamber-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 300
+      match: Host(`chamber.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - name: openchamber-lan-host
+          port: 3000
+          serversTransport: openchamber-lan-transport
+    - kind: Rule
+      priority: 100
+      match: Host(`chamber.e-dani.com`)
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: openchamber-lan-host
+          port: 3000
+          serversTransport: openchamber-lan-transport
+  tls:
+    secretName: wildcard-edani-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-jarvis-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 400
+      match: Host(`jarvis.e-dani.com`) && (Path(`/`) || Path(`/jarvis`) || Path(`/jarvis.html`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      middlewares:
+        - name: jarvis-public-hud-shell
+          namespace: jarvis
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      priority: 300
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    secretName: wildcard-edani-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-bambulab-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 300
+      match: Host(`bambulab.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - name: bambulab
+          namespace: bambulab
+          port: 80
+  tls:
+    secretName: wildcard-edani-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-skirmbooks-public-host
+  namespace: traefik-lan
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 300
+      match: Host(`skirmbooks.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - name: skirmbooks-ui
+          namespace: skirmshop
+          port: 80
+  tls:
+    secretName: wildcard-edani-tls
