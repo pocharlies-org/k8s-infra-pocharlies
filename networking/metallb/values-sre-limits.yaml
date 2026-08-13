@@ -11,11 +11,10 @@ controller:
       memory: 256Mi
 
 speaker:
-  tolerations:
-    - key: dedicated
-      operator: Equal
-      value: llm
-      effect: NoSchedule
+  # MetalLB only serves RFC1918 LAN VIPs, so speakers are needed solely on the
+  # x86 infrastructure node. GPU workers must not carry network-plane pods.
+  nodeSelector:
+    kubernetes.io/hostname: ubuntu
   resources:
     requests:
       cpu: 10m
