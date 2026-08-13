@@ -56,3 +56,12 @@ def test_openchamber_accepts_public_split_host_without_removing_fallback():
     assert "middlewares" not in trusted
     assert fallback["middlewares"] == [{"name": "sso-chain", "namespace": "keycloak"}]
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+
+
+def test_openchamber_lan_backend_uses_stable_tailscale_endpoint():
+    resources = documents("networking/traefik-lan/openchamber-lan.yaml")
+    service = next(item for item in resources if item.get("kind") == "Service")
+    endpoint = next(item for item in resources if item.get("kind") == "EndpointSlice")
+    assert "type" not in service["spec"]
+    assert endpoint["metadata"]["labels"]["kubernetes.io/service-name"] == service["metadata"]["name"]
+    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
