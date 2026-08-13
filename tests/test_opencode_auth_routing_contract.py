@@ -43,5 +43,6 @@ def test_lan_opencode_bypasses_sso_only_for_trusted_networks():
     assert "Host(`code.e-dani.com`)" in trusted["match"]
     assert trusted["services"] == [{"name": "opencode-lan-host", "port": 19900}]
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
-    assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+    assert "type" not in service["spec"]
+    endpoint = _resource(documents, "EndpointSlice", "opencode-lan-host")
+    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
