@@ -96,9 +96,16 @@ resources:
 nodeSelector:
   kubernetes.io/hostname: ubuntu
 
-# Explicit empty maps/lists clear the former multi-node placement under Argo's
-# server-side apply. The x86 node carries a soft dev-pool taint by design.
-affinity: {}
+# Repeat the x86 constraint in affinity so server-side apply overwrites the
+# former multi-node required affinity owned by an older Helm deployment.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [ubuntu]
 topologySpreadConstraints: []
 tolerations:
   - key: pool
