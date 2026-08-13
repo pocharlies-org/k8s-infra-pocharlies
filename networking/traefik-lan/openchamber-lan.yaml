@@ -20,6 +20,18 @@ spec:
       protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: openchamber-lan-transport
+  namespace: traefik-lan
+spec:
+  maxIdleConnsPerHost: 128
+  forwardingTimeouts:
+    dialTimeout: 10s
+    responseHeaderTimeout: 30s
+    idleConnTimeout: 90s
+---
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: lan-openchamber
@@ -34,6 +46,7 @@ spec:
       services:
         - name: openchamber-lan-host
           port: 3000
+          serversTransport: openchamber-lan-transport
     # Keep a defensive SSO fallback if the private hostname is ever reached
     # from a source outside the explicitly trusted networks.
     - kind: Rule
@@ -45,6 +58,7 @@ spec:
       services:
         - name: openchamber-lan-host
           port: 3000
+          serversTransport: openchamber-lan-transport
   tls:
     store:
       name: default
