@@ -47,9 +47,19 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
         self.assertEqual(
             self.values["service"]["spec"]["externalTrafficPolicy"], "Local"
         )
-        self.assertNotIn("tolerations", self.values)
-        self.assertNotIn("affinity", self.values)
-        self.assertNotIn("topologySpreadConstraints", self.values)
+        self.assertEqual(
+            self.values["tolerations"],
+            [
+                {
+                    "key": "pool",
+                    "operator": "Equal",
+                    "value": "dev",
+                    "effect": "PreferNoSchedule",
+                }
+            ],
+        )
+        self.assertEqual(self.values["affinity"], {})
+        self.assertEqual(self.values["topologySpreadConstraints"], [])
 
     def test_lan_vips_are_announced_only_from_physical_lan_nodes(self) -> None:
         self.assertEqual(
