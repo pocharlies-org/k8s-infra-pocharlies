@@ -1,0 +1,94 @@
+# Longhorn no se estaba scrapeando: el 2026-08-13 se comprobo que VictoriaMetrics
+# tenia CERO series `longhorn_*`. Eso importa mas de lo que parece — significa que
+# nada vigilaba el almacenamiento del cluster, y asi es como el nodo `ubuntu` estuvo
+# dias con `allowScheduling: false` sin que nadie se enterase, dejando a
+# databases/postgres-shared-2 con 2 de 3 replicas hasta que se encontro por casualidad.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  endpoints:
+    - port: manager
+      path: /metrics
+      interval: 30s
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: longhorn-scheduling
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+spec:
+  groups:
+    - name: longhorn.scheduling
+      rules:
+        # La deriva concreta que nos mordio. `allowScheduling` es un campo del que
+        # Longhorn es dueño: ni ArgoCD ni Ansible lo reconcilian de forma continua
+        # (Argo pelearia con Longhorn por el objeto, y Ansible solo corre cuando se
+        # lanza), asi que la unica defensa real es detectarlo.
+        - alert: LonghornNodeSchedulingDisabled
+          expr: |
+            longhorn_node_status{condition="allowScheduling"} == 0
+          for: 30m
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "Longhorn no programa replicas en {{ $labels.node }}"
+            description: >-
+              El nodo {{ $labels.node }} tiene allowScheduling=false, asi que Longhorn
+              no colocara replicas nuevas en el. Si fue deliberado (modo attach-only),
+              silencia esta alerta para ese nodo. Si no, el cluster tiene menos destinos
+              de los que cree y un volumen puede quedarse degradado sin sitio donde
+              reconstruirse. Comprobar con:
+              kubectl -n longhorn-system get nodes.longhorn.io -o custom-columns=NAME:.metadata.name,SCHED:.spec.allowScheduling
+
+        # El sintoma que de verdad duele, independiente de por que pase.
+        - alert: LonghornVolumeDegraded
+          expr: |
+            longhorn_volume_robustness == 2
+          for: 1h
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "Volumen Longhorn degradado: {{ $labels.volume }}"
+            description: >-
+              Lleva mas de una hora sin todas sus replicas. Si la causa es
+              "insufficient storage", ojo: NO significa falta de espacio en disco.
+              Longhorn resta storageReserved ANTES de aplicar el minimo del 15 %, asi
+              que los dos margenes se suman. Un volumen puede no caber con cientos de
+              GiB libres.
+
+        - alert: LonghornVolumeFaulted
+          expr: |
+            longhorn_volume_robustness == 3
+          for: 5m
+          labels:
+            severity: critical
+            area: storage
+          annotations:
+            summary: "Volumen Longhorn en FAULTED: {{ $labels.volume }}"
+            description: "Sin ninguna replica utilizable. El dato de ese PVC no esta accesible."
+
+        # Menos de 3 destinos deja al cluster sin poder cumplir replicas=3.
+        - alert: LonghornTooFewSchedulableNodes
+          expr: |
+            count(longhorn_node_status{condition="allowScheduling"} == 1) < 3
+          for: 30m
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "Solo {{ $value }} nodos Longhorn admiten replicas"
+            description: >-
+              Con menos de 3 destinos no se puede cumplir numberOfReplicas=3 y los
+              volumenes nuevos o en reconstruccion se quedaran degradados.
