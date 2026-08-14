@@ -8,7 +8,6 @@ metadata:
   namespace: traefik-lan
 spec:
   entryPoints: [websecure]
-  ingressClassName: traefik-lan
   routes:
     - kind: Rule
       priority: 300
@@ -37,7 +36,6 @@ metadata:
   namespace: traefik-lan
 spec:
   entryPoints: [websecure]
-  ingressClassName: traefik-lan
   routes:
     - kind: Rule
       priority: 400
@@ -66,7 +64,6 @@ metadata:
   namespace: traefik-lan
 spec:
   entryPoints: [websecure]
-  ingressClassName: traefik-lan
   routes:
     - kind: Rule
       priority: 300
@@ -85,7 +82,6 @@ metadata:
   namespace: traefik-lan
 spec:
   entryPoints: [websecure]
-  ingressClassName: traefik-lan
   routes:
     - kind: Rule
       priority: 300
