@@ -19,6 +19,9 @@ data:
       hosts {
         100.83.56.98 dgx.e-dani.com
         100.83.56.98 s3.e-dani.com
+        # Host backends used by Traefik ExternalName Services. Cluster DNS does
+        # not inherit MagicDNS, so pin the stable x86 Tailscale address here.
+        100.83.56.98 x86.taile0ad27.ts.net
         ttl 60
         fallthrough
       }
