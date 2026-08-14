@@ -1,0 +1,30 @@
+---
+# Public path carve-out for lab/demo artifacts served from the main MinIO:
+#   https://s3.e-dani.com/labs/<key>
+# NO auth middleware on purpose: only the "labs" bucket has anonymous
+# (download) read, and it holds only throwaway demos. Priority 300 beats the
+# s3.e-dani.com SSO catch-all (100) and LAN bypass (200), same pattern as
+# synapse-email-attachments-public.yaml and facturas-public.yaml.
+# traefik-edge does not watch the minio namespace, hence the ExternalName hop
+# (reuses minio-s3-ext, already defined in this namespace).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: labs-public
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/labs`)
+      priority: 300
+      services:
+        - name: minio-s3-ext
+          namespace: traefik-edge
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
