@@ -12,6 +12,7 @@ resources:
   - networking/traefik-lan/openclaw-lan.yaml
   - networking/traefik-lan/openchamber-lan.yaml
   - networking/traefik-lan/opencode-lan.yaml
+  - networking/traefik-lan/opencode-claude-panel-lan.yaml
   - networking/traefik-lan/public-panels-lan.yaml
   - networking/traefik-lan/sauvage-bot-lan.yaml
   - networking/traefik-lan/synapse-email-attachments-lan.yaml
@@ -27,6 +28,7 @@ resources:
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
   - networking/traefik-edge/opencode-public.yaml
+  - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
