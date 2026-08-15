@@ -1,0 +1,75 @@
+---
+# Claude accounts panel (opencode-claude plugin), published under the same host
+# as OpenCode at code.e-dani.com/claude/.
+#
+# The plugin serves it from the opencode process on 8799. It binds 0.0.0.0
+# because Traefik reaches this host over Tailscale, so loopback-only would be
+# unreachable — see OPENCODE_CLAUDE_PANEL_HOST in the opencode-web unit.
+#
+# Same client-IP restriction as the OpenCode route: LAN and Tailscale only.
+# The panel manages subscription credentials, so it must never be looser than
+# the service it sits beside.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencode-claude-panel-lan-host
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: opencode-claude-panel-lan-host
+    app.kubernetes.io/part-of: traefik-lan
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 8799
+      targetPort: 8799
+      protocol: TCP
+---
+# /claude → /claude/ so the page's <base href> is a directory. Without the
+# trailing slash every relative fetch would resolve one level too high.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: claude-panel-slash
+  namespace: traefik-lan
+spec:
+  redirectRegex:
+    regex: ^https://code\.e-dani\.com/claude$
+    replacement: https://code.e-dani.com/claude/
+    permanent: false
+---
+# The plugin serves the panel at /, so strip the prefix. Traefik sets
+# X-Forwarded-Prefix, which the panel turns into <base href="/claude/">.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: claude-panel-stripprefix
+  namespace: traefik-lan
+spec:
+  stripPrefix:
+    prefixes:
+      - /claude
+    forceSlash: false
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-opencode-claude-panel
+  namespace: traefik-lan
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Higher priority than the OpenCode route (300) so /claude wins the host.
+    - kind: Rule
+      match: Host(`code.e-dani.com`) && PathPrefix(`/claude`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 400
+      middlewares:
+        - name: claude-panel-slash
+        - name: claude-panel-stripprefix
+      services:
+        - name: opencode-claude-panel-lan-host
+          port: 8799
+  tls:
+    secretName: wildcard-edani-tls
