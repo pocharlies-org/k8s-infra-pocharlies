@@ -50,7 +50,6 @@ spec:
   stripPrefix:
     prefixes:
       - /claude
-    forceSlash: false
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
