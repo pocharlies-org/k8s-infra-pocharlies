@@ -1,0 +1,168 @@
+---
+# Los secretos INTERNOS de Harbor, proyectados desde Vault.
+#
+# POR QUE EXISTE ESTO. El chart de Harbor genera estos valores con `randAlphaNum`,
+# `genCA` y `htpasswd`, es decir, distintos en cada render. Con `helm upgrade` no
+# se nota: el chart hace un `lookup` del secret vivo y reusa lo que ya hay
+# (`harbor.secretKeyHelper`). Pero ArgoCD renderiza con `helm template` SIN acceso
+# al cluster, el lookup sale vacio y cae al random. Sin estos ExternalSecret, cada
+# sync de ArgoCD generaria claves nuevas y romperia la autenticacion entre core,
+# registry y jobservice.
+#
+# LOS VALORES NO SON NUEVOS. Se copiaron uno a uno de los secrets que ya corrian
+# en el cluster el 15-08-2026. Regenerar cualquiera de ellos rompe algo concreto:
+#
+#   secret / secretKey  -> Harbor cifra con ellos las credenciales que guarda en
+#                          la BD (robots, replicaciones). Si cambian, eso deja de
+#                          descifrarse. Son los mas peligrosos de los diez.
+#   tls.key / tls.crt   -> el certificado con el que core FIRMA los tokens del
+#                          registry. Se monta en /etc/core/private_key.pem.
+#   JOBSERVICE_SECRET   -> autenticacion core <-> jobservice.
+#   REGISTRY_HTTP_SECRET-> estado de subidas del registry.
+#   REGISTRY_PASSWD y REGISTRY_HTPASSWD -> el segundo es el bcrypt del primero.
+#                          Tienen que cuadrar entre si o core no entra al registry.
+#
+# NO esta aqui `POSTGRESQL_PASSWORD`: el chart solo admite
+# `database.external.existingSecret` y esta BD es interna. Se resuelve con
+# `ignoreDifferences` en el kustomization raiz de k8s-gitops-pocharlies.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-core-keys
+  namespace: harbor
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: harbor-core-keys
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        # `core.existingSecret` exige que la clave se llame exactamente `secret`.
+        secret: "{{ .coreSecret }}"
+        # `existingSecretSecretKey` se monta como volumen con
+        # `items: [{key: secretKey, path: key}]`, asi que el nombre es obligatorio
+        # y las demas claves de este secret se ignoran.
+        secretKey: "{{ .secretKey }}"
+        CSRF_KEY: "{{ .csrfKey }}"
+        HARBOR_ADMIN_PASSWORD: "{{ .adminPassword }}"
+  data:
+    - secretKey: coreSecret
+      remoteRef: { key: secret/harbor/internal, property: core_secret }
+    - secretKey: secretKey
+      remoteRef: { key: secret/harbor/internal, property: secret_key }
+    - secretKey: csrfKey
+      remoteRef: { key: secret/harbor/internal, property: csrf_key }
+    - secretKey: adminPassword
+      remoteRef: { key: secret/harbor/internal, property: admin_password }
+---
+# Certificado de firma de tokens. Va en su propio secret y no junto a las claves
+# de arriba porque el chart lo monta como VOLUMEN (`core.secretName`), con
+# `subPath: tls.key` -> /etc/core/private_key.pem.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-token-cert
+  namespace: harbor
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: harbor-token-cert
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        tls.crt: "{{ .tokenCrt }}"
+        tls.key: "{{ .tokenKey }}"
+  data:
+    - secretKey: tokenCrt
+      remoteRef: { key: secret/harbor/internal, property: token_crt }
+    - secretKey: tokenKey
+      remoteRef: { key: secret/harbor/internal, property: token_key }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-jobservice-keys
+  namespace: harbor
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: harbor-jobservice-keys
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        JOBSERVICE_SECRET: "{{ .jobserviceSecret }}"
+  data:
+    - secretKey: jobserviceSecret
+      remoteRef: { key: secret/harbor/internal, property: jobservice_secret }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-registry-keys
+  namespace: harbor
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: harbor-registry-keys
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        REGISTRY_HTTP_SECRET: "{{ .registryHttpSecret }}"
+  data:
+    - secretKey: registryHttpSecret
+      remoteRef: { key: secret/harbor/internal, property: registry_http_secret }
+---
+# `registry.credentials.existingSecret` exige EXACTAMENTE estas dos claves.
+# REGISTRY_HTPASSWD es el bcrypt de REGISTRY_PASSWD: si se regenera uno sin el
+# otro, core deja de poder autenticarse contra el registry. Por eso el htpasswd
+# se copia tal cual del cluster en vez de recalcularlo -- `htpasswd` usa una sal
+# nueva en cada llamada.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-registry-creds
+  namespace: harbor
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: harbor-registry-creds
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        REGISTRY_PASSWD: "{{ .registryPassword }}"
+        REGISTRY_HTPASSWD: "{{ .registryHtpasswd }}"
+  data:
+    - secretKey: registryPassword
+      remoteRef: { key: secret/harbor/internal, property: registry_password }
+    - secretKey: registryHtpasswd
+      remoteRef: { key: secret/harbor/internal, property: registry_htpasswd }
