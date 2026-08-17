@@ -1,6 +1,7 @@
 ---
 # Public edge route for the Claude accounts panel (opencode-claude plugin),
-# served by the opencode process on port 8799 of the x86 host.
+# served by the opencode process on port 8799 of the x86 host. Its canonical
+# hostname is claude.e-dani.com; code.e-dani.com/claude/ remains as an alias.
 #
 # Same shape as opencode-public.yaml: Service without selector + EndpointSlice
 # pointing at the x86 Tailscale IP. Published under the OpenCode host as
@@ -73,11 +74,25 @@ kind: IngressRoute
 metadata:
   name: edge-opencode-claude-panel
   namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: claude.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
 spec:
   entryPoints:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    - kind: Rule
+      match: Host(`claude.e-dani.com`)
+      priority: 200
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: opencode-claude-panel-edge-host
+          namespace: traefik-edge
+          port: 8799
     # Priority above the catch-all OpenCode route (100) so /claude wins the host.
     - kind: Rule
       match: Host(`code.e-dani.com`) && PathPrefix(`/claude`)
