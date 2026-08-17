@@ -7,6 +7,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: adguard
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -15,6 +16,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: argocd
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -23,6 +25,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: harbor
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -31,6 +34,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: longhorn-system
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -39,6 +43,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: minio
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -47,6 +52,7 @@ metadata:
   name: wildcard-lan-tls
   namespace: monitoring
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
 ---
 apiVersion: v1
@@ -55,4 +61,5 @@ metadata:
   name: wildcard-lan-tls
   namespace: vault
   annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
