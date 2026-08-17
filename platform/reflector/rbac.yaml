@@ -1,0 +1,201 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reflector-read
+rules:
+  # Reflector watches cluster-wide because Kubernetes RBAC cannot restrict a
+  # list/watch to one object name. It has no cluster-wide write permission.
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: reflector-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: reflector-read
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: adguard
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: adguard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: harbor
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: harbor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: longhorn-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: longhorn-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: minio
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: minio
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reflector-wildcard-lan
+  namespace: vault
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["wildcard-lan-tls"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reflector-wildcard-lan
+  namespace: vault
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reflector-wildcard-lan
+subjects:
+  - kind: ServiceAccount
+    name: reflector
+    namespace: reflector
