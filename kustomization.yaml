@@ -45,7 +45,6 @@ resources:
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
-  - platform/reflector/wildcard-lan-mirrors.yaml
   - platform/vault/auto-unseal.yaml
   - platform/external-secrets/runtime-credentials.yaml
   - platform/velero/node-agent-config.yaml
