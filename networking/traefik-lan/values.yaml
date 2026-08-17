@@ -46,6 +46,9 @@ ports:
     protocol: TCP
 
 additionalArguments:
+  # TLSStore/default is cluster-wide in Traefik. Select the LAN copy so the
+  # edge store cannot win nondeterministically after certificate rotation.
+  - --providers.kubernetescrd.defaultTLSResourcesNamespace=traefik-lan
   # ":443" (client-facing port), NOT "websecure": the entrypoint name resolves
   # to the container port 8443, which is not reachable from LAN clients.
   - --entrypoints.web.http.redirections.entrypoint.to=:443
