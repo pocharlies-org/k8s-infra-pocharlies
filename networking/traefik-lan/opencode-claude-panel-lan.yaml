@@ -1,6 +1,6 @@
 ---
-# Claude accounts panel (opencode-claude plugin), published under the same host
-# as OpenCode at code.e-dani.com/claude/.
+# Claude accounts panel (opencode-claude plugin), published canonically at
+# claude.e-dani.com and kept under code.e-dani.com/claude/ as an alias.
 #
 # The plugin serves it from the opencode process on 8799. It binds 0.0.0.0
 # because Traefik reaches this host over Tailscale, so loopback-only would be
@@ -60,6 +60,23 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Reading quota is private-network friendly. Every mutation still falls
+    # through to the Keycloak route below, even from LAN/Tailscale.
+    - kind: Rule
+      match: Host(`claude.e-dani.com`) && Method(`GET`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 500
+      services:
+        - name: opencode-claude-panel-lan-host
+          port: 8799
+    - kind: Rule
+      match: Host(`claude.e-dani.com`)
+      priority: 300
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: opencode-claude-panel-lan-host
+          port: 8799
     # Higher priority than the OpenCode route (300) so /claude wins the host.
     - kind: Rule
       match: Host(`code.e-dani.com`) && PathPrefix(`/claude`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
