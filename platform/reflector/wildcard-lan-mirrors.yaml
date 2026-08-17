@@ -1,6 +1,6 @@
-# These metadata-only resources adopt the seven manual TLS copies without
-# storing certificate material in Git. Server-side apply owns only these
-# annotation; Reflector owns the data and reflected-version metadata.
+# The seven target Secrets predate GitOps and cannot be recreated from Git
+# because their private key must never enter the repository. Apply these
+# metadata-only patches after the existing Secrets so Reflector can adopt them.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -8,7 +8,6 @@ metadata:
   namespace: adguard
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -17,7 +16,6 @@ metadata:
   namespace: argocd
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -26,7 +24,6 @@ metadata:
   namespace: harbor
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -35,7 +32,6 @@ metadata:
   namespace: longhorn-system
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -44,7 +40,6 @@ metadata:
   namespace: minio
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -53,7 +48,6 @@ metadata:
   namespace: monitoring
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
 ---
 apiVersion: v1
 kind: Secret
@@ -62,4 +56,3 @@ metadata:
   namespace: vault
   annotations:
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
-type: kubernetes.io/tls
