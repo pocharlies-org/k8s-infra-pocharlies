@@ -92,6 +92,9 @@ additionalArguments:
   - "--metrics.prometheus.entrypoint=metrics"
   - "--ping=true"
   - "--ping.entryPoint=traefik"
+  # TLSStore/default is cluster-wide in Traefik. Keep the public ingress on
+  # its own store instead of competing with the LAN controller's default.
+  - "--providers.kubernetescrd.defaultTLSResourcesNamespace=traefik-edge"
 
 providers:
   kubernetesCRD:
