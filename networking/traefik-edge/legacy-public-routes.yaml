@@ -452,10 +452,14 @@ spec:
     middlewares:
     - name: sso-chain
       namespace: keycloak
-    - name: openclaw-sso-upstream-headers
+    - name: openclaw-qwen36-openclaw-public-preauth-sanitize
+      namespace: openclaw-qwen36
+    - name: openclaw-qwen36-openclaw-public-postauth-strip
+      namespace: openclaw-qwen36
     services:
-    - name: openclaw-edge-host
-      port: 18789
+    - name: openclaw-qwen36-openclaw
+      namespace: openclaw-qwen36
+      port: 8080
   tls:
     store:
       name: default
