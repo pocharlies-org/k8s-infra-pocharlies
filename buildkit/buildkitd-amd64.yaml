@@ -60,8 +60,13 @@ spec:
             # Keep the disposable cache bounded on the 25Gi PVC. Values are
             # reserved space, desired free space and maximum used space (MiB).
             - --oci-worker-gc
+            # keepstorage is per-policy and these ADD UP: 8192+8192+12288 was
+            # 28.5G of guaranteed retention on a 25Gi volume, so the GC was
+            # never allowed to free anything and the disk filled to 98% until
+            # builds failed with ENOSPC. Keep the total comfortably under the
+            # volume: 6+6+10 = 22G on 50Gi leaves real headroom to reclaim.
             - --oci-worker-gc-keepstorage
-            - 8192,8192,12288
+            - 6144,6144,10240
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
@@ -137,10 +142,14 @@ spec:
   storageClassName: longhorn-single
   resources:
     requests:
-      # The cache is disposable, but PVC requests cannot be shrunk. Keep the
-      # GitOps request aligned with the already-bound 25Gi volume so Argo can
-      # reconcile forward-only without attempting an invalid resize.
-      storage: 25Gi
+      # The cache is disposable, but PVC requests cannot be shrunk, so this only
+      # ever grows. Raised 25Gi -> 50Gi on 2026-08-20: the volume sat at 98%
+      # (23.9G of 24.4G) with `buildctl du` reporting Reclaimable: 0B, and a
+      # dashboard-backend build died on "No space left on device" while
+      # unpacking ffmpeg. `buildctl prune --all` freed nothing because none of
+      # it was reclaimable — see the gc keepstorage note on the Deployment,
+      # which is the actual cause and is fixed alongside this.
+      storage: 50Gi
 ---
 apiVersion: v1
 kind: Service
