@@ -1,0 +1,80 @@
+---
+# CANARIO publico de OpenChamber, respaldado por el x86 sobre Tailscale.
+# Cloudflare -> traefik-edge (Keycloak SSO) -> x86:3001.
+#
+# Es el gemelo de openchamber-public.yaml (produccion, :3000). El canario corre
+# la unidad openchamber-beta.service, con su propio OPENCHAMBER_DATA_DIR y el
+# MISMO motor opencode que produccion.
+#
+# chamber-beta y no beta.chamber: Cloudflare Universal SSL solo cubre un nivel
+# de comodin, asi que una sola etiqueta entra en wildcard-public-tls y no hace
+# falta Certificate propio. Misma forma que libreplay-staging.e-dani.com.
+#
+# A diferencia de produccion, NO se anade rewrite de AdGuard ni ruta en
+# traefik-lan: desde la LAN el canario pasa por Keycloak. Es deliberado; los
+# e2e no van por aqui, van directos al :3001 por Tailscale.
+apiVersion: v1
+kind: Service
+metadata:
+  name: openchamber-beta-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: openchamber-beta-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-openchamber-beta-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: chamber-beta.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`chamber-beta.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 200
+      services:
+        - name: openchamber-beta-edge-host
+          namespace: traefik-edge
+          port: 3001
+    # Igual que produccion: OpenChamber usa 401 en estas rutas para mantener su
+    # propia sesion de contrasena de UI, y el 401->SSO generico la rompe. Sin
+    # esta regla el canario no seria el mismo artefacto que se promociona.
+    - kind: Rule
+      match: Host(`chamber-beta.e-dani.com`) && (PathPrefix(`/api`) || PathPrefix(`/auth`))
+      priority: 150
+      middlewares:
+        - name: sso-forward-auth
+          namespace: keycloak
+      services:
+        - name: openchamber-beta-edge-host
+          namespace: traefik-edge
+          port: 3001
+    - kind: Rule
+      match: Host(`chamber-beta.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: openchamber-beta-edge-host
+          namespace: traefik-edge
+          port: 3001
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
