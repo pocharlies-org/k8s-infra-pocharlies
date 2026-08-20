@@ -45,7 +45,7 @@ class SauvageBotContractTest(unittest.TestCase):
         self.assertEqual(config["FILES_SAMPLES"], "/srv/data")
         self.assertEqual(config["SERVER_AUTH"], "")
         self.assertNotIn("SERVER_FORWARD_AUTH_EMAILS", config)
-        self.assertEqual(config["OPENAI_MODEL"], "tooling")
+        self.assertEqual(config["OPENAI_MODEL"], "qwen35-4b")
         self.assertEqual(config["TELEGRAM_GROUP"], "-1003672565710")
         self.assertEqual(config["TELEGRAM_GROUPS"], "-1003672565710")
         self.assertEqual(config["COMMUNITY_CHAT_ID"], "-1003672565710")
