@@ -30,7 +30,7 @@ data:
   OPENAI_API_BASE: http://litellm.litellm.svc.cluster.local:4000/v1
   # Capability alias: LiteLLM resolves this to the current local tooling
   # resident and owns availability fallback independently of Shield.
-  OPENAI_MODEL: tooling
+  OPENAI_MODEL: qwen35-4b
   OPENAI_RETRY_COUNT: "1"
   OPENAI_CHECK_SHORT_MESSAGES: "true"
   LLM_MODE: always
@@ -90,7 +90,7 @@ spec:
   template:
     metadata:
       annotations:
-        config.k8s.e-dani.com/revision: shield-local-tooling-20260813
+        config.k8s.e-dani.com/revision: shield-qwen35-4b-20260820
       labels:
         app.kubernetes.io/name: sauvage-bot
         app.kubernetes.io/part-of: sauvage-moderation
