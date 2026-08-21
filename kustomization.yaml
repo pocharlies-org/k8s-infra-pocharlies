@@ -7,6 +7,7 @@ resources:
   - networking/dns/coredns-custom.yaml
   - networking/metallb/ippool.yaml
   - networking/traefik-lan/tls-store.yaml
+  - networking/traefik-lan/harbor-registry-direct.yaml
   - networking/traefik-lan/lan-app-routes.yaml
   - networking/traefik-lan/dgx-public-host-lan.yaml
   - networking/traefik-lan/openclaw-lan.yaml
