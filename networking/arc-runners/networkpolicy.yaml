@@ -81,6 +81,16 @@ spec:
         - { protocol: TCP, port: 443 }
         - { protocol: TCP, port: 80 }
 
+    # Builder remoto canónico de los workflows de imagen. Se abre únicamente
+    # el Service de BuildKit dentro de su namespace; no da acceso al resto de
+    # servicios privados ni al x86 host.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: buildkit
+      ports:
+        - { protocol: TCP, port: 1234 }
+
     # Harbor y los servicios del cluster que un build pueda necesitar.
     - to:
         - namespaceSelector: {}
