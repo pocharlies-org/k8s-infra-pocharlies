@@ -22,10 +22,10 @@
 # permisos, asi que la excepcion del x86 se expresa como un `ipBlock` con
 # `except`, no como una regla de denegacion (no existen en NetworkPolicy).
 #
-# Y OJO al `except 192.168.0.0/16`: sin la regla explicita de Harbor de mas
-# abajo, ese except rompe SEIS builds de dgx-infra (dashboard-*, omnivoice-*,
-# stt-turbo), que empujan imagenes a harbor.lan.e-dani.com. Comprobado ANTES de
-# escribir la policy, no despues de romperlos.
+# Y OJO al `except 192.168.0.0/16`: Harbor necesita tanto la regla explicita de
+# la VIP como la excepcion acotada a 10/8 para los runners DinD que aparece al
+# final. CoreDNS resuelve harbor.lan al ClusterIP, no a la VIP, dentro del
+# cluster.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -97,3 +97,32 @@ spec:
       ports:
         - { protocol: TCP, port: 443 }
         - { protocol: TCP, port: 80 }
+---
+# Los runners `arc-k8s` arrancan dockerd como sidecar privilegiado. Con la
+# policy de arriba, kube-router rechaza su trafico a Service/Pod CIDRs incluso
+# cuando una regla namespaceSelector permite el destino. Un ipBlock para el
+# CIDR interno si se aplica correctamente; se comprobo con dockerd activo:
+# Harbor -> 401, BuildKit :1234 accesible, x86 :19900 bloqueado y :3001 abierto.
+#
+# Esta excepcion NO incluye 100.64/10 (tailnet, donde vive el RCE :19900), ni
+# 192.168/16 (LAN domestica), ni abre internet adicional. `arc-openclaw` tampoco
+# coincide con el selector.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-k8s-cluster-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      DinD necesita Service/Pod CIDRs para Harbor y BuildKit; la allowlist 10/8
+      conserva aislados la tailnet y el :19900 del x86.
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: arc-k8s
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
