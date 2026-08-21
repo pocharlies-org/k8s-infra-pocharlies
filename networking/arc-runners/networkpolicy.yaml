@@ -21,6 +21,11 @@
 # OJO al orden de las reglas de egreso: una policy de egreso es una UNION de
 # permisos, asi que la excepcion del x86 se expresa como un `ipBlock` con
 # `except`, no como una regla de denegacion (no existen en NetworkPolicy).
+#
+# Y OJO al `except 192.168.0.0/16`: sin la regla explicita de Harbor de mas
+# abajo, ese except rompe SEIS builds de dgx-infra (dashboard-*, omnivoice-*,
+# stt-turbo), que empujan imagenes a harbor.lan.e-dani.com. Comprobado ANTES de
+# escribir la policy, no despues de romperlos.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
