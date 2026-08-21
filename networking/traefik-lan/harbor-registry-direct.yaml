@@ -1,0 +1,22 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: harbor-registry-direct
+  namespace: harbor
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # The Harbor chart's nginx proxy closes /v2 blob commits after 900s.
+    # Multi-GB AI layers can legitimately need longer while registry copies
+    # them into MinIO, so keep the UI on nginx and send only registry traffic
+    # straight to Harbor core (the same upstream nginx normally uses).
+    - kind: Rule
+      match: Host(`harbor.lan.e-dani.com`) && PathPrefix(`/v2/`)
+      priority: 100
+      services:
+        - name: harbor-core
+          port: 80
+  tls:
+    secretName: wildcard-lan-tls
