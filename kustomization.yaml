@@ -31,6 +31,7 @@ resources:
   - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/openchamber-beta-public.yaml
+  - networking/arc-runners/networkpolicy.yaml
   - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
   - networking/traefik-edge/skirmshop-s3-public.yaml
