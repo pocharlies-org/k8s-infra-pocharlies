@@ -1,0 +1,70 @@
+---
+# Panel unico de sesiones: opencode + Codex + Claude Code en un mismo listado.
+# Cloudflare -> traefik-edge (Keycloak SSO) -> x86:3003 -> agent-session-mirror
+# (127.0.0.1:19901) -> opencode (127.0.0.1:19900).
+#
+# A DIFERENCIA de openchamber-public.yaml, aqui NO existe la regla de prioridad
+# 200 con ClientIP: esa regla deja entrar a toda la LAN y a toda la tailnet SIN
+# SSO. En chamber.e-dani.com es un atajo comodo porque detras solo hay lectura
+# del motor; aqui detras hay un espejo con escritura, y continuar una sesion
+# significa ejecutar `codex exec resume` / `claude -p --resume` como dibanez.
+# Quien reintroduzca esa regla convierte esto en ejecucion de comandos sin
+# credencial. El unico camino es este, y esta autenticado.
+apiVersion: v1
+kind: Service
+metadata:
+  name: multichamber-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: multichamber-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-multichamber-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: multichamber.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    # /api y /auth se autentican SIN el middleware que reescribe 401 a redirect:
+    # OpenChamber usa 401 en esas rutas para su propia sesion de contrasena, y
+    # convertirlo en 302 da un bucle de redirecciones.
+    - kind: Rule
+      match: Host(`multichamber.e-dani.com`) && (PathPrefix(`/api`) || PathPrefix(`/auth`))
+      priority: 150
+      middlewares:
+        - name: sso-forward-auth
+          namespace: keycloak
+      services:
+        - name: multichamber-edge-host
+          namespace: traefik-edge
+          port: 3003
+    - kind: Rule
+      match: Host(`multichamber.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: multichamber-edge-host
+          namespace: traefik-edge
+          port: 3003
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
