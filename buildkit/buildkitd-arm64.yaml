@@ -98,16 +98,16 @@ spec:
                 - SETUID
                 - SETGID
           resources:
-            # NVCC for SM121/CUTLASS can exceed 4 GiB even with one compile job.
-            # The node has ample headroom while builds run (17% live usage on
-            # 2026-07-31); 8 GiB prevents cgroup exit 137 without reserving that
-            # memory permanently or involving the GPU device.
+            # Native ARM64 wheels can exceed 8 GiB while NVCC links them.  The
+            # 8 GiB limit was OOM-killed on 2026-08-21 while building SAM-2 for
+            # the ComfyUI 0.33 image.  ARM64 build workflows are gated on the
+            # creative profile, where the Sparks are free from the 80 GiB LLM.
             requests:
               cpu: "500m"
               memory: 2Gi
             limits:
               cpu: "2"
-              memory: 8Gi
+              memory: 16Gi
           ports:
             - name: buildkit
               containerPort: 1234
