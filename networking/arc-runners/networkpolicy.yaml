@@ -1,0 +1,84 @@
+---
+# Egreso de los runners de CI: pueden salir a internet y al canario, pero NO al
+# resto del x86.
+#
+# POR QUE EXISTE. El x86 (100.83.56.98) es el nodo k8s `ubuntu` y corre
+# `opencode serve --hostname 0.0.0.0 --port 19900` con
+# `UnsetEnvironment=OPENCODE_SERVER_PASSWORD`: medido el 20-08-2026, ese puerto
+# responde **200 sin credencial**, y las sesiones que crea ejecutan comandos
+# como `dibanez` — que esta en sudo y docker, tiene KUBECONFIG de cluster-admin
+# y un PAT con admin:org en ~/.config/gh/hosts.yml.
+#
+# Los runners de CI procesan entrada de TERCEROS (notas de release, hunks de
+# conflicto, codigo rebasado de upstream). Hasta ahora `arc-runners` no tenia
+# NINGUNA NetworkPolicy, asi que un job podia hablar con ese puerto. La
+# contencion "el agente corre en un job efimero" era de PROCESO, y el atacante
+# no necesita el proceso: le basta la ruta de red.
+#
+# Los e2e SI necesitan el x86, pero solo el :3001 del canario. Eso es lo unico
+# que se abre.
+#
+# OJO al orden de las reglas de egreso: una policy de egreso es una UNION de
+# permisos, asi que la excepcion del x86 se expresa como un `ipBlock` con
+# `except`, no como una regla de denegacion (no existen en NetworkPolicy).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-runners-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      El :19900 del x86 es RCE sin auth como dibanez (sudo, docker,
+      cluster-admin, PAT admin:org). Los runners procesan codigo de terceros.
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # DNS: sin esto no resuelve nada y todo lo demas da igual.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+
+    # Internet, MENOS la tailnet y las redes privadas. GitHub, nodejs.org,
+    # registry.npmjs.org y demas caen aqui.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8          # cluster y LAN interna
+              - 172.16.0.0/12
+              - 192.168.0.0/16      # LAN de casa, incluido el x86 por LAN
+              - 100.64.0.0/10       # tailnet: aqui vive el :19900
+              - 169.254.0.0/16      # link-local / metadata
+
+    # La UNICA excepcion del x86: el canario, para los e2e de Playwright.
+    # El :3000 (produccion) y el :19900 (motor) quedan fuera a proposito.
+    - to:
+        - ipBlock:
+            cidr: 100.83.56.98/32
+      ports:
+        - { protocol: TCP, port: 3001 }
+
+    # Harbor por la VIP de traefik-lan. Los builds de dgx-infra
+    # (build-dashboard-*, build-omnivoice-*, build-stt-turbo) empujan imagenes
+    # a harbor.lan.e-dani.com, que resuelve a esta IP: sin esta regla el
+    # `except 192.168.0.0/16` de arriba los rompe. Comprobado antes de
+    # escribir la policy, no despues.
+    - to:
+        - ipBlock:
+            cidr: 192.168.50.240/32
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 80 }
+
+    # Harbor y los servicios del cluster que un build pueda necesitar.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 80 }
