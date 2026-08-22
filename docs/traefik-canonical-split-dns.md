@@ -16,11 +16,10 @@ hostname also has one canonical hostname served by both ingress planes:
 - Legacy `.lan` names remain as compatibility aliases while consumers are
   migrated. This change does not delete or rename an active route contract.
 
-The active inventory contains 45 distinct legacy LAN hostnames. Together with the
-canonical-only `multichamber.e-dani.com` endpoint, the split-DNS inventory has
-46 endpoints. The routing contract test checks that every legacy name has both
-a LAN and an Edge destination, using existing routes where the canonical side
-already existed.
+The compatibility inventory contains 46 distinct legacy LAN hostnames. Of
+those, 45 retain canonical split-DNS pairs; together with the canonical-only
+`multichamber.e-dani.com`, the active canonical inventory has 46 endpoints.
+The retired Sauvage name is the exception described below.
 
 ## Naming
 
@@ -33,10 +32,12 @@ names had different owners, so the collision-free active names are:
 | `openclaw-webhooks.lan.e-dani.com` | `openclaw-k8s-webhooks.e-dani.com` | the existing public name targets Sauvage |
 | `s3.lan.e-dani.com` | `minio-s3.e-dani.com` | `s3.e-dani.com` is already a path router for other buckets |
 
-`openclaw.lan.e-dani.com` / `openclaw-sauvage.e-dani.com` were retired on
-2026-08-22 after the Sauvage gateway and loopback proxy were removed from the
-host. Their legacy and canonical Traefik routes were deleted together; the K8s
-instance remains independently available at `openclaw.e-dani.com`.
+`openclaw-sauvage.e-dani.com` was retired on 2026-08-22 after the Sauvage
+gateway and loopback proxy were removed from the host. Its LAN/Edge routes and
+AdGuard rewrite were deleted. The legacy `openclaw.lan.e-dani.com` name now
+returns a permanent redirect, preserving the request path, to the active K8s
+instance at `https://openclaw.e-dani.com`; it is not counted as a canonical
+Sauvage endpoint.
 
 `admin.lan.skirmshop.es` maps to `admin.skirmshop.es` and has a dedicated
 certificate because the `e-dani.com` wildcard cannot cover it.
