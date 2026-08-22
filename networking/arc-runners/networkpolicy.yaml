@@ -134,7 +134,9 @@ spec:
 # 22-08-2026: Harbor resolvía a 10.43.248.144 y la conexión era rechazada.
 #
 # Esta excepción es más estrecha que la de DinD: sólo HTTP(S) y BuildKit dentro
-# del Service CIDR. No abre Pod CIDRs, LAN doméstica, tailnet ni el :19900.
+# del Service CIDR. El API de Kubernetes necesita además sus tres endpoints
+# reales tras el DNAT de kubernetes.default; se permiten sólo esos /32 en 6443.
+# No abre Pod CIDRs, LAN doméstica ni el :19900.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -142,8 +144,9 @@ metadata:
   namespace: arc-runners
   annotations:
     e-dani.com/motivo: >-
-      Las releases de OpenClaw necesitan Harbor y BuildKit por ClusterIP; sólo
-      se permiten sus puertos requeridos dentro del Service CIDR.
+      Las releases de OpenClaw necesitan Harbor y BuildKit por ClusterIP y
+      acceso read-only al API de Kubernetes; sólo se permiten sus puertos y
+      los tres endpoints actuales del API server.
 spec:
   podSelector:
     matchLabels:
@@ -158,6 +161,18 @@ spec:
         - { protocol: TCP, port: 443 }
         - { protocol: TCP, port: 80 }
         - { protocol: TCP, port: 1234 }
+    # `kubernetes.default:443` se traduce a los endpoints hostNetwork del API
+    # server antes de que kube-router evalúe la regla. Son IPs Tailscale
+    # estables de los tres control-plane; no se abre el resto de 100.64/10.
+    - to:
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+      ports:
+        - { protocol: TCP, port: 6443 }
     # kube-router también comprueba el destino posterior al DNAT. Traefik
     # publica 443/80 en el Service, pero escucha en 8443/8000 en el pod.
     - to:
