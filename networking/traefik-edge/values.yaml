@@ -116,6 +116,25 @@ providers:
       - libreplay
       - libreplay-staging
       - serpientetool
+      # Canonical-host migration: public routes live in traefik-edge and
+      # reference the existing LAN service owners cross-namespace.
+      - adguard
+      - agentgateway
+      - agentgateway-stg
+      - argocd
+      - aurora
+      - monitoring
+      - ha-dashboard
+      - longhorn-system
+      - minio
+      - dgx-synapse-mcp
+      - openclaw-synapse
+      - paperclip
+      - picqer-mcp
+      - backup-hub
+      - stt-mcp
+      - vault
+      - traefik-lan
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -139,6 +158,23 @@ providers:
       - tomorrowland
       - libreplay-staging
       - serpientetool
+      - adguard
+      - agentgateway
+      - agentgateway-stg
+      - argocd
+      - aurora
+      - monitoring
+      - ha-dashboard
+      - longhorn-system
+      - minio
+      - dgx-synapse-mcp
+      - openclaw-synapse
+      - paperclip
+      - picqer-mcp
+      - backup-hub
+      - stt-mcp
+      - vault
+      - traefik-lan
     allowExternalNameServices: true
     allowEmptyServices: true
 

@@ -1,0 +1,460 @@
+---
+# Canonical split-horizon names for services that historically only had a
+# *.lan.e-dani.com hostname. AdGuard sends these names to Traefik LAN while
+# public DNS sends them to Traefik Edge. The old *.lan names remain on their
+# owner resources as compatibility aliases during the consumer migration.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: canonical-hosts-lan
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/component: canonical-host-routing
+spec:
+  entryPoints: [websecure]
+  routes:
+    # AdGuard and cluster administration.
+    - kind: Rule
+      match: Host(`adguard-setup.e-dani.com`)
+      services:
+        - {name: adguard-web, namespace: adguard, port: 3000}
+    - kind: Rule
+      match: Host(`adguard.e-dani.com`)
+      services:
+        - {name: adguard-web, namespace: adguard, port: 80}
+    - kind: Rule
+      match: Host(`argocd.e-dani.com`)
+      services:
+        - {name: argocd-server, namespace: argocd, port: 80}
+
+    # Typed MCP/API services keep their application-level bearer gates on LAN.
+    - kind: Rule
+      match: Host(`agentgateway-mcp.e-dani.com`)
+      services:
+        - {name: agentgateway-mcp, namespace: agentgateway, port: 3000}
+    - kind: Rule
+      match: Host(`agentgateway-mcp-stg.e-dani.com`)
+      services:
+        - {name: agentgateway-mcp, namespace: agentgateway-stg, port: 3000}
+    - kind: Rule
+      match: Host(`dgx-synapse-mcp.e-dani.com`)
+      services:
+        - {name: dgx-synapse-mcp, namespace: dgx-synapse-mcp, port: 3014}
+    - kind: Rule
+      match: Host(`mcp-socialmedia.e-dani.com`)
+      services:
+        - {name: mcp-sse, namespace: whatsapp-mcp, port: 3010}
+    - kind: Rule
+      match: Host(`picqer-mcp.e-dani.com`)
+      services:
+        - {name: picqer-mcp, namespace: picqer-mcp, port: 3013}
+    - kind: Rule
+      match: Host(`stt-mcp.e-dani.com`)
+      services:
+        - {name: stt-mcp, namespace: stt-mcp, port: 3011}
+    - kind: Rule
+      match: Host(`litellm.e-dani.com`)
+      services:
+        - {name: litellm, namespace: litellm, port: 4000}
+
+    # Brain and internal dashboards.
+    - kind: Rule
+      match: Host(`brain-k8s.e-dani.com`)
+      services:
+        - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
+    - kind: Rule
+      match: Host(`brain-ingest-k8s.e-dani.com`)
+      services:
+        - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
+    - kind: Rule
+      match: Host(`ha-dashboard.e-dani.com`)
+      services:
+        - {name: ha-dashboard, namespace: ha-dashboard, port: 80}
+
+    # Aurora keeps the exact middleware/path topology of its legacy LAN route.
+    - kind: Rule
+      priority: 200
+      match: Host(`aurora.e-dani.com`) && PathPrefix(`/backend`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: aurora-strip-backend, namespace: aurora}
+      services:
+        - {name: aurora-server, namespace: aurora, port: 5080}
+    - kind: Rule
+      priority: 200
+      match: Host(`aurora.e-dani.com`) && PathPrefix(`/ws`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: aurora-ws-drop-authorization, namespace: aurora}
+        - {name: aurora-strip-ws, namespace: aurora}
+      services:
+        - {name: aurora-chatbot, namespace: aurora, port: 5006}
+    - kind: Rule
+      priority: 100
+      match: Host(`aurora.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: aurora-frontend, namespace: aurora, port: 3000}
+    - kind: Rule
+      priority: 100
+      match: Host(`aurora-api.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: aurora-server, namespace: aurora, port: 5080}
+
+    # Existing public services gain the same hostname on the LAN side.
+    - kind: Rule
+      match: Host(`firecrawl.e-dani.com`)
+      services:
+        - {name: firecrawl-api, namespace: skirmshop, port: 3002}
+    - kind: Rule
+      priority: 100
+      match: Host(`harbor.e-dani.com`) && PathPrefix(`/v2/`)
+      services:
+        - {name: harbor-core, namespace: harbor, port: 80}
+    - kind: Rule
+      match: Host(`harbor.e-dani.com`)
+      services:
+        - {name: harbor, namespace: harbor, port: 80}
+    - kind: Rule
+      match: Host(`langfuse.e-dani.com`)
+      services:
+        - {name: langfuse-web, namespace: langfuse, port: 3000}
+
+    # Human operations panels preserve LAN bypass + SSO fallback where the
+    # legacy route already had that behavior.
+    - kind: Rule
+      priority: 300
+      match: Host(`alertmanager.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: vmalertmanager-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 9093}
+    - kind: Rule
+      priority: 100
+      match: Host(`alertmanager.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: vmalertmanager-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 9093}
+    - kind: Rule
+      priority: 300
+      match: Host(`grafana.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: vm-grafana, namespace: monitoring, port: 80}
+    - kind: Rule
+      priority: 100
+      match: Host(`grafana.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: vm-grafana, namespace: monitoring, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`home-assistant.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: homeassistant, namespace: homeassistant, port: 8123}
+    - kind: Rule
+      priority: 100
+      match: Host(`home-assistant.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: homeassistant, namespace: homeassistant, port: 8123}
+    - kind: Rule
+      priority: 300
+      match: Host(`libreplay.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: libreplay-web, namespace: libreplay, port: 80}
+    - kind: Rule
+      priority: 100
+      match: Host(`libreplay.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: libreplay-web, namespace: libreplay, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`longhorn.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: longhorn-frontend, namespace: longhorn-system, port: 80}
+    - kind: Rule
+      priority: 100
+      match: Host(`longhorn.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: longhorn-frontend, namespace: longhorn-system, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`teslamate.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: teslamate, namespace: teslamate, port: 80}
+    - kind: Rule
+      priority: 100
+      match: Host(`teslamate.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: teslamate, namespace: teslamate, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`vm.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: vmsingle-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 8428}
+    - kind: Rule
+      priority: 100
+      match: Host(`vm.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: vmsingle-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 8428}
+
+    # Keep has a path-specific backend and an SSO-protected frontend.
+    - kind: Rule
+      priority: 400
+      match: Host(`keep.e-dani.com`) && PathPrefix(`/backend`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: keep-backend-stripprefix, namespace: monitoring}
+      services:
+        - {name: keep-backend, namespace: monitoring, port: 8080}
+    - kind: Rule
+      priority: 300
+      match: Host(`keep.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: keep-frontend, namespace: monitoring, port: 3000}
+    - kind: Rule
+      priority: 100
+      match: Host(`keep.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: keep-frontend, namespace: monitoring, port: 3000}
+    - kind: Rule
+      priority: 100
+      match: Host(`keep-api.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: keep-backend, namespace: monitoring, port: 8080}
+
+    # Storage consoles/APIs. minio-s3 avoids colliding with the existing
+    # s3.e-dani.com path router used by media, invoices and attachments.
+    - kind: Rule
+      match: Host(`minio.e-dani.com`)
+      services:
+        - {name: minio-console, namespace: minio, port: 9001}
+    - kind: Rule
+      match: Host(`minio-s3.e-dani.com`)
+      services:
+        - {name: minio-s3, namespace: minio, port: 9000}
+    - kind: Rule
+      match: Host(`skirmshop-s3.e-dani.com`)
+      services:
+        - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9000}
+    - kind: Rule
+      match: Host(`skirmshop-s3-console.e-dani.com`)
+      services:
+        - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9001}
+
+    # OpenClaw K8s keeps its trusted-proxy middleware chain.
+    - kind: Rule
+      priority: 400
+      match: Host(`openclaw-k8s.e-dani.com`) && HeaderRegexp(`Upgrade`, `(?i)^websocket$`) && (ClientIP(`192.168.50.74/32`) || ClientIP(`192.168.50.96/32`) || ClientIP(`100.90.163.101/32`) || ClientIP(`192.168.50.142/32`))
+      middlewares:
+        - {name: openclaw-qwen36-openclaw-lan-preauth-sanitize, namespace: openclaw-qwen36}
+        - {name: openclaw-qwen36-openclaw-lan-device-auth, namespace: openclaw-qwen36}
+        - {name: openclaw-qwen36-openclaw-lan-postauth-strip, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
+    - kind: Rule
+      priority: 300
+      match: Host(`openclaw-k8s.e-dani.com`) && (ClientIP(`192.168.0.0/16`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      middlewares:
+        - {name: openclaw-qwen36-openclaw-lan-preauth-sanitize, namespace: openclaw-qwen36}
+        - {name: openclaw-qwen36-openclaw-lan-device-auth, namespace: openclaw-qwen36}
+        - {name: openclaw-qwen36-openclaw-lan-postauth-strip, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
+    - kind: Rule
+      priority: 400
+      match: Host(`openclaw-k8s-readonly.e-dani.com`) && PathPrefix(`/oauth2`) && (ClientIP(`192.168.0.0/16`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - {name: oauth2-proxy-openclaw-readonly, namespace: keycloak, port: 4180}
+    - kind: Rule
+      priority: 300
+      match: Host(`openclaw-k8s-readonly.e-dani.com`) && (ClientIP(`192.168.0.0/16`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      middlewares:
+        - {name: openclaw-qwen36-readonly-preauth-sanitize, namespace: openclaw-qwen36}
+        - {name: sso-openclaw-readonly-chain, namespace: keycloak}
+        - {name: openclaw-qwen36-readonly-postauth-strip, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-readonly, namespace: openclaw-qwen36, port: 8080}
+
+    # openclaw.e-dani.com remains the K8s canonical host. Preserve the public
+    # provider callbacks ahead of the authenticated UI catch-all.
+    - kind: Rule
+      priority: 600
+      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-pocharlies`)
+      middlewares:
+        - {name: replace-gmail-pubsub, namespace: traefik-edge}
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 8789}
+    - kind: Rule
+      priority: 590
+      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-leila`)
+      middlewares:
+        - {name: replace-gmail-pubsub, namespace: traefik-edge}
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 8790}
+    - kind: Rule
+      priority: 580
+      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub-edani`)
+      middlewares:
+        - {name: replace-gmail-pubsub, namespace: traefik-edge}
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 8791}
+    - kind: Rule
+      priority: 570
+      match: Host(`openclaw.e-dani.com`) && PathPrefix(`/gmail-pubsub`)
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 8788}
+    - kind: Rule
+      priority: 560
+      match: Host(`openclaw.e-dani.com`) && Path(`/telegram-webhook`)
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 8787}
+    - kind: Rule
+      priority: 100
+      match: Host(`openclaw.e-dani.com`)
+      middlewares:
+        - {name: openclaw-qwen36-openclaw-public-preauth-sanitize, namespace: openclaw-qwen36}
+        - {name: sso-chain, namespace: keycloak}
+        - {name: openclaw-qwen36-openclaw-public-postauth-strip, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
+    - kind: Rule
+      match: Host(`openclaw-webhooks.e-dani.com`)
+      services:
+        - {name: sauvage-localhost, namespace: traefik-edge, port: 18890}
+
+    # Collision-free canonical names for legacy/private OpenClaw surfaces.
+    - kind: Rule
+      priority: 500
+      match: Host(`openclaw-k8s-webhooks.e-dani.com`) && PathPrefix(`/plugins/webhooks/`) && ClientIP(`10.42.4.0/32`)
+      middlewares:
+        - {name: openclaw-qwen36-openclaw-webhooks-sanitize, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
+    - kind: Rule
+      priority: 1000
+      match: Host(`openclaw-synapse.e-dani.com`) && (ClientIP(`10.42.4.0/32`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: openclaw-synapse-openclaw, namespace: openclaw-synapse, port: 8791}
+    - kind: Rule
+      priority: 300
+      match: Host(`openclaw-sauvage.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`10.42.0.0/16`))
+      middlewares:
+        - {name: openclaw-sauvage-lan-identity, namespace: traefik-lan}
+      services:
+        - {name: openclaw-lan-host, namespace: traefik-lan, port: 18789}
+    - kind: Rule
+      priority: 100
+      match: Host(`openclaw-sauvage.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: openclaw-sauvage-lan-identity, namespace: traefik-lan}
+      services:
+        - {name: openclaw-lan-host, namespace: traefik-lan, port: 18789}
+
+    # MultiChamber deliberately keeps Keycloak on LAN as well: unlike the
+    # read-only panels it can resume agents and execute as the x86 user.
+    - kind: Rule
+      priority: 150
+      match: Host(`multichamber.e-dani.com`) && (PathPrefix(`/api`) || PathPrefix(`/auth`))
+      middlewares:
+        - {name: sso-forward-auth, namespace: keycloak}
+      services:
+        - {name: multichamber-edge-host, namespace: traefik-edge, port: 3003}
+    - kind: Rule
+      priority: 100
+      match: Host(`multichamber.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: multichamber-edge-host, namespace: traefik-edge, port: 3003}
+
+    # Remaining UI/service aliases.
+    - kind: Rule
+      match: Host(`sauvage-bot.e-dani.com`)
+      middlewares:
+        - {name: sauvage-bot-strip-auth-headers, namespace: traefik-lan}
+      services:
+        - {name: sauvage-bot-ext, namespace: traefik-lan, port: 8080}
+    - kind: Rule
+      priority: 100000
+      match: Host(`uriel.e-dani.com`) && PathPrefix(`/api/poster/`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - {name: uriel-poster, namespace: traefik-edge, port: 80}
+    - kind: Rule
+      match: Host(`uriel.e-dani.com`) && PathPrefix(`/api/`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - {name: uriel-chat, namespace: traefik-edge, port: 80}
+    - kind: Rule
+      match: Host(`uriel.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - {name: uriel-site, namespace: traefik-edge, port: 80}
+    - kind: Rule
+      match: Host(`vault.e-dani.com`)
+      services:
+        - {name: vault-active, namespace: vault, port: 8200}
+    - kind: Rule
+      match: Host(`whatsapp.e-dani.com`)
+      services:
+        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
+    - kind: Rule
+      match: Host(`whatsapp-pro.e-dani.com`)
+      services:
+        - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
+
+    # Synapse keeps public webhook/static path ownership before the LAN admin
+    # catch-all, so split DNS does not redirect local producers to the UI.
+    - kind: Rule
+      priority: 2500
+      match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-feedback`)
+      services:
+        - {name: synapse-brain-feedback-handler, namespace: traefik-edge, port: 8080}
+    - kind: Rule
+      priority: 2400
+      match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
+      services:
+        - {name: synapse-admin-k8s, namespace: traefik-edge, port: 18795}
+    - kind: Rule
+      priority: 2300
+      match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
+      services:
+        - {name: synapse-gateway-k8s, namespace: traefik-edge, port: 18790}
+    - kind: Rule
+      priority: 2200
+      match: Host(`synapse.e-dani.com`) && PathPrefix(`/attachments`)
+      middlewares:
+        - {name: synapse-admin-allowlist, namespace: traefik-edge}
+      services:
+        - {name: edge-static-server, namespace: traefik-edge, port: 8080}
+    - kind: Rule
+      priority: 300
+      match: Host(`synapse.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`))
+      services:
+        - {name: synapse-admin-k8s, namespace: traefik-lan, port: 18795}
+    - kind: Rule
+      priority: 100
+      match: Host(`synapse.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: synapse-admin-k8s, namespace: traefik-lan, port: 18795}
+  tls:
+    secretName: wildcard-edani-tls
