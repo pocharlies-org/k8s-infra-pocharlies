@@ -58,7 +58,6 @@ CANONICAL_LAN_HOSTS = {
     "openclaw-k8s-readonly.e-dani.com",
     "openclaw-k8s-webhooks.e-dani.com",
     "openclaw-k8s.e-dani.com",
-    "openclaw-sauvage.e-dani.com",
     "openclaw-synapse.e-dani.com",
     "openclaw-webhooks.e-dani.com",
     "openclaw.e-dani.com",
@@ -167,7 +166,6 @@ def test_colliding_legacy_hosts_have_unambiguous_canonical_names():
     assert {
         "minio-s3.e-dani.com",
         "openclaw-k8s-webhooks.e-dani.com",
-        "openclaw-sauvage.e-dani.com",
     } <= current
 
 

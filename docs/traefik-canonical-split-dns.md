@@ -16,9 +16,9 @@ hostname also has one canonical hostname served by both ingress planes:
 - Legacy `.lan` names remain as compatibility aliases while consumers are
   migrated. This change does not delete or rename an active route contract.
 
-The inventory contained 46 distinct legacy LAN hostnames. Together with the
+The active inventory contains 45 distinct legacy LAN hostnames. Together with the
 canonical-only `multichamber.e-dani.com` endpoint, the split-DNS inventory has
-47 endpoints. The routing contract test checks that every legacy name has both
+46 endpoints. The routing contract test checks that every legacy name has both
 a LAN and an Edge destination, using existing routes where the canonical side
 already existed.
 
@@ -26,13 +26,17 @@ already existed.
 
 The normal mapping removes `.lan`, for example
 `grafana.lan.e-dani.com` becomes `grafana.e-dani.com`. Three existing public
-names had different owners, so the collision-free names are:
+names had different owners, so the collision-free active names are:
 
 | Legacy hostname | Canonical hostname | Reason |
 | --- | --- | --- |
-| `openclaw.lan.e-dani.com` | `openclaw-sauvage.e-dani.com` | `openclaw.e-dani.com` is the K8s instance |
 | `openclaw-webhooks.lan.e-dani.com` | `openclaw-k8s-webhooks.e-dani.com` | the existing public name targets Sauvage |
 | `s3.lan.e-dani.com` | `minio-s3.e-dani.com` | `s3.e-dani.com` is already a path router for other buckets |
+
+`openclaw.lan.e-dani.com` / `openclaw-sauvage.e-dani.com` were retired on
+2026-08-22 after the Sauvage gateway and loopback proxy were removed from the
+host. Their legacy and canonical Traefik routes were deleted together; the K8s
+instance remains independently available at `openclaw.e-dani.com`.
 
 `admin.lan.skirmshop.es` maps to `admin.skirmshop.es` and has a dedicated
 certificate because the `e-dani.com` wildcard cannot cover it.

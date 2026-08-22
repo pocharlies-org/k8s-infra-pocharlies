@@ -10,7 +10,6 @@ resources:
   - networking/traefik-lan/harbor-registry-direct.yaml
   - networking/traefik-lan/lan-app-routes.yaml
   - networking/traefik-lan/dgx-public-host-lan.yaml
-  - networking/traefik-lan/openclaw-lan.yaml
   - networking/traefik-lan/openchamber-lan.yaml
   - networking/traefik-lan/opencode-lan.yaml
   - networking/traefik-lan/opencode-claude-panel-lan.yaml
