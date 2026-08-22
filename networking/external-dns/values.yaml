@@ -24,6 +24,11 @@ txtOwnerId: k3s-x86-home
 interval: 1m
 logLevel: info
 
+# Canonical split-DNS routes use the manually owned public *.e-dani.com
+# wildcard. This filter makes their per-resource exclude annotation effective
+# for every enabled source, including traefik-proxy.
+annotationFilter: "external-dns.alpha.kubernetes.io/exclude notin (true)"
+
 sources:
   - service
   - ingress

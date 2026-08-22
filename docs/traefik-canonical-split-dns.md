@@ -9,8 +9,9 @@ hostname also has one canonical hostname served by both ingress planes:
 
 - AdGuard resolves the canonical name to the Traefik LAN VIP
   `192.168.50.240`.
-- Public DNS is owned by the `traefik-edge` route and resolves to the four
-  edge nodes.
+- Public DNS uses the DNS-only `*.e-dani.com` wildcard, which aliases the
+  existing four-address `images.openclaw.e-dani.com` edge record. Exact
+  records continue to take precedence.
 - The HTTP hostname is identical on both paths; DNS chooses the ingress.
 - Legacy `.lan` names remain as compatibility aliases while consumers are
   migrated. This change does not delete or rename an active route contract.
@@ -36,8 +37,10 @@ certificate because the `e-dani.com` wildcard cannot cover it.
 
 ## Authentication and exposure
 
-Browser/admin routes on Edge use the shared Keycloak `sso-chain` and are
-Cloudflare-proxied. Keycloak and oauth2-proxy need no per-host change: the
+Browser/admin routes on Edge use the shared Keycloak `sso-chain`. Existing
+exact records retain their Cloudflare proxy setting; new wildcard-covered
+names are DNS-only to stay compatible with machine endpoints. Keycloak and
+oauth2-proxy need no per-host change: the
 shared client returns through
 `https://auth-next.e-dani.com/oauth2/callback`, and its cookie/whitelist
 scope is `.e-dani.com`.
@@ -66,7 +69,7 @@ change adds the missing LAN half while preserving its Keycloak boundary.
 - `networking/traefik-lan/canonical-hosts-lan.yaml`: added canonical LAN
   routes where the service owner did not already provide one.
 - `networking/traefik-edge/canonical-hosts-public.yaml`: canonical public UI
-  and machine routes.
+  and machine routes, excluded from per-host ExternalDNS publication.
 - `networking/traefik-edge/canonical-hosts-networkpolicy.yaml`: permits the
   four host-network Edge nodes to reach only port 8791 of OpenClaw Synapse.
 - `k8s-adguard-pocharlies/k8s/adguard.yaml`: reconciles the canonical local
@@ -80,6 +83,11 @@ After GitOps convergence, verify that local DNS returns `192.168.50.240`,
 public DNS returns the Edge targets, LAN requests hit Traefik LAN, browser
 routes redirect to Keycloak when anonymous, and machine routes return their
 backend authentication response rather than a Traefik 404/502.
+
+Cloudflare's zone quota cannot hold four A records plus a TXT owner record for
+every canonical host. The public wildcard is therefore manually owned, like
+the existing LAN wildcard. Its rollback backup and invariants are documented
+in `runbook-cloudflare-lan-record-budget.md`.
 
 Rollback is the reverse deployment order: restore the LiteLLM canonical
 host in its app route, remove the central canonical routes, then remove the

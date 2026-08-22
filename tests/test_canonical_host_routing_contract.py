@@ -135,19 +135,17 @@ def test_openclaw_synapse_has_a_lan_sso_fallback():
     ]
 
 
-def test_public_ui_routes_are_sso_gated_and_api_routes_are_dns_only():
+def test_public_ui_routes_are_sso_gated_and_dns_is_wildcard_owned():
     path = "networking/traefik-edge/canonical-hosts-public.yaml"
     ui = ingress(path, "canonical-ui-hosts-public")
     api = ingress(path, "canonical-api-hosts-public")
 
     assert ui["spec"]["ingressClassName"] == "traefik-edge"
     assert api["spec"]["ingressClassName"] == "traefik-edge"
-    assert ui["metadata"]["annotations"][
-        "external-dns.alpha.kubernetes.io/cloudflare-proxied"
-    ] == "true"
-    assert api["metadata"]["annotations"][
-        "external-dns.alpha.kubernetes.io/cloudflare-proxied"
-    ] == "false"
+    for route in (ui, api):
+        assert route["metadata"]["annotations"] == {
+            "external-dns.alpha.kubernetes.io/exclude": "true"
+        }
     assert hosts(api) == API_EDGE_HOSTS
 
     for rule in ui["spec"]["routes"]:
@@ -196,6 +194,13 @@ def test_edge_watches_every_namespace_used_by_canonical_routes():
     providers = values["providers"]
     assert service_namespaces <= set(
         providers["kubernetesCRD"]["namespaces"]
+    )
+
+
+def test_external_dns_honors_canonical_route_exclusions():
+    values = documents("networking/external-dns/values.yaml")[0]
+    assert values["annotationFilter"] == (
+        "external-dns.alpha.kubernetes.io/exclude notin (true)"
     )
 
 

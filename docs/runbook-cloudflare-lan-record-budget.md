@@ -58,3 +58,29 @@ Rollback is the reverse: restore the backed-up records with their original
 type, name, content, TTL, and proxy flag, remove `excludeDomains`, and reconcile
 external-dns. Do not use a wildcard TXT record as a replacement for ownership
 records.
+
+## Public canonical-host wildcard
+
+Cloudflare's `e-dani.com` zone reached its record quota when the canonical
+split-DNS migration tried to publish four Edge A records plus one TXT owner
+record for every former LAN-only hostname. The permanent budget-safe public
+fallback is:
+
+```text
+*.e-dani.com  CNAME  images.openclaw.e-dani.com  DNS-only
+```
+
+`images.openclaw.e-dani.com` is an existing DNS-only record with all four Edge
+addresses. A CNAME preserves the requested hostname, so Traefik still selects
+the exact canonical router. Existing exact DNS records take precedence over
+the wildcard and retain their own proxy/DNS-only behavior.
+
+This wildcard is manually owned in Cloudflare. Canonical aggregate
+IngressRoutes carry `external-dns.alpha.kubernetes.io/exclude: "true"`, and
+ExternalDNS must keep the matching annotation filter enabled. Do not add a TXT
+ownership record or per-host targets for those aggregate routes: doing so
+recreates the quota failure and can block ACME challenges.
+
+Before replacing or deleting the wildcard, back up its full Cloudflare JSON,
+verify that the target still returns the four Edge addresses, and verify all
+47 legacy-to-canonical mappings still have both a LAN and an Edge router.
