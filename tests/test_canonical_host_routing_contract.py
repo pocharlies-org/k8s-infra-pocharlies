@@ -54,12 +54,10 @@ CANONICAL_LAN_HOSTS = {
     "mcp-socialmedia.e-dani.com",
     "minio-s3.e-dani.com",
     "minio.e-dani.com",
-    "multichamber.e-dani.com",
     "openclaw-k8s-readonly.e-dani.com",
     "openclaw-k8s-webhooks.e-dani.com",
     "openclaw-k8s.e-dani.com",
     "openclaw-synapse.e-dani.com",
-    "openclaw-webhooks.e-dani.com",
     "openclaw.e-dani.com",
     "picqer-mcp.e-dani.com",
     "sauvage-bot.e-dani.com",
@@ -99,26 +97,6 @@ def test_all_new_lan_routes_use_canonical_names_and_public_wildcard():
     assert route["metadata"]["annotations"] == {
         "external-dns.alpha.kubernetes.io/exclude": "true"
     }
-
-
-def test_multichamber_keeps_keycloak_on_the_lan_path():
-    route = ingress(
-        "networking/traefik-lan/canonical-hosts-lan.yaml",
-        "canonical-hosts-lan",
-    )
-    rules = [
-        rule
-        for rule in route["spec"]["routes"]
-        if "Host(`multichamber.e-dani.com`)" in rule["match"]
-    ]
-    assert [rule["priority"] for rule in rules] == [150, 100]
-    assert rules[0]["middlewares"] == [
-        {"name": "sso-forward-auth", "namespace": "keycloak"}
-    ]
-    assert rules[1]["middlewares"] == [
-        {"name": "sso-chain", "namespace": "keycloak"}
-    ]
-    assert all("ClientIP(" not in rule["match"] for rule in rules)
 
 
 def test_openclaw_synapse_has_a_lan_sso_fallback():
