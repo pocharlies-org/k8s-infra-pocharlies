@@ -1,11 +1,18 @@
 # OpenClaw Sauvage LAN Trusted-Proxy Cutover
 
+> **Estado 2026-08-22:** runtime retirado. `sauvage` no tiene binario,
+> listener `:18789` ni las unidades descritas abajo. Las rutas de compatibilidad
+> siguen declaradas, pero `openclaw-sauvage.e-dani.com` no debe reactivarse ni
+> reencaminarse al OpenClaw Kubernetes sin confirmar primero propietario y
+> equivalencia funcional. El resto conserva el procedimiento y la evidencia
+> historica del runtime anterior.
+
 This runbook is the final architecture for `https://openclaw.lan.e-dani.com`:
 Traefik-LAN authenticates the browser-side route and OpenClaw accepts only
 trusted-proxy headers from the cluster, instead of relying on `auth none` behind
 a host loopback proxy.
 
-Current production state after the 2026-07-01 guard fix:
+Historical production state after the 2026-07-01 guard fix:
 
 - `openclaw-gateway.service` runs on `sauvage` as user `ubuntu`.
 - The gateway listens on `127.0.0.1:18789` with `--bind loopback --auth none`.

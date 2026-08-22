@@ -16,9 +16,11 @@ hostname also has one canonical hostname served by both ingress planes:
 - Legacy `.lan` names remain as compatibility aliases while consumers are
   migrated. This change does not delete or rename an active route contract.
 
-The inventory contained 47 distinct legacy LAN hostnames. The routing
-contract test checks that every one has both a LAN and an Edge destination,
-using existing routes where the canonical side already existed.
+The inventory contained 46 distinct legacy LAN hostnames. Together with the
+canonical-only `multichamber.e-dani.com` endpoint, the split-DNS inventory has
+47 endpoints. The routing contract test checks that every legacy name has both
+a LAN and an Edge destination, using existing routes where the canonical side
+already existed.
 
 ## Naming
 

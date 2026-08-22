@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import tls from 'node:tls';
 
-const url = new URL(process.env.OPENCLAW_LAN_HEALTHCHECK_URL || 'wss://openclaw.lan.e-dani.com/');
-const origin = process.env.OPENCLAW_LAN_HEALTHCHECK_ORIGIN || 'https://openclaw.lan.e-dani.com';
+const url = new URL(process.env.OPENCLAW_LAN_HEALTHCHECK_URL || 'wss://openclaw-sauvage.e-dani.com/');
+const origin = process.env.OPENCLAW_LAN_HEALTHCHECK_ORIGIN || 'https://openclaw-sauvage.e-dani.com';
 const timeoutMs = Number(process.env.OPENCLAW_LAN_HEALTHCHECK_TIMEOUT_MS || '8000');
 const expectedEvent = process.env.OPENCLAW_LAN_HEALTHCHECK_EXPECTED || 'connect.challenge';
 const port = Number(url.port || (url.protocol === 'wss:' ? '443' : '80'));

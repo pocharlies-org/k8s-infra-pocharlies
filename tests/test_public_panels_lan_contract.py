@@ -58,10 +58,10 @@ def test_openchamber_accepts_public_split_host_without_removing_fallback():
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
 
 
-def test_openchamber_lan_backend_uses_magicdns_name_pinned_in_coredns():
+def test_openchamber_lan_backend_pins_stable_x86_tailscale_address():
     resources = documents("networking/traefik-lan/openchamber-lan.yaml")
     service = next(item for item in resources if item.get("kind") == "Service")
-    assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
-    coredns = (ROOT / "networking/dns/coredns-custom.yaml").read_text(encoding="utf-8")
-    assert "100.83.56.98 x86.taile0ad27.ts.net" in coredns
+    endpoint = next(item for item in resources if item.get("kind") == "EndpointSlice")
+    assert "type" not in service["spec"]
+    assert endpoint["metadata"]["labels"]["kubernetes.io/service-name"] == service["metadata"]["name"]
+    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
