@@ -142,11 +142,21 @@ spec:
       middlewares: *generic-sso
       services:
         - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9001}
-    - kind: Rule
-      match: Host(`paperclip.e-dani.com`)
-      middlewares: *generic-sso
-      services:
-        - {name: paperclip, namespace: paperclip, port: 3100}
+    # paperclip.e-dani.com NO se publica en el edge, a proposito.
+    #
+    # Paperclip orquesta agentes con un execution target SSH a
+    # dibanez@192.168.50.142: abre shell en un nodo del plano de control, con
+    # sudo, docker y kubeconfig cluster-admin, y su adapter de Claude trae
+    # `dangerouslySkipPermissions: true` por defecto. No es una UI de consulta
+    # como el resto de esta lista.
+    #
+    # Ademas `sso-chain` lo ROMPE: `sso-errors` reescribe cualquier 401 del
+    # backend a un 302 hacia /oauth2/sign_in, y la SPA de Paperclip llama a
+    # /api/auth/get-session, que responde 401 mientras no hayas entrado en la
+    # app. Eso genera un bucle login -> callback -> login que acaba en 403 del
+    # propio oauth2-proxy (medido el 22-08 18:16).
+    #
+    # Se sirve solo por traefik-lan (LAN + tailnet), con su propio login.
     - kind: Rule
       match: Host(`openclaw-synapse.e-dani.com`)
       middlewares: *generic-sso
