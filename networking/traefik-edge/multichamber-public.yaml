@@ -15,6 +15,13 @@
 # resolviendo `x86.taile0ad27.ts.net:3003` salieron 5 OK y 10 fallos; contra
 # 100.83.56.98:3003, 15 de 15. MagicDNS no es fiable desde esos nodos y cada
 # resolucion fallida es un 502 suelto en mitad de la carga de la pagina.
+#
+# PASO OCULTO: ArgoCD tiene `discovery.k8s.io/EndpointSlice` en resource.exclusions
+# (argocd-cm), asi que este EndpointSlice NO lo crea el sync — y aun asi la app
+# aparece `Synced`. Tras un despliegue limpio hay que aplicarlo a mano:
+#   kubectl apply -f networking/traefik-edge/multichamber-public.yaml
+# Comprobar que existe:
+#   kubectl get endpointslice -n traefik-edge multichamber-edge-host
 apiVersion: v1
 kind: Service
 metadata:
