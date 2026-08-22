@@ -29,21 +29,37 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: paperclip-drop-authorization
+  name: paperclip-sso-auth
   namespace: traefik-edge
 spec:
-  headers:
-    customRequestHeaders:
-      # oauth2-proxy lleva `set_authorization_header = true`, y el forwardAuth
-      # copia `Authorization: Bearer <token de Keycloak>` a la peticion.
-      # Paperclip intenta validar ESE token como suyo, no cuela, y responde 401
-      # en `GET /`. Medido dentro del pod:
-      #     sin Authorization -> 200
-      #     con Authorization -> 401
-      # Con `sso-errors` delante ese 401 se convierte en un 302 a Keycloak,
-      # Keycloak dice "ya estas dentro", vuelve, y otra vez: bucle infinito.
-      # Vaciarla es lo mismo que ya hace `aurora-ws-drop-authorization`.
-      Authorization: ""
+  # Copia de `sso-forward-auth` (ns keycloak) SIN `Authorization` en
+  # authResponseHeaders. Todo lo demas identico.
+  #
+  # Por que: oauth2-proxy lleva `set_authorization_header = true`, asi que el
+  # forwardAuth normal mete `Authorization: Bearer <token de Keycloak>` en la
+  # peticion. Paperclip intenta validar ESE token como token suyo y responde
+  # 401 en `GET /`. Medido dentro del pod, misma peticion:
+  #     sin Authorization -> 200
+  #     con Authorization -> 401
+  # Con `sso-errors` delante, ese 401 se volvia un 302 a Keycloak, Keycloak
+  # decia "ya estas dentro", volvia, y otra vez: bucle infinito de login.
+  #
+  # Y por que NO se vacia la cabecera con un middleware de headers, que es lo
+  # que hace `aurora-ws-drop-authorization`: porque Paperclip usa esa MISMA
+  # cabecera para sus API keys. Comprobado:
+  #     Authorization: Bearer <clave falsa> -> 401 (token malo)
+  #     sin cabecera                        -> 403 (no autenticado)
+  # Vaciarla romperia el CLI y cualquier agente que hable con la API por el
+  # edge. Lo correcto es no inyectarla, no borrarla.
+  forwardAuth:
+    address: http://oauth2-proxy.keycloak.svc.cluster.local:4180/oauth2/auth
+    authResponseHeaders:
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Forwarded-User
+    maxResponseBodySize: 1048576
+    trustForwardHeader: true
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -72,9 +88,7 @@ spec:
       match: Host(`paperclip.e-dani.com`) && PathPrefix(`/api`)
       priority: 150
       middlewares:
-        - name: sso-forward-auth
-          namespace: keycloak
-        - name: paperclip-drop-authorization
+        - name: paperclip-sso-auth
           namespace: traefik-edge
       services:
         - name: paperclip
@@ -85,9 +99,11 @@ spec:
       match: Host(`paperclip.e-dani.com`)
       priority: 100
       middlewares:
-        - name: sso-chain
+        # `sso-errors` da la pagina de login; el forwardAuth propio autentica
+        # sin inyectar Authorization. Es `sso-chain` desmontado a mano.
+        - name: sso-errors
           namespace: keycloak
-        - name: paperclip-drop-authorization
+        - name: paperclip-sso-auth
           namespace: traefik-edge
       services:
         - name: paperclip
