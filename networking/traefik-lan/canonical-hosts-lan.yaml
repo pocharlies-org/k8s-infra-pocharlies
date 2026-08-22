@@ -363,23 +363,6 @@ spec:
         - {name: sso-chain, namespace: keycloak}
       services:
         - {name: openclaw-synapse-openclaw, namespace: openclaw-synapse, port: 8791}
-    # MultiChamber deliberately keeps Keycloak on LAN as well: unlike the
-    # read-only panels it can resume agents and execute as the x86 user.
-    - kind: Rule
-      priority: 150
-      match: Host(`multichamber.e-dani.com`) && (PathPrefix(`/api`) || PathPrefix(`/auth`))
-      middlewares:
-        - {name: sso-forward-auth, namespace: keycloak}
-      services:
-        - {name: multichamber-edge-host, namespace: traefik-edge, port: 3003}
-    - kind: Rule
-      priority: 100
-      match: Host(`multichamber.e-dani.com`)
-      middlewares:
-        - {name: sso-chain, namespace: keycloak}
-      services:
-        - {name: multichamber-edge-host, namespace: traefik-edge, port: 3003}
-
     # Remaining UI/service aliases.
     - kind: Rule
       match: Host(`sauvage-bot.e-dani.com`)
