@@ -10,8 +10,9 @@ metadata:
   labels:
     app.kubernetes.io/component: canonical-host-routing
   annotations:
-    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    # These names are covered by the manually owned DNS-only *.e-dani.com
+    # wildcard. Publishing each route separately exhausts the Cloudflare zone.
+    external-dns.alpha.kubernetes.io/exclude: "true"
 spec:
   entryPoints: [websecure]
   ingressClassName: traefik-edge
@@ -192,8 +193,7 @@ metadata:
   labels:
     app.kubernetes.io/component: canonical-host-routing
   annotations:
-    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/exclude: "true"
 spec:
   entryPoints: [websecure]
   ingressClassName: traefik-edge
