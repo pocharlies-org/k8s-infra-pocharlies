@@ -58,19 +58,25 @@ def test_openchamber_accepts_public_split_host_without_removing_fallback():
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
 
 
-def test_openchamber_lan_backend_pins_stable_x86_tailscale_address():
+def test_openchamber_lan_backend_uses_the_pinned_x86_externalname():
     resources = documents("networking/traefik-lan/openchamber-lan.yaml")
     service = next(item for item in resources if item.get("kind") == "Service")
-    endpoint = next(item for item in resources if item.get("kind") == "EndpointSlice")
-    assert "type" not in service["spec"]
-    assert endpoint["metadata"]["labels"]["kubernetes.io/service-name"] == service["metadata"]["name"]
-    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
+    assert service["metadata"]["name"] == "openchamber-lan-x86"
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
 
 
-def test_openchamber_edge_backend_pins_the_same_stable_x86_tailscale_address():
+def test_openchamber_edge_backend_uses_the_pinned_x86_externalname():
     resources = documents("networking/traefik-edge/openchamber-public.yaml")
     service = next(item for item in resources if item.get("kind") == "Service")
-    endpoint = next(item for item in resources if item.get("kind") == "EndpointSlice")
-    assert "type" not in service["spec"]
-    assert endpoint["metadata"]["labels"]["kubernetes.io/service-name"] == service["metadata"]["name"]
-    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
+    assert service["metadata"]["name"] == "openchamber-edge-x86"
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+
+
+def test_coredns_pins_the_openchamber_externalname_to_x86():
+    config = next(
+        item for item in documents("networking/dns/coredns-custom.yaml")
+        if item.get("kind") == "ConfigMap" and item["metadata"]["name"] == "coredns-custom"
+    )
+    assert "100.83.56.98 x86.taile0ad27.ts.net" in config["data"]["edani-public-lan.server"]
