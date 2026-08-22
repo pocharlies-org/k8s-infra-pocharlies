@@ -17,25 +17,23 @@ spec:
       targetPort: 3000
       protocol: TCP
 ---
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
+apiVersion: v1
+kind: Endpoints
 metadata:
   name: openchamber-lan-stable
   namespace: traefik-lan
-  labels:
-    kubernetes.io/service-name: openchamber-lan-stable
-    app.kubernetes.io/name: openchamber-lan-stable
-    app.kubernetes.io/part-of: traefik-lan
-addressType: IPv4
-ports:
-  - name: http
-    protocol: TCP
-    port: 3000
-endpoints:
+# Keep this as Endpoints rather than a hand-managed EndpointSlice: Argo CD
+# excludes EndpointSlice discovery, while Kubernetes mirrors this desired
+# endpoint to the slice Traefik consumes.
+subsets:
   # MagicDNS from the Traefik nodes is intermittent. Pin the stable x86
-  # Tailscale address, as the MultiChamber route already does.
-  - addresses: [100.83.56.98]
-    conditions: {}
+  # Tailscale address.
+  - addresses:
+      - ip: 100.83.56.98
+    ports:
+      - name: http
+        port: 3000
+        protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport
