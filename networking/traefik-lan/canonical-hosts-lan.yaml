@@ -19,7 +19,7 @@ spec:
     - kind: Rule
       match: Host(`adguard-setup.e-dani.com`)
       services:
-        - {name: adguard-web, namespace: adguard, port: 3000}
+        - {name: adguard-web, namespace: adguard, port: 80}
     - kind: Rule
       match: Host(`adguard.e-dani.com`)
       services:

@@ -18,7 +18,7 @@ configuration:
         region: us-east-1
         s3ForcePathStyle: true
         s3Url: http://minio-s3.minio.svc.cluster.local:9000
-        publicUrl: https://s3.lan.e-dani.com
+        publicUrl: https://minio-s3.e-dani.com
       credential:
         name: velero-minio-creds
         key: cloud
