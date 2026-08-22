@@ -23,6 +23,8 @@ metadata:
   namespace: traefik-lan
   labels:
     app.kubernetes.io/component: canonical-host-routing
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
 spec:
   entryPoints: [websecure]
   routes:

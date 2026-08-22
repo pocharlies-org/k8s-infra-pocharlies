@@ -97,6 +97,9 @@ def test_all_new_lan_routes_use_canonical_names_and_public_wildcard():
     assert all(".lan." not in rule["match"] for rule in route["spec"]["routes"])
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
     assert "ingressClassName" not in route["spec"]
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/exclude": "true"
+    }
 
 
 def test_multichamber_keeps_keycloak_on_the_lan_path():
@@ -177,6 +180,9 @@ def test_admin_skirmshop_has_a_dedicated_lan_certificate_and_route():
     assert hosts(route) == {"admin.skirmshop.es"}
     assert route["spec"]["tls"] == {
         "secretName": "admin-skirmshop-canonical-tls"
+    }
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/exclude": "true"
     }
 
 
