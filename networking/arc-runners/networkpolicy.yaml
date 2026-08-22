@@ -126,3 +126,35 @@ spec:
     - to:
         - ipBlock:
             cidr: 10.0.0.0/8
+---
+# `arc-openclaw` no usa DinD, pero kube-router también evalúa su tráfico contra
+# la ClusterIP del Service antes de las reglas namespaceSelector de arriba. Por
+# eso Harbor (443) y el BuildKit remoto (1234) se rechazaban aunque sus
+# namespaces estuvieran permitidos. Reproducido desde un runner vivo el
+# 22-08-2026: Harbor resolvía a 10.43.248.144 y la conexión era rechazada.
+#
+# Esta excepción es más estrecha que la de DinD: sólo HTTP(S) y BuildKit dentro
+# del Service CIDR. No abre Pod CIDRs, LAN doméstica, tailnet ni el :19900.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-openclaw-service-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      Las releases de OpenClaw necesitan Harbor y BuildKit por ClusterIP; sólo
+      se permiten sus puertos requeridos dentro del Service CIDR.
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: arc-openclaw
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 1234 }
