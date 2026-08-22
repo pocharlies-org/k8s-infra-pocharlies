@@ -10,6 +10,11 @@
 # significa ejecutar `codex exec resume` / `claude -p --resume` como dibanez.
 # Quien reintroduzca esa regla convierte esto en ejecucion de comandos sin
 # credencial. El unico camino es este, y esta autenticado.
+# El backend va por IP cruda con EndpointSlice, NO por ExternalName. Medido el
+# 22-08-2026 desde el propio nodo del edge (ks5-cp-2, hostNetwork como Traefik):
+# resolviendo `x86.taile0ad27.ts.net:3003` salieron 5 OK y 10 fallos; contra
+# 100.83.56.98:3003, 15 de 15. MagicDNS no es fiable desde esos nodos y cada
+# resolucion fallida es un 502 suelto en mitad de la carga de la pagina.
 apiVersion: v1
 kind: Service
 metadata:
@@ -19,13 +24,30 @@ metadata:
     app.kubernetes.io/name: multichamber-edge-host
     app.kubernetes.io/part-of: traefik-edge-cutover
 spec:
-  type: ExternalName
-  externalName: x86.taile0ad27.ts.net
   ports:
     - name: http
       port: 3003
       targetPort: 3003
       protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: multichamber-edge-host
+  namespace: traefik-edge
+  labels:
+    kubernetes.io/service-name: multichamber-edge-host
+    app.kubernetes.io/name: multichamber-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 3003
+endpoints:
+  - addresses:
+      - 100.83.56.98
+    conditions: {}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
