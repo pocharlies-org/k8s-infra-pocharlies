@@ -5,10 +5,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: openchamber-lan-host
+  name: openchamber-lan-stable
   namespace: traefik-lan
   labels:
-    app.kubernetes.io/name: openchamber-lan-host
+    app.kubernetes.io/name: openchamber-lan-stable
     app.kubernetes.io/part-of: traefik-lan
 spec:
   ports:
@@ -20,11 +20,11 @@ spec:
 apiVersion: discovery.k8s.io/v1
 kind: EndpointSlice
 metadata:
-  name: openchamber-lan-host
+  name: openchamber-lan-stable
   namespace: traefik-lan
   labels:
-    kubernetes.io/service-name: openchamber-lan-host
-    app.kubernetes.io/name: openchamber-lan-host
+    kubernetes.io/service-name: openchamber-lan-stable
+    app.kubernetes.io/name: openchamber-lan-stable
     app.kubernetes.io/part-of: traefik-lan
 addressType: IPv4
 ports:
@@ -62,7 +62,7 @@ spec:
       match: Host(`chamber.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
       services:
-        - name: openchamber-lan-host
+        - name: openchamber-lan-stable
           port: 3000
           serversTransport: openchamber-lan-transport
     # Keep a defensive SSO fallback if the private hostname is ever reached
@@ -74,7 +74,7 @@ spec:
         - name: sso-chain
           namespace: keycloak
       services:
-        - name: openchamber-lan-host
+        - name: openchamber-lan-stable
           port: 3000
           serversTransport: openchamber-lan-transport
   tls:
