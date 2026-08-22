@@ -119,6 +119,22 @@ def test_multichamber_keeps_keycloak_on_the_lan_path():
     assert all("ClientIP(" not in rule["match"] for rule in rules)
 
 
+def test_openclaw_synapse_has_a_lan_sso_fallback():
+    route = ingress(
+        "networking/traefik-lan/canonical-hosts-lan.yaml",
+        "canonical-hosts-lan",
+    )
+    rules = [
+        rule
+        for rule in route["spec"]["routes"]
+        if "Host(`openclaw-synapse.e-dani.com`)" in rule["match"]
+    ]
+    assert [rule["priority"] for rule in rules] == [1000, 100]
+    assert rules[1]["middlewares"] == [
+        {"name": "sso-chain", "namespace": "keycloak"}
+    ]
+
+
 def test_public_ui_routes_are_sso_gated_and_api_routes_are_dns_only():
     path = "networking/traefik-edge/canonical-hosts-public.yaml"
     ui = ingress(path, "canonical-ui-hosts-public")
