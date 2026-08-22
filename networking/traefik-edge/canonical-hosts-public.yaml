@@ -142,7 +142,9 @@ spec:
       middlewares: *generic-sso
       services:
         - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9001}
-    # paperclip.e-dani.com NO se publica en el edge, a proposito.
+    # Paperclip is published separately by paperclip-public.yaml. Do not add
+    # it to this generic SSO route list: its three-route auth topology keeps
+    # the application session endpoints from entering an oauth2-proxy loop.
     #
     # Paperclip orquesta agentes con un execution target SSH a
     # dibanez@192.168.50.142: abre shell en un nodo del plano de control, con
@@ -156,7 +158,6 @@ spec:
     # app. Eso genera un bucle login -> callback -> login que acaba en 403 del
     # propio oauth2-proxy (medido el 22-08 18:16).
     #
-    # Se sirve solo por traefik-lan (LAN + tailnet), con su propio login.
     - kind: Rule
       match: Host(`openclaw-synapse.e-dani.com`)
       middlewares: *generic-sso

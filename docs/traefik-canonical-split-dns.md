@@ -17,9 +17,9 @@ hostname also has one canonical hostname served by both ingress planes:
   migrated. This change does not delete or rename an active route contract.
 
 The compatibility inventory contains 46 distinct legacy LAN hostnames. Of
-those, 45 retain canonical split-DNS pairs; together with the canonical-only
-`multichamber.e-dani.com`, the active canonical inventory has 46 endpoints.
-The retired Sauvage name is the exception described below.
+those, 45 retain canonical split-DNS pairs and the active canonical inventory
+has 45 endpoints. MultiChamber and the retired Sauvage webhook hostname are
+not active canonical endpoints.
 
 ## Naming
 
@@ -32,9 +32,14 @@ names had different owners, so the collision-free active names are:
 | `openclaw-webhooks.lan.e-dani.com` | `openclaw-k8s-webhooks.e-dani.com` | the existing public name targets Sauvage |
 | `s3.lan.e-dani.com` | `minio-s3.e-dani.com` | `s3.e-dani.com` is already a path router for other buckets |
 
-`openclaw-sauvage.e-dani.com` was retired on 2026-08-22 after the Sauvage
-gateway and loopback proxy were removed from the host. Its LAN/Edge routes and
-AdGuard rewrite were deleted. The legacy `openclaw.lan.e-dani.com` name now
+`openclaw-sauvage.e-dani.com`, `multichamber.e-dani.com`, and
+`openclaw-webhooks.e-dani.com` were retired after their Sauvage/x86 backends
+were removed. Their LAN/Edge routes and AdGuard exact rewrites are deleted;
+the public wildcard is intentionally not an exact per-host record. Producers
+must use `openclaw-k8s-webhooks.e-dani.com` for the active Kubernetes webhook
+endpoint; the retired webhook hostname is not redirected because replaying a
+POST to a different consumer would be unsafe. The legacy
+`openclaw.lan.e-dani.com` name now
 returns a permanent redirect, preserving the request path, to the active K8s
 instance at `https://openclaw.e-dani.com`; it is not counted as a canonical
 Sauvage endpoint.
@@ -61,15 +66,8 @@ allowlists, and mutation gates are unchanged; this is only an ingress
 transport route, not a new API capability.
 
 LAN routes retain the behavior of their legacy owner, including existing
-trusted-network bypasses. MultiChamber is the deliberate exception: both
-LAN and Edge require Keycloak because it can resume sessions and execute as
-the x86 user. The `/api` and `/auth` paths retain `sso-forward-auth`; the UI
-uses `sso-chain`. There is no `ClientIP` bypass.
-
-The design was checked against Claude session
-`8647ab8d-1bdb-4afd-9c08-ec1644a5bed4` (2026-08-21). That session implemented
-MultiChamber as Edge-only and explicitly omitted an AdGuard override. This
-change adds the missing LAN half while preserving its Keycloak boundary.
+trusted-network bypasses. Retired endpoints have no compatibility route when
+their request semantics are unsafe to redirect.
 
 ## Ownership
 
