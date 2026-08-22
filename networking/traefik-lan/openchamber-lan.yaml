@@ -17,23 +17,27 @@ spec:
       targetPort: 3000
       protocol: TCP
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
   name: openchamber-lan-stable
   namespace: traefik-lan
-# Keep this as Endpoints rather than a hand-managed EndpointSlice: Argo CD
-# excludes EndpointSlice discovery, while Kubernetes mirrors this desired
-# endpoint to the slice Traefik consumes.
-subsets:
+  labels:
+    kubernetes.io/service-name: openchamber-lan-stable
+    app.kubernetes.io/name: openchamber-lan-stable
+    app.kubernetes.io/part-of: traefik-lan
+# Argo CD excludes both Endpoints and EndpointSlice discovery. Keep the exact
+# desired slice here and reconcile it explicitly after a rollout or restore.
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 3000
+endpoints:
   # MagicDNS from the Traefik nodes is intermittent. Pin the stable x86
   # Tailscale address.
-  - addresses:
-      - ip: 100.83.56.98
-    ports:
-      - name: http
-        port: 3000
-        protocol: TCP
+  - addresses: [100.83.56.98]
+    conditions: {}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: ServersTransport

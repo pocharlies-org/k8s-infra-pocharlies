@@ -78,9 +78,11 @@ their request semantics are unsafe to redirect.
 - `networking/traefik-edge/canonical-hosts-networkpolicy.yaml`: permits the
   four host-network Edge nodes to reach only port 8791 of OpenClaw Synapse.
 - `networking/traefik-{lan,edge}/openchamber-*.yaml`: selectorless Services
-  use GitOps-managed `Endpoints` at `100.83.56.98:3000`; Kubernetes mirrors
-  them to the EndpointSlices consumed by Traefik because Argo excludes direct
-  EndpointSlice discovery. Do not add manual slices for those Services.
+  use explicit EndpointSlices at `100.83.56.98:3000`. Argo excludes both
+  `Endpoints` and `EndpointSlice`; after a rollout or restore, reconcile the
+  exact resource with `kubectl apply -f` on each OpenChamber manifest, then
+  verify its Service has the expected endpoint. Do not change to ExternalName:
+  MagicDNS is intermittent from Traefik nodes.
 - `k8s-adguard-pocharlies/k8s/adguard.yaml`: reconciles the canonical local
   rewrites into the persistent AdGuard configuration.
 - `k8s-litellm-pocharlies/k8s/manifest.yaml`: leaves the old `.lan` alias
