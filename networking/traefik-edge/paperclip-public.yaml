@@ -27,6 +27,25 @@
 # Sin anotaciones de external-dns: el comodin manual *.e-dani.com ya resuelve
 # este nombre, y publicar un registro por ruta agota la zona de Cloudflare.
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: paperclip-drop-authorization
+  namespace: traefik-edge
+spec:
+  headers:
+    customRequestHeaders:
+      # oauth2-proxy lleva `set_authorization_header = true`, y el forwardAuth
+      # copia `Authorization: Bearer <token de Keycloak>` a la peticion.
+      # Paperclip intenta validar ESE token como suyo, no cuela, y responde 401
+      # en `GET /`. Medido dentro del pod:
+      #     sin Authorization -> 200
+      #     con Authorization -> 401
+      # Con `sso-errors` delante ese 401 se convierte en un 302 a Keycloak,
+      # Keycloak dice "ya estas dentro", vuelve, y otra vez: bucle infinito.
+      # Vaciarla es lo mismo que ya hace `aurora-ws-drop-authorization`.
+      Authorization: ""
+---
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: edge-paperclip-public
@@ -55,6 +74,8 @@ spec:
       middlewares:
         - name: sso-forward-auth
           namespace: keycloak
+        - name: paperclip-drop-authorization
+          namespace: traefik-edge
       services:
         - name: paperclip
           namespace: paperclip
@@ -66,6 +87,8 @@ spec:
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        - name: paperclip-drop-authorization
+          namespace: traefik-edge
       services:
         - name: paperclip
           namespace: paperclip
