@@ -61,7 +61,16 @@ def test_openchamber_accepts_public_split_host_without_removing_fallback():
 def test_openchamber_lan_backend_pins_stable_x86_tailscale_address():
     resources = documents("networking/traefik-lan/openchamber-lan.yaml")
     service = next(item for item in resources if item.get("kind") == "Service")
-    endpoint = next(item for item in resources if item.get("kind") == "EndpointSlice")
+    endpoint = next(item for item in resources if item.get("kind") == "Endpoints")
     assert "type" not in service["spec"]
-    assert endpoint["metadata"]["labels"]["kubernetes.io/service-name"] == service["metadata"]["name"]
-    assert endpoint["endpoints"] == [{"addresses": ["100.83.56.98"], "conditions": {}}]
+    assert endpoint["metadata"]["name"] == service["metadata"]["name"]
+    assert endpoint["subsets"] == [{"addresses": [{"ip": "100.83.56.98"}], "ports": [{"name": "http", "port": 3000, "protocol": "TCP"}]}]
+
+
+def test_openchamber_edge_backend_pins_the_same_stable_x86_tailscale_address():
+    resources = documents("networking/traefik-edge/openchamber-public.yaml")
+    service = next(item for item in resources if item.get("kind") == "Service")
+    endpoint = next(item for item in resources if item.get("kind") == "Endpoints")
+    assert "type" not in service["spec"]
+    assert endpoint["metadata"]["name"] == service["metadata"]["name"]
+    assert endpoint["subsets"] == [{"addresses": [{"ip": "100.83.56.98"}], "ports": [{"name": "http", "port": 3000, "protocol": "TCP"}]}]
