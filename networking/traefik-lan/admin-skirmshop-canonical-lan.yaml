@@ -1,0 +1,115 @@
+---
+# admin.skirmshop.es is the only canonical hostname outside e-dani.com, so it
+# needs its own LAN-side certificate. Public traffic keeps using Traefik Edge;
+# AdGuard sends the same hostname to Traefik LAN for office/tailnet clients.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: admin-skirmshop-canonical-lan
+  namespace: traefik-lan
+spec:
+  secretName: admin-skirmshop-canonical-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - admin.skirmshop.es
+  renewBefore: 720h
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: admin-skirmshop-canonical-lan
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/component: canonical-host-routing
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 700
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/api/panel`)
+      middlewares:
+        - {name: admin-lan-panel-operator-identity, namespace: skirmshop}
+      services:
+        - {name: control-panel-bff, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 500
+      match: Host(`admin.skirmshop.es`) && Path(`/`)
+      services:
+        - {name: control-panel-ui, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 450
+      match: Host(`admin.skirmshop.es`) && Path(`/picker`)
+      middlewares:
+        - {name: admin-lan-picker-redirect-root, namespace: skirmshop}
+      services:
+        - {name: skirmshop-picker, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 400
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/picker`)
+      middlewares:
+        - {name: picker-lan-deny-sso, namespace: skirmshop}
+        - {name: picker-strip, namespace: skirmshop}
+      services:
+        - {name: skirmshop-picker, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 450
+      match: Host(`admin.skirmshop.es`) && Path(`/labels-ups`)
+      middlewares:
+        - {name: admin-lan-labels-ups-redirect-root, namespace: skirmshop}
+      services:
+        - {name: labels-ups-adapter, namespace: skirmshop, port: 3002}
+    - kind: Rule
+      priority: 400
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/labels-ups`)
+      middlewares:
+        - {name: strip-labels-ups, namespace: skirmshop}
+      services:
+        - {name: labels-ups-adapter, namespace: skirmshop, port: 3002}
+    - kind: Rule
+      priority: 350
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/wiki`)
+      middlewares:
+        - {name: skirmshop-wiki-strip, namespace: skirmshop}
+      services:
+        - {name: skirmshop-wiki, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/labels`)
+      middlewares:
+        - {name: strip-labels, namespace: skirmshop}
+      services:
+        - {name: labels-shopify-app, namespace: skirmshop, port: 3004}
+    - kind: Rule
+      priority: 300
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/collections-tree`)
+      services:
+        - {name: collections-tree-app, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/translations`)
+      services:
+        - {name: translations-app, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/sii`)
+      services:
+        - {name: sii-app, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 300
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/bundles`)
+      services:
+        - {name: bundles-app, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 250
+      match: Host(`admin.skirmshop.es`) && (PathPrefix(`/app`) || PathPrefix(`/auth`) || PathPrefix(`/api`) || PathPrefix(`/__manifest`) || Path(`/healthz`) || Path(`/readyz`))
+      services:
+        - {name: back-in-stock-app, namespace: skirmshop, port: 80}
+    - kind: Rule
+      priority: 10
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/`)
+      services:
+        - {name: control-panel-ui, namespace: skirmshop, port: 80}
+  tls:
+    secretName: admin-skirmshop-canonical-tls

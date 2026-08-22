@@ -1,0 +1,30 @@
+# Traefik Edge runs with hostNetwork, so the backend sees the stable Tailscale
+# addresses of the four ingress nodes rather than a traefik-edge pod address.
+# This additive policy opens only OpenClaw's HTTP port to those ingress nodes;
+# the application-owned policy continues to govern every other ingress/egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openclaw-synapse-allow-traefik-edge
+  namespace: openclaw-synapse
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: openclaw
+      app.kubernetes.io/instance: openclaw-synapse
+      app.kubernetes.io/name: openclaw-synapse
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.109.183.9/32
+      ports:
+        - protocol: TCP
+          port: 8791

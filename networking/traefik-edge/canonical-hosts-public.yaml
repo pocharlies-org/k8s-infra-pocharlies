@@ -1,0 +1,232 @@
+---
+# Browser-oriented canonical hosts. Public DNS points at Traefik Edge and the
+# generic Keycloak chain is mandatory; AdGuard resolves the same names to the
+# LAN routes in canonical-hosts-lan.yaml.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: canonical-ui-hosts-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/component: canonical-host-routing
+  annotations:
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`adguard-setup.e-dani.com`)
+      middlewares: &generic-sso
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: adguard-web, namespace: adguard, port: 3000}
+    - kind: Rule
+      match: Host(`adguard.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: adguard-web, namespace: adguard, port: 80}
+    - kind: Rule
+      match: Host(`argocd.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: argocd-server, namespace: argocd, port: 80}
+    - kind: Rule
+      match: Host(`agentgateway-mcp-stg.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: agentgateway-mcp, namespace: agentgateway-stg, port: 3000}
+    - kind: Rule
+      match: Host(`alertmanager.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: vmalertmanager-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 9093}
+    - kind: Rule
+      match: Host(`grafana.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: vm-grafana, namespace: monitoring, port: 80}
+    - kind: Rule
+      match: Host(`home-assistant.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: homeassistant, namespace: homeassistant, port: 8123}
+    - kind: Rule
+      match: Host(`longhorn.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: longhorn-frontend, namespace: longhorn-system, port: 80}
+    - kind: Rule
+      match: Host(`teslamate.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: teslamate, namespace: teslamate, port: 80}
+    - kind: Rule
+      match: Host(`vm.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: vmsingle-vm-victoria-metrics-k8s-stack, namespace: monitoring, port: 8428}
+    - kind: Rule
+      match: Host(`ha-dashboard.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: ha-dashboard, namespace: ha-dashboard, port: 80}
+    - kind: Rule
+      match: Host(`brain-k8s.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
+    - kind: Rule
+      match: Host(`brain-ingest-k8s.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
+
+    # Aurora/Keep keep their path transforms after the SSO gate.
+    - kind: Rule
+      priority: 200
+      match: Host(`aurora.e-dani.com`) && PathPrefix(`/backend`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: aurora-strip-backend, namespace: aurora}
+      services:
+        - {name: aurora-server, namespace: aurora, port: 5080}
+    - kind: Rule
+      priority: 200
+      match: Host(`aurora.e-dani.com`) && PathPrefix(`/ws`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: aurora-ws-drop-authorization, namespace: aurora}
+        - {name: aurora-strip-ws, namespace: aurora}
+      services:
+        - {name: aurora-chatbot, namespace: aurora, port: 5006}
+    - kind: Rule
+      priority: 100
+      match: Host(`aurora.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: aurora-frontend, namespace: aurora, port: 3000}
+    - kind: Rule
+      match: Host(`aurora-api.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: aurora-server, namespace: aurora, port: 5080}
+    - kind: Rule
+      priority: 400
+      match: Host(`keep.e-dani.com`) && PathPrefix(`/backend`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: keep-backend-stripprefix, namespace: monitoring}
+      services:
+        - {name: keep-backend, namespace: monitoring, port: 8080}
+    - kind: Rule
+      match: Host(`keep.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: keep-frontend, namespace: monitoring, port: 3000}
+    - kind: Rule
+      match: Host(`keep-api.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: keep-backend, namespace: monitoring, port: 8080}
+
+    - kind: Rule
+      match: Host(`minio.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: minio-console, namespace: minio, port: 9001}
+    - kind: Rule
+      match: Host(`skirmshop-s3-console.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9001}
+    - kind: Rule
+      match: Host(`paperclip.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: paperclip, namespace: paperclip, port: 3100}
+    - kind: Rule
+      match: Host(`openclaw-synapse.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: openclaw-synapse-openclaw, namespace: openclaw-synapse, port: 8791}
+    - kind: Rule
+      match: Host(`openclaw-k8s-webhooks.e-dani.com`) && PathPrefix(`/plugins/webhooks/`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: openclaw-qwen36-openclaw-webhooks-sanitize, namespace: openclaw-qwen36}
+      services:
+        - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
+    - kind: Rule
+      match: Host(`openclaw-sauvage.e-dani.com`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+        - {name: openclaw-sauvage-lan-identity, namespace: traefik-lan}
+      services:
+        - {name: openclaw-lan-host, namespace: traefik-lan, port: 18789}
+    - kind: Rule
+      match: Host(`vault.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: vault-active, namespace: vault, port: 8200}
+    - kind: Rule
+      match: Host(`whatsapp-pro.e-dani.com`)
+      middlewares: *generic-sso
+      services:
+        - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
+---
+# Machine clients cannot follow a browser SSO redirect. These routes are
+# DNS-only (no Cloudflare streaming timeout) and are exposed only where the
+# backend already returned 401 without its bearer/API/S3 signature in the
+# pre-change audit. The normal typed AgentGateway policy remains unchanged.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: canonical-api-hosts-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/component: canonical-host-routing
+  annotations:
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`agentgateway-mcp.e-dani.com`)
+      services:
+        - {name: agentgateway-mcp, namespace: agentgateway, port: 3000}
+    - kind: Rule
+      match: Host(`dgx-synapse-mcp.e-dani.com`)
+      services:
+        - {name: dgx-synapse-mcp, namespace: dgx-synapse-mcp, port: 3014}
+    - kind: Rule
+      match: Host(`mcp-socialmedia.e-dani.com`)
+      services:
+        - {name: mcp-sse, namespace: whatsapp-mcp, port: 3010}
+    - kind: Rule
+      match: Host(`picqer-mcp.e-dani.com`)
+      services:
+        - {name: picqer-mcp, namespace: picqer-mcp, port: 3013}
+    - kind: Rule
+      match: Host(`stt-mcp.e-dani.com`)
+      services:
+        - {name: stt-mcp, namespace: stt-mcp, port: 3011}
+    - kind: Rule
+      match: Host(`litellm.e-dani.com`)
+      services:
+        - {name: litellm, namespace: litellm, port: 4000}
+    - kind: Rule
+      match: Host(`minio-s3.e-dani.com`)
+      services:
+        - {name: minio-s3, namespace: minio, port: 9000}
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
