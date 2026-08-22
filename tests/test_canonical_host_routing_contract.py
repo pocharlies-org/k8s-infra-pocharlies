@@ -169,6 +169,23 @@ def test_colliding_legacy_hosts_have_unambiguous_canonical_names():
     } <= current
 
 
+def test_retired_sauvage_alias_redirects_to_active_k8s_openclaw():
+    documents_ = documents("networking/traefik-lan/openclaw-lan.yaml")
+    middleware = next(item for item in documents_ if item["kind"] == "Middleware")
+    route = next(item for item in documents_ if item["kind"] == "IngressRoute")
+    assert middleware["spec"]["redirectRegex"] == {
+        "regex": r"^https://openclaw\.lan\.e-dani\.com/(.*)",
+        "replacement": "https://openclaw.e-dani.com/${1}",
+        "permanent": True,
+    }
+    assert hosts(route) == {"openclaw.lan.e-dani.com"}
+    assert route["spec"]["routes"][0]["services"] == [{
+        "name": "openclaw-qwen36-openclaw",
+        "namespace": "openclaw-qwen36",
+        "port": 8080,
+    }]
+
+
 def test_admin_skirmshop_has_a_dedicated_lan_certificate_and_route():
     path = "networking/traefik-lan/admin-skirmshop-canonical-lan.yaml"
     cert = next(item for item in documents(path) if item["kind"] == "Certificate")

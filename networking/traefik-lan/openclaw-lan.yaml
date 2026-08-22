@@ -1,59 +1,16 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: openclaw-lan-host
-  namespace: traefik-lan
-  labels:
-    app.kubernetes.io/name: openclaw-lan-host
-    app.kubernetes.io/part-of: traefik-lan
-spec:
-  ports:
-    - { name: http, port: 18789, targetPort: 18789, protocol: TCP }
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: openclaw-lan-host
-  namespace: traefik-lan
-  labels:
-    kubernetes.io/service-name: openclaw-lan-host
-    app.kubernetes.io/name: openclaw-lan-host
-    app.kubernetes.io/part-of: traefik-lan
-addressType: IPv4
-ports:
-  - name: http
-    protocol: TCP
-    port: 18789
-endpoints:
-  # OpenClaw Control UI for the sauvage host runtime. The actual OpenClaw
-  # gateway is loopback-only on sauvage (127.0.0.1:18789, auth=none); a guarded
-  # user-systemd proxy publishes 100.109.183.9:18789 and rewrites the first
-  # WebSocket Host header back to 127.0.0.1:18789.
-  - addresses:
-      - 100.109.183.9
-    conditions: {}
----
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: openclaw-sauvage-lan-identity
+  name: openclaw-legacy-to-k8s
   namespace: traefik-lan
   labels:
-    app.kubernetes.io/name: openclaw-lan-host
+    app.kubernetes.io/name: openclaw-legacy-redirect
     app.kubernetes.io/part-of: traefik-lan
 spec:
-  # Preparation for the final trusted-proxy cutover. Today the sauvage gateway
-  # still runs auth=none behind the loopback proxy, so these headers are inert.
-  # If/when the host gateway is migrated to auth=trusted-proxy, this middleware
-  # gives OpenClaw a stable operator identity and overwrites any spoofed client
-  # values before the request leaves Traefik-LAN.
-  headers:
-    customRequestHeaders:
-      X-Forwarded-User: openclaw-sauvage-lan
-      X-Forwarded-Email: openclaw-sauvage-lan@e-dani.com
-      X-Forwarded-Groups: /edani-operators
-      X-Forwarded-Proto: https
-      X-Forwarded-Host: openclaw.lan.e-dani.com
+  redirectRegex:
+    regex: ^https://openclaw\.lan\.e-dani\.com/(.*)
+    replacement: https://openclaw.e-dani.com/${1}
+    permanent: true
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -64,30 +21,18 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # LAN clients reach the Control UI directly. K8s hairpin/SNAT means Traefik
-    # may see cluster-pod source IPs for LAN traffic; do not include the broad
-    # Tailscale CGNAT range here.
-    - kind: Rule
-      match: Host(`openclaw.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`10.42.0.0/16`))
-      priority: 300
-      middlewares:
-        - name: openclaw-sauvage-lan-identity
-          namespace: traefik-lan
-      services:
-        - name: openclaw-lan-host
-          port: 18789
-    # Everything else goes through Keycloak SSO.
     - kind: Rule
       match: Host(`openclaw.lan.e-dani.com`)
-      priority: 100
+      priority: 300
       middlewares:
-        - name: sso-chain
-          namespace: keycloak
-        - name: openclaw-sauvage-lan-identity
+        - name: openclaw-legacy-to-k8s
           namespace: traefik-lan
+      # Traefik requires a service even though redirectRegex terminates the
+      # request first. Use the active K8s OpenClaw backend, never Sauvage.
       services:
-        - name: openclaw-lan-host
-          port: 18789
+        - name: openclaw-qwen36-openclaw
+          namespace: openclaw-qwen36
+          port: 8080
   tls:
     store:
       name: default
