@@ -35,6 +35,7 @@ resources:
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/openchamber-beta-public.yaml
   - networking/traefik-edge/canonical-hosts-public.yaml
+  - networking/traefik-edge/paperclip-public.yaml
   - networking/traefik-edge/canonical-hosts-networkpolicy.yaml
   - networking/arc-runners/networkpolicy.yaml
   - networking/traefik-edge/sauvage-bot-public.yaml
