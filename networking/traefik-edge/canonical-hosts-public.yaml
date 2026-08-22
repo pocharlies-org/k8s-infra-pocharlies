@@ -170,13 +170,6 @@ spec:
       services:
         - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
     - kind: Rule
-      match: Host(`openclaw-sauvage.e-dani.com`)
-      middlewares:
-        - {name: sso-chain, namespace: keycloak}
-        - {name: openclaw-sauvage-lan-identity, namespace: traefik-lan}
-      services:
-        - {name: openclaw-lan-host, namespace: traefik-lan, port: 18789}
-    - kind: Rule
       match: Host(`vault.e-dani.com`)
       middlewares: *generic-sso
       services:
