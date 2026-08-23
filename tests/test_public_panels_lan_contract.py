@@ -55,6 +55,10 @@ def test_openchamber_accepts_public_split_host_without_removing_fallback():
     assert all(cidr in trusted["match"] for cidr in TRUSTED)
     assert "middlewares" not in trusted
     assert fallback["middlewares"] == [{"name": "sso-chain", "namespace": "keycloak"}]
+    assert all(
+        rule["services"] == [{"name": "openchamber-lan-x86", "port": 3000, "serversTransport": "openchamber-lan-transport"}]
+        for rule in (trusted, fallback)
+    )
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
 
 
@@ -79,4 +83,11 @@ def test_coredns_pins_the_openchamber_externalname_to_x86():
         item for item in documents("networking/dns/coredns-custom.yaml")
         if item.get("kind") == "ConfigMap" and item["metadata"]["name"] == "coredns-custom"
     )
-    assert "100.83.56.98 x86.taile0ad27.ts.net" in config["data"]["edani-public-lan.server"]
+    assert "100.83.56.98 x86.taile0ad27.ts.net" not in config["data"]["edani-public-lan.server"]
+    tailnet_zone = config["data"]["x86-taile0ad27.server"]
+    assert "taile0ad27.ts.net:53 {" in tailnet_zone
+    assert "100.83.56.98 x86.taile0ad27.ts.net" in tailnet_zone
+    assert "hosts {" in tailnet_zone
+    assert "fallthrough" in tailnet_zone
+    assert "forward . /etc/resolv.conf" in tailnet_zone
+    assert "cache 30" in tailnet_zone

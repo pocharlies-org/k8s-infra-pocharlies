@@ -2,14 +2,10 @@
 # Split-horizon routes for human-facing panels. AdGuard sends these public
 # names to Traefik LAN; Internet continues through traefik-edge + Keycloak.
 #
-# OJO: el Service de Chamber vive en networking/traefik-lan/openchamber-lan.yaml
-# y se llama `openchamber-lan-stable` desde ff65fe0. Si se vuelve a renombrar,
-# hay que tocar LOS DOS ficheros. Traefik no avisa con un backend caido: si el
-# Service referenciado no existe, DESCARTA el router entero y la respuesta es un
-# 404, no un 502 -- parece que la ruta no existe en vez de que el backend falle.
-# El motivo real solo se ve en el log:
-#   ERR "kubernetes service not found: traefik-lan/openchamber-lan-host"
-#       ingress=lan-openchamber-public-host
+# OJO: el Service estable de Chamber vive en
+# networking/traefik-lan/openchamber-lan.yaml y se llama
+# `openchamber-lan-x86`. Mantener ambas rutas sobre ese ExternalName evita que
+# esta ruta split-DNS vuelva al Service selectorless retirado.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -22,7 +18,7 @@ spec:
       priority: 300
       match: Host(`chamber.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       services:
-        - name: openchamber-lan-stable
+        - name: openchamber-lan-x86
           port: 3000
           serversTransport: openchamber-lan-transport
     - kind: Rule
@@ -32,7 +28,7 @@ spec:
         - name: sso-chain
           namespace: keycloak
       services:
-        - name: openchamber-lan-stable
+        - name: openchamber-lan-x86
           port: 3000
           serversTransport: openchamber-lan-transport
   tls:
