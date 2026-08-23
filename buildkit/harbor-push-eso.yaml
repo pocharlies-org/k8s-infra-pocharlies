@@ -1,6 +1,8 @@
 ---
 # ExternalSecret: synthesize harbor-push dockerconfigjson from vault.
-# Vault path: secret/infra/harbor/ci-robot (username + password + registry).
+# Vault path: secret/infra/harbor/ci-robot (username + password).  Harbor's
+# write endpoint is the LAN hostname; the canonical hostname remains present
+# so images pushed through LAN are also readable by canonical consumers.
 # The resulting secret is consumed by both buildkitd-amd64 and buildkitd-arm64
 # as a volume-mounted Docker config.
 apiVersion: external-secrets.io/v1
@@ -22,7 +24,12 @@ spec:
         .dockerconfigjson: |
           {
             "auths": {
-              "{{ .registry }}": {
+              "harbor.e-dani.com": {
+                "username": "{{ .username }}",
+                "password": "{{ .password }}",
+                "auth": "{{ printf "%s:%s" .username .password | b64enc }}"
+              },
+              "harbor.lan.e-dani.com": {
                 "username": "{{ .username }}",
                 "password": "{{ .password }}",
                 "auth": "{{ printf "%s:%s" .username .password | b64enc }}"
@@ -38,7 +45,3 @@ spec:
       remoteRef:
         key: infra/harbor/ci-robot
         property: password
-    - secretKey: registry
-      remoteRef:
-        key: infra/harbor/ci-robot
-        property: registry
