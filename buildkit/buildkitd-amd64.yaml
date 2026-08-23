@@ -110,18 +110,16 @@ spec:
           volumeMounts:
             - name: cache
               mountPath: /home/user/.local/share/buildkit
-            # This is the production publishing credential: it covers both
-            # the LAN build registry and the canonical deploy registry.
-            - name: harbor-push-lan
+            - name: harbor-push
               mountPath: /home/user/.docker
               readOnly: true
       volumes:
         - name: cache
           persistentVolumeClaim:
             claimName: buildkitd-amd64-cache-longhorn
-        - name: harbor-push-lan
+        - name: harbor-push
           secret:
-            secretName: harbor-push-lan
+            secretName: harbor-push
             items:
               - key: .dockerconfigjson
                 path: config.json
