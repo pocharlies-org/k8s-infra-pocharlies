@@ -104,9 +104,46 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn('reason" == "SecretSynced"', script)
         self.assertIn(r'{{printf "%s\n" $key}}', script)
         self.assertNotIn(r'{{printf "%s\\n" $key}}', script)
-        self.assertIn('grep -q "^user chatbot "', script)
+        self.assertIn("expected_acl_sha256", script)
+        self.assertIn('env EXPECTED_ACL_SHA256="$expected_acl_sha256"', script)
+        self.assertIn('projected_sha256="$(sha256sum /acl/users.acl', script)
+        self.assertIn('[ "$projected_sha256" = "$EXPECTED_ACL_SHA256" ]', script)
+        self.assertIn("PRE-LOAD SECURITY BOUNDARY", script)
+        self.assertIn('chatbot_line_count" = 1', script)
+        self.assertIn('chatbot_password_count" = 1', script)
+        acl_load_position = script.index(
+            'result="$(valkey-cli -p 6379 --user sentinel'
+        )
+        for preload_assertion in (
+            '[ "$chatbot_line_count" = 1 ]',
+            '[ "$chatbot_password_count" = 1 ]',
+            '[ "$actual_acl_tokens" = "$expected_acl_tokens" ]',
+        ):
+            self.assertLess(script.index(preload_assertion), acl_load_position)
         self.assertIn("ACL LOAD", script)
         self.assertIn("ACL DRYRUN chatbot HSET", script)
+        self.assertIn("actual_acl_tokens", script)
+        self.assertIn("expected_acl_tokens", script)
+        self.assertIn("+auth +del +eval +exists +hdel +hget +hset +incr", script)
+        self.assertIn("+pexpire +ping +pttl +quit +time", script)
+        self.assertNotIn("+@connection", script)
+        self.assertIn(
+            "User\\ chatbot\\ has\\ no\\ permissions\\ to\\ access\\ the\\ "
+            "*rho:forbidden:acl-activation-probe*key",
+            script,
+        )
+        for denied_probe in (
+            "CLIENT PAUSE 1000",
+            "CLIENT KILL TYPE normal",
+            "CLIENT UNBLOCK 1",
+            "COMMAND INFO ACL",
+            "SELECT 0",
+            "FLUSHDB",
+        ):
+            self.assertIn(f"assert_command_denied {denied_probe}", script)
+        self.assertIn("NOPERM*", script)
+        self.assertEqual(script.count('REDISCLI_AUTH="$chatbot_password"'), 5)
+        self.assertNotIn("VALKEYCLI_AUTH", script)
         self.assertIn("shared-valkey-0 shared-valkey-1 shared-valkey-2", script)
         self.assertIn("expected one master and two replicas", script)
         self.assertIn('exec "$master_pod" -c valkey', script)
