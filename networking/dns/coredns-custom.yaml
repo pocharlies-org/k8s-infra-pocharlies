@@ -19,8 +19,19 @@ data:
       hosts {
         100.83.56.98 dgx.e-dani.com
         100.83.56.98 s3.e-dani.com
-        # Host backends used by Traefik ExternalName Services. Cluster DNS does
-        # not inherit MagicDNS, so pin the stable x86 Tailscale address here.
+        ttl 60
+        fallthrough
+      }
+      forward . /etc/resolv.conf
+      cache 30
+    }
+  x86-taile0ad27.server: |
+    # This must be a dedicated zone: a hosts entry in e-dani.com does not
+    # answer queries for x86.taile0ad27.ts.net.  Traefik ExternalName
+    # backends use this pin rather than node-local MagicDNS.
+    taile0ad27.ts.net:53 {
+      errors
+      hosts {
         100.83.56.98 x86.taile0ad27.ts.net
         ttl 60
         fallthrough

@@ -79,10 +79,12 @@ their request semantics are unsafe to redirect.
   four host-network Edge nodes to reach only port 8791 of OpenClaw Synapse.
 - `networking/traefik-{lan,edge}/openchamber-*.yaml`: the stable route uses
   new `ExternalName` Services pointing to `x86.taile0ad27.ts.net:3000`.
-  `networking/dns/coredns-custom.yaml` pins that name to `100.83.56.98`, so
-  the route stays declarative across restores without Argo-excluded endpoint
-  resources. The old selectorless Services and EndpointSlices are pruned by
-  exact name after the new routes have converged.
+  `networking/dns/coredns-custom.yaml` pins that name to `100.83.56.98` in
+  its own `taile0ad27.ts.net:53` server block. The pin must not live in the
+  `e-dani.com:53` block: CoreDNS only selects a server block that matches the
+  queried suffix. This makes the route declarative across restores without
+  Argo-excluded endpoint resources. The old selectorless Services and
+  EndpointSlices are pruned by exact name after the new routes have converged.
 - `k8s-adguard-pocharlies/k8s/adguard.yaml`: reconciles the canonical local
   rewrites into the persistent AdGuard configuration.
 - `k8s-litellm-pocharlies/k8s/manifest.yaml`: leaves the old `.lan` alias
