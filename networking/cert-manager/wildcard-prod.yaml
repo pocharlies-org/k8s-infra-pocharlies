@@ -7,6 +7,13 @@ metadata:
   namespace: traefik-lan
 spec:
   secretName: wildcard-lan-tls
+  # 2026-08-25: la clave privada de este certificado quedo expuesta en claro en
+  # una transcripcion (volcado accidental de `kubectl get secret -o ...data`).
+  # Sin rotationPolicy cert-manager REUTILIZA la clave en cada renovacion, asi
+  # que renovar no habria rotado nada. Con `Always` cada emision genera clave
+  # nueva, y este mismo cambio de spec fuerza una reemision inmediata.
+  privateKey:
+    rotationPolicy: Always
   secretTemplate:
     annotations:
       reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
