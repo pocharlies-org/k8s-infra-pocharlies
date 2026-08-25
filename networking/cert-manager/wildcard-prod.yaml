@@ -14,6 +14,12 @@ spec:
   # nueva, y este mismo cambio de spec fuerza una reemision inmediata.
   privateKey:
     rotationPolicy: Always
+  # TEMPORAL (2026-08-25): rotationPolicy por si sola NO reemite — cert-manager
+  # solo la aplica en la siguiente renovacion (estaba prevista el 20-09). Con
+  # ~1344 h hasta notAfter, un renewBefore mayor la deja vencida YA y fuerza la
+  # emision con clave nueva. QUITAR este campo en cuanto notBefore cambie, o
+  # el certificado quedara permanentemente "por renovar".
+  renewBefore: 1500h
   secretTemplate:
     annotations:
       reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
