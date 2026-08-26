@@ -17,6 +17,33 @@
 #
 # Sin anotaciones de external-dns: el comodín manual *.e-dani.com ya resuelve
 # este nombre (el `exclude: "true"` evita además publicar un registro por ruta).
+#
+# El edge (DaemonSet traefik-edge) arranca con
+# `--providers.kubernetescrd.namespaces=traefik-edge` y no puede resolver un
+# Service de otra namespace: un `name: chat / namespace: chat` directo en la
+# IngressRoute falla en vivo con `failed to get service chat/chat: namespace is
+# not within watched namespaces`. El patrón probado en este edge (langfuse-web-ext,
+# minio-s3-ext, sauvage-bot-ext, openchamber-edge-x86) es un Service de tipo
+# ExternalName DENTRO de la ns traefik-edge apuntando al FQDN del servicio real;
+# la IngressRoute referencia ese Service (misma ns, sin namespace). El provider
+# lo permite vía `allowExternalNameServices: true`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-chat-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-chat-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: chat.chat.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -37,8 +64,7 @@ spec:
         - name: sso-chain
           namespace: keycloak
       services:
-        - name: chat
-          namespace: chat
+        - name: edge-chat-public
           port: 80
   tls:
     store:
