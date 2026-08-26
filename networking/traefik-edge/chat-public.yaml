@@ -1,0 +1,46 @@
+# chat.e-dani.com (Open WebUI) en el edge. Fichero propio, igual que
+# paperclip-public.yaml: la ruta LAN equivalente vive en dgx-infra
+# (k8s/apps/chat/ingressroute.yaml, IngressRoute chat-lan).
+#
+# El DNS decide a dónde va: AdGuard reescribe el nombre a 192.168.50.240 (LB
+# de traefik-lan) para los clientes de dentro; desde internet llega a
+# traefik-edge, que sirve esta ruta. Ambas con el MISMO nombre de host y la
+# MISMA cadena SSO.
+#
+# Cadena SSO = `sso-chain` de la ns keycloak (sso-errors + sso-forward-auth),
+# el sistema que usan los demás dominios. Aquí SÍ vale `sso-chain` a secas, a
+# diferencia de paperclip: Open WebUI va en modo trusted-header y NO devuelve
+# 401 como respuesta normal de su SPA — el forwardAuth interviene ANTES de
+# llegar a la app y la página de login de Open WebUI nunca se muestra (el botón
+# de login dispara POST /auths/signin con los headers ya puestos). Validado con
+# Open WebUI v0.11.0.
+#
+# Sin anotaciones de external-dns: el comodín manual *.e-dani.com ya resuelve
+# este nombre (el `exclude: "true"` evita además publicar un registro por ruta).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-chat-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/component: canonical-host-routing
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`chat.e-dani.com`)
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: chat
+          namespace: chat
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
