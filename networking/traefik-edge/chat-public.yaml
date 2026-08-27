@@ -44,6 +44,26 @@ spec:
       targetPort: 80
       protocol: TCP
 ---
+# Borra el header Authorization que inyecta oauth2-proxy (access_token de
+# Keycloak) ANTES de que llegue a Open WebUI. OWUI en modo trusted-header
+# autentica por su cookie `token` (JWT) + los X-Auth-Request-*; si ve un
+# Authorization header ajeno, get_current_user (utils/auth.py) lo prefiere
+# sobre la cookie y devuelve 401 en todos los endpoints autenticados tras el
+# signin. Patrón idéntico a aurora-ws-drop-authorization (ns aurora) y a la
+# ruta LAN equivalente (chat-drop-authorization, ns chat).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chat-drop-authorization
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-chat-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  headers:
+    customRequestHeaders:
+      Authorization: ""
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -63,6 +83,8 @@ spec:
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        - name: chat-drop-authorization
+          namespace: traefik-edge
       services:
         - name: edge-chat-public
           port: 80
