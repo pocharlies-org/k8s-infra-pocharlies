@@ -7,8 +7,12 @@
 # traefik-edge, que sirve esta ruta. Ambas con el MISMO nombre de host y la
 # MISMA cadena SSO.
 #
-# Cadena SSO = `sso-chain` de la ns keycloak (sso-errors + sso-forward-auth),
-# el sistema que usan los demás dominios. Aquí SÍ vale `sso-chain` a secas, a
+# Cadena SSO = `sso-chat-chain` de la ns keycloak (proxy DEDICADO
+# oauth2-proxy-chat). Se dejó de usar `sso-chain` el 2026-08-28: el proxy
+# compartido solo admite /edani-admins y /edani-operators, dos grupos que
+# abren ~90 rutas (Vault, ArgoCD, Longhorn...); para dar acceso al chat a
+# alguien sin darle todo eso hace falta un proxy propio que acepte además
+# /edani-users. Aquí SÍ vale una cadena SSO a secas, a
 # diferencia de paperclip: Open WebUI va en modo trusted-header y NO devuelve
 # 401 como respuesta normal de su SPA — el forwardAuth interviene ANTES de
 # llegar a la app y la página de login de Open WebUI nunca se muestra (el botón
@@ -42,6 +46,27 @@ spec:
     - name: http
       port: 80
       targetPort: 80
+      protocol: TCP
+---
+# El proxy SSO dedicado del chat (oauth2-proxy-chat, ns keycloak) necesita
+# servir /oauth2/* en ESTE host: su redirect_url es
+# https://chat.e-dani.com/oauth2/callback. Como el edge solo vigila su propia
+# namespace, se referencia con el mismo patrón ExternalName de arriba.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-oauth2-proxy-chat
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-chat-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy-chat.keycloak.svc.cluster.local
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180
       protocol: TCP
 ---
 # Borra el header Authorization que inyecta oauth2-proxy (access_token de
@@ -78,10 +103,19 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # El endpoint del propio proxy: sign_in, callback y sign_out. NO lleva
+    # cadena SSO (si la llevara, autenticarse exigiría estar autenticado).
+    - kind: Rule
+      match: Host(`chat.e-dani.com`) && PathPrefix(`/oauth2`)
+      services:
+        - name: edge-oauth2-proxy-chat
+          port: 4180
     - kind: Rule
       match: Host(`chat.e-dani.com`)
       middlewares:
-        - name: sso-chain
+        # `sso-chat-chain`, no `sso-chain`: el proxy dedicado admite además
+        # el grupo `/edani-users`, que da acceso a este host y a nada más.
+        - name: sso-chat-chain
           namespace: keycloak
         - name: chat-drop-authorization
           namespace: traefik-edge
