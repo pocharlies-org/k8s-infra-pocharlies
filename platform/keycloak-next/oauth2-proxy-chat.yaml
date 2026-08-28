@@ -1,0 +1,207 @@
+# Proxy SSO DEDICADO para chat.e-dani.com (Open WebUI).
+#
+# Por qué no vale `sso-chain` (el proxy compartido `oauth2-proxy`):
+# ese proxy tiene `allowed_groups = [ "/edani-admins", "/edani-operators" ]` y
+# protege ~90 rutas — Vault, ArgoCD, Longhorn, MinIO, Grafana, brain, synapse,
+# los paneles de opencode. Para que una persona use SOLO el chat haría falta
+# meterla en uno de esos dos grupos, lo que le abriría todo lo demás.
+#
+# Este proxy acepta además `/edani-users`, un grupo sin privilegios que no
+# concede nada fuera de este host. Mismo patrón que oauth2-proxy-skirmshop y
+# oauth2-proxy-openclaw-readonly: instancia propia, cookie propia, grupos
+# propios.
+#
+# El cliente Keycloak es el mismo `oauth2-proxy` (comparte
+# oauth2-proxy-secrets); su lista de redirectUris ya incluye el comodín
+# `https://*.e-dani.com/oauth2/callback`, que cubre este host sin tocar nada
+# en Keycloak.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-chat-config
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+data:
+  oauth2_proxy.cfg: |
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
+    skip_oidc_discovery = true
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/certs"
+    redirect_url = "https://chat.e-dani.com/oauth2/callback"
+    scope = "openid email profile"
+
+    reverse_proxy = true
+    http_address = "0.0.0.0:4180"
+    upstreams = [ "static://202" ]
+
+    # Cookie propia y acotada a este host: no colisiona con `_edani_sso` del
+    # proxy compartido ni viaja al resto de subdominios.
+    cookie_name = "_chat_sso"
+    cookie_domains = [ "chat.e-dani.com" ]
+    cookie_secure = true
+    cookie_samesite = "lax"
+    # Mismos límites que el proxy compartido: por debajo de
+    # ssoSessionMaxLifespan (30d) y de ssoSessionIdleTimeout (7d).
+    cookie_expire = "720h"
+    cookie_refresh = "1h"
+
+    whitelist_domains = [ "chat.e-dani.com" ]
+    email_domains = [ "*" ]
+    allowed_groups = [ "/edani-admins", "/edani-operators", "/edani-users" ]
+
+    pass_access_token = true
+    pass_user_headers = true
+    set_authorization_header = true
+    set_xauthrequest = true
+    skip_provider_button = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-chat
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oauth2-proxy-chat
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-chat
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Misma política de colocación que oauth2-proxy-skirmshop: fuera de
+      # `ubuntu` (nodo x86 de desarrollo, se reinicia sin aviso). Es stateless,
+      # así que su sitio es sauvage con ks5 de reserva.
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+              - matchExpressions:
+                  - key: node-pool
+                    operator: In
+                    values: [ks5-nvme]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+          args: ["--config=/etc/oauth2-proxy/oauth2_proxy.cfg"]
+          envFrom:
+            - secretRef:
+                name: oauth2-proxy-secrets
+          ports:
+            - { name: http, containerPort: 4180 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy/oauth2_proxy.cfg
+              subPath: oauth2_proxy.cfg
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: oauth2-proxy-chat-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-chat
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+spec:
+  selector:
+    app: oauth2-proxy-chat
+  ports:
+    - { name: http, port: 4180, targetPort: http }
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-chat-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-chat.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    authResponseHeaders:
+      - Authorization
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Forwarded-User
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-chat-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    status:
+      - "401-403"
+    service:
+      name: oauth2-proxy-chat
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+      "403": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-chat-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-chat
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-chat-errors
+      - name: sso-chat-forward-auth
