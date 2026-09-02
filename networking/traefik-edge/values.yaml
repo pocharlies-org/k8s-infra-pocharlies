@@ -129,7 +129,6 @@ providers:
       - minio
       - dgx-synapse-mcp
       - openclaw-synapse
-      - paperclip
       - picqer-mcp
       - backup-hub
       - stt-mcp
@@ -169,7 +168,6 @@ providers:
       - minio
       - dgx-synapse-mcp
       - openclaw-synapse
-      - paperclip
       - picqer-mcp
       - backup-hub
       - stt-mcp
