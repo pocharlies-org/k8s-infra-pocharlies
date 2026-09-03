@@ -1,0 +1,65 @@
+---
+# Public ingress for the Company Office Jira webhook receiver.
+#
+# The receiver is a Node process that runs on the x86 host (the same host that
+# serves OpenChamber), because its configuration and secrets live there:
+#   - /home/dibanez/startupcompany/company-office.json   (Jira base, project, fields)
+#   - /home/dibanez/startupcompany/registry.json         (me+<name> -> employee)
+#   - the Jira token and the webhook HMAC secret         (host files, never Git)
+# It listens on 127.0.0.1:19910. Like OpenChamber, the cluster only tunnels to
+# it over Tailscale via an ExternalName; there is no container image to build.
+#
+# Route shape matters: Jira Automation POSTs to
+#   https://jira-webhook.e-dani.com/integrations/jira/v1/webhook/<installationId>
+# and that path must NOT go through the Keycloak SSO middleware that guards the
+# rest of chamber.e-dani.com — Jira cannot complete an SSO dance. This host has
+# no SSO middleware at all; the only gate is the HMAC the receiver verifies over
+# the raw body. That is the whole point of a signed webhook.
+#
+# The receiver binds loopback only, so this ingress is the sole public path to
+# it. If it must be reachable from the LAN without Cloudflare, add a
+# traefik-lan route with the same shape.
+apiVersion: v1
+kind: Service
+metadata:
+  name: company-office-webhook-edge-x86
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: company-office-webhook-edge-x86
+    app.kubernetes.io/part-of: company-office
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 19910
+      targetPort: 19910
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-company-office-webhook-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: jira-webhook.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    # No sso-forward-auth / sso-chain middleware: the webhook is authenticated
+    # by its HMAC signature, not by a browser session.
+    - kind: Rule
+      match: Host(`jira-webhook.e-dani.com`)
+      priority: 100
+      services:
+        - name: company-office-webhook-edge-x86
+          namespace: traefik-edge
+          port: 19910
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
