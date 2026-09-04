@@ -30,6 +30,7 @@ resources:
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
+  - networking/traefik-edge/company-viewer-public.yaml
   - networking/traefik-edge/opencode-public.yaml
   - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
