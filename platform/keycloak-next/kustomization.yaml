@@ -14,6 +14,7 @@ resources:
   - openclaw-readonly-clients.yaml
   - synapse-sre-client.yaml
   - agentgateway-domain-roles-job.yaml
+  - chat-agentgateway-client.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -30,6 +31,9 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-domain-roles
+  - name: keycloak-chat-agentgateway-client
+    files:
+      - chat-agentgateway-client.sh=scripts/chat-agentgateway-client.sh
 generatorOptions:
   disableNameSuffixHash: true
   labels:

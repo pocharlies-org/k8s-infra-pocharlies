@@ -47,6 +47,10 @@ spec:
             - { name: REALM, value: edani }
             - name: ROLE_NAMES
               value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage
+            # Reviewed together with chat-agentgateway-client.yaml (sync-wave 23):
+            # the only service account allowed to hold a domain role.
+            - name: ALLOWED_SERVICE_ACCOUNTS
+              value: agentgateway-write:media=service-account-chat-agentgateway
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }

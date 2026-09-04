@@ -1,0 +1,115 @@
+# Dedicated confidential client for the chat surface (Open WebUI at
+# chat.e-dani.com). Its auth-proxy sidecar mints client-credentials tokens
+# carrying only the reviewed domain role agentgateway-write:media, which
+# AgentGateway /studio requires for studio_generate_image, studio_generate_video
+# and studio_cancel_job. The role is created by agentgateway-domain-roles-job
+# (sync-wave 19); this hook runs after every other identity reconciler.
+#
+# Prerequisite before the first sync: seed a random value in
+# secret/agentgateway/prod#chat_agentgateway_client_secret (kv patch, never
+# put; RUNBOOK.md §10 has the exact command).
+# Without it the ExternalSecret never materializes and this PostSync hook
+# blocks with an unresolved secretKeyRef.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: chat-agentgateway-keycloak-bootstrap
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: chat-agentgateway-client
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: chat-agentgateway-keycloak-bootstrap
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client_secret
+      remoteRef:
+        key: secret/agentgateway/prod
+        property: chat_agentgateway_client_secret
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-chat-agentgateway-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: chat-agentgateway-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "23"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: chat-agentgateway-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/chat-agentgateway-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: chat-agentgateway }
+            - { name: ROLE_NAME, value: agentgateway-write:media }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
+            - { name: RECONCILE_CONTRACT_VERSION, value: "1" }
+            - name: CHAT_AGENTGATEWAY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chat-agentgateway-keycloak-bootstrap
+                  key: client_secret
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-chat-agentgateway-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

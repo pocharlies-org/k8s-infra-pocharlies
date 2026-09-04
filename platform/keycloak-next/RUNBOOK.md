@@ -302,3 +302,52 @@ lifetime. The emergency rollback Job is deliberately excluded from Kustomize;
 it deletes only the immutable client and its now-unmapped realm role. Run it
 only during an authorized incident while the versioned ConfigMap still exists,
 then verify its sanitized `"present":false` result and remove the Job.
+
+## 10. Chat studio service identity (`chat-agentgateway`)
+
+Open WebUI at `chat.e-dani.com` reaches AgentGateway `/studio` through an
+`agentgateway-auth-proxy` sidecar that mints client-credentials tokens as
+`chat-agentgateway`. The token carries only the domain role
+`agentgateway-write:media` (created by the domain-roles hook, sync-wave 19),
+which the gateway requires for `studio_generate_image`, `studio_generate_video`
+and `studio_cancel_job`; the umbrella `agentgateway-write` is forbidden.
+
+**Before merging** the commit that adds this identity, seed the client secret;
+without it the ExternalSecret never materializes and the PostSync hook pod
+sits in `CreateContainerConfigError` until the sync fails:
+
+```bash
+# Same mount convention as §1: ExternalSecret key secret/agentgateway/prod is
+# CLI path secret/secret/agentgateway/prod. kv v2: patch, never put (put would
+# erase the sibling synapse_* and openclaw_* client secrets on that path).
+VAULT_TOKEN="$(kubectl -n vault get secret vault-admin-token -o jsonpath='{.data.token}' | base64 -d)"
+kubectl -n vault exec -i vault-0 -- env VAULT_TOKEN="${VAULT_TOKEN}" \
+  vault kv patch secret/secret/agentgateway/prod \
+  chat_agentgateway_client_secret="$(openssl rand -base64 36)"
+unset VAULT_TOKEN
+```
+
+The first reconciliation must be a full Argo CD sync (hooks are skipped on a
+selective resource sync). Expected sanitized output:
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-chat-agentgateway-client --timeout=300s
+kubectl -n keycloak logs job/keycloak-chat-agentgateway-client -c reconcile-client
+# {"client_id":"chat-agentgateway","realm_role":"agentgateway-write:media","present":true,"exclusive_service_account":true}
+```
+
+On the next sync the domain-roles hook reports
+`"human_assigned":false,"service_account_grants":1`; any other holder of
+`agentgateway-write:media`, or this service account on any other domain role,
+fails that hook and therefore the whole sync.
+
+The chat Deployment consumes the same Vault property through its own
+ExternalSecret (in `dgx-infra`, `k8s/apps/chat`), so rotating the secret is one
+`kv patch` followed by a sync here and a restart of the chat pod.
+
+For rollback, apply `manual/chat-agentgateway-client-rollback-job.yaml` during
+an authorized incident while the versioned ConfigMap still exists. It deletes
+only the client (and with it the service account and its role grant) and
+retains `agentgateway-write:media`; verify
+`"client_present":false,"role_retained":true` and remove the Job.
