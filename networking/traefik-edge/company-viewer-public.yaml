@@ -1,0 +1,36 @@
+---
+# Public edge route for the company viewer (SC-189 / SC-195).
+# Cloudflare -> traefik-edge -> sso-chain@keycloak (Keycloak SSO, realm edani) ->
+# Service dgx-dashboard-ui.control-nexus:80 (nginx UI pod) -> host backend.
+# Read-only viewer of x86 agent sessions: EVERY rule is SSO-gated. The
+# LAN/tailnet source-network bypass that edge-dgx-dashboard-public carries
+# is deliberately NOT replicated here - transcripts never cross the
+# boundary unauthenticated, not even from the LAN.
+# TLS is covered by tlsstore `default` -> wildcard-public-tls (*.e-dani.com).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-company-viewer-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: company.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`company.e-dani.com`)
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
