@@ -100,10 +100,28 @@ shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
 `agentgateway-domain-roles-job.yaml` creates the ten reviewed domain roles
-without assigning them to any user, group or service account. The hook fails if
-one is composite or already assigned. Assignment stays blocked until dedicated
-Keycloak clients and an explicit role-to-client map are reviewed together; the
-global `agentgateway-mcp` client is not granted these roles by this hook.
+without assigning them. The hook fails if one is composite, mapped to a group,
+or held by any user other than the single reviewed service account in its
+immutable `ALLOWED_SERVICE_ACCOUNTS` map (today only
+`agentgateway-write:media=service-account-chat-agentgateway`). Every other
+domain role stays unassigned until a dedicated client and a new map entry are
+reviewed together; the global `agentgateway-mcp` client is never granted these
+roles by this hook.
+
+## Chat studio identity (`chat-agentgateway`)
+
+`chat-agentgateway-client.yaml` reconciles the confidential client the chat
+surface (Open WebUI at `chat.e-dani.com`) uses, through its
+`agentgateway-auth-proxy` sidecar, to reach AgentGateway `/studio`. The client
+has client credentials only, the exact `mcp.lan.e-dani.com` audience,
+`fullScopeAllowed=false`, and exactly one realm role in its scope and on its
+service account: `agentgateway-write:media`. The role itself is owned by the
+domain-roles hook above; this reconciler refuses to run if it is missing and
+never creates or deletes it. It fails if the service account holds any other
+`agentgateway-write*` role, if a human or group holds `:media`, or if the minted
+token carries the umbrella `agentgateway-write`. The client secret is the single
+Vault property `secret/agentgateway/prod#chat_agentgateway_client_secret`; see
+`RUNBOOK.md` §10 for seeding and rollback.
 
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
