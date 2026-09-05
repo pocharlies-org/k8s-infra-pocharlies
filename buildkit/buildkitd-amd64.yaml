@@ -57,16 +57,46 @@ spec:
             - --addr
             - tcp://0.0.0.0:1234
             - --oci-worker-no-process-sandbox
-            # Keep the disposable cache bounded on the 25Gi PVC. Values are
-            # reserved space, desired free space and maximum used space (MiB).
+            # GC enabled, with NO --oci-worker-gc-keepstorage flag. Note on
+            # --oci-worker-gc itself: in v0.31.0 it has Value: true by default
+            # (cmd/buildkitd/main_oci_worker.go) and getGCPolicy only disables
+            # GC on an explicit =false, so passing it or omitting it is
+            # BEHAVIOUR-EQUIVALENT to arm64 (which passes no GC flag at all),
+            # though the args are not literally identical. With no
+            # [[worker.oci.gcpolicy]] in a buildkitd.toml (none is mounted) and
+            # no flag, buildkitd v0.31.0 applies DefaultGCPolicy computed from
+            # the REAL size of the cache volume (cmd/buildkitd/config/
+            # gcpolicy.go): 4 policies, the last one `all = true`, with
+            # reservedSpace = min(10%, 10GB), maxUsedSpace = min(80%, 100GB)
+            # and minFreeSpace = 20% of the volume -> on this 50Gi PVC the GC
+            # targets ~40Gi used / ~10Gi free and CAN reclaim.
+            # History of this flag (third recurrence of the same mechanism):
+            # - 2026-08-20: PVC was full at 98% on 25Gi; raised 25->50Gi and
+            #   changed keepstorage 8192,8192,12288 -> 6144,6144,10240.
+            # - 2026-09-05 (SC-285): full again, 48.9G/49.0G (142M free) and
+            #   `buildctl du` reports a Total of 52.39GB.
+            #   Cause: keepstorage sets reservedSpace on ALL FOUR default
+            #   policies and calculateKeepBytes() floors each policy's keep at
+            #   its reservedSpace (cache/manager.go) -> keep >= 6+6+10 GiB of
+            #   guaranteed retention, above what the GC may drop; plus the
+            #   60-day and 48h keepDuration windows are never crossed with
+            #   active CI. The GC could therefore never fire at any number
+            #   under ~52G: shrinking the flag further only moves the ceiling.
+            #   Contrast buildkitd-arm64.yaml: same image, no GC flags at all,
+            #   and its GC reclaims.
+            #   Evidence: df 49.0G/48.9G used/142M free/100%; buildctl du
+            #   --verbose: 132 records, all Type: regular, none shared; and
+            #   the keepstorage math above. The du "Reclaimable" column is
+            #   NOT valid evidence of anything: in v0.31.0 the CLI derives it
+            #   per record as !InUse (cmd/buildctl/diskusage.go), so on this
+            #   busy CI builder every record reads false and the summary
+            #   shows Reclaimable: 0B even though the API has records to
+            #   reclaim. Valid verification metrics after the sync: `df` on
+            #   the PVC and the Total in `buildctl du` — never Reclaimable.
+            # If finer control is ever needed (e.g. an explicit keepDuration),
+            # that requires a buildkitd.toml ConfigMap with [[worker.oci.
+            # gcpolicy]] blocks; the flag cannot express per-policy rules.
             - --oci-worker-gc
-            # keepstorage is per-policy and these ADD UP: 8192+8192+12288 was
-            # 28.5G of guaranteed retention on a 25Gi volume, so the GC was
-            # never allowed to free anything and the disk filled to 98% until
-            # builds failed with ENOSPC. Keep the total comfortably under the
-            # volume: 6+6+10 = 22G on 50Gi leaves real headroom to reclaim.
-            - --oci-worker-gc-keepstorage
-            - 6144,6144,10240
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
@@ -147,8 +177,10 @@ spec:
       # (23.9G of 24.4G) with `buildctl du` reporting Reclaimable: 0B, and a
       # dashboard-backend build died on "No space left on device" while
       # unpacking ffmpeg. `buildctl prune --all` freed nothing because none of
-      # it was reclaimable — see the gc keepstorage note on the Deployment,
-      # which is the actual cause and is fixed alongside this.
+      # it was reclaimable. Third recurrence of the same mechanism on
+      # 2026-09-05 (SC-285, back at 100%): the operator ruled the PVC size
+      # FINAL — no further enlargement; the fix is the GC policy on the
+      # Deployment, which now caps buildkit's own usage at ~40Gi of this 50Gi.
       storage: 50Gi
 ---
 apiVersion: v1
