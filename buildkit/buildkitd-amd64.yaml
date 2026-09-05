@@ -57,7 +57,12 @@ spec:
             - --addr
             - tcp://0.0.0.0:1234
             - --oci-worker-no-process-sandbox
-            # GC enabled, with NO --oci-worker-gc-keepstorage flag: with no
+            # GC enabled, with NO --oci-worker-gc-keepstorage flag. Note on
+            # --oci-worker-gc itself: in v0.31.0 it has Value: true by default
+            # (cmd/buildkitd/main_oci_worker.go) and getGCPolicy only disables
+            # GC on an explicit =false, so passing it or omitting it is
+            # BEHAVIOUR-EQUIVALENT to arm64 (which passes no GC flag at all),
+            # though the args are not literally identical. With no
             # [[worker.oci.gcpolicy]] in a buildkitd.toml (none is mounted) and
             # no flag, buildkitd v0.31.0 applies DefaultGCPolicy computed from
             # the REAL size of the cache volume (cmd/buildkitd/config/
@@ -69,7 +74,7 @@ spec:
             # - 2026-08-20: PVC was full at 98% on 25Gi; raised 25->50Gi and
             #   changed keepstorage 8192,8192,12288 -> 6144,6144,10240.
             # - 2026-09-05 (SC-285): full again, 48.9G/49.0G (142M free) and
-            #   `buildctl du` reports Reclaimable: 0B over Total: 52.39GB.
+            #   `buildctl du` reports a Total of 52.39GB.
             #   Cause: keepstorage sets reservedSpace on ALL FOUR default
             #   policies and calculateKeepBytes() floors each policy's keep at
             #   its reservedSpace (cache/manager.go) -> keep >= 6+6+10 GiB of
@@ -78,12 +83,16 @@ spec:
             #   active CI. The GC could therefore never fire at any number
             #   under ~52G: shrinking the flag further only moves the ceiling.
             #   Contrast buildkitd-arm64.yaml: same image, no GC flags at all,
-            #   and its GC reclaims (du: Reclaimable: 96.34GB / 96.34GB).
+            #   and its GC reclaims.
             #   Evidence: df 49.0G/48.9G used/142M free/100%; buildctl du
-            #   --verbose: 132 records, all Type: regular, none shared. The
-            #   du API (v0.31.0) has no "reclaimable" field at all: the CLI
-            #   prints Reclaimable=false for every record, so that column is
-            #   NOT the evidence — the evidence is the keepstorage math above.
+            #   --verbose: 132 records, all Type: regular, none shared; and
+            #   the keepstorage math above. The du "Reclaimable" column is
+            #   NOT valid evidence of anything: in v0.31.0 the CLI derives it
+            #   per record as !InUse (cmd/buildctl/diskusage.go), so on this
+            #   busy CI builder every record reads false and the summary
+            #   shows Reclaimable: 0B even though the API has records to
+            #   reclaim. Valid verification metrics after the sync: `df` on
+            #   the PVC and the Total in `buildctl du` — never Reclaimable.
             # If finer control is ever needed (e.g. an explicit keepDuration),
             # that requires a buildkitd.toml ConfigMap with [[worker.oci.
             # gcpolicy]] blocks; the flag cannot express per-policy rules.
