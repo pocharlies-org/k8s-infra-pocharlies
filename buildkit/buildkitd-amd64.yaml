@@ -80,8 +80,10 @@ spec:
             #   Contrast buildkitd-arm64.yaml: same image, no GC flags at all,
             #   and its GC reclaims (du: Reclaimable: 96.34GB / 96.34GB).
             #   Evidence: df 49.0G/48.9G used/142M free/100%; buildctl du
-            #   --verbose: 132 records, all Type: regular, none shared, none
-            #   kept by any rule the operator could not lift.
+            #   --verbose: 132 records, all Type: regular, none shared. The
+            #   du API (v0.31.0) has no "reclaimable" field at all: the CLI
+            #   prints Reclaimable=false for every record, so that column is
+            #   NOT the evidence — the evidence is the keepstorage math above.
             # If finer control is ever needed (e.g. an explicit keepDuration),
             # that requires a buildkitd.toml ConfigMap with [[worker.oci.
             # gcpolicy]] blocks; the flag cannot express per-policy rules.
