@@ -32,6 +32,7 @@ resources:
   - networking/traefik-edge/dgx-dashboard-public.yaml
   - networking/traefik-edge/company-viewer-public.yaml
   - networking/traefik-edge/opencode-public.yaml
+  - networking/traefik-edge/jira-epic-trigger-public.yaml
   - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/openchamber-beta-public.yaml

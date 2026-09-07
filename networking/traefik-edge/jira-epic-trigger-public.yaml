@@ -1,0 +1,74 @@
+---
+# Public ingress for the Jira → CTO trigger that runs on the x86 host.
+#
+# Jira Cloud POSTs `jira:issue_updated` for epics of project SC to
+#   https://jira-webhook.e-dani.com/jira/epic?token=…
+# and the receiver (`jira-epic-trigger.service`, systemd --user on x86, tailnet
+# 100.83.56.98:19911) launches a headless company-cto session when the epic has
+# just moved to In Progress. It lives on the host, not in a pod, because it runs
+# `claude` with the operator's config, router and skills; the cluster only
+# tunnels to it over Tailscale, same pattern as opencode-public.yaml.
+#
+# No SSO middleware here: Jira cannot complete a Keycloak dance. The gate is the
+# shared token in the URL (or an HMAC over the raw body), verified by the
+# receiver, and only the two paths Jira needs are published — /state stays on
+# the tailnet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jira-epic-trigger-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: jira-epic-trigger-edge-host
+    app.kubernetes.io/part-of: company
+spec:
+  ports:
+    - name: http
+      port: 19911
+      targetPort: 19911
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: jira-epic-trigger-edge-host
+  namespace: traefik-edge
+  labels:
+    kubernetes.io/service-name: jira-epic-trigger-edge-host
+    app.kubernetes.io/name: jira-epic-trigger-edge-host
+    app.kubernetes.io/part-of: company
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 19911
+endpoints:
+  - addresses:
+      - 100.83.56.98
+    conditions: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-jira-epic-trigger-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: jira-webhook.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`jira-webhook.e-dani.com`) && (Path(`/jira/epic`) || Path(`/healthz`))
+      priority: 100
+      services:
+        - name: jira-epic-trigger-edge-host
+          namespace: traefik-edge
+          port: 19911
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
