@@ -4,10 +4,17 @@
 # Jira Cloud POSTs `jira:issue_updated` for epics of project SC to
 #   https://jira-webhook.e-dani.com/jira/epic?token=…
 # and the receiver (`jira-epic-trigger.service`, systemd --user on x86, tailnet
-# 100.83.56.98:19911) launches a headless company-cto session when the epic has
-# just moved to In Progress. It lives on the host, not in a pod, because it runs
-# `claude` with the operator's config, router and skills; the cluster only
-# tunnels to it over Tailscale, same pattern as opencode-public.yaml.
+# 100.83.56.98:19911, repo x86-host-runtime) launches a headless company-cto
+# session when the epic has just moved to In Progress. It lives on the host,
+# not in a pod, because it runs `claude` with the operator's config, router and
+# skills; the cluster only tunnels to it over Tailscale.
+#
+# ExternalName, not Service+EndpointSlice: ArgoCD excludes EndpointSlice and
+# Endpoints (`resource.exclusions` in argocd-cm), so a slice in Git is never
+# applied — the one behind opencode-public.yaml was `kubectl apply`'d by hand on
+# 2026-08-11 and ArgoCD does not know it exists. `x86.taile0ad27.ts.net` resolves
+# in-cluster through networking/dns/coredns-custom.yaml (hosts entry →
+# 100.83.56.98), which is the same mechanism openchamber-public.yaml relies on.
 #
 # No SSO middleware here: Jira cannot complete a Keycloak dance. The gate is the
 # shared token in the URL (or an HMAC over the raw body), verified by the
@@ -22,30 +29,13 @@ metadata:
     app.kubernetes.io/name: jira-epic-trigger-edge-host
     app.kubernetes.io/part-of: company
 spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
   ports:
     - name: http
       port: 19911
       targetPort: 19911
       protocol: TCP
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: jira-epic-trigger-edge-host
-  namespace: traefik-edge
-  labels:
-    kubernetes.io/service-name: jira-epic-trigger-edge-host
-    app.kubernetes.io/name: jira-epic-trigger-edge-host
-    app.kubernetes.io/part-of: company
-addressType: IPv4
-ports:
-  - name: http
-    protocol: TCP
-    port: 19911
-endpoints:
-  - addresses:
-      - 100.83.56.98
-    conditions: {}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
