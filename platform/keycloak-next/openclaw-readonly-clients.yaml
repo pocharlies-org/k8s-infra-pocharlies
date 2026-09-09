@@ -106,6 +106,7 @@ spec:
             - { name: OPERATOR_EMAIL, value: info@e-dani.com }
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
+            - { name: REQUIRED_REALM_ROLE, value: cto-office-send }
             - name: OPENCLAW_READONLY_UI_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
