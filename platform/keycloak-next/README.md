@@ -119,7 +119,13 @@ dedicated clients for the independent `info@e-dani.com` plane:
   `mcp.lan.e-dani.com` audience, no effective `agentgateway-write` role, and
   a client-level role scope mapping that limits its tokens to exactly the
   `cto-office-send` realm role; `fullScopeAllowed` stays false so no other
-  realm role — present or future — can ever be emitted by this client.
+  realm role — present or future — can ever be emitted by this client. The
+  reconciler also guarantees the grant itself: it idempotently maps
+  `cto-office-send` onto the client's service account (and fails closed if
+  the role is absent from the realm rather than creating it). The grant is
+  therefore not revocable operationally without a code change — `MODE=rollback`
+  deletes both dedicated clients — and the control designed for the emergency
+  is the AgentGateway `CTO_OFFICE_WRITE` kill-switch.
 
 The dedicated oauth2-proxy additionally accepts only the one email from its
 mounted `authenticated_emails_file`; it forwards email/groups but no bearer to
