@@ -141,3 +141,19 @@ the Keycloak bootstrap administrator and deletes the two immutable dedicated
 client IDs even if the operator was disabled, an application secret was lost,
 or the service client accidentally acquired the forbidden write role:
 `manual/openclaw-readonly-clients-rollback-job.yaml`.
+
+## Synapse SRE M2M identity
+
+`synapse-sre-client.yaml` reconciles the `synapse-sre-orchestrator` client
+and its sibling `synapse-draft-orchestrator`, both with
+`fullScopeAllowed=false`. For `synapse-sre-orchestrator` the client
+realm-role scope mapping must be exactly `synapse-sre-m2m` plus
+`cto-office-send`: without the second entry the grant on the service account
+is inert and its client_credentials token carries only `synapse-sre-m2m`
+(the same "granted but inert" defect fixed for the OpenClaw clients in
+#104/#105). The reconciler idempotently ensures both the client scope
+mapping and the grant, asserts the minted token carries exactly those two
+realm roles, and fails closed if `cto-office-send` disappears from the realm
+rather than creating it. `synapse-draft-orchestrator` keeps exactly
+`synapse-draft-m2m` and never gains `cto-office-send`. The emergency control
+remains the AgentGateway `CTO_OFFICE_WRITE` kill-switch.
