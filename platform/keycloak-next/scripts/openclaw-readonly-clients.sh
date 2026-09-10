@@ -251,6 +251,37 @@ ensure_realm_role_in_client_scope() {
   realm_role_in_client_scope || fail "client role scope is missing ${REQUIRED_REALM_ROLE}"
 }
 
+realm_role_granted_to_service_account() {
+  sa_user_id="$1"
+  kget "users/${sa_user_id}/role-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}"
+}
+
+ensure_realm_role_on_service_account() {
+  # The grant itself. The client role scope above only declares that this
+  # client may emit the role; the mapping onto the service account lived only
+  # as hand-made state, so reconcile it here. Limited on purpose to
+  # ${REQUIRED_REALM_ROLE}: guaranteeing this one grant must not become a
+  # template for guaranteeing others. As with the client scope above, the
+  # role itself is provisioned elsewhere: if it is missing this reconciler
+  # fails closed instead of creating it.
+  sa_user_id="$(kget "clients/${AGENTGATEWAY_CLIENT_UUID}/service-account-user" \
+    --fields id --format csv --noquotes | nonempty_lines)"
+  [ -n "${sa_user_id}" ] || fail "AgentGateway service account is missing"
+  if ! realm_role_granted_to_service_account "${sa_user_id}"; then
+    role_id="$(kget "roles/${REQUIRED_REALM_ROLE}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${REQUIRED_REALM_ROLE} is missing from the realm"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${REQUIRED_REALM_ROLE}")"
+    "${KCADM}" create "users/${sa_user_id}/role-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to grant ${REQUIRED_REALM_ROLE} to the AgentGateway service account"
+    unset role_body role_id
+  fi
+  realm_role_granted_to_service_account "${sa_user_id}" || \
+    fail "AgentGateway service account is missing ${REQUIRED_REALM_ROLE}"
+  unset sa_user_id
+}
+
 assert_no_forbidden_role() {
   user_id="$1"
   if kget "users/${user_id}/role-mappings/realm/composite" \
@@ -370,6 +401,7 @@ case "${MODE}" in
     upsert_groups_mapper
     upsert_audience_mapper
     ensure_realm_role_in_client_scope
+    ensure_realm_role_on_service_account
     verify_clients
     verify_minted_claims
     printf '{"ui_client":"%s","agentgateway_client":"%s","operator_email":"%s","write_role_present":false}\n' \
