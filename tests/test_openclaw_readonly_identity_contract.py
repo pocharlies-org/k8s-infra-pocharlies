@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import pathlib
 import re
@@ -34,6 +36,10 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
         self.assertIn('config.\\"included.custom.audience\\"', script)
         self.assertIn("assert_no_forbidden_role", script)
         self.assertIn("verify_minted_claims", script)
+        self.assertIn("ensure_realm_role_on_service_account", script)
+        self.assertIn('create "users/${sa_user_id}/role-mappings/realm"', script)
+        self.assertIn('"${REQUIRED_REALM_ROLE} is missing from the realm"', script)
+        self.assertIn("realm roles are not exactly", script)
         self.assertIn("mcp.lan.e-dani.com", script)
         self.assertIn("MODE", script)
         self.assertIn("rollback)", script)
@@ -218,6 +224,199 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
             self.assertIn('"present":false', result.stdout)
             self.assertFalse(ui_marker.exists())
             self.assertFalse(agentgateway_marker.exists())
+
+    FAKE_KCADM_ENSURE = textwrap.dedent(
+        """\
+        #!/bin/sh
+        command="$1"
+        shift
+        endpoint=""
+        fields=""
+        query=""
+        config_file=""
+        has_client=0
+        case "$command" in
+          config)
+            prev=""
+            for argument in "$@"; do
+              if [ "$prev" = "--config" ]; then config_file="$argument"; fi
+              case "$argument" in
+                --client) has_client=1 ;;
+              esac
+              prev="$argument"
+            done
+            if [ "$has_client" = "1" ]; then
+              printf '{"token": "%s"}\\n' "$FAKE_TOKEN" > "$config_file"
+            fi
+            exit 0
+            ;;
+          get|create|update)
+            endpoint="$1"
+            shift
+            prev=""
+            for argument in "$@"; do
+              if [ "$prev" = "--fields" ]; then fields="$argument"; fi
+              case "$argument" in
+                clientId=*) query="client:$argument" ;;
+                email=*) query="email:$argument" ;;
+              esac
+              prev="$argument"
+            done
+            ;;
+          *)
+            echo "unexpected command: $command" >&2
+            exit 76
+            ;;
+        esac
+
+        case "$command" in
+          get)
+            case "$endpoint" in
+              clients)
+                case "$query" in
+                  "client:clientId=openclaw-readonly-ui") printf '%s\\n' ui-uuid ;;
+                  "client:clientId=openclaw-readonly-agentgateway") printf '%s\\n' agentgateway-uuid ;;
+                  *) echo "unexpected client query: $query" >&2; exit 74 ;;
+                esac
+                ;;
+              clients/ui-uuid)
+                case "$fields" in
+                  id) printf '%s\\n' ui-uuid ;;
+                  enabled) printf '%s\\n' true ;;
+                  publicClient) printf '%s\\n' false ;;
+                  standardFlowEnabled) printf '%s\\n' true ;;
+                  directAccessGrantsEnabled) printf '%s\\n' false ;;
+                  serviceAccountsEnabled) printf '%s\\n' false ;;
+                  fullScopeAllowed) printf '%s\\n' false ;;
+                  *) echo "unexpected ui field: $fields" >&2; exit 72 ;;
+                esac
+                ;;
+              clients/agentgateway-uuid)
+                case "$fields" in
+                  id) printf '%s\\n' agentgateway-uuid ;;
+                  enabled) printf '%s\\n' true ;;
+                  publicClient) printf '%s\\n' false ;;
+                  standardFlowEnabled) printf '%s\\n' false ;;
+                  directAccessGrantsEnabled) printf '%s\\n' false ;;
+                  serviceAccountsEnabled) printf '%s\\n' true ;;
+                  fullScopeAllowed) printf '%s\\n' false ;;
+                  *) echo "unexpected agentgateway field: $fields" >&2; exit 72 ;;
+                esac
+                ;;
+              clients/ui-uuid/protocol-mappers/models)
+                printf '%s\\n' 'groups-mapper,openclaw-readonly-groups'
+                ;;
+              clients/agentgateway-uuid/protocol-mappers/models)
+                printf '%s\\n' 'aud-mapper,openclaw-readonly-agentgateway-audience'
+                ;;
+              clients/agentgateway-uuid/scope-mappings/realm)
+                if [ -e "$FAKE_STATE/scope" ]; then printf '%s\\n' cto-office-send; fi
+                ;;
+              clients/agentgateway-uuid/service-account-user)
+                printf '%s\\n' sa-uuid
+                ;;
+              roles/cto-office-send)
+                printf '%s\\n' role-uuid
+                ;;
+              users)
+                case "$query" in
+                  "email:email=info@e-dani.com") printf '%s\\n' operator-uuid ;;
+                  *) echo "unexpected user query: $query" >&2; exit 77 ;;
+                esac
+                ;;
+              users/operator-uuid)
+                case "$fields" in
+                  enabled) printf '%s\\n' true ;;
+                  *) echo "unexpected operator field: $fields" >&2; exit 78 ;;
+                esac
+                ;;
+              users/operator-uuid/role-mappings/realm/composite)
+                printf '%s\\n' default-roles-edani
+                ;;
+              users/sa-uuid/role-mappings/realm)
+                if [ -e "$FAKE_STATE/grant" ]; then printf '%s\\n' cto-office-send; fi
+                ;;
+              users/sa-uuid/role-mappings/realm/composite)
+                printf '%s\\n' cto-office-send
+                ;;
+              *)
+                echo "unexpected lookup: $endpoint" >&2
+                exit 73
+                ;;
+            esac
+            ;;
+          update)
+            printf '%s\\n' "update $endpoint" >> "$FAKE_JOURNAL"
+            ;;
+          create)
+            printf '%s\\n' "create $endpoint" >> "$FAKE_JOURNAL"
+            case "$endpoint" in
+              clients/agentgateway-uuid/scope-mappings/realm) touch "$FAKE_STATE/scope" ;;
+              users/sa-uuid/role-mappings/realm) touch "$FAKE_STATE/grant" ;;
+              *) echo "unexpected create: $endpoint" >&2; exit 75 ;;
+            esac
+            ;;
+        esac
+        """
+    )
+
+    def run_ensure_with_fake_keycloak(self, grant_present):
+        script = BASE / "scripts" / "openclaw-readonly-clients.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            state = tmp_path / "state"
+            state.mkdir()
+            journal = tmp_path / "journal"
+            journal.touch()
+            fake_kcadm = tmp_path / "kcadm.sh"
+            fake_kcadm.write_text(self.FAKE_KCADM_ENSURE)
+            fake_kcadm.chmod(0o755)
+            if grant_present:
+                (state / "scope").touch()
+                (state / "grant").touch()
+            claims = json.dumps(
+                {
+                    "azp": "openclaw-readonly-agentgateway",
+                    "aud": "mcp.lan.e-dani.com",
+                    "realm_access": {"roles": ["cto-office-send"]},
+                },
+                separators=(",", ":"),
+            )
+            header = base64.urlsafe_b64encode(b'{"alg":"none"}').decode().rstrip("=")
+            payload = base64.urlsafe_b64encode(claims.encode()).decode().rstrip("=")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "MODE": "ensure",
+                    "KCADM": str(fake_kcadm),
+                    "KC_BOOTSTRAP_ADMIN_USERNAME": "test-admin",
+                    "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
+                    "OPENCLAW_READONLY_UI_CLIENT_SECRET": "not-a-real-secret",
+                    "OPENCLAW_READONLY_AGENTGATEWAY_CLIENT_SECRET": "not-a-real-secret",
+                    "FAKE_STATE": str(state),
+                    "FAKE_JOURNAL": str(journal),
+                    "FAKE_TOKEN": f"{header}.{payload}.sig",
+                }
+            )
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                check=True,
+                text=True,
+                capture_output=True,
+                env=env,
+            )
+            self.assertIn('"agentgateway_client":"openclaw-readonly-agentgateway"', result.stdout)
+            return journal.read_text()
+
+    def test_ensure_is_no_op_when_grant_is_present(self):
+        journal = self.run_ensure_with_fake_keycloak(grant_present=True)
+        self.assertNotIn("create users/sa-uuid/role-mappings/realm", journal)
+        self.assertNotIn("create clients/agentgateway-uuid/scope-mappings/realm", journal)
+
+    def test_ensure_creates_grant_when_absent(self):
+        journal = self.run_ensure_with_fake_keycloak(grant_present=False)
+        self.assertEqual(journal.count("create users/sa-uuid/role-mappings/realm"), 1)
+        self.assertEqual(journal.count("create clients/agentgateway-uuid/scope-mappings/realm"), 1)
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_keycloak_kustomization_builds(self):
