@@ -7,42 +7,46 @@ Keycloak is the active SSO stack. `auth-next.e-dani.com` is canonical and
 
 Since 2026-08-11 Keycloak uses database `keycloak`, owned by role `keycloak`,
 on `postgres-shared-rw.databases.svc.cluster.local`. Both namespaces project the
-same Vault credential from `secret/keycloak-next/postgres`; no password is
+same 1Password credential from item `keycloak-next-postgres`; no password is
 stored in Git. The former `keycloak/keycloak-postgres` cluster and its PVCs were
 decommissioned on 2026-08-11 after the operator closed the rollback window.
 Database recovery now follows the `postgres-shared` backup and restore runbook.
 
-## 1. Seed Vault secrets
+## 1. Seed 1Password items
 
-The `vault-backend` ClusterSecretStore is mounted at Vault KV path `secret` and
-the ExternalSecret keys below intentionally match the existing repo convention.
+The `onepassword` ClusterSecretStore resolves every `remoteRef.key` as
+`<item>/<field label>` against the 1Password vault `k8s-pocharlies`, so the
+item titles below are the ones the ExternalSecret manifests reference.
 
-Required ExternalSecret remoteRef keys:
+Required items (titles) and their fields:
 
 ```text
-secret/keycloak-next/bootstrap
-secret/keycloak-next/postgres
-secret/keycloak-next/oauth2-proxy
+keycloak-next-bootstrap        admin_username, admin_password
+keycloak-next-postgres         username, password
+keycloak-next-oauth2-proxy     client_id, client_secret, cookie_secret
 ```
 
-If using the Vault CLI against the `secret` mount, that means commands use
-paths like:
+Using the 1Password CLI with a service account that has Read & Write on that
+vault (`OP_SERVICE_ACCOUNT_TOKEN` set, never echoed):
 
 ```bash
-vault kv put secret/secret/keycloak-next/bootstrap \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-bootstrap \
   admin_username=admin \
   admin_password="$(openssl rand -base64 36)"
 
-vault kv put secret/secret/keycloak-next/postgres \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-postgres \
   username=keycloak \
   password="$(openssl rand -base64 36)"
 ```
 
-Do not write `secret/keycloak-next/oauth2-proxy` until Keycloak has been
+Do not create `keycloak-next-oauth2-proxy` until Keycloak has been
 bootstrapped and the confidential client exists.
 
-Temporary Kubernetes secrets can be used if Vault write access is unavailable,
-but replace them with Vault-backed secrets when Vault access is restored.
+Temporary Kubernetes secrets can be used if 1Password write access is
+unavailable, but replace them with store-backed secrets when access is
+restored.
 
 ## 2. Activate the stack
 
@@ -54,7 +58,7 @@ Add this resource to the root `/home/dibanez/k8s/k8s-infra-pocharlies/kustomizat
 
 Sync with Argo. During the first sync, it is acceptable for oauth2-proxy to be
 unready until the Keycloak realm/client is created and its secret is written to
-Vault.
+1Password.
 
 Traefik Edge must watch the `keycloak` namespace. Keep
 `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`
@@ -108,7 +112,8 @@ Add a groups mapper so oauth2-proxy receives a `groups` claim.
 After creating the Keycloak client:
 
 ```bash
-vault kv put secret/secret/keycloak-next/oauth2-proxy \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-oauth2-proxy \
   client_id=oauth2-proxy \
   client_secret="<client secret from Keycloak>" \
   cookie_secret="$(openssl rand -base64 32)"
@@ -223,15 +228,16 @@ Official references:
 
 ## 8. Independent OpenClaw read-only clients
 
-Prerequisite Vault properties under `secret/keycloak-next/openclaw-readonly`:
+Prerequisite fields on the 1Password item `keycloak-next-openclaw-readonly`
+(vault `k8s-pocharlies`):
 
 - `ui_client_secret` for `openclaw-readonly-ui`;
 - `cookie_secret` for the dedicated oauth2-proxy;
 - `agentgateway_client_secret` for `openclaw-readonly-agentgateway`.
 
-That is Vault CLI notation. The ClusterSecretStore already mounts `secret/`, so
-the manifests intentionally use the relative ExternalSecret key
-`keycloak-next/openclaw-readonly`.
+The `onepassword` store resolves each `remoteRef.key` as `<item>/<field label>`,
+so the manifests use keys such as
+`keycloak-next-openclaw-readonly/ui_client_secret`.
 
 Generate all three outside logs and shell history. Do not reuse the admin
 oauth2-proxy secret, its cookie secret, or `agentgateway-mcp` credentials.
@@ -275,8 +281,11 @@ The private SRE routes use one dedicated confidential service client,
 operator receives this role. The client has only the explicit
 `mcp.lan.e-dani.com` audience and `fullScopeAllowed=false`.
 
-Seed a new random value in
-`secret/agentgateway/prod#synapse_sre_orchestrator_client_secret`; never reuse
+Seed a new random value in the 1Password item `agentgateway-prod`, field
+`synapse_sre_orchestrator_client_secret` (rotate with
+`op item edit agentgateway-prod --vault k8s-pocharlies synapse_sre_orchestrator_client_secret=...`;
+inline `op item edit` updates only that field — the full-replacement caveat
+applies to `--template` only); never reuse
 an OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. Keep
 `SRE_M2M_ENABLED=false` while syncing this identity. The PostSync hook must
 finish with sanitized output:

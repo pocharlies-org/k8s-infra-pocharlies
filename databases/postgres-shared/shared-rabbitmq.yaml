@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: shared-rabbitmq
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: rabbitmq-secrets
@@ -18,12 +18,10 @@ spec:
   data:
     - secretKey: RABBITMQ_DEFAULT_USER
       remoteRef:
-        key: secret/skirmshop/rabbitmq
-        property: user
+        key: skirmshop-rabbitmq/user
     - secretKey: RABBITMQ_DEFAULT_PASS
       remoteRef:
-        key: secret/skirmshop/rabbitmq
-        property: password
+        key: skirmshop-rabbitmq/password
 ---
 # Erlang cookie shared by all cluster members.
 # Generated via `openssl rand -hex 32` on 2026-05-30 during the HA refactor.

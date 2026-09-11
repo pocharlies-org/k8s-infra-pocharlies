@@ -7,9 +7,9 @@ metadata:
   name: harbor-s3-credentials
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-s3-credentials
@@ -24,9 +24,7 @@ spec:
   data:
     - secretKey: accessKey
       remoteRef:
-        key: secret/minio/harbor-s3
-        property: access_key
+        key: minio-harbor-s3/access_key
     - secretKey: secretKey
       remoteRef:
-        key: secret/minio/harbor-s3
-        property: secret_key
+        key: minio-harbor-s3/secret_key

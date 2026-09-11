@@ -7,23 +7,32 @@ ulimit -c 0 >/dev/null 2>&1 || true
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXPECTED_CONTEXT="${EXPECTED_CONTEXT:-x86-k3s}"
 
+# 1Password destination (SC-490 / SC-498): vault k8s-pocharlies, service account
+# with Read & Write on that vault only. The token is provided either directly in
+# OP_SERVICE_ACCOUNT_TOKEN or in a 0600 file via OP_SA_TOKEN_FILE (same pattern
+# as _ops/vault-to-1password/op-sa.sh); it never appears on a command line.
+OP_VAULT="${OP_VAULT:-k8s-pocharlies}"
+
 declare -A USERS=(
   [breakglass]="minio-breakglass-admin"
   [harbor]="harbor-s3"
   [velero]="velero-s3"
   [loki]="loki-s3"
 )
-declare -A PATHS=(
-  [breakglass]="minio/breakglass-admin"
-  [harbor]="minio/harbor-s3"
-  [velero]="minio/velero-s3"
-  [loki]="minio/loki-s3"
+# Item titles follow the migration convention (vault path `/` -> `-`, mount
+# dropped): secret/minio/harbor-s3 -> minio-harbor-s3. Field labels stay
+# identical to the old KV keys: access_key / secret_key.
+declare -A ITEMS=(
+  [breakglass]="minio-breakglass-admin"
+  [harbor]="minio-harbor-s3"
+  [velero]="minio-velero-s3"
+  [loki]="minio-loki-s3"
 )
 declare -A PASSWORDS
-declare -a WRITTEN_PATHS=()
+declare -a WRITTEN_ITEMS=()
 declare -a CREATED_POLICIES=()
 declare -a CREATED_USERS=()
-VAULT_TOKEN=""
+declare -a OP_TEMPLATE_FILES=()
 
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -39,29 +48,42 @@ minio_admin() {
   ' sh "$@"
 }
 
-vault_path_exists() {
-  local path="$1"
-  printf '%s\n' "$VAULT_TOKEN" | kubectl -n vault exec -i vault-0 -- sh -eu -c '
-    IFS= read -r token
-    export VAULT_TOKEN="$token"
-    vault kv get -mount=secret "$1" >/dev/null 2>&1
-  ' sh "$path" >/dev/null 2>&1
+cleanup_op_templates() {
+  local f
+  for f in "${OP_TEMPLATE_FILES[@]}"; do
+    shred -u "$f" >/dev/null 2>&1 || rm -f "$f" 2>/dev/null || true
+  done
+  OP_TEMPLATE_FILES=()
 }
 
-vault_put() {
-  local path="$1" access_key="$2" secret_key="$3"
+op_item_exists() {
+  local item="$1"
+  op item get "$item" --vault "$OP_VAULT" --format json >/dev/null 2>&1
+}
+
+op_item_create() {
+  local item="$1" access_key="$2" secret_key="$3"
   # Register first so an ambiguous transport failure after the server-side
   # write is still cleaned up.
-  WRITTEN_PATHS+=("$path")
-  printf '%s\n%s\n%s\n' "$VAULT_TOKEN" "$access_key" "$secret_key" |
-    kubectl -n vault exec -i vault-0 -- sh -eu -c '
-      IFS= read -r token
-      IFS= read -r access_key
-      IFS= read -r secret_key
-      export VAULT_TOKEN="$token"
-      vault kv put -mount=secret "$1" access_key="$access_key" secret_key="$secret_key" >/dev/null
-      unset token access_key secret_key
-    ' sh "$path" >/dev/null
+  WRITTEN_ITEMS+=("$item")
+  # Values are passed through a 0600 template file, never via argv, and the
+  # field labels match the old KV keys exactly. NOTE (verified 11-09 during the
+  # Vault->1Password migration): `op item edit --template` does NOT merge, it
+  # REPLACES the item's whole field list, so rotating an existing item must
+  # always send the complete set (access_key + secret_key together). This
+  # provisioner only ever creates: an existing item is refused up front.
+  local tmp
+  tmp="$(mktemp)"
+  OP_TEMPLATE_FILES+=("$tmp")
+  chmod 600 "$tmp"
+  printf '%s\n' "{\"title\":\"${item}\",\"category\":\"SECURE_NOTE\",\"fields\":[{\"id\":\"access_key\",\"type\":\"CONCEALED\",\"label\":\"access_key\",\"value\":\"${access_key}\"},{\"id\":\"secret_key\",\"type\":\"CONCEALED\",\"label\":\"secret_key\",\"value\":\"${secret_key}\"}]}" >"$tmp"
+  op item create --vault "$OP_VAULT" --template "$tmp" >/dev/null
+  shred -u "$tmp" >/dev/null 2>&1 || rm -f "$tmp"
+  local f kept=()
+  for f in "${OP_TEMPLATE_FILES[@]}"; do
+    [[ "$f" == "$tmp" ]] || kept+=("$f")
+  done
+  OP_TEMPLATE_FILES=("${kept[@]+"${kept[@]}"}")
 }
 
 create_policy() {
@@ -158,17 +180,13 @@ rollback() {
     for policy in "${CREATED_POLICIES[@]}"; do
       minio_admin admin policy remove admin "$policy" >/dev/null 2>&1 || true
     done
-    for path in "${WRITTEN_PATHS[@]}"; do
-      printf '%s\n' "$VAULT_TOKEN" | kubectl -n vault exec -i vault-0 -- sh -eu -c '
-        IFS= read -r token
-        export VAULT_TOKEN="$token"
-        vault kv metadata delete -mount=secret "$1" >/dev/null
-      ' sh "$path" >/dev/null 2>&1 || true
+    for item in "${WRITTEN_ITEMS[@]}"; do
+      op item delete "$item" --vault "$OP_VAULT" >/dev/null 2>&1 || true
     done
     printf 'bootstrap failed; all resources created by this run were rolled back\n' >&2
   fi
+  cleanup_op_templates
   for key in "${!PASSWORDS[@]}"; do unset 'PASSWORDS[$key]'; done
-  unset VAULT_TOKEN
   exit "$code"
 }
 trap rollback EXIT
@@ -176,7 +194,17 @@ trap rollback EXIT
 [[ "${1:-}" == "--execute" ]] || fail "usage: MINIO_CHANGE_WINDOW_APPROVED=yes $0 --execute"
 [[ "${MINIO_CHANGE_WINDOW_APPROVED:-}" == "yes" ]] || fail "change window is not approved"
 [[ "$(kubectl config current-context)" == "$EXPECTED_CONTEXT" ]] || fail "unexpected Kubernetes context"
-for tool in kubectl jq openssl; do command -v "$tool" >/dev/null 2>&1 || fail "missing tool: $tool"; done
+for tool in kubectl jq openssl op; do command -v "$tool" >/dev/null 2>&1 || fail "missing tool: $tool"; done
+
+if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" && -n "${OP_SA_TOKEN_FILE:-}" ]]; then
+  [[ -f "$OP_SA_TOKEN_FILE" ]] || fail "OP_SA_TOKEN_FILE not found"
+  OP_SERVICE_ACCOUNT_TOKEN="$(cat "$OP_SA_TOKEN_FILE")"
+  export OP_SERVICE_ACCOUNT_TOKEN
+fi
+[[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] ||
+  fail "set OP_SERVICE_ACCOUNT_TOKEN (or OP_SA_TOKEN_FILE) for a service account with Read & Write on vault $OP_VAULT"
+op item list --vault "$OP_VAULT" --format json >/dev/null ||
+  fail "1Password service account cannot read vault $OP_VAULT"
 
 kubectl -n argocd get applications.argoproj.io -o json | jq -e '
   [.items[] | select(
@@ -185,16 +213,12 @@ kubectl -n argocd get applications.argoproj.io -o json | jq -e '
     (.status.operationState.phase == "Running")
   )] | length == 0
 ' >/dev/null || fail "Argo is not globally quiescent"
-kubectl -n vault wait --for=condition=Ready pod/vault-0 --timeout=30s >/dev/null
 kubectl -n minio wait --for=condition=Ready pod/minio-0 --timeout=30s >/dev/null
 
 for key in harbor velero loki; do jq -e . "$ROOT/storage/minio/$key-s3-policy.json" >/dev/null; done
 
-VAULT_TOKEN="$(kubectl -n vault get secret vault-admin-token -o go-template='{{ index .data "token" | base64decode }}')"
-[[ -n "$VAULT_TOKEN" ]] || fail "Vault admin token is unavailable"
-
 for key in breakglass harbor velero loki; do
-  vault_path_exists "${PATHS[$key]}" && fail "refusing to overwrite an existing Vault path: ${PATHS[$key]}"
+  op_item_exists "${ITEMS[$key]}" && fail "refusing to overwrite an existing 1Password item: ${ITEMS[$key]}"
   minio_admin admin user info admin "${USERS[$key]}" >/dev/null 2>&1 && fail "refusing to overwrite an existing MinIO user: ${USERS[$key]}"
   PASSWORDS[$key]="$(openssl rand -hex 24)"
 done
@@ -203,7 +227,7 @@ for policy in harbor-s3 velero-s3 loki-s3; do
 done
 
 for key in breakglass harbor velero loki; do
-  vault_put "${PATHS[$key]}" "${USERS[$key]}" "${PASSWORDS[$key]}"
+  op_item_create "${ITEMS[$key]}" "${USERS[$key]}" "${PASSWORDS[$key]}"
 done
 
 create_user breakglass consoleAdmin
@@ -220,6 +244,5 @@ probe_bucket velero velero-backups true
 probe_bucket loki loki-chunks false
 
 for key in "${!PASSWORDS[@]}"; do unset 'PASSWORDS[$key]'; done
-unset VAULT_TOKEN
 trap - EXIT
 printf 'MINIO_WORKLOAD_IDENTITIES_READY\n'

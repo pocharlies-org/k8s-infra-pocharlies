@@ -47,12 +47,17 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertNotIn('echo "${SYNAPSE_SRE_CLIENT_SECRET}"', script)
         self.assertNotIn('echo "${token}"', script)
 
-    def test_manifest_uses_one_vault_property_and_a_hardened_postsync_job(self):
+    def test_manifest_uses_one_1password_field_per_item_and_a_hardened_postsync_job(self):
         manifest = (BASE / "synapse-sre-client.yaml").read_text()
         self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
-        self.assertIn("key: secret/agentgateway/prod", manifest)
-        self.assertIn("property: synapse_sre_orchestrator_client_secret", manifest)
-        self.assertIn("property: synapse_draft_orchestrator_client_secret", manifest)
+        self.assertIn(
+            "key: agentgateway-prod/synapse_sre_orchestrator_client_secret",
+            manifest,
+        )
+        self.assertIn(
+            "key: agentgateway-prod/synapse_draft_orchestrator_client_secret",
+            manifest,
+        )
         self.assertIn("name: CLIENT_ID, value: synapse-draft-orchestrator", manifest)
         self.assertIn("name: ROLE_NAME, value: synapse-draft-m2m", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
