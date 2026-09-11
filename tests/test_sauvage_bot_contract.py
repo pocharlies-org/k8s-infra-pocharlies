@@ -113,7 +113,7 @@ class SauvageBotContractTest(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                item["remoteRef"]["key"] == "sauvage-bot"
+                item["remoteRef"]["key"] == f"sauvage-bot/{item['secretKey']}"
                 for item in runtime_secret["spec"]["data"]
             )
         )

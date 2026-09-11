@@ -254,9 +254,9 @@ metadata:
     app.kubernetes.io/name: synapse-brain-feedback-handler
     app.kubernetes.io/part-of: synapse
 spec:
-  refreshInterval: "1h"
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: synapse-brain-feedback-token
@@ -268,8 +268,7 @@ spec:
   data:
     - secretKey: dashboard_api_key
       remoteRef:
-        key: skirmshop-brain/prod/app
-        property: dashboard_api_key
+        key: skirmshop-brain-prod-app/dashboard_api_key
 ---
 apiVersion: apps/v1
 kind: Deployment

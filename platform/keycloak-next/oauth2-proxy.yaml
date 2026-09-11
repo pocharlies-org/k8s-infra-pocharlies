@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: oauth2-proxy
     app.kubernetes.io/component: forward-auth
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: oauth2-proxy-secrets
@@ -18,16 +18,13 @@ spec:
   data:
     - secretKey: OAUTH2_PROXY_CLIENT_ID
       remoteRef:
-        key: secret/keycloak-next/oauth2-proxy
-        property: client_id
+        key: keycloak-next-oauth2-proxy/client_id
     - secretKey: OAUTH2_PROXY_CLIENT_SECRET
       remoteRef:
-        key: secret/keycloak-next/oauth2-proxy
-        property: client_secret
+        key: keycloak-next-oauth2-proxy/client_secret
     - secretKey: OAUTH2_PROXY_COOKIE_SECRET
       remoteRef:
-        key: secret/keycloak-next/oauth2-proxy
-        property: cookie_secret
+        key: keycloak-next-oauth2-proxy/cookie_secret
 ---
 apiVersion: v1
 kind: ConfigMap
