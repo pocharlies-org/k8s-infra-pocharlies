@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: synapse-sre-client
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: synapse-sre-keycloak-bootstrap
@@ -18,8 +18,7 @@ spec:
   data:
     - secretKey: client_secret
       remoteRef:
-        key: secret/agentgateway/prod
-        property: synapse_sre_orchestrator_client_secret
+        key: agentgateway-prod/synapse_sre_orchestrator_client_secret
 ---
 apiVersion: batch/v1
 kind: Job
@@ -110,9 +109,9 @@ metadata:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: synapse-draft-client
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: synapse-draft-keycloak-bootstrap
@@ -121,8 +120,7 @@ spec:
   data:
     - secretKey: client_secret
       remoteRef:
-        key: secret/agentgateway/prod
-        property: synapse_draft_orchestrator_client_secret
+        key: agentgateway-prod/synapse_draft_orchestrator_client_secret
 ---
 apiVersion: batch/v1
 kind: Job
