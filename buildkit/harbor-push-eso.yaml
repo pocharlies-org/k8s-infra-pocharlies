@@ -11,10 +11,10 @@ metadata:
   name: harbor-push
   namespace: buildkit
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
     kind: ClusterSecretStore
-    name: vault-backend
+    name: onepassword
   target:
     name: harbor-push
     creationPolicy: Owner
@@ -39,9 +39,7 @@ spec:
   data:
     - secretKey: username
       remoteRef:
-        key: infra/harbor/ci-robot
-        property: username
+        key: infra-harbor-ci-robot/username
     - secretKey: password
       remoteRef:
-        key: infra/harbor/ci-robot
-        property: password
+        key: infra-harbor-ci-robot/password

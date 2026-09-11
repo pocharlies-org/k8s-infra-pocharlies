@@ -9,7 +9,7 @@ redirects here for old bookmarks.
 - `auth-next.e-dani.com` serves Keycloak.
 - Keycloak stores its dedicated `keycloak` database and owner role in the
   shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
-  from Vault path `secret/keycloak-next/postgres`.
+  from 1Password item `keycloak-next-postgres` (vault `k8s-pocharlies`).
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
 - Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
   namespace:
@@ -20,29 +20,30 @@ redirects here for old bookmarks.
 - Traefik Edge must watch the `keycloak` namespace. This is configured in
   `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`.
 
-## Vault prerequisites
+## 1Password prerequisites
 
-Create these Vault paths before adding this stack to the root
-`kustomization.yaml`:
+Create these 1Password items (vault `k8s-pocharlies`) before adding this stack
+to the root `kustomization.yaml`:
 
-- `secret/keycloak-next/bootstrap`
+- `keycloak-next-bootstrap`
   - `admin_username`
   - `admin_password`
-- `secret/keycloak-next/postgres`
+- `keycloak-next-postgres`
   - `username`
   - `password`
-- `secret/keycloak-next/oauth2-proxy`
+- `keycloak-next-oauth2-proxy`
   - `client_id`
   - `client_secret`
   - `cookie_secret`
-- `secret/keycloak-next/openclaw-readonly`
+- `keycloak-next-openclaw-readonly`
   - `ui_client_secret`
   - `cookie_secret`
   - `agentgateway_client_secret`
 
-The path above is Vault CLI notation. Because `vault-backend` already mounts
-the KV-v2 engine at `secret/`, ExternalSecret `remoteRef.key` values must use the
-relative key `keycloak-next/openclaw-readonly` and must not repeat `secret/`.
+The `onepassword` ClusterSecretStore resolves every ExternalSecret
+`remoteRef.key` as `<item>/<field label>`, e.g.
+`keycloak-next-openclaw-readonly/ui_client_secret`. Seeding recipes with the
+`op` CLI are in `RUNBOOK.md`.
 
 The oauth2-proxy client must be a confidential Keycloak client in the `edani`
 realm. Use this callback:
@@ -63,8 +64,8 @@ that Google Cloud OAuth client before expecting Gmail login to complete.
 
 ## Activation
 
-This directory is referenced from the root kustomization. After the Vault
-secrets and Google OAuth client exist:
+This directory is referenced from the root kustomization. After the 1Password
+items and Google OAuth client exist:
 
 1. Sync the Argo app.
 2. Confirm the `keycloak` namespace is healthy.
@@ -133,7 +134,7 @@ Traefik. Both the proxy and reconciliation hook are fixed to the KS5 OVH pool,
 tokenless and network-isolated from everything except Keycloak/DNS (plus
 Traefik ingress for the proxy).
 
-Do not sync these resources until the Vault path above is seeded and the
+Do not sync these resources until the 1Password item above is seeded and the
 AgentGateway signed-role policy is live. The OpenClaw chart remains disabled
 until the sanitized PostSync result reports `"write_role_present":false`.
 State rollback is explicit and excluded from Argo. It authenticates only with

@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: bootstrap-admin
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: keycloak-bootstrap
@@ -18,12 +18,10 @@ spec:
   data:
     - secretKey: KC_BOOTSTRAP_ADMIN_USERNAME
       remoteRef:
-        key: secret/keycloak-next/bootstrap
-        property: admin_username
+        key: keycloak-next-bootstrap/admin_username
     - secretKey: KC_BOOTSTRAP_ADMIN_PASSWORD
       remoteRef:
-        key: secret/keycloak-next/bootstrap
-        property: admin_password
+        key: keycloak-next-bootstrap/admin_password
 ---
 apiVersion: apps/v1
 kind: Deployment

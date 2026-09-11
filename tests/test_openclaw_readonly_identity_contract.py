@@ -53,11 +53,14 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
         self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
         self.assertIn("name: openclaw-readonly-ui-secrets", manifest)
         self.assertIn("name: openclaw-readonly-agentgateway-bootstrap", manifest)
-        self.assertEqual(manifest.count("key: keycloak-next/openclaw-readonly"), 3)
+        self.assertEqual(manifest.count("key: keycloak-next-openclaw-readonly/"), 3)
         self.assertNotIn("key: secret/keycloak-next/openclaw-readonly", manifest)
-        self.assertIn("property: ui_client_secret", manifest)
-        self.assertIn("property: cookie_secret", manifest)
-        self.assertIn("property: agentgateway_client_secret", manifest)
+        self.assertIn("key: keycloak-next-openclaw-readonly/ui_client_secret", manifest)
+        self.assertIn("key: keycloak-next-openclaw-readonly/cookie_secret", manifest)
+        self.assertIn(
+            "key: keycloak-next-openclaw-readonly/agentgateway_client_secret",
+            manifest,
+        )
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
         self.assertIn("argocd.argoproj.io/sync-wave: \"21\"", manifest)
         self.assertIn("activeDeadlineSeconds: 900", manifest)

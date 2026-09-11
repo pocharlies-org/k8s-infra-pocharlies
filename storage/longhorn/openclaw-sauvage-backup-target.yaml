@@ -17,10 +17,10 @@ metadata:
     app.kubernetes.io/part-of: longhorn
     backup.e-dani.com/scope: openclaw
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   refreshPolicy: Periodic
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: longhorn-openclaw-sauvage-backup
@@ -37,24 +37,21 @@ spec:
   data:
     - secretKey: AWS_ACCESS_KEY_ID
       remoteRef:
-        key: secret/longhorn/openclaw-sauvage-backup
-        property: AWS_ACCESS_KEY_ID
+        key: longhorn-openclaw-sauvage-backup/AWS_ACCESS_KEY_ID
         conversionStrategy: Default
         decodingStrategy: None
         metadataPolicy: None
         nullBytePolicy: Fail
     - secretKey: AWS_SECRET_ACCESS_KEY
       remoteRef:
-        key: secret/longhorn/openclaw-sauvage-backup
-        property: AWS_SECRET_ACCESS_KEY
+        key: longhorn-openclaw-sauvage-backup/AWS_SECRET_ACCESS_KEY
         conversionStrategy: Default
         decodingStrategy: None
         metadataPolicy: None
         nullBytePolicy: Fail
     - secretKey: AWS_ENDPOINTS
       remoteRef:
-        key: secret/longhorn/openclaw-sauvage-backup
-        property: AWS_ENDPOINTS
+        key: longhorn-openclaw-sauvage-backup/AWS_ENDPOINTS
         conversionStrategy: Default
         decodingStrategy: None
         metadataPolicy: None
