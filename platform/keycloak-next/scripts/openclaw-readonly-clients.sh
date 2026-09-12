@@ -15,6 +15,11 @@ OPERATOR_EMAIL="${OPERATOR_EMAIL:-info@e-dani.com}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 REQUIRED_REALM_ROLE="${REQUIRED_REALM_ROLE:-cto-office-send}"
+# INFRA-44 (INFRA-23 H2): the six read roles this client's service account
+# carries are owned by agentgateway-read-grants.sh (which maps both the grants
+# and this client's role scope). This reconciler only asserts they arrive in
+# the minted token; it never creates or maps them.
+EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-openclaw-readonly-admin.config
 CLIENT_CONFIG=/tmp/kcadm-openclaw-readonly-client.config
@@ -370,10 +375,11 @@ verify_minted_claims() {
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"agentgateway-write"'; then
     fail "minted read-only token contains ${FORBIDDEN_REALM_ROLE}"
   fi
-  realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[:space:]')"
+  realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[]"' | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
   [ -n "${realm_roles}" ] || fail "minted read-only token has no realm_access roles claim"
-  [ "${realm_roles}" = "[\"${REQUIRED_REALM_ROLE}\"]" ] || \
-    fail "minted read-only token realm roles are not exactly ${REQUIRED_REALM_ROLE}"
+  expected_roles="$(printf '%s\n%s\n' "${REQUIRED_REALM_ROLE}" "${EXPECTED_READ_ROLES}" | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
+  [ "${realm_roles}" = "${expected_roles}" ] || \
+    fail "minted read-only token realm roles are not exactly ${expected_roles}"
   unset realm_roles
   unset claims
 }
