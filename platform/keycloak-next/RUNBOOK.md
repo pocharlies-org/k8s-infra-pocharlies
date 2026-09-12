@@ -311,3 +311,54 @@ lifetime. The emergency rollback Job is deliberately excluded from Kustomize;
 it deletes only the immutable client and its now-unmapped realm role. Run it
 only during an authorized incident while the versioned ConfigMap still exists,
 then verify its sanitized `"present":false` result and remove the Job.
+
+## 10. AgentGateway read roles and grants (INFRA-23 H2 / INFRA-44)
+
+The gateway's read routes are enforced one route at a time (H4..H24), each
+requiring its own realm role `agentgateway-read:<route>`. This section is the
+grant phase: it must be live and verified before any route gains its
+`require:` (grant first, enforce second — no legitimate client loses access).
+
+The PostSync reconciler `agentgateway-read-grants-job.yaml` (sync wave 20, so
+it lands before the openclaw-readonly reconciler in wave 21) owns the full
+read matrix:
+
+- Creates the 21 `agentgateway-read:<route>` realm roles (non-composite).
+- Grants them individually — never via groups (SC-44 C6): the
+  `agentgateway-mcp` service account receives all 21; the
+  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
+  `skirmshop-plugins`). `synapse-sre-orchestrator`,
+  `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
+  none.
+- Maps the same roles into each client's role scope so the grants travel in
+  minted tokens without `fullScopeAllowed` (SC-100 defect 6 family; turning
+  `fullScopeAllowed` off for `agentgateway-mcp` is INFRA-45, a separate
+  story).
+- Fails closed on any group mapping, any member outside the matrix, any
+  composite role, any scope or grant entry outside the matrix, and any
+  freshly minted token whose `realm_access.roles` is not exactly the reviewed
+  set (22 roles for `agentgateway-mcp` including `agentgateway-write`, 7 for
+  `openclaw-readonly-agentgateway` including `cto-office-send`).
+
+Check the hook result without printing any JWT or credential:
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-read-grants --timeout=900s
+kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read-grants
+```
+
+Expected sanitized output:
+
+```json
+{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"tokens_verified":true}
+```
+
+For state rollback (authorized incidents only, while the versioned ConfigMap
+still exists), apply `manual/agentgateway-read-grants-rollback-job.yaml`. It
+verifies every role's members are inside the reviewed matrix, then deletes the
+21 roles — deleting a realm role cascades its service-account grants and
+client scope mappings — and verifies nothing remains. Reverting Git alone
+does not remove Keycloak state; the PostSync hook re-creates the matrix on
+the next sync of a revision that still contains the reconciler.
