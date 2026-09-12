@@ -24,6 +24,14 @@ OPENCLAW_ROLE_NAMES = [f"agentgateway-read:{route}" for route in OPENCLAW_ROUTES
 MCP_SA = "service-account-agentgateway-mcp"
 OC_SA = "service-account-openclaw-readonly-agentgateway"
 
+# Measured 2026-09-12 (INFRA-44): agentgateway-mcp has fullScopeAllowed=true, so
+# its minted token carries the reviewed 22 PLUS the flattened composites of the
+# service account's default-roles-edani (25 exact). openclaw-readonly-agentgateway
+# has fullScopeAllowed=false and measured exactly its reviewed 7 — the defaults
+# do NOT travel there.
+TOKEN_DEFAULT_ROLES = ["default-roles-edani", "offline_access", "uma_authorization"]
+MCP_TOKEN_ROLES = READ_ROLE_NAMES + ["agentgateway-write"] + TOKEN_DEFAULT_ROLES
+
 
 def make_token(roles, azp):
     claims = json.dumps(
@@ -236,9 +244,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
                     "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
                     "FAKE_STATE": str(state),
                     "FAKE_JOURNAL": str(journal),
-                    "FAKE_TOKEN_MCP": make_token(
-                        READ_ROLE_NAMES + ["agentgateway-write"], "agentgateway-mcp"
-                    ),
+                    "FAKE_TOKEN_MCP": make_token(MCP_TOKEN_ROLES, "agentgateway-mcp"),
                     "FAKE_TOKEN_OC": make_token(
                         ["cto-office-send"] + OPENCLAW_ROLE_NAMES,
                         "openclaw-readonly-agentgateway",
@@ -269,6 +275,11 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertIn("roles/${role}/users", script)
         self.assertIn("roles/${role}/groups", script)
         self.assertIn("mcp.lan.e-dani.com", script)
+        # The exact MCP token expectation is the 22 reviewed roles plus the
+        # three measured flattened composites (25 total, INFRA-44).
+        self.assertIn("TOKEN_DEFAULT_ROLE_NAMES", script)
+        for role in TOKEN_DEFAULT_ROLES:
+            self.assertIn(role, script)
         self.assertNotIn("set -x", script)
         self.assertNotIn('echo "${token}"', script)
         self.assertNotIn('echo "${client_secret}"', script)
@@ -344,11 +355,76 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn("not exactly the reviewed matrix", result.stderr)
 
+    def run_audit_with_tokens(self, mcp_roles, oc_roles):
+        script = BASE / "scripts" / "agentgateway-read-grants.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            state = tmp_path / "state"
+            state.mkdir()
+            seed_full_state(state)
+            journal = tmp_path / "journal"
+            journal.touch()
+            fake_kcadm = tmp_path / "kcadm.sh"
+            fake_kcadm.write_text(FAKE_KCADM)
+            fake_kcadm.chmod(0o755)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "MODE": "audit",
+                    "KCADM": str(fake_kcadm),
+                    "KC_BOOTSTRAP_ADMIN_USERNAME": "test-admin",
+                    "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
+                    "FAKE_STATE": str(state),
+                    "FAKE_JOURNAL": str(journal),
+                    "FAKE_TOKEN_MCP": make_token(mcp_roles, "agentgateway-mcp"),
+                    "FAKE_TOKEN_OC": make_token(
+                        oc_roles, "openclaw-readonly-agentgateway"
+                    ),
+                }
+            )
+            return subprocess.run(
+                ["/bin/sh", str(script)], capture_output=True, text=True, env=env
+            )
+
+    def test_mcp_token_with_extra_role_fails_closed(self):
+        # The comparison is EXACT, never a subset: a role an attacker added to
+        # the service account must fail the hook even though the reviewed 25
+        # are all present.
+        result = self.run_audit_with_tokens(
+            MCP_TOKEN_ROLES + ["create-realm"],
+            ["cto-office-send"] + OPENCLAW_ROLE_NAMES,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not exactly the reviewed matrix", result.stderr)
+
+    def test_mcp_token_missing_a_measured_default_fails_closed(self):
+        # The 25 are the measured exact set: dropping one of the flattened
+        # composites (e.g. a scope-mapping regression) must also fail closed.
+        result = self.run_audit_with_tokens(
+            [role for role in MCP_TOKEN_ROLES if role != "uma_authorization"],
+            ["cto-office-send"] + OPENCLAW_ROLE_NAMES,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not exactly the reviewed matrix", result.stderr)
+
+    def test_openclaw_token_with_travelling_defaults_fails_closed(self):
+        # INFRA-45 guard: openclaw measured exactly 7 (fullScopeAllowed=false
+        # filters the realm defaults out). If a flip starts shipping the
+        # defaults, this assertion must fail closed until re-reviewed.
+        result = self.run_audit_with_tokens(
+            MCP_TOKEN_ROLES,
+            ["cto-office-send"] + OPENCLAW_ROLE_NAMES + TOKEN_DEFAULT_ROLES,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not exactly the reviewed matrix", result.stderr)
+
     def test_job_is_postsync_nonroot_pinned_and_network_limited(self):
         manifest = (BASE / "agentgateway-read-grants-job.yaml").read_text()
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
         self.assertIn('argocd.argoproj.io/sync-wave: "20"', manifest)
-        self.assertIn("activeDeadlineSeconds: 900", manifest)
+        # 1800s: ~630s measured to the mint path at 500m CPU (INFRA-44); the
+        # previous 900s budget was exceeded on the first attempt.
+        self.assertIn("activeDeadlineSeconds: 1800", manifest)
         self.assertIn("automountServiceAccountToken: false", manifest)
         self.assertIn("runAsNonRoot: true", manifest)
         self.assertIn("readOnlyRootFilesystem: true", manifest)
@@ -372,6 +448,16 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         for role in OPENCLAW_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("realm roles are not exactly", script)
+        # The negative check (no agentgateway-write in the read-only token)
+        # stays literal, and the expected mint set stays the measured exact 7:
+        # the realm defaults must NOT be folded into this client's assertion.
+        self.assertIn('fail "minted read-only token contains ${FORBIDDEN_REALM_ROLE}"', script)
+        # The expected mint set stays the measured exact 7 (base + 6 reads):
+        # the realm defaults must NOT be folded into this client's assertion.
+        self.assertIn(
+            'expected_roles="$(printf \'%s\\n%s\\n\' "${REQUIRED_REALM_ROLE}" "${EXPECTED_READ_ROLES}"',
+            script,
+        )
 
 
 if __name__ == "__main__":

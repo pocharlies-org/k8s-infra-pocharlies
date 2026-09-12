@@ -16,10 +16,14 @@ metadata:
 spec:
   backoffLimit: 1
   # kcadm starts a JVM for every admin request. The steady-state reconcile
-  # issues roughly one bounded call per read role plus a fixed set; keep the
-  # same 900s budget the ten-role domain-roles reconciler needed in
-  # production (269s measured 2026-07-15) with room for the 21-role matrix.
-  activeDeadlineSeconds: 900
+  # issues ~165 sequential calls for the 21-role matrix plus two token mints:
+  # measured ~630s to the mint path at the 500m CPU limit on 2026-09-12
+  # (INFRA-44), which blew through the previous 900s budget (first attempt:
+  # DeadlineExceeded). 1800s keeps ~2.9x margin over the measurement. Raising
+  # the CPU limit instead has no precedent here — every PostSync reconciler in
+  # this repo is 50m/500m — and the deadline is the free lever for a hook with
+  # ttlSecondsAfterFinished and BeforeHookCreation.
+  activeDeadlineSeconds: 1800
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
