@@ -27,6 +27,18 @@ OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agen
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
+# Measured 2026-09-12 (INFRA-44): agentgateway-mcp has fullScopeAllowed=true, so
+# every realm role effective for its service account passes the token scope
+# filter — including default-roles-edani and the realm roles Keycloak flattens
+# out of that composite (offline_access, uma_authorization). The exact expected
+# agentgateway-mcp token set is therefore the reviewed matrix PLUS these three
+# measured defaults (25 total). The comparison stays EXACT, never a subset: a
+# subset check would not detect a role added by an attacker.
+# openclaw-readonly-agentgateway has fullScopeAllowed=false and a realm
+# scope-mapping of exactly the reviewed seven, and its minted token measured
+# exactly those seven — these defaults do NOT travel there.
+TOKEN_DEFAULT_ROLE_NAMES="default-roles-edani,offline_access,uma_authorization"
+
 cleanup() {
   rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
 }
@@ -325,7 +337,7 @@ verify_minted_tokens() {
   printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
     fail "minted token has wrong azp"
   printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || fail "minted token is missing the gateway audience"
-  expected="$(printf '%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | comma_list_sorted)"
+  expected="$(printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" | comma_list_sorted)"
   actual="$(printf '%s' "${claims}" | token_realm_roles)"
   [ -n "${actual}" ] || fail "minted token has no realm_access roles claim"
   [ "${actual}" = "${expected}" ] || fail "minted ${CLIENT_ID} token realm roles are not exactly the reviewed matrix"
@@ -338,6 +350,10 @@ verify_minted_tokens() {
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"'"${WRITE_ROLE_NAME}"'"'; then
     fail "minted read-only token contains ${WRITE_ROLE_NAME}"
   fi
+  # Measured 2026-09-12 (INFRA-44): exactly these seven travel; the realm
+  # defaults are filtered out by fullScopeAllowed=false. If a future change
+  # flips fullScopeAllowed or widens the scope-mapping, the defaults start
+  # travelling and this exact comparison must fail closed until re-reviewed.
   expected="$(printf '%s\n%s\n' "${OPENCLAW_BASE_ROLE}" "${OPENCLAW_READ_ROLE_NAMES}" | comma_list_sorted)"
   actual="$(printf '%s' "${claims}" | token_realm_roles)"
   [ -n "${actual}" ] || fail "minted openclaw token has no realm_access roles claim"
