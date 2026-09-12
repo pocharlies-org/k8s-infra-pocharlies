@@ -139,8 +139,9 @@ la política no se puede volver a guardar abierta por descuido.
 
 ## Quién puede aplicarlo
 
-**Yo no**: la credencial OAuth que hay en Vault (`secret/aurora-tailscale`)
-tiene scopes `devices:core:read, dns:read, policy_file:read, routes:read` — de
+**Yo no**: la credencial OAuth (item `aurora-tailscale` de 1Password, antes
+ruta `secret/aurora-tailscale` de Vault — migrada el 11-09 en SC-519) tiene
+scopes `devices:core:read, dns:read, policy_file:read, routes:read` — de
 solo lectura. Por eso pude leer la política pero no escribirla. Se aplica desde
 la consola de Tailscale (Access Controls), o con una credencial que tenga
 `policy_file:write`.
