@@ -92,7 +92,13 @@ FAKE_KCADM = textwrap.dedent(
               id) printf '%s\\n' "${endpoint#clients/}" ;;
               enabled|serviceAccountsEnabled) printf 'true\\n' ;;
               fullScopeAllowed)
-                if [ "$endpoint" = clients/oc-uuid ]; then printf 'false\\n'; else printf 'true\\n'; fi
+                if [ "$endpoint" = clients/oc-uuid ]; then
+                  printf 'false\\n'
+                elif [ -f "$state/fullscope-mcp" ]; then
+                  cat "$state/fullscope-mcp"
+                else
+                  printf 'true\\n'
+                fi
                 ;;
               *) exit 63 ;;
             esac
@@ -135,7 +141,14 @@ FAKE_KCADM = textwrap.dedent(
             ;;
           roles/*)
             role="${endpoint#roles/}"
-            if [ -f "$state/roles" ] && grep -Fxq "$role,false" "$state/roles"; then
+            if [ "$role" = agentgateway-write ]; then
+              # Pre-existing role owned by the write-role reconciler: always
+              # resolvable, never created or deleted by this script.
+              case "$fields" in
+                id) printf 'id-write\\n' ;;
+                composite) printf 'false\\n' ;;
+              esac
+            elif [ -f "$state/roles" ] && grep -Fxq "$role,false" "$state/roles"; then
               case "$fields" in
                 id) printf 'id-%s\\n' "$role" ;;
                 composite) printf 'false\\n' ;;
@@ -189,6 +202,42 @@ FAKE_KCADM = textwrap.dedent(
           *) exit 67 ;;
         esac
         ;;
+      update)
+        endpoint="$1"
+        shift
+        for a in "$@"; do
+          case "$a" in
+            fullScopeAllowed=false) printf 'false\\n' > "$state/fullscope-mcp" ;;
+            fullScopeAllowed=true) printf 'true\\n' > "$state/fullscope-mcp" ;;
+          esac
+        done
+        ;;
+      delete)
+        endpoint="$1"
+        shift
+        case "$endpoint" in
+          roles/*)
+            # Mimic Keycloak cascade: deleting a realm role removes its
+            # members, user grants and client scope mappings.
+            role="${endpoint#roles/}"
+            for f in grants-mcp-sa grants-oc-sa scope-mcp scope-oc; do
+              if [ -f "$state/$f" ]; then
+                grep -Fxv "$role" "$state/$f" > "$state/$f.tmp" || true
+                mv "$state/$f.tmp" "$state/$f"
+              fi
+            done
+            if [ -f "$state/roles" ]; then
+              grep -Fxv "$role,false" "$state/roles" > "$state/roles.tmp" || true
+              mv "$state/roles.tmp" "$state/roles"
+            fi
+            if [ -f "$state/users" ]; then
+              sed "\\|^${role}||d" "$state/users" > "$state/users.tmp"
+              mv "$state/users.tmp" "$state/users"
+            fi
+            ;;
+          *) exit 69 ;;
+        esac
+        ;;
       *)
         exit 68
         ;;
@@ -203,18 +252,41 @@ def seed_full_state(state):
     users = [f"{role}|{MCP_SA}\n" for role in READ_ROLE_NAMES]
     users += [f"{role}|{OC_SA}\n" for role in OPENCLAW_ROLE_NAMES]
     (state / "users").write_text("".join(users))
-    (state / "scope-mcp").write_text("".join(f"{role}\n" for role in READ_ROLE_NAMES))
+    # Post-INFRA-45 steady state: the mcp client scope carries
+    # agentgateway-write plus the 21 read roles and fullScopeAllowed is false.
+    (state / "scope-mcp").write_text(
+        "agentgateway-write\n" + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+    )
     (state / "scope-oc").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
     )
-    (state / "grants-mcp-sa").write_text("".join(f"{role}\n" for role in READ_ROLE_NAMES))
+    (state / "grants-mcp-sa").write_text(
+        "agentgateway-write\n" + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+    )
     (state / "grants-oc-sa").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
     )
+    (state / "fullscope-mcp").write_text("false\n")
+
+
+def seed_full_state_fullscope_on(state):
+    seed_full_state(state)
+    (state / "fullscope-mcp").write_text("true\n")
+
+
+DEFAULT_MCP_ROLES = ["agentgateway-write"] + READ_ROLE_NAMES
+DEFAULT_OC_ROLES = ["cto-office-send"] + OPENCLAW_ROLE_NAMES
 
 
 class AgentgatewayReadGrantsContractTest(unittest.TestCase):
-    def run_reconciler(self, mode="ensure", seed=None, expect_ok=True):
+    def run_reconciler(
+        self,
+        mode="ensure",
+        seed=None,
+        expect_ok=True,
+        mcp_roles=None,
+        oc_roles=None,
+    ):
         script = BASE / "scripts" / "agentgateway-read-grants.sh"
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = pathlib.Path(tmp)
@@ -237,10 +309,11 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
                     "FAKE_STATE": str(state),
                     "FAKE_JOURNAL": str(journal),
                     "FAKE_TOKEN_MCP": make_token(
-                        READ_ROLE_NAMES + ["agentgateway-write"], "agentgateway-mcp"
+                        mcp_roles if mcp_roles is not None else DEFAULT_MCP_ROLES,
+                        "agentgateway-mcp",
                     ),
                     "FAKE_TOKEN_OC": make_token(
-                        ["cto-office-send"] + OPENCLAW_ROLE_NAMES,
+                        oc_roles if oc_roles is not None else DEFAULT_OC_ROLES,
                         "openclaw-readonly-agentgateway",
                     ),
                 }
@@ -266,6 +339,9 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertIn("READ_ROLE_NAMES is immutable", script)
         self.assertIn("OPENCLAW_READ_ROLE_NAMES is immutable", script)
         self.assertIn("group role-mapping is forbidden (SC-44 C6)", script)
+        # INFRA-45: fullScopeAllowed=false is part of the owned matrix.
+        self.assertIn("must keep fullScopeAllowed=false", script)
+        self.assertIn("fullScopeAllowed=false", script)
         self.assertIn("roles/${role}/users", script)
         self.assertIn("roles/${role}/groups", script)
         self.assertIn("mcp.lan.e-dani.com", script)
@@ -282,7 +358,11 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertEqual(1, journal.count("create clients/oc-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
-        self.assertEqual(21, len(state_files["scope-mcp"].split()))
+        # INFRA-45: the mcp client scope is agentgateway-write plus the 21
+        # read roles (22), and the flag ends up false.
+        self.assertEqual(22, len(state_files["scope-mcp"].split()))
+        self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
+        self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its six reviewed roles on that client.
         self.assertEqual(6, len(state_files["scope-oc"].split()))
@@ -290,11 +370,18 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertEqual(6, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
-        result, journal, _ = self.run_reconciler(mode="ensure", seed=seed_full_state)
+        result, journal, state_files = self.run_reconciler(
+            mode="ensure", seed=seed_full_state
+        )
         self.assertIn('"roles":21,"created":0', result.stdout)
+        self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertNotIn("create roles ", journal)
         self.assertNotIn("create clients/", journal)
         self.assertNotIn("create users/", journal)
+        # fullScopeAllowed=false is part of the owned matrix: an idempotent
+        # run must not even issue the update.
+        self.assertNotIn("update ", journal)
+        self.assertEqual("false\n", state_files["fullscope-mcp"])
 
     def test_audit_passes_against_full_state(self):
         result, journal, _ = self.run_reconciler(mode="audit", seed=seed_full_state)
@@ -311,38 +398,116 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertIn("group role-mapping is forbidden", result.stderr)
 
     def test_unauthorized_token_roles_fail_closed(self):
-        script = BASE / "scripts" / "agentgateway-read-grants.sh"
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = pathlib.Path(tmp)
-            state = tmp_path / "state"
-            state.mkdir()
+        # A minted agentgateway-mcp token missing agentgateway-write (the 21
+        # read roles only) is off-matrix and must abort, in audit mode too.
+        result, _, _ = self.run_reconciler(
+            mode="audit", seed=seed_full_state, expect_ok=False,
+            mcp_roles=list(READ_ROLE_NAMES),
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not exactly the reviewed matrix", result.stderr)
+
+    def test_ensure_flips_fullscope_off_in_the_fail_closed_order(self):
+        # From an empty realm the order must be: map write into the client
+        # scope, mint a token and verify the exact 22 BEFORE the flip, then
+        # flip, then mint again and verify the same 22 AFTER the flag is off.
+        result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
+        self.assertIn('"fullscope_allowed":false', result.stdout)
+        self.assertIn('"tokens_verified":true', result.stdout)
+        lines = journal.splitlines()
+        mints = [
+            i for i, line in enumerate(lines)
+            if "config credentials" in line and "--client agentgateway-mcp" in line
+        ]
+        updates = [i for i, line in enumerate(lines) if line.startswith("update clients/mcp-uuid")]
+        scope_create = [
+            i for i, line in enumerate(lines)
+            if "create clients/mcp-uuid/scope-mappings/realm" in line
+        ]
+        self.assertEqual(1, len(updates))
+        self.assertIn("fullScopeAllowed=false", lines[updates[0]])
+        self.assertLess(scope_create[0], updates[0])  # (a) write mapped first
+        self.assertLess(mints[0], updates[0])         # (b) verified before flip
+        self.assertLess(updates[0], mints[1])         # (d) verified after flip
+        self.assertEqual(3, len(mints))               # pre, post, final
+        self.assertEqual("false\n", state_files["fullscope-mcp"])
+
+    def test_pre_flip_token_mismatch_blocks_the_flip(self):
+        # Scope and grants are complete but fullScope is still true and the
+        # minted token is off-matrix: the reconciler must abort BEFORE
+        # touching fullScopeAllowed, so live traffic never loses roles.
+        result, journal, state_files = self.run_reconciler(
+            mode="ensure", seed=seed_full_state_fullscope_on, expect_ok=False,
+            mcp_roles=list(READ_ROLE_NAMES),
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not exactly the reviewed matrix", result.stderr)
+        self.assertNotIn("update clients/mcp-uuid", journal)
+        self.assertEqual("true\n", state_files["fullscope-mcp"])
+
+    def test_audit_fails_when_fullscope_is_still_on(self):
+        result, _, _ = self.run_reconciler(
+            mode="audit", seed=seed_full_state_fullscope_on, expect_ok=False
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("must keep fullScopeAllowed=false", result.stderr)
+
+    def test_mcp_scope_outside_matrix_fails_closed(self):
+        # The mcp client scope still rejects anything outside write+21: an
+        # extra mapped role widens the reviewed matrix and aborts.
+        def seed(state):
             seed_full_state(state)
-            journal = tmp_path / "journal"
-            journal.touch()
-            fake_kcadm = tmp_path / "kcadm.sh"
-            fake_kcadm.write_text(FAKE_KCADM)
-            fake_kcadm.chmod(0o755)
-            env = os.environ.copy()
-            env.update(
-                {
-                    "MODE": "audit",
-                    "KCADM": str(fake_kcadm),
-                    "KC_BOOTSTRAP_ADMIN_USERNAME": "test-admin",
-                    "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
-                    "FAKE_STATE": str(state),
-                    "FAKE_JOURNAL": str(journal),
-                    "FAKE_TOKEN_MCP": make_token(READ_ROLE_NAMES, "agentgateway-mcp"),
-                    "FAKE_TOKEN_OC": make_token(
-                        ["cto-office-send"] + OPENCLAW_ROLE_NAMES,
-                        "openclaw-readonly-agentgateway",
-                    ),
-                }
-            )
-            result = subprocess.run(
-                ["/bin/sh", str(script)], capture_output=True, text=True, env=env
-            )
-            self.assertNotEqual(0, result.returncode)
-            self.assertIn("not exactly the reviewed matrix", result.stderr)
+            with (state / "scope-mcp").open("a") as handle:
+                handle.write("some-other-role\n")
+
+        result, _, _ = self.run_reconciler(mode="ensure", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("widens the reviewed matrix", result.stderr)
+
+    def test_fullscope_rollback_mode_restores_true_and_verifies(self):
+        result, journal, state_files = self.run_reconciler(
+            mode="fullscope-rollback", seed=seed_full_state
+        )
+        self.assertIn('"mode":"fullscope-rollback"', result.stdout)
+        self.assertIn('"tokens_verified":true', result.stdout)
+        updates = [line for line in journal.splitlines() if line.startswith("update clients/mcp-uuid")]
+        self.assertEqual(1, len(updates))
+        self.assertIn("fullScopeAllowed=true", updates[0])
+        self.assertEqual("true\n", state_files["fullscope-mcp"])
+
+    def test_fullscope_rollback_fails_closed_on_off_matrix_token(self):
+        # The flag is restored first (it is what brings traffic back), but an
+        # off-matrix token must still abort loudly afterwards.
+        result, _, state_files = self.run_reconciler(
+            mode="fullscope-rollback", seed=seed_full_state, expect_ok=False,
+            mcp_roles=DEFAULT_MCP_ROLES + ["some-other-role"],
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("widens the reviewed matrix", result.stderr)
+        self.assertEqual("true\n", state_files["fullscope-mcp"])
+
+    def test_fullscope_rollback_tolerates_rolled_back_read_grants(self):
+        # If the read grants were already rolled back, the token carries
+        # agentgateway-write alone: accepted, the emergency path stays usable.
+        result, _, _ = self.run_reconciler(
+            mode="fullscope-rollback", seed=seed_full_state,
+            mcp_roles=["agentgateway-write"],
+        )
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_rollback_mode_deletes_read_roles_and_keeps_write_surface(self):
+        result, journal, state_files = self.run_reconciler(
+            mode="rollback", seed=seed_full_state
+        )
+        self.assertIn('"roles_deleted":21,"present":false', result.stdout)
+        self.assertEqual(21, journal.count("delete roles/agentgateway-read:"))
+        self.assertNotIn("delete roles/agentgateway-write", journal)
+        self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
+        self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
+        # The write surface predates this reconciler and stays: while
+        # fullScopeAllowed=false it is what keeps write traffic alive.
+        self.assertEqual("agentgateway-write\n", state_files["scope-mcp"])
+        self.assertEqual("false\n", state_files["fullscope-mcp"])
 
     def test_job_is_postsync_nonroot_pinned_and_network_limited(self):
         manifest = (BASE / "agentgateway-read-grants-job.yaml").read_text()
@@ -363,9 +528,22 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertIn("agentgateway-read-grants-job.yaml", kustomization)
         self.assertIn("scripts/agentgateway-read-grants.sh", kustomization)
         self.assertNotIn("manual/agentgateway-read-grants-rollback-job.yaml", kustomization)
+        self.assertNotIn("manual/agentgateway-fullscope-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
         self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
+
+    def test_manual_fullscope_rollback_job_is_manual_and_hardened(self):
+        manifest = (BASE / "manual" / "agentgateway-fullscope-rollback-job.yaml").read_text()
+        self.assertIn("value: fullscope-rollback", manifest)
+        self.assertIn("keycloak-agentgateway-read-grants", manifest)
+        # Applied by hand only: no ArgoCD hook may ever run or delete it.
+        self.assertNotIn("argocd.argoproj.io/hook", manifest)
+        self.assertIn("activeDeadlineSeconds: 900", manifest)
+        self.assertIn("automountServiceAccountToken: false", manifest)
+        self.assertIn("runAsNonRoot: true", manifest)
+        self.assertIn("readOnlyRootFilesystem: true", manifest)
+        self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
 
     def test_openclaw_reconciler_asserts_read_roles_in_its_tokens(self):
         script = (BASE / "scripts" / "openclaw-readonly-clients.sh").read_text()
