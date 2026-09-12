@@ -79,7 +79,11 @@ class VeleroOperabilityContractTest(unittest.TestCase):
     def test_fsb_policy_skips_only_ephemeral_emptydir(self):
         self.assertIn("name: velero-fsb-volume-policy", VOLUME_POLICY)
         self.assertIn("volumeTypes:\n            - emptyDir", VOLUME_POLICY)
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 1)
+        # 66c8717 added the second skip: CNPG-managed PVCs, which CNPG/barman
+        # already backs up with real PITR. The durable volume-type selectors
+        # below remain forbidden; the CNPG rule matches by pvcLabels only.
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 2)
+        self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for durable_selector in ("persistentVolumeClaim", "csi:", "nfs:"):
             self.assertNotIn(durable_selector, VOLUME_POLICY)
 

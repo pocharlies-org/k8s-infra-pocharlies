@@ -14,6 +14,7 @@ resources:
   - openclaw-readonly-clients.yaml
   - synapse-sre-client.yaml
   - agentgateway-domain-roles-job.yaml
+  - agentgateway-read-grants-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -30,6 +31,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-domain-roles
+  - name: keycloak-agentgateway-read-grants
+    files:
+      - agentgateway-read-grants.sh=scripts/agentgateway-read-grants.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-read-grants
 generatorOptions:
   disableNameSuffixHash: true
   labels:

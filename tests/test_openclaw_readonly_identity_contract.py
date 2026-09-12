@@ -381,7 +381,17 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
                 {
                     "azp": "openclaw-readonly-agentgateway",
                     "aud": "mcp.lan.e-dani.com",
-                    "realm_access": {"roles": ["cto-office-send"]},
+                    "realm_access": {
+                        "roles": [
+                            "cto-office-send",
+                            "agentgateway-read:gsc",
+                            "agentgateway-read:offers",
+                            "agentgateway-read:skirmshop-plugins",
+                            "agentgateway-read:studio",
+                            "agentgateway-read:synapse",
+                            "agentgateway-read:synapse-tools",
+                        ]
+                    },
                 },
                 separators=(",", ":"),
             )
