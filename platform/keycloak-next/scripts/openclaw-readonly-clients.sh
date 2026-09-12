@@ -377,6 +377,12 @@ verify_minted_claims() {
   fi
   realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[]"' | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
   [ -n "${realm_roles}" ] || fail "minted read-only token has no realm_access roles claim"
+  # Measured 2026-09-12 (INFRA-44): this client has fullScopeAllowed=false and a
+  # realm scope-mapping of exactly the reviewed seven, so the realm defaults
+  # (default-roles-edani, offline_access, uma_authorization) are filtered out of
+  # its tokens. The expected set below is the measured exact 7; if a future
+  # change flips fullScopeAllowed or widens the scope-mapping, the defaults
+  # start travelling and this comparison must fail closed until re-reviewed.
   expected_roles="$(printf '%s\n%s\n' "${REQUIRED_REALM_ROLE}" "${EXPECTED_READ_ROLES}" | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
   [ "${realm_roles}" = "${expected_roles}" ] || \
     fail "minted read-only token realm roles are not exactly ${expected_roles}"

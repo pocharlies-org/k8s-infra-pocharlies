@@ -337,15 +337,21 @@ read matrix:
   story).
 - Fails closed on any group mapping, any member outside the matrix, any
   composite role, any scope or grant entry outside the matrix, and any
-  freshly minted token whose `realm_access.roles` is not exactly the reviewed
-  set (22 roles for `agentgateway-mcp` including `agentgateway-write`, 7 for
-  `openclaw-readonly-agentgateway` including `cto-office-send`).
+  freshly minted token whose `realm_access.roles` is not exactly the measured
+  set (25 roles for `agentgateway-mcp`: the reviewed 22 including
+  `agentgateway-write` plus the flattened `default-roles-edani` composites
+  `default-roles-edani`, `offline_access` and `uma_authorization`, which pass
+  the scope filter while `fullScopeAllowed` is still true — they drop back to
+  the reviewed 22 when INFRA-45 turns it off; 7 for
+  `openclaw-readonly-agentgateway` including `cto-office-send`, measured
+  2026-09-12: with `fullScopeAllowed=false` the scope mapping filters the
+  defaults out, so they must never appear there).
 
 Check the hook result without printing any JWT or credential:
 
 ```bash
 kubectl -n keycloak wait --for=condition=complete \
-  job/keycloak-agentgateway-read-grants --timeout=900s
+  job/keycloak-agentgateway-read-grants --timeout=1800s
 kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read-grants
 ```
 
