@@ -9,6 +9,20 @@ umask 077
 # (SC-100 defect 6 family). Grants are individual only: any group mapping is a
 # policy violation (SC-44 C6 precedent). The matrix below is the CTO ruling R2
 # of 2026-09-12 and is immutable from inside this script.
+#
+# INFRA-45 (INFRA-23 H3) extends the matrix: the agentgateway-mcp client's
+# role scope carries agentgateway-write explicitly and the client's
+# fullScopeAllowed is owned as false. The flip is fail-closed in this order:
+# map write into the scope, verify the measured exact 25 (the reviewed 22 plus
+# the three flattened defaults, which pass the scope filter while the flag is
+# still true) BEFORE touching the flag, only then set it false, and re-verify
+# the exact 22 travel through the client role scope alone. If the post-flip
+# token is off-matrix the flag is AUTO-RESTORED to true (read-back plus a
+# confirmation mint of the exact 25) before the hook aborts: the flip is the
+# live step and the service account moves ~9465 requests per 4h (measured
+# baseline 2026-09-12), so an abort must not leave its token broken. MODE
+# fullscope-rollback is the emergency inverse (manual Job, excluded from
+# Kustomize; see RUNBOOK section 11).
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
@@ -27,16 +41,18 @@ OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agen
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
-# Measured 2026-09-12 (INFRA-44): agentgateway-mcp has fullScopeAllowed=true, so
-# every realm role effective for its service account passes the token scope
-# filter — including default-roles-edani and the realm roles Keycloak flattens
-# out of that composite (offline_access, uma_authorization). The exact expected
-# agentgateway-mcp token set is therefore the reviewed matrix PLUS these three
-# measured defaults (25 total). The comparison stays EXACT, never a subset: a
-# subset check would not detect a role added by an attacker.
-# openclaw-readonly-agentgateway has fullScopeAllowed=false and a realm
-# scope-mapping of exactly the reviewed seven, and its minted token measured
-# exactly those seven — these defaults do NOT travel there.
+# Measured 2026-09-12 (INFRA-44/INFRA-46): while agentgateway-mcp has
+# fullScopeAllowed=true, every realm role effective for its service account
+# passes the token scope filter — including default-roles-edani and the realm
+# roles Keycloak flattens out of that composite (offline_access,
+# uma_authorization) — so the exact expected agentgateway-mcp token set is the
+# reviewed matrix PLUS these three measured defaults (25 total). With
+# fullScopeAllowed=false the defaults do NOT travel: openclaw-readonly-
+# agentgateway has the flag off, a realm scope-mapping of exactly the reviewed
+# seven, and its minted token measured exactly those seven. After INFRA-45's
+# flip the exact expected agentgateway-mcp set is therefore the reviewed 22.
+# Both comparisons stay EXACT, never a subset: a subset check would not detect
+# a role added by an attacker.
 TOKEN_DEFAULT_ROLE_NAMES="default-roles-edani,offline_access,uma_authorization"
 
 cleanup() {
@@ -58,8 +74,8 @@ fail() {
 [ "${OPENCLAW_READ_ROLE_NAMES}" = "${EXPECTED_OPENCLAW_READ_ROLE_NAMES}" ] || \
   fail "OPENCLAW_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
-  ensure|audit|rollback) ;;
-  *) fail "MODE must be ensure, audit, or rollback" ;;
+  ensure|audit|rollback|fullscope-rollback) ;;
+  *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
 esac
 
 nonempty_lines() { sed '/^[[:space:]]*$/d'; }
@@ -269,15 +285,27 @@ resolve_clients() {
     fail "${OPENCLAW_CLIENT_ID} must keep fullScopeAllowed=false"
 }
 
+mcp_wanted_scope() {
+  # INFRA-45: agentgateway-write is mapped explicitly so the write role keeps
+  # travelling in tokens once fullScopeAllowed is off. The service account has
+  # held the grant since the write-role reconciler; only the mapping was
+  # missing (SC-100 defect 6 family).
+  printf '%s,%s' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}"
+}
+
+mcp_wanted_scope_lines() {
+  printf '%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | tr ',' '\n'
+}
+
 ensure_client_scopes() {
-  grant_missing_roles "clients/${MCP_UUID}/scope-mappings/realm" "$(scope_names "${MCP_UUID}")" "${READ_ROLE_NAMES}"
+  grant_missing_roles "clients/${MCP_UUID}/scope-mappings/realm" "$(scope_names "${MCP_UUID}")" "$(mcp_wanted_scope)"
   grant_missing_roles "clients/${OC_UUID}/scope-mappings/realm" "$(scope_names "${OC_UUID}")" "${OPENCLAW_READ_ROLE_NAMES}"
 }
 
 verify_client_scopes() {
   mcp_scope="$(scope_names "${MCP_UUID}")"
-  assert_wanted_mapped "${mcp_scope}" "${READ_ROLE_NAMES}"
-  assert_mapped_within "${mcp_scope}" "$(printf '%s\n' "${READ_ROLE_NAMES}" | tr ',' '\n')"
+  assert_wanted_mapped "${mcp_scope}" "$(mcp_wanted_scope)"
+  assert_mapped_within "${mcp_scope}" "$(mcp_wanted_scope_lines)"
 
   oc_scope="$(scope_names "${OC_UUID}")"
   assert_wanted_mapped "${oc_scope}" "${OPENCLAW_READ_ROLE_NAMES}"
@@ -332,16 +360,154 @@ mint_claims() {
   printf '%s' "${claims}"
 }
 
-verify_minted_tokens() {
-  claims="$(mint_claims "${MCP_UUID}" "${CLIENT_ID}")"
-  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
-    fail "minted token has wrong azp"
-  printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || fail "minted token is missing the gateway audience"
-  expected="$(printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" | comma_list_sorted)"
+mcp_token_expected_on() {
+  # fullScopeAllowed=true: the reviewed 22 plus the three measured defaults,
+  # which pass the scope filter while the flag is on (INFRA-46 measurement).
+  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" \
+    | comma_list_sorted
+}
+
+mcp_token_expected_off() {
+  # fullScopeAllowed=false: the defaults do not travel (measured on
+  # openclaw-readonly-agentgateway: exactly its reviewed seven), so the exact
+  # expected set is the reviewed 22 alone.
+  printf '%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | comma_list_sorted
+}
+
+check_mcp_token() {
+  # $1 = expected comma list. Returns 0 when the minted agentgateway-mcp
+  # token carries exactly those realm roles, non-zero otherwise. Never calls
+  # fail: the post-flip caller must auto-restore fullScopeAllowed before
+  # aborting (see ensure_fullscope_off).
+  claims="$(mint_claims "${MCP_UUID}" "${CLIENT_ID}")" || return 1
+  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || return 1
+  printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || return 1
   actual="$(printf '%s' "${claims}" | token_realm_roles)"
-  [ -n "${actual}" ] || fail "minted token has no realm_access roles claim"
-  [ "${actual}" = "${expected}" ] || fail "minted ${CLIENT_ID} token realm roles are not exactly the reviewed matrix"
-  unset claims actual expected
+  [ -n "${actual}" ] || return 1
+  [ "${actual}" = "$1" ] || return 1
+  unset claims actual
+  return 0
+}
+
+verify_mcp_token() {
+  # $1 = phase label used in failure messages, $2 = expected comma list. The
+  # minted agentgateway-mcp token must carry exactly the expected roles.
+  claims="$(mint_claims "${MCP_UUID}" "${CLIENT_ID}")" || \
+    fail "minted ${CLIENT_ID} token could not be obtained (${1})"
+  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
+    fail "minted token has wrong azp (${1})"
+  printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || \
+    fail "minted token is missing the gateway audience (${1})"
+  actual="$(printf '%s' "${claims}" | token_realm_roles)"
+  [ -n "${actual}" ] || fail "minted token has no realm_access roles claim (${1})"
+  [ "${actual}" = "$2" ] || \
+    fail "minted ${CLIENT_ID} token realm roles are not exactly the reviewed matrix (${1})"
+  unset claims actual
+}
+
+mcp_fullscope_value() {
+  kget "clients/${MCP_UUID}" --fields fullScopeAllowed --format csv --noquotes | nonempty_lines
+}
+
+assert_mcp_fullscope_off() {
+  [ "$(mcp_fullscope_value)" = "false" ] || \
+    fail "${CLIENT_ID} must keep fullScopeAllowed=false (INFRA-45 matrix)"
+}
+
+auto_restore_fullscope_on() {
+  # Emergency inverse of the flip performed by THIS run. The flag restores the
+  # live token shape, so it is set first; the restoration is trusted only
+  # after a read-back AND a confirmation mint of the exact 25 (the defaults
+  # travel again with the flag on). If even the restore fails, abort loudly
+  # for manual intervention — the flag is the last known-good token shape for
+  # gateway traffic.
+  "${KCADM}" update "clients/${MCP_UUID}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+    -s fullScopeAllowed=true >/dev/null 2>&1 || \
+    fail "post-flip token is off-matrix AND fullScopeAllowed could not be restored on ${CLIENT_ID}: manual intervention required (RUNBOOK section 11)"
+  [ "$(mcp_fullscope_value)" = "true" ] || \
+    fail "fullScopeAllowed did not become true on ${CLIENT_ID} during auto-restore: manual intervention required (RUNBOOK section 11)"
+  verify_mcp_token "auto-restored fullScopeAllowed=true" "$(mcp_token_expected_on)"
+}
+
+ensure_fullscope_off() {
+  # INFRA-45 fail-closed order: (a) agentgateway-write is already mapped into
+  # the client role scope by ensure_client_scopes; (b) the measured exact 25
+  # (reviewed 22 plus the three defaults, which pass the scope filter while
+  # the flag is still true) must travel in a minted token BEFORE the flag is
+  # touched — this proves the service-account grants are intact; (c) only then
+  # flip; (d) re-verify the exact 22 with the flag off, so the roles
+  # demonstrably travel through the client role scope alone. If the post-flip
+  # token is off-matrix, the flag is restored to true (read-back plus a
+  # confirmation mint of the exact 25) before aborting: the flip is the live
+  # step and the service account moves ~9465 requests per 4h (measured
+  # baseline 2026-09-12), so an abort must not leave its token broken. The
+  # flag itself is part of the owned matrix: an idempotent run asserts false
+  # and, having flipped nothing, restores nothing — an off-matrix token in
+  # steady state is drift or an attack and must fail closed without mutation.
+  current="$(mcp_fullscope_value)"
+  flipped=false
+  case "${current}" in
+    false) ;;
+    true)
+      verify_mcp_token "before fullScopeAllowed=false" "$(mcp_token_expected_on)"
+      "${KCADM}" update "clients/${MCP_UUID}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+        -s fullScopeAllowed=false >/dev/null 2>&1 || \
+        fail "failed to set fullScopeAllowed=false on ${CLIENT_ID}"
+      [ "$(mcp_fullscope_value)" = "false" ] || \
+        fail "fullScopeAllowed did not become false on ${CLIENT_ID}"
+      flipped=true
+      ;;
+    *) fail "unexpected fullScopeAllowed value for ${CLIENT_ID}" ;;
+  esac
+  if check_mcp_token "$(mcp_token_expected_off)"; then
+    return 0
+  fi
+  if [ "${flipped}" = "true" ]; then
+    auto_restore_fullscope_on
+    fail "minted ${CLIENT_ID} token after fullScopeAllowed=false is not exactly the reviewed 22; fullScopeAllowed was restored to true and confirmed with the exact 25 — aborting (RUNBOOK section 11)"
+  fi
+  fail "minted ${CLIENT_ID} token with fullScopeAllowed=false is not exactly the reviewed 22 (flag unchanged by this run)"
+}
+
+fullscope_rollback() {
+  # Emergency inverse of ensure_fullscope_off (manual Job, RUNBOOK section 11).
+  # The flag restores live traffic, so it is set first and verified after.
+  # Measured 2026-09-12 (INFRA-46): with fullScopeAllowed=true the three realm
+  # defaults travel again, so the fully intact expected token is the exact 25
+  # (reviewed 22 plus defaults). agentgateway-write is the floor — a grants
+  # rollback that already removed the read roles leaves write plus the
+  # defaults, which is accepted — and nothing outside the reviewed 22 plus the
+  # three measured defaults may appear.
+  "${KCADM}" update "clients/${MCP_UUID}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+    -s fullScopeAllowed=true >/dev/null 2>&1 || \
+    fail "failed to set fullScopeAllowed=true on ${CLIENT_ID}"
+  [ "$(mcp_fullscope_value)" = "true" ] || \
+    fail "fullScopeAllowed did not become true on ${CLIENT_ID}"
+  claims="$(mint_claims "${MCP_UUID}" "${CLIENT_ID}")" || \
+    fail "minted token could not be obtained (fullscope rollback)"
+  printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
+    fail "minted token has wrong azp (fullscope rollback)"
+  printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || \
+    fail "minted token is missing the gateway audience (fullscope rollback)"
+  actual="$(printf '%s' "${claims}" | token_realm_roles)"
+  [ -n "${actual}" ] || fail "minted token has no realm_access roles claim (fullscope rollback)"
+  printf '%s\n' "${actual}" | tr ',' '\n' | grep -Fxq "${WRITE_ROLE_NAME}" || \
+    fail "minted token is missing ${WRITE_ROLE_NAME} after fullscope rollback"
+  for default_role in $(printf '%s' "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' ' '); do
+    printf '%s\n' "${actual}" | tr ',' '\n' | grep -Fxq "${default_role}" || \
+      fail "minted token is missing the measured realm default ${default_role} while fullScopeAllowed=true"
+  done
+  assert_mapped_within "$(printf '%s\n' "${actual}" | tr ',' '\n')" \
+    "$(printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' '\n')"
+  unset claims actual
+  printf '{"reconciler":"agentgateway-read-grants","mode":"fullscope-rollback","fullscope_allowed_agentgateway_mcp":true,"tokens_verified":true}\n'
+}
+
+verify_minted_tokens() {
+  # Steady state after INFRA-45: the flag is false (ensure flipped it, or the
+  # audit asserted it above), so the exact expected agentgateway-mcp set is
+  # the reviewed 22 — the measured defaults must NOT be in it.
+  verify_mcp_token "final" "$(mcp_token_expected_off)"
 
   claims="$(mint_claims "${OC_UUID}" "${OPENCLAW_CLIENT_ID}")"
   printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${OPENCLAW_CLIENT_ID}"'"' || \
@@ -365,6 +531,11 @@ rollback_roles() {
   # Deleting a realm role cascades its user and client-scope mappings, so the
   # whole additive surface of this reconciler is removed in one pass. Guarded:
   # any member outside the reviewed matrix aborts before the first deletion.
+  # The agentgateway-write role, its service-account grant and its client
+  # scope mapping are NOT touched here: they predate this reconciler
+  # (write-role job) and are needed while fullScopeAllowed=false. To restore
+  # the pre-INFRA-45 flag, run manual/agentgateway-fullscope-rollback-job.yaml
+  # (RUNBOOK section 11) — the two Jobs are order-independent.
   old_ifs="${IFS}"
   IFS=,
   for role in ${READ_ROLE_NAMES}; do
@@ -418,8 +589,9 @@ case "${MODE}" in
     ensure_sa_grants
     verify_sa_grants
     assert_all_roles_exclusive
+    ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":21,"created":%s,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":21,"created":%s,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -427,10 +599,14 @@ case "${MODE}" in
     assert_all_roles_exclusive
     verify_client_scopes
     verify_sa_grants
+    assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles
+    ;;
+  fullscope-rollback)
+    fullscope_rollback
     ;;
 esac

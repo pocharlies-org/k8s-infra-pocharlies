@@ -16,14 +16,20 @@ metadata:
 spec:
   backoffLimit: 1
   # kcadm starts a JVM for every admin request. The steady-state reconcile
-  # issues ~165 sequential calls for the 21-role matrix plus two token mints:
-  # measured ~630s to the mint path at the 500m CPU limit on 2026-09-12
-  # (INFRA-44), which blew through the previous 900s budget (first attempt:
-  # DeadlineExceeded). 1800s keeps ~2.9x margin over the measurement. Raising
-  # the CPU limit instead has no precedent here — every PostSync reconciler in
-  # this repo is 50m/500m — and the deadline is the free lever for a hook with
-  # ttlSecondsAfterFinished and BeforeHookCreation.
-  activeDeadlineSeconds: 1800
+  # issues ~165 sequential calls for the 21-role matrix plus FOUR token mints
+  # since INFRA-45 (pre-flip, post-flip, final, openclaw; the auto-restore
+  # abort path stops at three). Measured ~630s to the mint path at the 500m
+  # CPU limit on 2026-09-12 (INFRA-44), which blew through the previous 900s
+  # budget (first attempt: DeadlineExceeded) — so the two mints then pending
+  # needed >270s combined, a >=135s per-mint floor with no measured ceiling.
+  # 1800s (INFRA-46) only fits if each mint stays under ~280s; with four mints
+  # on the new path that margin is under 2x the floor, so the budget is
+  # 2700s: it fits the four-mint path for any per-mint cost up to ~490s (~3.6x
+  # the measured floor). Raising the CPU limit instead has no precedent here —
+  # every PostSync reconciler in this repo is 50m/500m — and the deadline is
+  # the free lever for a hook with ttlSecondsAfterFinished and
+  # BeforeHookCreation.
+  activeDeadlineSeconds: 2700
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
