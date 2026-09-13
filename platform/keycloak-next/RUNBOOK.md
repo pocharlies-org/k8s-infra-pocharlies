@@ -7,42 +7,46 @@ Keycloak is the active SSO stack. `auth-next.e-dani.com` is canonical and
 
 Since 2026-08-11 Keycloak uses database `keycloak`, owned by role `keycloak`,
 on `postgres-shared-rw.databases.svc.cluster.local`. Both namespaces project the
-same Vault credential from `secret/keycloak-next/postgres`; no password is
+same 1Password credential from item `keycloak-next-postgres`; no password is
 stored in Git. The former `keycloak/keycloak-postgres` cluster and its PVCs were
 decommissioned on 2026-08-11 after the operator closed the rollback window.
 Database recovery now follows the `postgres-shared` backup and restore runbook.
 
-## 1. Seed Vault secrets
+## 1. Seed 1Password items
 
-The `vault-backend` ClusterSecretStore is mounted at Vault KV path `secret` and
-the ExternalSecret keys below intentionally match the existing repo convention.
+The `onepassword` ClusterSecretStore resolves every `remoteRef.key` as
+`<item>/<field label>` against the 1Password vault `k8s-pocharlies`, so the
+item titles below are the ones the ExternalSecret manifests reference.
 
-Required ExternalSecret remoteRef keys:
+Required items (titles) and their fields:
 
 ```text
-secret/keycloak-next/bootstrap
-secret/keycloak-next/postgres
-secret/keycloak-next/oauth2-proxy
+keycloak-next-bootstrap        admin_username, admin_password
+keycloak-next-postgres         username, password
+keycloak-next-oauth2-proxy     client_id, client_secret, cookie_secret
 ```
 
-If using the Vault CLI against the `secret` mount, that means commands use
-paths like:
+Using the 1Password CLI with a service account that has Read & Write on that
+vault (`OP_SERVICE_ACCOUNT_TOKEN` set, never echoed):
 
 ```bash
-vault kv put secret/secret/keycloak-next/bootstrap \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-bootstrap \
   admin_username=admin \
   admin_password="$(openssl rand -base64 36)"
 
-vault kv put secret/secret/keycloak-next/postgres \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-postgres \
   username=keycloak \
   password="$(openssl rand -base64 36)"
 ```
 
-Do not write `secret/keycloak-next/oauth2-proxy` until Keycloak has been
+Do not create `keycloak-next-oauth2-proxy` until Keycloak has been
 bootstrapped and the confidential client exists.
 
-Temporary Kubernetes secrets can be used if Vault write access is unavailable,
-but replace them with Vault-backed secrets when Vault access is restored.
+Temporary Kubernetes secrets can be used if 1Password write access is
+unavailable, but replace them with store-backed secrets when access is
+restored.
 
 ## 2. Activate the stack
 
@@ -54,7 +58,7 @@ Add this resource to the root `/home/dibanez/k8s/k8s-infra-pocharlies/kustomizat
 
 Sync with Argo. During the first sync, it is acceptable for oauth2-proxy to be
 unready until the Keycloak realm/client is created and its secret is written to
-Vault.
+1Password.
 
 Traefik Edge must watch the `keycloak` namespace. Keep
 `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`
@@ -108,7 +112,8 @@ Add a groups mapper so oauth2-proxy receives a `groups` claim.
 After creating the Keycloak client:
 
 ```bash
-vault kv put secret/secret/keycloak-next/oauth2-proxy \
+op item create --vault k8s-pocharlies --category SECURE_NOTE \
+  --title keycloak-next-oauth2-proxy \
   client_id=oauth2-proxy \
   client_secret="<client secret from Keycloak>" \
   cookie_secret="$(openssl rand -base64 32)"
@@ -223,15 +228,16 @@ Official references:
 
 ## 8. Independent OpenClaw read-only clients
 
-Prerequisite Vault properties under `secret/keycloak-next/openclaw-readonly`:
+Prerequisite fields on the 1Password item `keycloak-next-openclaw-readonly`
+(vault `k8s-pocharlies`):
 
 - `ui_client_secret` for `openclaw-readonly-ui`;
 - `cookie_secret` for the dedicated oauth2-proxy;
 - `agentgateway_client_secret` for `openclaw-readonly-agentgateway`.
 
-That is Vault CLI notation. The ClusterSecretStore already mounts `secret/`, so
-the manifests intentionally use the relative ExternalSecret key
-`keycloak-next/openclaw-readonly`.
+The `onepassword` store resolves each `remoteRef.key` as `<item>/<field label>`,
+so the manifests use keys such as
+`keycloak-next-openclaw-readonly/ui_client_secret`.
 
 Generate all three outside logs and shell history. Do not reuse the admin
 oauth2-proxy secret, its cookie secret, or `agentgateway-mcp` credentials.
@@ -275,8 +281,11 @@ The private SRE routes use one dedicated confidential service client,
 operator receives this role. The client has only the explicit
 `mcp.lan.e-dani.com` audience and `fullScopeAllowed=false`.
 
-Seed a new random value in
-`secret/agentgateway/prod#synapse_sre_orchestrator_client_secret`; never reuse
+Seed a new random value in the 1Password item `agentgateway-prod`, field
+`synapse_sre_orchestrator_client_secret` (rotate with
+`op item edit agentgateway-prod --vault k8s-pocharlies synapse_sre_orchestrator_client_secret=...`;
+inline `op item edit` updates only that field — the full-replacement caveat
+applies to `--template` only); never reuse
 an OpenClaw webhook, AgentGateway operator or oauth2-proxy secret. Keep
 `SRE_M2M_ENABLED=false` while syncing this identity. The PostSync hook must
 finish with sanitized output:
@@ -303,7 +312,140 @@ it deletes only the immutable client and its now-unmapped realm role. Run it
 only during an authorized incident while the versioned ConfigMap still exists,
 then verify its sanitized `"present":false` result and remove the Job.
 
-## 10. Chat studio service identity (`chat-agentgateway`)
+## 10. AgentGateway read roles and grants (INFRA-23 H2 / INFRA-44)
+
+The gateway's read routes are enforced one route at a time (H4..H24), each
+requiring its own realm role `agentgateway-read:<route>`. This section is the
+grant phase: it must be live and verified before any route gains its
+`require:` (grant first, enforce second — no legitimate client loses access).
+
+The PostSync reconciler `agentgateway-read-grants-job.yaml` (sync wave 20, so
+it lands before the openclaw-readonly reconciler in wave 21) owns the full
+read matrix:
+
+- Creates the 21 `agentgateway-read:<route>` realm roles (non-composite).
+- Grants them individually — never via groups (SC-44 C6): the
+  `agentgateway-mcp` service account receives all 21; the
+  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
+  `skirmshop-plugins`). `synapse-sre-orchestrator`,
+  `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
+  none.
+- Maps the same roles into each client's role scope so the grants travel in
+  minted tokens without `fullScopeAllowed` (SC-100 defect 6 family). Since
+  INFRA-45 (section 11) the `agentgateway-mcp` scope additionally carries
+  `agentgateway-write` explicitly, and the client's `fullScopeAllowed` is
+  owned as `false` by this reconciler.
+- Fails closed on any group mapping, any member outside the matrix, any
+  composite role, any scope or grant entry outside the matrix, and any
+  freshly minted token whose `realm_access.roles` is not exactly the measured
+  set for the client's `fullScopeAllowed` state: 25 roles for
+  `agentgateway-mcp` while the flag is true (the reviewed 22 including
+  `agentgateway-write` plus the flattened `default-roles-edani` composites
+  `default-roles-edani`, `offline_access` and `uma_authorization`, which pass
+  the scope filter — measured 2026-09-12, INFRA-46) and exactly the reviewed
+  22 once INFRA-45 has turned the flag off (section 11; the defaults do not
+  travel with the flag off); 7 for `openclaw-readonly-agentgateway` including
+  `cto-office-send`, measured 2026-09-12: with `fullScopeAllowed=false` the
+  scope mapping filters the defaults out, so they must never appear there.
+
+Check the hook result without printing any JWT or credential:
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-read-grants --timeout=2700s
+kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read-grants
+```
+
+Expected sanitized output:
+
+```json
+{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}
+```
+
+For state rollback (authorized incidents only, while the versioned ConfigMap
+still exists), apply `manual/agentgateway-read-grants-rollback-job.yaml`. It
+verifies every role's members are inside the reviewed matrix, then deletes the
+21 roles — deleting a realm role cascades its service-account grants and
+client scope mappings — and verifies nothing remains. Reverting Git alone
+does not remove Keycloak state; the PostSync hook re-creates the matrix on
+the next sync of a revision that still contains the reconciler. The
+`agentgateway-write` role, its grant and its client scope mapping are NOT
+touched by this Job (they predate the reconciler and carry write traffic while
+`fullScopeAllowed=false`); to also restore the pre-INFRA-45 flag run the Job
+in section 11. The two Jobs are order-independent.
+
+## 11. AgentGateway fullScopeAllowed off (INFRA-23 H3 / INFRA-45)
+
+`fullScopeAllowed` on `agentgateway-mcp` is now owned as `false`: the 22
+token roles (`agentgateway-write` plus the 21 `agentgateway-read:<route>`)
+travel exclusively through the client's explicit realm role scope. The same
+wave-20 PostSync reconciler performs the change fail-closed, in this order:
+
+1. Maps `agentgateway-write` into the client role scope (the service account
+   has held the grant since the write-role reconciler; only the mapping was
+   missing).
+2. Mints a `client_credentials` token (audience `mcp.lan.e-dani.com`) and
+   requires `realm_access.roles` to be exactly the measured 25 — the reviewed
+   22 plus the three flattened realm defaults (`default-roles-edani`,
+   `offline_access`, `uma_authorization`), which pass the scope filter while
+   `fullScopeAllowed` is still true (INFRA-46 measurement) — BEFORE touching
+   the flag: this proves the grants are intact before anything is removed.
+3. Only then sets `fullScopeAllowed=false` and reads the flag back.
+4. Mints again and requires exactly the reviewed 22 with the flag off — the
+   roles now demonstrably travel through the client role scope alone, and the
+   measured defaults are gone (they do not travel with the flag off).
+5. If that post-flip token is off-matrix, the reconciler AUTO-RESTORES
+   `fullScopeAllowed=true` before aborting: set, read back, and trusted only
+   after a confirmation mint of the exact 25 again — the flip is the live step
+   and the service account moves ~9465 requests per 4 h (measured baseline
+   2026-09-12), so an abort must not leave its token broken. Only after the
+   confirmed restoration does the hook fail. (When the flag was already false
+   and the token is off-matrix, nothing is restored — that is drift or an
+   attack, and the run fails closed without mutation.)
+6. Asserts the matrix on every later run (scope = write+21, flag = false,
+   final token = exact 22); anything outside aborts the hook.
+
+Check the hook result (sanitized, no JWT):
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-read-grants --timeout=2700s
+kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read-grants
+```
+
+Positive traffic control (the point of the change is that nothing breaks):
+the `agentgateway-mcp` service account must keep moving its usual volume
+through the gateway. Via Loki (same pipeline as INFRA-43, retention 168h):
+
+```bash
+kubectl -n monitoring port-forward svc/loki-gateway 3100:80 &
+curl -sG "http://127.0.0.1:3100/loki/api/v1/query" \
+  --data-urlencode 'query=sum(count_over_time({namespace="agentgateway"} |= "jwt.sub=2379d025-dfb6-433e-bd02-0f2aa9a5ae75" [4h]))'
+# per-status: append e.g. |= "http.status=200" before [4h]
+```
+
+Compare the 4 h count before and after the sync (baseline measured
+2026-09-12: 9465/4 h) and the status histogram: a mass of 401/403 after the
+flip means roles stopped travelling and the rollback below applies.
+
+Rollback honesty: `git revert` of the INFRA-45 commit alone does NOT restore
+`fullScopeAllowed=true` — Keycloak state is not versioned, and while the
+reconciler is in the tree its PostSync hook re-asserts `false`. During an
+authorized incident, apply `manual/agentgateway-fullscope-rollback-job.yaml`
+(excluded from Kustomize, same pattern as the grants rollback): it sets the
+flag back to `true`, reads it back, mints a token and fails closed if the
+roles fall outside the reviewed 22 plus the three measured defaults — with
+the flag restored the fully intact token is the exact 25; `agentgateway-write`
+plus the defaults is the accepted floor if the read grants were already
+rolled back. Pair it with the `git revert`; until the revert syncs, the next
+PostSync flips the flag back to `false`. Expected sanitized output:
+
+```json
+{"reconciler":"agentgateway-read-grants","mode":"fullscope-rollback","fullscope_allowed_agentgateway_mcp":true,"tokens_verified":true}
+```
+
+## 12. Chat studio service identity (`chat-agentgateway`)
 
 Open WebUI at `chat.e-dani.com` reaches AgentGateway `/studio` through an
 `agentgateway-auth-proxy` sidecar that mints client-credentials tokens as

@@ -36,11 +36,15 @@ case "${CLIENT_ID}:${ROLE_NAME}" in
     CLIENT_SECRET="${SYNAPSE_SRE_CLIENT_SECRET:-}"
     MAPPER_NAME=synapse-sre-agentgateway-audience
     ROLE_DESCRIPTION='Allows only the typed Synapse and OpenClaw SRE M2M planes'
+    REQUIRED_REALM_ROLE=cto-office-send
+    EXPECTED_REALM_ROLES=cto-office-send,synapse-sre-m2m
     ;;
   synapse-draft-orchestrator:synapse-draft-m2m)
     CLIENT_SECRET="${SYNAPSE_DRAFT_CLIENT_SECRET:-}"
     MAPPER_NAME=synapse-draft-agentgateway-audience
     ROLE_DESCRIPTION='Allows only the typed Synapse and OpenClaw draft M2M planes'
+    REQUIRED_REALM_ROLE=
+    EXPECTED_REALM_ROLES=synapse-draft-m2m
     ;;
   *) fail "unsupported immutable client/role pair" ;;
 esac
@@ -200,6 +204,68 @@ ensure_role_scope_mapping() {
   role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
 }
 
+required_role_in_client_scope() {
+  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}"
+}
+
+ensure_required_role_in_client_scope() {
+  # Same defect as #104 on the openclaw-readonly-agentgateway client: with
+  # fullScopeAllowed=false the roles in a token are the intersection of the
+  # service account's realm roles and this client's role scope mapping, so a
+  # granted role that the client scope does not carry is inert. The client
+  # role scope is the documented way to declare it; fullScopeAllowed stays
+  # false on purpose (least privilege). The role itself is provisioned
+  # elsewhere: if it is missing this reconciler fails closed instead of
+  # creating it.
+  [ -n "${REQUIRED_REALM_ROLE}" ] || return 0
+  if ! required_role_in_client_scope; then
+    role_id="$(kget "roles/${REQUIRED_REALM_ROLE}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${REQUIRED_REALM_ROLE} is missing from the realm"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${REQUIRED_REALM_ROLE}")"
+    "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to map ${REQUIRED_REALM_ROLE} into the client role scope"
+    unset role_body role_id
+  fi
+  required_role_in_client_scope || fail "client role scope is missing ${REQUIRED_REALM_ROLE}"
+}
+
+required_role_granted_to_service_account() {
+  kget "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}"
+}
+
+ensure_required_role_on_service_account() {
+  # The grant itself, same fail-closed idiom as the client scope above and
+  # limited on purpose to ${REQUIRED_REALM_ROLE}: guaranteeing this one grant
+  # must not become a template for guaranteeing others. As with the client
+  # scope, the role is provisioned elsewhere and this reconciler fails closed
+  # if it is absent rather than creating it.
+  [ -n "${REQUIRED_REALM_ROLE}" ] || return 0
+  if ! required_role_granted_to_service_account; then
+    role_id="$(kget "roles/${REQUIRED_REALM_ROLE}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${REQUIRED_REALM_ROLE} is missing from the realm"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${REQUIRED_REALM_ROLE}")"
+    "${KCADM}" create "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to grant ${REQUIRED_REALM_ROLE} to the service account"
+    unset role_body role_id
+  fi
+  required_role_granted_to_service_account || \
+    fail "service account is missing ${REQUIRED_REALM_ROLE}"
+}
+
+assert_exact_client_scope_roles() {
+  # The client realm-role scope must be exactly the expected set: a missing
+  # entry makes a grant inert (fail-closed green) and an extra one widens
+  # what this client may ever emit in its tokens.
+  actual="$(kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
+  [ "${actual}" = "${EXPECTED_REALM_ROLES}" ] || \
+    fail "client role scope is not exactly ${EXPECTED_REALM_ROLES}"
+}
+
 resolve_service_account() {
   SERVICE_ACCOUNT_ID="$(kget "clients/${CLIENT_UUID}/service-account-user" \
     --fields id --format csv --noquotes | nonempty_lines)"
@@ -255,9 +321,15 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
   [ -n "$(mapper_uuid_optional "${MAPPER_NAME}")" ] || fail "audience mapper missing"
   role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
+  assert_exact_client_scope_roles
   resolve_service_account
   target_has_direct_role || fail "direct realm role missing"
   assert_exclusive_role_mapping
+  if [ -n "${REQUIRED_REALM_ROLE}" ]; then
+    kget "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm/composite" \
+      --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}" || \
+      fail "${REQUIRED_REALM_ROLE} is not effective for the service account"
+  fi
 }
 
 mint_claims() {
@@ -293,6 +365,11 @@ verify_minted_claims() {
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"agentgateway-write"'; then
     fail "minted token contains forbidden realm role"
   fi
+  realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[]"' | tr ',' '\n' | grep -v '^[[:space:]]*$' | sort | tr '\n' ',' | sed 's/,$//')"
+  [ -n "${realm_roles}" ] || fail "minted token has no realm_access roles claim"
+  [ "${realm_roles}" = "${EXPECTED_REALM_ROLES}" ] || \
+    fail "minted token realm roles are not exactly ${EXPECTED_REALM_ROLES}"
+  unset realm_roles
   unset claims
 }
 
@@ -321,9 +398,11 @@ case "${MODE}" in
     upsert_audience_mapper
     ensure_role
     ensure_role_scope_mapping
+    ensure_required_role_in_client_scope
     progress role-scope-verified
     resolve_service_account
     ensure_role_mapping
+    ensure_required_role_on_service_account
     progress role-mapping-verified
     verify_client
     verify_minted_claims
