@@ -7,7 +7,7 @@
 #
 # Prerequisite before the first sync: seed a random value in
 # secret/agentgateway/prod#chat_agentgateway_client_secret (kv patch, never
-# put; RUNBOOK.md §10 has the exact command).
+# put; RUNBOOK.md §12 has the exact command).
 # Without it the ExternalSecret never materializes and this PostSync hook
 # blocks with an unresolved secretKeyRef.
 apiVersion: external-secrets.io/v1

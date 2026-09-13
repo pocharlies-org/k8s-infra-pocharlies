@@ -75,7 +75,9 @@ spec:
 
   resources:
     requests:
-      cpu: "500m"
+      # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
+      # 68m (postgres-shared-2). Limits unchanged (4 CPU) absorb the spikes.
+      cpu: "200m"
       memory: "2Gi"
     limits:
       cpu: "4"

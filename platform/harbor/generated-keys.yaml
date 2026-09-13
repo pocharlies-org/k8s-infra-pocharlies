@@ -31,9 +31,9 @@ metadata:
   name: harbor-core-keys
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-core-keys
@@ -53,13 +53,13 @@ spec:
         HARBOR_ADMIN_PASSWORD: "{{ .adminPassword }}"
   data:
     - secretKey: coreSecret
-      remoteRef: { key: secret/harbor/internal, property: core_secret }
+      remoteRef: { key: harbor-internal/core_secret }
     - secretKey: secretKey
-      remoteRef: { key: secret/harbor/internal, property: secret_key }
+      remoteRef: { key: harbor-internal/secret_key }
     - secretKey: csrfKey
-      remoteRef: { key: secret/harbor/internal, property: csrf_key }
+      remoteRef: { key: harbor-internal/csrf_key }
     - secretKey: adminPassword
-      remoteRef: { key: secret/harbor/internal, property: admin_password }
+      remoteRef: { key: harbor-internal/admin_password }
 ---
 # Certificado de firma de tokens. Va en su propio secret y no junto a las claves
 # de arriba porque el chart lo monta como VOLUMEN (`core.secretName`), con
@@ -70,9 +70,9 @@ metadata:
   name: harbor-token-cert
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-token-cert
@@ -86,9 +86,9 @@ spec:
         tls.key: "{{ .tokenKey }}"
   data:
     - secretKey: tokenCrt
-      remoteRef: { key: secret/harbor/internal, property: token_crt }
+      remoteRef: { key: harbor-internal/token_crt }
     - secretKey: tokenKey
-      remoteRef: { key: secret/harbor/internal, property: token_key }
+      remoteRef: { key: harbor-internal/token_key }
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -96,9 +96,9 @@ metadata:
   name: harbor-jobservice-keys
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-jobservice-keys
@@ -111,7 +111,7 @@ spec:
         JOBSERVICE_SECRET: "{{ .jobserviceSecret }}"
   data:
     - secretKey: jobserviceSecret
-      remoteRef: { key: secret/harbor/internal, property: jobservice_secret }
+      remoteRef: { key: harbor-internal/jobservice_secret }
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -119,9 +119,9 @@ metadata:
   name: harbor-registry-keys
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-registry-keys
@@ -134,7 +134,7 @@ spec:
         REGISTRY_HTTP_SECRET: "{{ .registryHttpSecret }}"
   data:
     - secretKey: registryHttpSecret
-      remoteRef: { key: secret/harbor/internal, property: registry_http_secret }
+      remoteRef: { key: harbor-internal/registry_http_secret }
 ---
 # `registry.credentials.existingSecret` exige EXACTAMENTE estas dos claves.
 # REGISTRY_HTPASSWD es el bcrypt de REGISTRY_PASSWD: si se regenera uno sin el
@@ -147,9 +147,9 @@ metadata:
   name: harbor-registry-creds
   namespace: harbor
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: harbor-registry-creds
@@ -163,6 +163,6 @@ spec:
         REGISTRY_HTPASSWD: "{{ .registryHtpasswd }}"
   data:
     - secretKey: registryPassword
-      remoteRef: { key: secret/harbor/internal, property: registry_password }
+      remoteRef: { key: harbor-internal/registry_password }
     - secretKey: registryHtpasswd
-      remoteRef: { key: secret/harbor/internal, property: registry_htpasswd }
+      remoteRef: { key: harbor-internal/registry_htpasswd }

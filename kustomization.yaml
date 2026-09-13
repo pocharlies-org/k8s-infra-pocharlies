@@ -30,7 +30,9 @@ resources:
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
+  - networking/traefik-edge/company-viewer-public.yaml
   - networking/traefik-edge/opencode-public.yaml
+  - networking/traefik-edge/jira-epic-trigger-public.yaml
   - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/openchamber-beta-public.yaml
@@ -53,6 +55,7 @@ resources:
   - platform/reflector/rbac.yaml
   - platform/vault/auto-unseal.yaml
   - platform/external-secrets/runtime-credentials.yaml
+  - platform/external-secrets/cluster-secret-store-onepassword.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
   - platform/velero/repository-frequency-migration.yaml

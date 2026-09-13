@@ -14,6 +14,12 @@ UI_LAN_ORIGIN="${UI_LAN_ORIGIN:-https://openclaw-k8s-readonly.lan.e-dani.com}"
 OPERATOR_EMAIL="${OPERATOR_EMAIL:-info@e-dani.com}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
+REQUIRED_REALM_ROLE="${REQUIRED_REALM_ROLE:-cto-office-send}"
+# INFRA-44 (INFRA-23 H2): the six read roles this client's service account
+# carries are owned by agentgateway-read-grants.sh (which maps both the grants
+# and this client's role scope). This reconciler only asserts they arrive in
+# the minted token; it never creates or maps them.
+EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-openclaw-readonly-admin.config
 CLIENT_CONFIG=/tmp/kcadm-openclaw-readonly-client.config
@@ -32,6 +38,7 @@ fail() {
 [ "${AGENTGATEWAY_CLIENT_ID}" = "openclaw-readonly-agentgateway" ] || fail "AGENTGATEWAY_CLIENT_ID is immutable"
 [ "${OPERATOR_EMAIL}" = "info@e-dani.com" ] || fail "OPERATOR_EMAIL is immutable"
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
+[ "${REQUIRED_REALM_ROLE}" = "cto-office-send" ] || fail "REQUIRED_REALM_ROLE is immutable"
 case "${MODE}" in
   ensure|audit)
     [ -n "${OPENCLAW_READONLY_UI_CLIENT_SECRET:-}" ] || fail "UI client secret is empty"
@@ -227,6 +234,59 @@ upsert_audience_mapper() {
     fail "failed to reconcile AgentGateway audience mapper"
 }
 
+realm_role_in_client_scope() {
+  kget "clients/${AGENTGATEWAY_CLIENT_UUID}/scope-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}"
+}
+
+ensure_realm_role_in_client_scope() {
+  # fullScopeAllowed stays false on purpose: the client's own role scope
+  # mapping is the documented way to declare the specific roles this client
+  # may receive in its tokens. The role itself is provisioned elsewhere; if
+  # it is missing this reconciler fails closed instead of creating it.
+  if ! realm_role_in_client_scope; then
+    role_id="$(kget "roles/${REQUIRED_REALM_ROLE}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${REQUIRED_REALM_ROLE} is missing from the realm"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${REQUIRED_REALM_ROLE}")"
+    "${KCADM}" create "clients/${AGENTGATEWAY_CLIENT_UUID}/scope-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to map ${REQUIRED_REALM_ROLE} into the client role scope"
+    unset role_body role_id
+  fi
+  realm_role_in_client_scope || fail "client role scope is missing ${REQUIRED_REALM_ROLE}"
+}
+
+realm_role_granted_to_service_account() {
+  sa_user_id="$1"
+  kget "users/${sa_user_id}/role-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}"
+}
+
+ensure_realm_role_on_service_account() {
+  # The grant itself. The client role scope above only declares that this
+  # client may emit the role; the mapping onto the service account lived only
+  # as hand-made state, so reconcile it here. Limited on purpose to
+  # ${REQUIRED_REALM_ROLE}: guaranteeing this one grant must not become a
+  # template for guaranteeing others. As with the client scope above, the
+  # role itself is provisioned elsewhere: if it is missing this reconciler
+  # fails closed instead of creating it.
+  sa_user_id="$(kget "clients/${AGENTGATEWAY_CLIENT_UUID}/service-account-user" \
+    --fields id --format csv --noquotes | nonempty_lines)"
+  [ -n "${sa_user_id}" ] || fail "AgentGateway service account is missing"
+  if ! realm_role_granted_to_service_account "${sa_user_id}"; then
+    role_id="$(kget "roles/${REQUIRED_REALM_ROLE}" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "${REQUIRED_REALM_ROLE} is missing from the realm"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${REQUIRED_REALM_ROLE}")"
+    "${KCADM}" create "users/${sa_user_id}/role-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to grant ${REQUIRED_REALM_ROLE} to the AgentGateway service account"
+    unset role_body role_id
+  fi
+  realm_role_granted_to_service_account "${sa_user_id}" || \
+    fail "AgentGateway service account is missing ${REQUIRED_REALM_ROLE}"
+  unset sa_user_id
+}
+
 assert_no_forbidden_role() {
   user_id="$1"
   if kget "users/${user_id}/role-mappings/realm/composite" \
@@ -268,11 +328,16 @@ verify_clients() {
     fail "UI groups mapper is missing"
   [ -n "$(mapper_uuid_optional "${AGENTGATEWAY_CLIENT_UUID}" openclaw-readonly-agentgateway-audience)" ] || \
     fail "AgentGateway audience mapper is missing"
+  realm_role_in_client_scope || \
+    fail "AgentGateway client role scope is missing ${REQUIRED_REALM_ROLE}"
 
   service_user_id="$(kget "clients/${AGENTGATEWAY_CLIENT_UUID}/service-account-user" \
     --fields id --format csv --noquotes | nonempty_lines)"
   [ -n "${service_user_id}" ] || fail "AgentGateway service account is missing"
   assert_no_forbidden_role "${service_user_id}"
+  kget "users/${service_user_id}/role-mappings/realm/composite" \
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${REQUIRED_REALM_ROLE}" || \
+    fail "${REQUIRED_REALM_ROLE} is not effective for the AgentGateway service account"
   verify_operator_user
 }
 
@@ -310,6 +375,18 @@ verify_minted_claims() {
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"agentgateway-write"'; then
     fail "minted read-only token contains ${FORBIDDEN_REALM_ROLE}"
   fi
+  realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[]"' | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
+  [ -n "${realm_roles}" ] || fail "minted read-only token has no realm_access roles claim"
+  # Measured 2026-09-12 (INFRA-44): this client has fullScopeAllowed=false and a
+  # realm scope-mapping of exactly the reviewed seven, so the realm defaults
+  # (default-roles-edani, offline_access, uma_authorization) are filtered out of
+  # its tokens. The expected set below is the measured exact 7; if a future
+  # change flips fullScopeAllowed or widens the scope-mapping, the defaults
+  # start travelling and this comparison must fail closed until re-reviewed.
+  expected_roles="$(printf '%s\n%s\n' "${REQUIRED_REALM_ROLE}" "${EXPECTED_READ_ROLES}" | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
+  [ "${realm_roles}" = "${expected_roles}" ] || \
+    fail "minted read-only token realm roles are not exactly ${expected_roles}"
+  unset realm_roles
   unset claims
 }
 
@@ -335,6 +412,8 @@ case "${MODE}" in
     upsert_agentgateway_client
     upsert_groups_mapper
     upsert_audience_mapper
+    ensure_realm_role_in_client_scope
+    ensure_realm_role_on_service_account
     verify_clients
     verify_minted_claims
     printf '{"ui_client":"%s","agentgateway_client":"%s","operator_email":"%s","write_role_present":false}\n' \

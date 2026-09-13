@@ -15,6 +15,7 @@ resources:
   - synapse-sre-client.yaml
   - agentgateway-domain-roles-job.yaml
   - chat-agentgateway-client.yaml
+  - agentgateway-read-grants-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -34,6 +35,12 @@ configMapGenerator:
   - name: keycloak-chat-agentgateway-client
     files:
       - chat-agentgateway-client.sh=scripts/chat-agentgateway-client.sh
+  - name: keycloak-agentgateway-read-grants
+    files:
+      - agentgateway-read-grants.sh=scripts/agentgateway-read-grants.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-read-grants
 generatorOptions:
   disableNameSuffixHash: true
   labels:

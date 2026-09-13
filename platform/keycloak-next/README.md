@@ -9,7 +9,7 @@ redirects here for old bookmarks.
 - `auth-next.e-dani.com` serves Keycloak.
 - Keycloak stores its dedicated `keycloak` database and owner role in the
   shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
-  from Vault path `secret/keycloak-next/postgres`.
+  from 1Password item `keycloak-next-postgres` (vault `k8s-pocharlies`).
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
 - Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
   namespace:
@@ -20,29 +20,30 @@ redirects here for old bookmarks.
 - Traefik Edge must watch the `keycloak` namespace. This is configured in
   `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`.
 
-## Vault prerequisites
+## 1Password prerequisites
 
-Create these Vault paths before adding this stack to the root
-`kustomization.yaml`:
+Create these 1Password items (vault `k8s-pocharlies`) before adding this stack
+to the root `kustomization.yaml`:
 
-- `secret/keycloak-next/bootstrap`
+- `keycloak-next-bootstrap`
   - `admin_username`
   - `admin_password`
-- `secret/keycloak-next/postgres`
+- `keycloak-next-postgres`
   - `username`
   - `password`
-- `secret/keycloak-next/oauth2-proxy`
+- `keycloak-next-oauth2-proxy`
   - `client_id`
   - `client_secret`
   - `cookie_secret`
-- `secret/keycloak-next/openclaw-readonly`
+- `keycloak-next-openclaw-readonly`
   - `ui_client_secret`
   - `cookie_secret`
   - `agentgateway_client_secret`
 
-The path above is Vault CLI notation. Because `vault-backend` already mounts
-the KV-v2 engine at `secret/`, ExternalSecret `remoteRef.key` values must use the
-relative key `keycloak-next/openclaw-readonly` and must not repeat `secret/`.
+The `onepassword` ClusterSecretStore resolves every ExternalSecret
+`remoteRef.key` as `<item>/<field label>`, e.g.
+`keycloak-next-openclaw-readonly/ui_client_secret`. Seeding recipes with the
+`op` CLI are in `RUNBOOK.md`.
 
 The oauth2-proxy client must be a confidential Keycloak client in the `edani`
 realm. Use this callback:
@@ -63,8 +64,8 @@ that Google Cloud OAuth client before expecting Gmail login to complete.
 
 ## Activation
 
-This directory is referenced from the root kustomization. After the Vault
-secrets and Google OAuth client exist:
+This directory is referenced from the root kustomization. After the 1Password
+items and Google OAuth client exist:
 
 1. Sync the Argo app.
 2. Confirm the `keycloak` namespace is healthy.
@@ -121,7 +122,7 @@ never creates or deletes it. It fails if the service account holds any other
 `agentgateway-write*` role, if a human or group holds `:media`, or if the minted
 token carries the umbrella `agentgateway-write`. The client secret is the single
 Vault property `secret/agentgateway/prod#chat_agentgateway_client_secret`; see
-`RUNBOOK.md` §10 for seeding and rollback.
+`RUNBOOK.md` §12 for seeding and rollback.
 
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
@@ -134,7 +135,16 @@ dedicated clients for the independent `info@e-dani.com` plane:
 
 - `openclaw-readonly-ui` has browser standard flow but no service account;
 - `openclaw-readonly-agentgateway` has client credentials, the exact
-  `mcp.lan.e-dani.com` audience and no effective `agentgateway-write` role.
+  `mcp.lan.e-dani.com` audience, no effective `agentgateway-write` role, and
+  a client-level role scope mapping that limits its tokens to exactly the
+  `cto-office-send` realm role; `fullScopeAllowed` stays false so no other
+  realm role — present or future — can ever be emitted by this client. The
+  reconciler also guarantees the grant itself: it idempotently maps
+  `cto-office-send` onto the client's service account (and fails closed if
+  the role is absent from the realm rather than creating it). The grant is
+  therefore not revocable operationally without a code change — `MODE=rollback`
+  deletes both dedicated clients — and the control designed for the emergency
+  is the AgentGateway `CTO_OFFICE_WRITE` kill-switch.
 
 The dedicated oauth2-proxy additionally accepts only the one email from its
 mounted `authenticated_emails_file`; it forwards email/groups but no bearer to
@@ -142,7 +152,7 @@ Traefik. Both the proxy and reconciliation hook are fixed to the KS5 OVH pool,
 tokenless and network-isolated from everything except Keycloak/DNS (plus
 Traefik ingress for the proxy).
 
-Do not sync these resources until the Vault path above is seeded and the
+Do not sync these resources until the 1Password item above is seeded and the
 AgentGateway signed-role policy is live. The OpenClaw chart remains disabled
 until the sanitized PostSync result reports `"write_role_present":false`.
 State rollback is explicit and excluded from Argo. It authenticates only with
@@ -150,3 +160,19 @@ the Keycloak bootstrap administrator and deletes the two immutable dedicated
 client IDs even if the operator was disabled, an application secret was lost,
 or the service client accidentally acquired the forbidden write role:
 `manual/openclaw-readonly-clients-rollback-job.yaml`.
+
+## Synapse SRE M2M identity
+
+`synapse-sre-client.yaml` reconciles the `synapse-sre-orchestrator` client
+and its sibling `synapse-draft-orchestrator`, both with
+`fullScopeAllowed=false`. For `synapse-sre-orchestrator` the client
+realm-role scope mapping must be exactly `synapse-sre-m2m` plus
+`cto-office-send`: without the second entry the grant on the service account
+is inert and its client_credentials token carries only `synapse-sre-m2m`
+(the same "granted but inert" defect fixed for the OpenClaw clients in
+#104/#105). The reconciler idempotently ensures both the client scope
+mapping and the grant, asserts the minted token carries exactly those two
+realm roles, and fails closed if `cto-office-send` disappears from the realm
+rather than creating it. `synapse-draft-orchestrator` keeps exactly
+`synapse-draft-m2m` and never gains `cto-office-send`. The emergency control
+remains the AgentGateway `CTO_OFFICE_WRITE` kill-switch.

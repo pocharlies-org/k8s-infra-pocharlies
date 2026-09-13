@@ -26,6 +26,16 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertIn("oidc-audience-mapper", script)
         self.assertIn('"clients/${CLIENT_UUID}/scope-mappings/realm"', script)
         self.assertIn("ensure_role_scope_mapping", script)
+        self.assertIn("REQUIRED_REALM_ROLE=cto-office-send", script)
+        self.assertIn("EXPECTED_REALM_ROLES=cto-office-send,synapse-sre-m2m", script)
+        self.assertIn("EXPECTED_REALM_ROLES=synapse-draft-m2m", script)
+        self.assertIn("ensure_required_role_in_client_scope", script)
+        self.assertIn("ensure_required_role_on_service_account", script)
+        self.assertIn('create "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm"', script)
+        self.assertIn('"${REQUIRED_REALM_ROLE} is missing from the realm"', script)
+        self.assertIn("client role scope is not exactly", script)
+        self.assertIn("realm roles are not exactly", script)
+        self.assertIn("is not effective for the service account", script)
         self.assertIn("progress role-scope-verified", script)
         self.assertIn('"roles/${ROLE_NAME}/users" -q first=0 -q max=2', script)
         self.assertIn('"roles/${ROLE_NAME}/groups" -q first=0 -q max=2', script)
@@ -37,12 +47,17 @@ class SynapseSreIdentityContractTest(unittest.TestCase):
         self.assertNotIn('echo "${SYNAPSE_SRE_CLIENT_SECRET}"', script)
         self.assertNotIn('echo "${token}"', script)
 
-    def test_manifest_uses_one_vault_property_and_a_hardened_postsync_job(self):
+    def test_manifest_uses_one_1password_field_per_item_and_a_hardened_postsync_job(self):
         manifest = (BASE / "synapse-sre-client.yaml").read_text()
         self.assertEqual(manifest.count("kind: ExternalSecret"), 2)
-        self.assertIn("key: secret/agentgateway/prod", manifest)
-        self.assertIn("property: synapse_sre_orchestrator_client_secret", manifest)
-        self.assertIn("property: synapse_draft_orchestrator_client_secret", manifest)
+        self.assertIn(
+            "key: agentgateway-prod/synapse_sre_orchestrator_client_secret",
+            manifest,
+        )
+        self.assertIn(
+            "key: agentgateway-prod/synapse_draft_orchestrator_client_secret",
+            manifest,
+        )
         self.assertIn("name: CLIENT_ID, value: synapse-draft-orchestrator", manifest)
         self.assertIn("name: ROLE_NAME, value: synapse-draft-m2m", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)

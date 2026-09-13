@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: oauth2-proxy-openclaw-readonly
     app.kubernetes.io/component: ui-client-credentials
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: openclaw-readonly-ui-secrets
@@ -18,13 +18,11 @@ spec:
   data:
     - secretKey: OAUTH2_PROXY_CLIENT_SECRET
       remoteRef:
-        # vault-backend already mounts the KV-v2 engine at secret/.
-        key: keycloak-next/openclaw-readonly
-        property: ui_client_secret
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-openclaw-readonly/ui_client_secret
     - secretKey: OAUTH2_PROXY_COOKIE_SECRET
       remoteRef:
-        key: keycloak-next/openclaw-readonly
-        property: cookie_secret
+        key: keycloak-next-openclaw-readonly/cookie_secret
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -35,9 +33,9 @@ metadata:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: openclaw-readonly-clients
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: openclaw-readonly-agentgateway-bootstrap
@@ -46,8 +44,7 @@ spec:
   data:
     - secretKey: client_secret
       remoteRef:
-        key: keycloak-next/openclaw-readonly
-        property: agentgateway_client_secret
+        key: keycloak-next-openclaw-readonly/agentgateway_client_secret
 ---
 apiVersion: batch/v1
 kind: Job
@@ -106,6 +103,7 @@ spec:
             - { name: OPERATOR_EMAIL, value: info@e-dani.com }
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
+            - { name: REQUIRED_REALM_ROLE, value: cto-office-send }
             - name: OPENCLAW_READONLY_UI_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:

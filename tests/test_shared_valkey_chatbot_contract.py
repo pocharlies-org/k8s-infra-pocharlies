@@ -10,7 +10,7 @@ ACTIVATION_SCRIPT = ROOT / "scripts/valkey/activate-shared-valkey-acl.sh"
 
 
 class SharedValkeyChatbotContractTest(unittest.TestCase):
-    def test_acl_secret_is_reconciled_from_vault_with_all_required_keys(self) -> None:
+    def test_acl_secret_is_reconciled_from_1password_with_all_required_keys(self) -> None:
         manifest = yaml.safe_load(
             (VALKEY_DIR / "shared-valkey-secrets.yaml").read_text(encoding="utf-8")
         )
@@ -21,7 +21,7 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         self.assertIn("shared-valkey-secrets.yaml", kustomization["resources"])
         self.assertEqual(manifest["kind"], "ExternalSecret")
         self.assertEqual(manifest["spec"]["secretStoreRef"], {
-            "name": "vault-backend",
+            "name": "onepassword",
             "kind": "ClusterSecretStore",
         })
         self.assertEqual(manifest["spec"]["target"], {
@@ -39,25 +39,19 @@ class SharedValkeyChatbotContractTest(unittest.TestCase):
         })
         self.assertEqual(
             {
-                item["secretKey"]: (
-                    item["remoteRef"]["key"],
-                    item["remoteRef"]["property"],
-                )
+                item["secretKey"]: item["remoteRef"]["key"]
                 for item in manifest["spec"]["data"]
             },
             {
-                "users.acl": ("databases/shared-valkey-acl", "users_acl"),
+                "users.acl": "databases-shared-valkey-acl/users_acl",
                 "replication-password": (
-                    "databases/shared-valkey-acl",
-                    "replication_password",
+                    "databases-shared-valkey-acl/replication_password"
                 ),
                 "sentinel-password": (
-                    "databases/shared-valkey-acl",
-                    "sentinel_password",
+                    "databases-shared-valkey-acl/sentinel_password"
                 ),
                 "sentinel-valkey-password": (
-                    "databases/shared-valkey-acl",
-                    "sentinel_valkey_password",
+                    "databases-shared-valkey-acl/sentinel_valkey_password"
                 ),
             },
         )

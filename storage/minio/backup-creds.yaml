@@ -3,9 +3,8 @@
 # Used by: teslamate-postgres, shared-postgres (skirmshop), and any future CNPG cluster.
 # Created in each app namespace via ExternalSecret below.
 #
-# Vault path: secret/minio/backup-user
-# vault kv put secret/minio/backup-user \
-#   ACCESS_KEY_ID=backup-user \
+# 1Password item (vault k8s-pocharlies): minio-backup-user
+#   ACCESS_KEY_ID=backup-user
 #   SECRET_ACCESS_KEY=<random-password>
 # Then create the MinIO user in the MinIO console with policy:
 #   s3:GetBucketLocation, s3:GetObject, s3:PutObject, s3:ListBucket on velero-backups/*
@@ -22,9 +21,9 @@ spec:
         cnpg-backup: "true"
   refreshTime: 1h
   externalSecretSpec:
-    refreshInterval: 1h
+    refreshInterval: 6h
     secretStoreRef:
-      name: vault-backend
+      name: onepassword
       kind: ClusterSecretStore
     target:
       name: minio-backup-creds
@@ -33,16 +32,14 @@ spec:
     data:
       - secretKey: ACCESS_KEY_ID
         remoteRef:
-          key: secret/minio/backup-user
-          property: ACCESS_KEY_ID
+          key: minio-backup-user/ACCESS_KEY_ID
           conversionStrategy: Default
           decodingStrategy: None
           metadataPolicy: None
           nullBytePolicy: Ignore
       - secretKey: SECRET_ACCESS_KEY
         remoteRef:
-          key: secret/minio/backup-user
-          property: SECRET_ACCESS_KEY
+          key: minio-backup-user/SECRET_ACCESS_KEY
           conversionStrategy: Default
           decodingStrategy: None
           metadataPolicy: None
