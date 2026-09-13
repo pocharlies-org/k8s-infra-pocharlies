@@ -15,6 +15,7 @@ resources:
   - synapse-sre-client.yaml
   - agentgateway-domain-roles-job.yaml
   - agentgateway-read-grants-job.yaml
+  - agentgateway-social-mcp-client.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -37,6 +38,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-read-grants
+  - name: keycloak-agentgateway-social-mcp-client
+    files:
+      - agentgateway-social-mcp-client.sh=scripts/agentgateway-social-mcp-client.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-social-mcp-client
 generatorOptions:
   disableNameSuffixHash: true
   labels:
