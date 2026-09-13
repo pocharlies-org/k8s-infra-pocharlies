@@ -129,7 +129,9 @@ spec:
                 - SETGID
           resources:
             requests:
-              cpu: "500m"
+              # INFRA-42/INFRA-79 (2026-09-13): 500m -> 150m. p95 14d = 8m; build spikes
+              # ride the limit (4 CPU), not the request.
+              cpu: "150m"
               memory: 1Gi
             limits:
               cpu: "4"
