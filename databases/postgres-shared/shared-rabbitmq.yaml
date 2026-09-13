@@ -241,7 +241,9 @@ spec:
             - { name: config, mountPath: /etc/rabbitmq/rabbitmq.conf,    subPath: rabbitmq.conf,    readOnly: true }
             - { name: tuning, mountPath: /etc/rabbitmq/conf.d/20-tuning.conf, subPath: 20-tuning.conf, readOnly: true }
           resources:
-            requests: { cpu: 100m, memory: 512Mi }
+            # INFRA-42/INFRA-79 (2026-09-13): cpu 100m -> 200m. p95 14d = 292/294/284m
+            # across the 3 replicas — it was throttled at 100m, so this one goes UP.
+            requests: { cpu: 200m, memory: 512Mi }
             limits:   { memory: 3Gi }
           readinessProbe:
             exec: { command: [rabbitmq-diagnostics, -q, ping] }
