@@ -1,0 +1,226 @@
+# SKIRM-15 — oauth2-proxy PROPIO para skirmbooks.
+#
+# Por que existe: skirmbooks entraba en la cadena compartida `sso-chain`, es
+# decir la misma cookie `_edani_sso` (Domain `.e-dani.com`) y los mismos
+# `allowed_groups = [/edani-admins, /edani-operators]` que el dashboard de
+# control. Dos consecuencias reales:
+#   1. quien puede entrar en dgx.e-dani.com puede entrar en el software fiscal
+#      (AEAT / 369 / OSS / tenants) — no habia lista de permisos por software;
+#   2. no se puede estar identificado con dos cuentas distintas a la vez, y el
+#      logout de una app tumbaba la sesion de todas.
+# Aqui se corta: cookie propia sin `cookie_domains` (queda pegada al host
+# `skirmbooks.e-dani.com`, no se comparte con nada) y grupos propios.
+#
+# El patron no es nuevo: `oauth2-proxy-chat`, `oauth2-proxy-skirmshop` y
+# `oauth2-proxy-openclaw-readonly` hacen exactamente esto para su software.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-skirmbooks-config
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+data:
+  oauth2_proxy.cfg: |
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
+    skip_oidc_discovery = true
+    # `prompt=login` es lo que permite tener DOS identidades a la vez: sin el,
+    # la sesion SSO de Keycloak (galleta KEYCLOAK_IDENTITY en auth-next)
+    # reintroduce en silencio la cuenta que ya este usada en dgx, y skirmbooks
+    # acabaria con la misma persona aunque aqui toque otra. Con prompt=login
+    # skirmbooks pide credenciales al montar sesion y se puede elegir la cuenta
+    # fiscal (p. ej. alphalinkcrossfit) mientras dgx sigue con me@e-dani.com.
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth?prompt=login"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/certs"
+    redirect_url = "https://skirmbooks.e-dani.com/oauth2/callback"
+    scope = "openid email profile"
+
+    reverse_proxy = true
+    http_address = "0.0.0.0:4180"
+    upstreams = [ "static://202" ]
+
+    # Sin cookie_domains a proposito: la cookie nace y muere en
+    # `skirmbooks.e-dani.com`. Poner `.e-dani.com` (como hace `oauth2-proxy`)
+    # volveria a mezclar sesiones entre softwares, que es lo que se esta
+    # arreglando. Nombre distinto => el logout de skirmbooks no toca `_edani_sso`.
+    cookie_name = "_skirmbooks_sso"
+    cookie_secure = true
+    cookie_samesite = "lax"
+    cookie_expire = "12h"
+    cookie_refresh = "1h"
+
+    whitelist_domains = [ ".e-dani.com" ]
+    email_domains = [ "*" ]
+    # Lista nominal del software fiscal. Los grupos del dashboard NO dan acceso
+    # aqui; se pueblan con el Job keycloak-skirmbooks-sso.
+    allowed_groups = [ "/skirmbooks-users", "/skirmbooks-admins" ]
+
+    # La app es SSO-trust: valida el id_token que le llega por Authorization y
+    # deriva sus roles internos de X-Auth-Request-Groups (admin gestoria vs
+    # usuario de tenant). Sin estas dos lineas el backend no ve quien entro.
+    pass_access_token = true
+    pass_user_headers = true
+    set_authorization_header = true
+    set_xauthrequest = true
+    skip_provider_button = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-skirmbooks
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oauth2-proxy-skirmbooks
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-skirmbooks
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Mismo criterio que oauth2-proxy-skirmshop (2026-07-31): stateless, sin
+      # PVC, y su sitio es `sauvage` con ks5 de reserva — no `ubuntu`, el nodo
+      # x86 de desarrollo que se reinicia sin aviso y que ya se llevo el SSO
+      # por delante cuando alojaba keycloak-postgres.
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+              - matchExpressions:
+                  - key: node-pool
+                    operator: In
+                    values: [ks5-nvme]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+          args: ["--config=/etc/oauth2-proxy/oauth2_proxy.cfg"]
+          envFrom:
+            - secretRef:
+                # Mismo client `oauth2-proxy` del realm edani: lo que cambia por
+                # software es la cookie y los grupos (ambos en oauth2-proxy), no
+                # hace falta un client nuevo. Su redirect_uri se declara en el
+                # Job keycloak-skirmbooks-sso.
+                name: oauth2-proxy-secrets
+          ports:
+            - { name: http, containerPort: 4180 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy/oauth2_proxy.cfg
+              subPath: oauth2_proxy.cfg
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: oauth2-proxy-skirmbooks-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-skirmbooks
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+spec:
+  selector:
+    app: oauth2-proxy-skirmbooks
+  ports:
+    - { name: http, port: 4180, targetPort: http }
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmbooks-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-skirmbooks.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    authResponseHeaders:
+      - Authorization
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Forwarded-User
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmbooks-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    # SOLO 401, igual que la cadena compartida. Reescribir el 403 a sign_in
+    # mete en bucle esta app en concreto: skirmbooks lanza su propio 403 cuando
+    # el usuario no es platform-admin (`requirePlatformAdmin`), el SSO responde
+    # "ya estas dentro", la app vuelve a dar 403 -> ERR_TOO_MANY_REDIRECTS.
+    # Paso documentado el 10-08-2026 con info@e-dani.com en
+    # /admin/descargas-facturas; el 403 de "autenticado pero sin grupo" debe
+    # quedarse un 403 legible, no un reintento.
+    status:
+      - "401"
+    service:
+      name: oauth2-proxy-skirmbooks
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-skirmbooks-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-skirmbooks
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-skirmbooks-errors
+      - name: sso-skirmbooks-forward-auth

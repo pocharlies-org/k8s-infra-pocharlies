@@ -517,11 +517,23 @@ spec:
   - websecure
   ingressClassName: traefik-edge
   routes:
+  # SKIRM-15: el oauth2-proxy PROPIO de skirmbooks atiende su propio /oauth2 en
+  # su propio host, igual que hace auth-next con el proxy compartido. Regla mas
+  # larga => mas prioridad en Traefik, asi que gana a la regla del host a secas.
+  # Es aditiva: la app sigue donde estaba hasta validar el flujo de punta a punta.
+  - kind: Rule
+    match: Host(`skirmbooks.e-dani.com`) && PathPrefix(`/oauth2`)
+    services:
+    - name: oauth2-proxy-skirmbooks
+      namespace: keycloak
+      port: 4180
   - kind: Rule
     match: Host(`skirmbooks.e-dani.com`)
     # Keycloak SSO (forwardAuth) — financial app, internet-facing. El callback de
     # Enable Banking (/banking/enablebanking/callback) pasa porque el navegador del
     # usuario ya trae la cookie _edani_sso al volver del banco (sesión activa).
+    # PENDIENTE SKIRM-15: pasar a sso-skirmbooks-chain. Se deja aqui hasta
+    # validar el login con el proxy nuevo; ver la nota del PR.
     middlewares:
     - name: sso-chain
       namespace: keycloak
