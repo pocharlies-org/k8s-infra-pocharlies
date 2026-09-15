@@ -8,6 +8,7 @@ resources:
   - app-credentials.yaml
   - cluster.yaml
   - app-databases.yaml
+  - agent-transcripts-schema.yaml
   - role-settings.yaml
   - monitoring.yaml
   - shared-rabbitmq.yaml

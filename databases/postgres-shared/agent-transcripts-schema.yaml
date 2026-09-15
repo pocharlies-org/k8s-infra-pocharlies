@@ -1,0 +1,115 @@
+# SC-546: esquema y tabla del destino de archivo de la retención de sesiones.
+#
+# Por qué un Job y no un CRD: CNPG declara BASES de datos (kind: Database, ver
+# app-databases.yaml) pero NO declara esquemas ni tablas — no existe CRD para
+# eso. El precedente de DDL que el spec del Cluster no expone en este mismo
+# directorio es role-settings.yaml (ALTER ROLE ... SET): Job idempotente como
+# hook PostSync de ArgoCD. Aquí se aplica la misma forma.
+#
+# Idempotencia y no-destructivo, verificado contra el estado vivo medido el
+# 15-09-2026 (kubectl exec psql, lectura):
+#   - base agent_transcripts   -> owner opencode_archive (la declara el Database CR)
+#   - esquema transcripts      -> owner opencode_archive
+#   - tabla transcripts.agent_sessions -> owner opencode_archive,
+#     columnas agent text NOT NULL, session_id text NOT NULL, title text,
+#     cwd text, model text, message_count integer, payload jsonb NOT NULL,
+#     archived_at timestamptz NOT NULL DEFAULT now(),
+#     PRIMARY KEY (agent, session_id)  [pg_get_indexdef del pkey, 15-09]
+#   - 216 filas al 15-09 (el timer x86 opencode-archive-prune sigue archivando)
+# Sobre el clúster actual todo es no-op (IF NOT EXISTS + ALTER OWNER al dueño
+# que ya tiene); sobre un rebuild reconstruye el destino antes del primer tick
+# del timer. Nada de DROP. La tabla real es agent_sessions con columna
+# archived_at (la épica decía "updated_at": cuenta por contenido, no por nombre).
+#
+# El Job espera a que la base exista porque el Database CR lo reconcilia el
+# instance manager del primary de forma asíncrona: tras un rebuild el hook
+# PostSync puede correr antes de que CREATE DATABASE haya terminado.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-transcripts-schema-sql
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-agent-transcripts
+data:
+  setup.sql: |
+    CREATE SCHEMA IF NOT EXISTS transcripts;
+    CREATE TABLE IF NOT EXISTS transcripts.agent_sessions (
+      agent text NOT NULL,
+      session_id text NOT NULL,
+      title text,
+      cwd text,
+      model text,
+      message_count integer,
+      payload jsonb NOT NULL,
+      archived_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (agent, session_id)
+    );
+    -- Converge al estado vivo (dueño = opencode_archive) tras un rebuild;
+    -- no-op sobre el clúster actual.
+    ALTER SCHEMA transcripts OWNER TO opencode_archive;
+    ALTER TABLE transcripts.agent_sessions OWNER TO opencode_archive;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-shared-agent-transcripts
+  namespace: databases
+  annotations:
+    # PostSync y no Sync: el hook corre cuando el Cluster ya está aplicado y
+    # sano (mismo patrón y misma razón que role-settings.yaml).
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shared-infrastructure
+        app.kubernetes.io/component: postgres-agent-transcripts
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          env:
+            - name: PGHOST
+              value: postgres-shared-rw.databases.svc.cluster.local
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: password }
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              ok=0
+              for i in $(seq 1 60); do
+                if psql -v ON_ERROR_STOP=1 -d agent_transcripts -Atc 'SELECT 1' >/dev/null 2>&1; then
+                  ok=1; break
+                fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "agent_transcripts no existe tras 5 min (Database CR sin reconciliar)" >&2
+                exit 1
+              fi
+              psql -v ON_ERROR_STOP=1 -d agent_transcripts -f /sql/setup.sql
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: sql
+          configMap:
+            name: agent-transcripts-schema-sql
