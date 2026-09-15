@@ -9,6 +9,8 @@ resources:
   - oauth2-proxy-skirmshop.yaml
   - oauth2-proxy-openclaw-readonly.yaml
   - oauth2-proxy-chat.yaml
+  - oauth2-proxy-skirmbooks.yaml
+  - skirmbooks-sso.yaml
   - routing.yaml
   - agentgateway-write-role-job.yaml
   - openclaw-readonly-clients.yaml
@@ -44,6 +46,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-social-mcp-client
+  - name: keycloak-skirmbooks-sso
+    files:
+      - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh
+    options:
+      labels:
+        app.kubernetes.io/component: skirmbooks-sso
 generatorOptions:
   disableNameSuffixHash: true
   labels:
