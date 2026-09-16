@@ -96,7 +96,11 @@ ensure_group() {
   path="$1"
   gid="$(group_id_for "${path}")"
   if [ -n "${gid}" ]; then
-    printf 'grupo %s ya existe (%s)\n' "${path}" "${gid}"
+    # Los mensajes van a stderr: quien llama captura el gid con
+    # `gid="$(ensure_group ...)"`, y cualquier printf a stdout se colaria dentro
+    # del gid (de ahi el 404 del PUT de membresia: el id llegaba con la linea de
+    # log pegada). Solo el gid puro sale por stdout.
+    printf 'grupo %s ya existe (%s)\n' "${path}" "${gid}" >&2
     printf '%s' "${gid}"
     return 0
   fi
@@ -108,7 +112,7 @@ ensure_group() {
     -s "name=${name}" >/dev/null 2>&1 || fail "failed to create group ${path}"
   gid="$(group_id_for "${path}")"
   [ -n "${gid}" ] || fail "group ${path} created but not resolvable"
-  printf 'grupo %s creado (%s)\n' "${path}" "${gid}"
+  printf 'grupo %s creado (%s)\n' "${path}" "${gid}" >&2
   printf '%s' "${gid}"
 }
 
