@@ -87,10 +87,29 @@ metadata:
   namespace: traefik-lan
 spec:
   entryPoints: [websecure]
+  # SKIRM-16 (decision D2 del CTO, 16-09-2026): se cierra el bypass LAN/tailnet
+  # de skirmbooks (software fiscal con tenants y facturas). La regla del host
+  # lleva ahora la cadena propia sso-skirmbooks-chain (ns keycloak, cookie
+  # _skirmbooks_sso). El break-glass ya NO esta en el ingress: si el SSO falla,
+  # acceso directo con
+  #   kubectl -n skirmshop port-forward svc/skirmbooks-ui 8080:80
+  # La regla /oauth2 (priority 310, SIN middleware) es imprescindible para que
+  # el callback OAuth se complete desde LAN/tailnet; con forward-auth entraria
+  # en bucle. Mismo patron que openclaw-k8s-readonly en canonical-hosts-lan.yaml.
   routes:
+    - kind: Rule
+      priority: 310
+      match: Host(`skirmbooks.e-dani.com`) && PathPrefix(`/oauth2`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      services:
+        - name: oauth2-proxy-skirmbooks
+          namespace: keycloak
+          port: 4180
     - kind: Rule
       priority: 300
       match: Host(`skirmbooks.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      middlewares:
+        - name: sso-skirmbooks-chain
+          namespace: keycloak
       services:
         - name: skirmbooks-ui
           namespace: skirmshop
