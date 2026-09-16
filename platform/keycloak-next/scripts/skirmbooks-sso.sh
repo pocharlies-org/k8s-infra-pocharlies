@@ -81,9 +81,15 @@ kget() {
 # --- grupos ---------------------------------------------------------------
 # GET /groups no admite ?path=, asi que se lista y se casa el path exacto. El
 # path no lleva comas, luego CSV `id,path` parte bien con el id delante.
+# OJO: la imagen de Keycloak NO trae awk (el Job real fallo con
+# `awk: command not found`). Solo sed/grep/tr/head/wc, que si hay. Se quita el
+# sufijo `,path` con sed y se imprimen unicamente las lineas donde la sustitucion
+# cupo (`t` sale al final si hubo cambio, `d` borra las demas) — POSIX, vale
+# tambien para el sed de busybox de la imagen.
 group_id_for() {
   kget groups --fields id,path --format csv --noquotes 2>/dev/null \
-    | awk -F',' -v want="$1" '{ p=$NF; gsub(/^[ ]+|[ ]+$/,"",p); if (p==want) { print $1; exit } }'
+    | sed -e "s#,[[:space:]]*${1}[[:space:]]*\$##" -e t -e d \
+    | sed -e 's/[[:space:]]*$//' | head -1
 }
 
 ensure_group() {
