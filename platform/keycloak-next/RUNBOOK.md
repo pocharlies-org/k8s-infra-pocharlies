@@ -459,14 +459,15 @@ without it the ExternalSecret never materializes and the PostSync hook pod
 sits in `CreateContainerConfigError` until the sync fails:
 
 ```bash
-# Same mount convention as §1: ExternalSecret key secret/agentgateway/prod is
-# CLI path secret/secret/agentgateway/prod. kv v2: patch, never put (put would
-# erase the sibling synapse_* and openclaw_* client secrets on that path).
-VAULT_TOKEN="$(kubectl -n vault get secret vault-admin-token -o jsonpath='{.data.token}' | base64 -d)"
-kubectl -n vault exec -i vault-0 -- env VAULT_TOKEN="${VAULT_TOKEN}" \
-  vault kv patch secret/secret/agentgateway/prod \
-  chat_agentgateway_client_secret="$(openssl rand -base64 36)"
-unset VAULT_TOKEN
+# SC-490 (Vault -> 1Password): the ExternalSecret reads the 1Password item
+# agentgateway-prod (vault k8s-pocharlies) via ClusterSecretStore "onepassword".
+# `op item edit` touches only the named field, so the sibling tokens on the
+# item are untouched. The field does not exist in the item yet (verified read
+# 17-09): this seeding is the prerequisite, and the ExternalSecret stays
+# Ready=False until it lands.
+op item edit agentgateway-prod \
+  chat_agentgateway_client_secret="$(openssl rand -base64 36)" \
+  --vault k8s-pocharlies
 ```
 
 The first reconciliation must be a full Argo CD sync (hooks are skipped on a

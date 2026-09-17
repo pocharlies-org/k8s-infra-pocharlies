@@ -5,9 +5,12 @@
 # and studio_cancel_job. The role is created by agentgateway-domain-roles-job
 # (sync-wave 19); this hook runs after every other identity reconciler.
 #
-# Prerequisite before the first sync: seed a random value in
-# secret/agentgateway/prod#chat_agentgateway_client_secret (kv patch, never
-# put; RUNBOOK.md §12 has the exact command).
+# Prerequisite before the first sync: seed a random value as the field
+# chat_agentgateway_client_secret of the 1Password item agentgateway-prod
+# (vault k8s-pocharlies; platform/keycloak-next/RUNBOOK.md §12 has the exact
+# command). SC-490 barrida 17-09: this ES was added 04-09 against the retired
+# vault-backend store and never seeded anywhere — the field does not exist yet
+# in the item, so Ready=False until the operator seeds it (expected, fail-loud).
 # Without it the ExternalSecret never materializes and this PostSync hook
 # blocks with an unresolved secretKeyRef.
 apiVersion: external-secrets.io/v1
@@ -21,7 +24,7 @@ metadata:
 spec:
   refreshInterval: 1h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: chat-agentgateway-keycloak-bootstrap
@@ -30,8 +33,7 @@ spec:
   data:
     - secretKey: client_secret
       remoteRef:
-        key: secret/agentgateway/prod
-        property: chat_agentgateway_client_secret
+        key: agentgateway-prod/chat_agentgateway_client_secret
 ---
 apiVersion: batch/v1
 kind: Job
