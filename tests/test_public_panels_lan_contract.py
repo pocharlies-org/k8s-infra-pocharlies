@@ -24,7 +24,6 @@ def test_simple_public_panels_are_direct_only_from_trusted_networks():
     path = "networking/traefik-lan/public-panels-lan.yaml"
     expected = {
         "lan-bambulab-public-host": ("bambulab.e-dani.com", "bambulab", "bambulab", 80),
-        "lan-skirmbooks-public-host": ("skirmbooks.e-dani.com", "skirmshop", "skirmbooks-ui", 80),
     }
     for name, (host, namespace, service, port) in expected.items():
         route = ingress(path, name)
@@ -35,6 +34,24 @@ def test_simple_public_panels_are_direct_only_from_trusted_networks():
         assert "middlewares" not in rule
         assert rule["services"] == [{"name": service, "namespace": namespace, "port": port}]
         assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+
+
+def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
+    # SKIRM-16 (D2): el bypass LAN/tailnet de skirmbooks se cierra. El break-glass
+    # es kubectl port-forward al Service, no el ingress.
+    route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-skirmbooks-public-host")
+    oauth2, host = route["spec"]["routes"]
+    assert "ingressClassName" not in route["spec"]
+    assert oauth2["priority"] == 310 and host["priority"] == 300
+    assert "PathPrefix(`/oauth2`)" in oauth2["match"]
+    assert "middlewares" not in oauth2
+    assert oauth2["services"] == [{"name": "oauth2-proxy-skirmbooks", "namespace": "keycloak", "port": 4180}]
+    assert host["middlewares"] == [{"name": "sso-skirmbooks-chain", "namespace": "keycloak"}]
+    assert host["services"] == [{"name": "skirmbooks-ui", "namespace": "skirmshop", "port": 80}]
+    for rule in (oauth2, host):
+        assert "Host(`skirmbooks.e-dani.com`)" in rule["match"]
+        assert all(cidr in rule["match"] for cidr in TRUSTED)
+    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
 
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall():

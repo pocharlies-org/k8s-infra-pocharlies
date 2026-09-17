@@ -176,3 +176,22 @@ realm roles, and fails closed if `cto-office-send` disappears from the realm
 rather than creating it. `synapse-draft-orchestrator` keeps exactly
 `synapse-draft-m2m` and never gains `cto-office-send`. The emergency control
 remains the AgentGateway `CTO_OFFICE_WRITE` kill-switch.
+
+## AgentGateway social MCP public client
+
+`agentgateway-social-mcp-client.yaml` reconciles the public client
+`agentgateway-social-mcp` used by the AgentGateway `mcpAuthentication` policy
+on the `/social` route (SC-552 Parte 1 / SC-600). It is the pre-registered
+client the gateway short-circuits MCP Dynamic Client Registration to, so
+Open WebUI can run the authorization-code + PKCE flow against the `edani`
+realm without a client secret. The reconciler pins `publicClient=true` with no
+secret, `standardFlowEnabled=true`, direct access / implicit / service accounts
+off, `fullScopeAllowed=false`, PKCE `S256`, the exact redirect URI
+`https://chat.e-dani.com/oauth/clients/mcp:social/callback` (no wildcards) and
+the house `oidc-audience-mapper` `aud-mcp`
+(`included.custom.audience=mcp.lan.e-dani.com`, access and introspection token
+claims only). It changes no realm registration policy. Being public it carries
+no secret, so there is no `ExternalSecret` and no minted-token check; the
+reconciler asserts the flow flags, the redirect URI, the PKCE attribute and the
+mapper and fails closed. State rollback deletes the client
+(`manual/agentgateway-social-mcp-client-rollback-job.yaml`, excluded from Argo).
