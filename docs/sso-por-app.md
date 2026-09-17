@@ -125,3 +125,17 @@ No compartir cookie de dominio entre apps (nunca `cookie_domains` con el dominio
 común: es lo que acoplaba el acceso fiscal al del panel). El client `oauth2-proxy`
 del realm **sí** se comparte por diseño — lo que aísla por app son la cookie y los
 grupos, no un client por software.
+
+## Qué aísla este patrón, y qué no
+
+Lo que aísla de verdad son **dos** cosas, y conviene no confundirse sobre cuál hace el trabajo:
+
+- La **cookie host-only**: sin `cookie_domains`, la cookie nace y muere en `skirmbooks.e-dani.com`. Es lo que hace que cerrar sesión aquí no toque la de `dgx.e-dani.com`, y lo que impide que la sesión viaje a otro host del dominio.
+- El **`allowed_groups` propio** del proxy: cada oauth2-proxy decide por su cuenta a quién deja pasar, y los grupos del dashboard no abren esta puerta.
+
+Lo que **no** aísla, y hay que saberlo antes de copiar el patrón: el **client OIDC de Keycloak es compartido** (`oauth2-proxy` del realm `edani`). A ese client compartido se le añaden, por cada app, el `redirect_uri` exacto y el mapper de grupos. Consecuencias reales:
+
+- La lista de `redirect_uri` del client compartido **crece con cada app**. Es la pieza que se degrada con el número de apps, y el `*` solo vale al final de la URI, nunca en el host.
+- Un secreto de client comprometido lo está **para todas** las apps del patrón, no solo para una.
+
+Se aceptó así en SKIRM-15 porque los criterios de la épica piden permisos independientes por software, y eso lo dan la cookie y los grupos; un client por app era trabajo extra sin efecto medible sobre esos criterios. **Cuándo deja de valer:** cuando una app necesite un secreto de client, un tiempo de sesión o un flujo de consentimiento distintos del resto, o cuando el número de `redirect_uri` del client compartido deje de ser legible de un vistazo. Ese día, client por app — y es un cambio de diseño con su propia decisión, no un detalle de despliegue.
