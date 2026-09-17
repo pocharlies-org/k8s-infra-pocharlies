@@ -57,6 +57,7 @@ resources:
   - platform/external-secrets/runtime-credentials.yaml
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
   - platform/external-secrets/onepassword-sync.yaml
+  - platform/external-secrets/dgx131-probe.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
   - platform/velero/repository-frequency-migration.yaml
