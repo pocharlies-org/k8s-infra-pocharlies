@@ -18,6 +18,8 @@ metadata:
   labels:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: chat-agentgateway-client
+  annotations:
+    studio.dgx73/sync-trigger: "waves-19-23-20260917"
 spec:
   refreshInterval: 1h
   secretStoreRef:
@@ -45,6 +47,7 @@ metadata:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-wave: "23"
+    studio.dgx73/sync-trigger: "waves-19-23-20260917"
 spec:
   backoffLimit: 1
   activeDeadlineSeconds: 900
