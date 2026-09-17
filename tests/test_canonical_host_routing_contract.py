@@ -57,7 +57,6 @@ CANONICAL_LAN_HOSTS = {
     "openclaw-k8s-readonly.e-dani.com",
     "openclaw-k8s-webhooks.e-dani.com",
     "openclaw-k8s.e-dani.com",
-    "openclaw-synapse.e-dani.com",
     "openclaw.e-dani.com",
     "picqer-mcp.e-dani.com",
     "sauvage-bot.e-dani.com",
@@ -97,22 +96,6 @@ def test_all_new_lan_routes_use_canonical_names_and_public_wildcard():
     assert route["metadata"]["annotations"] == {
         "external-dns.alpha.kubernetes.io/exclude": "true"
     }
-
-
-def test_openclaw_synapse_has_a_lan_sso_fallback():
-    route = ingress(
-        "networking/traefik-lan/canonical-hosts-lan.yaml",
-        "canonical-hosts-lan",
-    )
-    rules = [
-        rule
-        for rule in route["spec"]["routes"]
-        if "Host(`openclaw-synapse.e-dani.com`)" in rule["match"]
-    ]
-    assert [rule["priority"] for rule in rules] == [1000, 100]
-    assert rules[1]["middlewares"] == [
-        {"name": "sso-chain", "namespace": "keycloak"}
-    ]
 
 
 def test_public_ui_routes_are_sso_gated_and_dns_is_wildcard_owned():
@@ -201,19 +184,3 @@ def test_external_dns_honors_canonical_route_exclusions():
     assert values["annotationFilter"] == (
         "external-dns.alpha.kubernetes.io/exclude notin (true)"
     )
-
-
-def test_openclaw_synapse_allows_only_edge_nodes_on_its_http_port():
-    policy = documents(
-        "networking/traefik-edge/canonical-hosts-networkpolicy.yaml"
-    )[0]
-    assert policy["kind"] == "NetworkPolicy"
-    assert policy["spec"]["policyTypes"] == ["Ingress"]
-    ingress = policy["spec"]["ingress"]
-    assert ingress[0]["ports"] == [{"protocol": "TCP", "port": 8791}]
-    assert {item["ipBlock"]["cidr"] for item in ingress[0]["from"]} == {
-        "100.71.117.127/32",
-        "100.75.189.75/32",
-        "100.107.21.89/32",
-        "100.109.183.9/32",
-    }

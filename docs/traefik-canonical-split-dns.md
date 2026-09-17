@@ -75,8 +75,6 @@ their request semantics are unsafe to redirect.
   routes where the service owner did not already provide one.
 - `networking/traefik-edge/canonical-hosts-public.yaml`: canonical public UI
   and machine routes, excluded from per-host ExternalDNS publication.
-- `networking/traefik-edge/canonical-hosts-networkpolicy.yaml`: permits the
-  four host-network Edge nodes to reach only port 8791 of OpenClaw Synapse.
 - `networking/traefik-{lan,edge}/openchamber-*.yaml`: the stable route uses
   new `ExternalName` Services pointing to `x86.taile0ad27.ts.net:3000`.
   `networking/dns/coredns-custom.yaml` pins that name to `100.83.56.98` in
