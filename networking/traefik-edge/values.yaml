@@ -128,7 +128,6 @@ providers:
       - longhorn-system
       - minio
       - dgx-synapse-mcp
-      - openclaw-synapse
       - picqer-mcp
       - backup-hub
       - stt-mcp
@@ -167,7 +166,6 @@ providers:
       - longhorn-system
       - minio
       - dgx-synapse-mcp
-      - openclaw-synapse
       - picqer-mcp
       - backup-hub
       - stt-mcp
