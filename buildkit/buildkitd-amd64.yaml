@@ -8,8 +8,8 @@ metadata:
     arch: amd64
 spec:
   replicas: 1
-  # buildkitd holds a replicated Longhorn cache PVC (RWO) -> Recreate avoids
-  # two pods racing the same cache during a rollout.
+  # buildkitd holds the cache PVC (RWO) -> Recreate avoids two pods racing the
+  # same cache during a rollout.
   strategy:
     type: Recreate
   selector:
@@ -26,15 +26,22 @@ spec:
         # allowPrivilegeEscalation to false on ALL containers, breaking rootlesskit.
         vault.hashicorp.com/agent-inject: "false"
     spec:
-      # The production amd64 builder is part of the OpenClaw release path. Keep
-      # both compute and cache on the three OVH KS5 nodes; it must not depend on
-      # the home/dev ubuntu node.
+      # The production amd64 builder is part of the OpenClaw release path and
+      # must not depend on the home/dev ubuntu node — sauvage is the same OVH
+      # region (ovh-fr), so the intent of the original ks5-nvme pin is kept.
+      # Moved off ks5-nvme (INFRA-42): the pool is only the three control-plane
+      # nodes, all at ~99% CPU requests; the apt/npm layer of the synapse
+      # release starved there and hit the 75m DOCKER_BUILD_TIMEOUT three times
+      # on 2026-09-14/15 (run 34905054888 attempts 1-2, exit 124). savage has
+      # 48 cores, ~38 CPU-requests free, 1.6T free on / and no Longhorn — hence
+      # the cache moved to local-path (it is a rebuildable build cache).
       nodeSelector:
         kubernetes.io/arch: amd64
-        node-pool: ks5-nvme
+        kubernetes.io/hostname: sauvage
       tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
+        - key: role
+          operator: Equal
+          value: edge
           effect: NoSchedule
       automountServiceAccountToken: false
       # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
@@ -148,7 +155,7 @@ spec:
       volumes:
         - name: cache
           persistentVolumeClaim:
-            claimName: buildkitd-amd64-cache-longhorn
+            claimName: buildkitd-amd64-cache
         - name: harbor-push
           secret:
             secretName: harbor-push
@@ -159,30 +166,28 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: buildkitd-amd64-cache-longhorn
+  name: buildkitd-amd64-cache
   namespace: buildkit
   labels:
     app: buildkitd
     arch: amd64
 spec:
   accessModes: ["ReadWriteOnce"]
-  # longhorn-single (1 replica), not longhorn-prod-nvme (3): this is a build
-  # cache. Replicating it three times protected nothing — losing it costs one
-  # slower build — while it held 49.2 GiB per replica on the ks5 nodes, which
-  # were at 82-89% and could not place a third postgres-shared-2 replica.
-  # Recreated on 2026-08-13; the cache rebuilds itself on the next build.
-  storageClassName: longhorn-single
+  # local-path on sauvage (same pattern as buildkitd-arm64 on gx10-ec3d):
+  # Longhorn does not run on sauvage, and this is a build cache — losing it
+  # costs one slower build, never data. It replaces
+  # buildkitd-amd64-cache-longhorn (longhorn-single, 50Gi), which held ~49 GiB
+  # on the saturated ks5 control-plane nodes (INFRA-42). sauvage has 1.6T free
+  # on /; the local-path PV lands there.
+  storageClassName: local-path
   resources:
     requests:
-      # The cache is disposable, but PVC requests cannot be shrunk, so this only
-      # ever grows. Raised 25Gi -> 50Gi on 2026-08-20: the volume sat at 98%
-      # (23.9G of 24.4G) with `buildctl du` reporting Reclaimable: 0B, and a
-      # dashboard-backend build died on "No space left on device" while
-      # unpacking ffmpeg. `buildctl prune --all` freed nothing because none of
-      # it was reclaimable. Third recurrence of the same mechanism on
-      # 2026-09-05 (SC-285, back at 100%): the operator ruled the PVC size
-      # FINAL — no further enlargement; the fix is the GC policy on the
-      # Deployment, which now caps buildkit's own usage at ~40Gi of this 50Gi.
+      # Size ruled FINAL by the operator (SC-285, 2026-09-05, third 100%-full
+      # recurrence): no further enlargement. The cap lives in the GC policy on
+      # the Deployment (~40Gi of this 50Gi). Verification after GC changes is
+      # `df` on the PVC and the Total in `buildctl du` — NEVER the
+      # "Reclaimable" column (v0.31.0 derives it per record as !InUse, so on a
+      # busy builder it always reads 0B).
       storage: 50Gi
 ---
 apiVersion: v1
