@@ -150,11 +150,6 @@ spec:
     # Esas van en fichero propio con su topologia de rutas, no en esta lista.
     #
     - kind: Rule
-      match: Host(`openclaw-synapse.e-dani.com`)
-      middlewares: *generic-sso
-      services:
-        - {name: openclaw-synapse-openclaw, namespace: openclaw-synapse, port: 8791}
-    - kind: Rule
       match: Host(`openclaw-k8s-webhooks.e-dani.com`) && PathPrefix(`/plugins/webhooks/`)
       middlewares:
         - {name: sso-chain, namespace: keycloak}
