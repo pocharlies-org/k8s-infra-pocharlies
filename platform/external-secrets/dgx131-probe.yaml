@@ -1,0 +1,28 @@
+---
+# dgx131-probe — ExternalSecret de prueba contra vault-backend (DGX-131 criterio 2).
+#
+# Demuestra que añadir un ES nuevo que lee de Vault NO incrementa las llamadas
+# a 1Password: la ruta remota ya existe (la escriben los pares vivos de
+# onepassword-sync) y el store vault-backend no toca el SDK de 1Password.
+# Efímero: se retira con el PR hermano dgx-131-probe-remove.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dgx131-probe
+  namespace: onepassword-sync
+  labels:
+    app.kubernetes.io/managed-by: external-secrets
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: dgx131-probe
+    creationPolicy: Owner
+    deletionPolicy: Delete
+  data:
+    - secretKey: dockerconfigjson
+      remoteRef:
+        key: op/infra-harbor-k8s-runtime-pull
+        property: dockerconfigjson
