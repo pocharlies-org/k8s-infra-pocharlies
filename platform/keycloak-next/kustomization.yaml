@@ -16,6 +16,7 @@ resources:
   - openclaw-readonly-clients.yaml
   - synapse-sre-client.yaml
   - agentgateway-domain-roles-job.yaml
+  - chat-agentgateway-client.yaml
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
 configMapGenerator:
@@ -34,6 +35,9 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-domain-roles
+  - name: keycloak-chat-agentgateway-client
+    files:
+      - chat-agentgateway-client.sh=scripts/chat-agentgateway-client.sh
   - name: keycloak-agentgateway-read-grants
     files:
       - agentgateway-read-grants.sh=scripts/agentgateway-read-grants.sh
