@@ -47,7 +47,13 @@ metadata:
     argocd.argoproj.io/sync-wave: "23"
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 900
+  # MEDIDO el 18-09-2026 con el contrato v2 (seis roles): 701 s de principio a
+  # fin en producción, contra los 900 de antes — 199 s de margen para un hook
+  # que arranca una JVM de kcadm por llamada y que ahora hace seis grants con su
+  # verificación de exclusividad. Un Keycloak lento se comía el margen y dejaba
+  # la sync colgando de un hook sano. 1800 s da holgura sin esconder un cuelgue:
+  # el backoffLimit sigue en 1.
+  activeDeadlineSeconds: 1800
   ttlSecondsAfterFinished: 3600
   template:
     metadata:

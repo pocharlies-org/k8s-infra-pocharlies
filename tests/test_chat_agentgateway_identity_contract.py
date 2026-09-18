@@ -346,7 +346,7 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn('argocd.argoproj.io/sync-wave: "23"', manifest)
         self.assertIn('name: RECONCILE_CONTRACT_VERSION, value: "2"', manifest)
         self.assertIn('synapse.e-dani.com/agentgateway-m2m-client: "true"', manifest)
-        self.assertIn("activeDeadlineSeconds: 900", manifest)
+        self.assertIn("activeDeadlineSeconds: 1800", manifest)
         self.assertIn("automountServiceAccountToken: false", manifest)
         self.assertIn("runAsNonRoot: true", manifest)
         self.assertIn("readOnlyRootFilesystem: true", manifest)
