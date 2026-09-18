@@ -7,15 +7,15 @@ KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage}"
-EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage"
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes}"
+EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes"
 # Dedicated confidential clients reviewed to hold exactly one domain role each,
 # as "<role>=<service-account-username>". The client itself is reconciled by a
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
 # that single grant. Any other user, any group and any other service account
 # still fails the reconcile.
-ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway}"
-EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway"
+ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway}"
+EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway"
 
 cleanup() { rm -f "${ADMIN_CONFIG}"; }
 trap cleanup EXIT HUP INT TERM
