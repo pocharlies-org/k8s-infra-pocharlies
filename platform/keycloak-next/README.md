@@ -127,8 +127,8 @@ hook above; this reconciler refuses to run if one is missing and never creates
 or deletes them. It fails if the service account holds ANY `agentgateway-write*`
 role outside the set, if a human or group holds one of them, or if the minted
 token carries the umbrella `agentgateway-write`. The client secret is the single
-Vault property `secret/agentgateway/prod#chat_agentgateway_client_secret`; see
-`RUNBOOK.md` §12 for seeding and rollback.
+field `chat_agentgateway_client_secret` of the 1Password item
+`agentgateway-prod`; see `RUNBOOK.md` §12 for seeding and rollback.
 
 oauth2-proxy deliberately uses public URLs for browser redirects and internal
 Keycloak service URLs for token/JWKS/userinfo calls. This avoids pod egress to
