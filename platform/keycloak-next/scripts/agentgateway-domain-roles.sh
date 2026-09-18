@@ -109,5 +109,5 @@ for role in ${ROLE_NAMES}; do
 done
 IFS="${old_ifs}"
 
-printf '{"role_family":"agentgateway-write-domain","roles":10,"created":%s,"human_assigned":false,"service_account_grants":%s}\n' \
+printf '{"role_family":"agentgateway-write-domain","roles":11,"created":%s,"human_assigned":false,"service_account_grants":%s}\n' \
   "${created}" "${granted}"

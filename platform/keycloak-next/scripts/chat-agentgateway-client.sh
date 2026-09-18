@@ -266,8 +266,13 @@ EOF
 }
 
 ensure_role_mapping() {
+  # TWO passes on purpose: with six roles, checking and granting in the same
+  # loop would have already granted the first roles by the time an unauthorized
+  # holder is found on the fourth. Nothing is mutated until every role is clean.
   for role in ${ROLE_NAMES}; do
     assert_exclusive_role_mapping "${role}"
+  done
+  for role in ${ROLE_NAMES}; do
     if ! target_has_direct_role "${role}"; then
       "${KCADM}" add-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
         --uid "${SERVICE_ACCOUNT_ID}" --rolename "${role}" >/dev/null 2>&1 || \
