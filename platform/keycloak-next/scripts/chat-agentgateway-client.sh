@@ -4,19 +4,30 @@ set -eu
 umask 077
 
 # Dedicated confidential client for the chat surface (Open WebUI at
-# chat.e-dani.com) to reach AgentGateway /studio through its auth-proxy sidecar.
-# It holds exactly one domain role, agentgateway-write:media, which is CREATED
-# by agentgateway-domain-roles.sh (sync-wave 19) and only VERIFIED here. This
-# reconciler never creates, deletes or widens a realm role.
+# chat.e-dani.com) to reach AgentGateway through its auth-proxy sidecar.
+# It holds the REVIEWED SET of domain roles below and nothing else from the
+# agentgateway-write family — never the legacy umbrella role. Every role is
+# CREATED by agentgateway-domain-roles.sh (sync-wave 19) and only VERIFIED
+# here: this reconciler never creates, deletes or widens a realm role.
+#
+# 2026-09-17 (contract v2): the set grew from one role to six. The chat moved
+# ALL its MCP tool servers onto the sidecar (they used to carry a hand-pasted,
+# 30-day token of the umbrella client agentgateway-mcp, which expires
+# 2026-09-27 and would have taken every tool down at once). The set is exactly
+# the domains the chat already reaches today — media, social, workspace, gsc,
+# synapse and the new hermes — so the move loses no capability while dropping
+# the umbrella's reach over shopify, picqer, skirmshop-plugins and sauvage.
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"
-ROLE_NAME="${ROLE_NAME:-agentgateway-write:media}"
+# Space-separated and ORDER-INSENSITIVE for the guard below; keep it sorted.
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"
+EXPECTED_ROLE_NAMES="agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
-RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"
+RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-chat-agentgateway-admin.config
 CLIENT_CONFIG=/tmp/kcadm-chat-agentgateway-client.config
@@ -36,13 +47,15 @@ progress() {
 }
 
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
-[ "${RECONCILE_CONTRACT_VERSION}" = "1" ] || fail "unsupported reconcile contract version"
-case "${CLIENT_ID}:${ROLE_NAME}" in
-  chat-agentgateway:agentgateway-write:media)
+[ "${RECONCILE_CONTRACT_VERSION}" = "2" ] || fail "unsupported reconcile contract version"
+[ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \
+  fail "ROLE_NAMES is immutable; review this reconciler, the domain-role allowlist and the gateway CEL together"
+case "${CLIENT_ID}" in
+  chat-agentgateway)
     CLIENT_SECRET="${CHAT_AGENTGATEWAY_CLIENT_SECRET:-}"
     MAPPER_NAME=chat-agentgateway-audience
     ;;
-  *) fail "unsupported immutable client/role pair" ;;
+  *) fail "unsupported immutable client" ;;
 esac
 case "${MODE}" in
   ensure|audit)
@@ -163,33 +176,41 @@ upsert_audience_mapper() {
 }
 
 role_exists() {
-  kget "roles/${ROLE_NAME}" --fields id >/dev/null 2>&1
+  kget "roles/$1" --fields id >/dev/null 2>&1
 }
 
 verify_role() {
   # The domain role is owned by agentgateway-domain-roles.sh; a missing role
   # means that hook has not run for this commit, never a reason to create it.
-  role_exists || fail "${ROLE_NAME} is missing; the agentgateway-domain-roles hook owns it"
-  composite="$(kget "roles/${ROLE_NAME}" --fields composite --format csv --noquotes | nonempty_lines)"
-  [ "${composite}" = "false" ] || fail "${ROLE_NAME} must remain non-composite"
+  role_exists "$1" || fail "$1 is missing; the agentgateway-domain-roles hook owns it"
+  composite="$(kget "roles/$1" --fields composite --format csv --noquotes | nonempty_lines)"
+  [ "${composite}" = "false" ] || fail "$1 must remain non-composite"
+}
+
+verify_roles() {
+  for role in ${ROLE_NAMES}; do
+    verify_role "${role}"
+  done
 }
 
 role_scope_has_direct_role() {
   kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${ROLE_NAME}"
+    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
 }
 
 ensure_role_scope_mapping() {
-  if ! role_scope_has_direct_role; then
-    role_id="$(kget "roles/${ROLE_NAME}" --fields id --format csv --noquotes | nonempty_lines)"
-    [ -n "${role_id}" ] || fail "${ROLE_NAME} id is empty"
-    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${ROLE_NAME}")"
-    "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
-      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
-      fail "failed to map ${ROLE_NAME} into the client role scope"
-    unset role_body role_id
-  fi
-  role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
+  for role in ${ROLE_NAMES}; do
+    if ! role_scope_has_direct_role "${role}"; then
+      role_id="$(kget "roles/${role}" --fields id --format csv --noquotes | nonempty_lines)"
+      [ -n "${role_id}" ] || fail "${role} id is empty"
+      role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${role}")"
+      "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
+        --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+        fail "failed to map ${role} into the client role scope"
+      unset role_body role_id
+    fi
+    role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
+  done
 }
 
 resolve_service_account() {
@@ -208,28 +229,36 @@ service_account_realm_roles() {
 }
 
 target_has_direct_role() {
-  service_account_realm_roles | grep -Fxq "${ROLE_NAME}"
+  service_account_realm_roles | grep -Fxq "$1"
 }
 
-assert_single_write_role() {
-  # The chat identity may hold its one domain role and nothing else from the
-  # agentgateway-write family: neither the legacy umbrella role nor a sibling
-  # domain such as agentgateway-write:synapse.
-  extra="$(service_account_realm_roles | grep -E '^agentgateway-write' | grep -Fxv "${ROLE_NAME}" || true)"
-  [ -z "${extra}" ] || fail "service account holds an extra AgentGateway write role"
+assert_reviewed_write_roles() {
+  # The chat identity may hold the reviewed domain roles and NOTHING else from
+  # the agentgateway-write family: not the legacy umbrella role, not a sibling
+  # domain such as agentgateway-write:shopify. Anything outside the set fails.
+  held="$(service_account_realm_roles | grep -E '^agentgateway-write' || true)"
+  for role in ${held}; do
+    case " ${ROLE_NAMES} " in
+      *" ${role} "*) ;;
+      *) fail "service account holds an unreviewed AgentGateway write role: ${role}" ;;
+    esac
+  done
+  for role in ${ROLE_NAMES}; do
+    printf '%s\n' "${held}" | grep -Fxq "${role}" || fail "service account is missing ${role}"
+  done
 }
 
 assert_exclusive_role_mapping() {
   # Bounded role-member endpoints: at most one user (our service account) and
   # zero groups are allowed, so fetching two rows detects every violation.
-  users="$(kget "roles/${ROLE_NAME}/users" -q first=0 -q max=2 \
+  users="$(kget "roles/$1/users" -q first=0 -q max=2 \
     --fields username --format csv --noquotes | nonempty_lines)"
-  groups="$(kget "roles/${ROLE_NAME}/groups" -q first=0 -q max=2 \
+  groups="$(kget "roles/$1/groups" -q first=0 -q max=2 \
     --fields path --format csv --noquotes | nonempty_lines)"
-  [ -z "${groups}" ] || fail "${ROLE_NAME} is mapped to a group"
+  [ -z "${groups}" ] || fail "$1 is mapped to a group"
   if [ -n "${users}" ]; then
     while IFS= read -r username; do
-      [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || fail "${ROLE_NAME} has an unauthorized user"
+      [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || fail "$1 has an unauthorized user"
     done <<EOF
 ${users}
 EOF
@@ -237,14 +266,21 @@ EOF
 }
 
 ensure_role_mapping() {
-  assert_exclusive_role_mapping
-  if ! target_has_direct_role; then
-    "${KCADM}" add-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
-      --uid "${SERVICE_ACCOUNT_ID}" --rolename "${ROLE_NAME}" >/dev/null 2>&1 || \
-      fail "failed to map ${ROLE_NAME}"
-  fi
-  assert_exclusive_role_mapping
-  assert_single_write_role
+  # TWO passes on purpose: with six roles, checking and granting in the same
+  # loop would have already granted the first roles by the time an unauthorized
+  # holder is found on the fourth. Nothing is mutated until every role is clean.
+  for role in ${ROLE_NAMES}; do
+    assert_exclusive_role_mapping "${role}"
+  done
+  for role in ${ROLE_NAMES}; do
+    if ! target_has_direct_role "${role}"; then
+      "${KCADM}" add-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
+        --uid "${SERVICE_ACCOUNT_ID}" --rolename "${role}" >/dev/null 2>&1 || \
+        fail "failed to map ${role}"
+    fi
+    assert_exclusive_role_mapping "${role}"
+  done
+  assert_reviewed_write_roles
 }
 
 verify_client() {
@@ -256,11 +292,13 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled true
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
   [ -n "$(mapper_uuid_optional "${MAPPER_NAME}")" ] || fail "audience mapper missing"
-  role_scope_has_direct_role || fail "client role scope is missing ${ROLE_NAME}"
   resolve_service_account
-  target_has_direct_role || fail "direct realm role missing"
-  assert_exclusive_role_mapping
-  assert_single_write_role
+  for role in ${ROLE_NAMES}; do
+    role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
+    target_has_direct_role "${role}" || fail "direct realm role missing: ${role}"
+    assert_exclusive_role_mapping "${role}"
+  done
+  assert_reviewed_write_roles
 }
 
 mint_claims() {
@@ -291,8 +329,10 @@ verify_minted_claims() {
   printf '%s' "${claims}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${CLIENT_ID}"'"' || \
     fail "minted token has wrong azp"
   printf '%s' "${claims}" | grep -Fq "${AGENTGATEWAY_AUDIENCE}" || fail "audience missing"
-  printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"'"${ROLE_NAME}"'"' || \
-    fail "dedicated realm role missing"
+  for role in ${ROLE_NAMES}; do
+    printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"'"${role}"'"' || \
+      fail "dedicated realm role missing in the minted token: ${role}"
+  done
   if printf '%s' "${claims}" | grep -Eq '"realm_access"[[:space:]]*:[[:space:]]*\{[^}]*"roles"[[:space:]]*:[[:space:]]*\[[^]]*"agentgateway-write"'; then
     fail "minted token contains forbidden realm role"
   fi
@@ -309,20 +349,22 @@ rollback_identity() {
       fail "failed to delete ${CLIENT_ID}"
   fi
   [ -z "$(resolve_client_optional)" ] || fail "client ${CLIENT_ID} remains after rollback"
-  if role_exists; then
-    users="$(kget "roles/${ROLE_NAME}/users" --fields username --format csv --noquotes | nonempty_lines)"
-    groups="$(kget "roles/${ROLE_NAME}/groups" --fields path --format csv --noquotes | nonempty_lines)"
-    [ -z "${users}${groups}" ] || fail "role still has mappings after client deletion"
-  fi
-  printf '{"client_id":"%s","realm_role":"%s","client_present":false,"role_retained":true}\n' \
-    "${CLIENT_ID}" "${ROLE_NAME}"
+  for role in ${ROLE_NAMES}; do
+    if role_exists "${role}"; then
+      users="$(kget "roles/${role}/users" --fields username --format csv --noquotes | nonempty_lines)"
+      groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
+      [ -z "${users}${groups}" ] || fail "${role} still has mappings after client deletion"
+    fi
+  done
+  printf '{"client_id":"%s","realm_roles":"%s","client_present":false,"roles_retained":true}\n' \
+    "${CLIENT_ID}" "${ROLE_NAMES}"
 }
 
 login_admin
 progress authenticated
 case "${MODE}" in
   ensure)
-    verify_role
+    verify_roles
     upsert_client
     progress client-reconciled
     upsert_audience_mapper
@@ -333,15 +375,15 @@ case "${MODE}" in
     progress role-mapping-verified
     verify_client
     verify_minted_claims
-    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true}\n' \
-      "${CLIENT_ID}" "${ROLE_NAME}"
+    printf '{"client_id":"%s","realm_roles":"%s","present":true,"exclusive_service_account":true}\n' \
+      "${CLIENT_ID}" "${ROLE_NAMES}"
     ;;
   audit)
-    verify_role
+    verify_roles
     verify_client
     verify_minted_claims
-    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true}\n' \
-      "${CLIENT_ID}" "${ROLE_NAME}"
+    printf '{"client_id":"%s","realm_roles":"%s","present":true,"exclusive_service_account":true}\n' \
+      "${CLIENT_ID}" "${ROLE_NAMES}"
     ;;
   rollback)
     rollback_identity

@@ -14,7 +14,8 @@ spec:
   backoffLimit: 1
   # kcadm starts a JVM for every role/audit request. The ten-role reconcile
   # took 269s in production on 2026-07-15, leaving only 31s before Kubernetes
-  # killed an otherwise healthy PostSync hook. Keep enough room for one slow
+  # killed an otherwise healthy PostSync hook. (2026-09-17: eleven roles and
+  # six reviewed service-account pairs — same order of magnitude, same margin.) Keep enough room for one slow
   # Keycloak response and the configured retry without weakening fail-closed
   # role validation.
   activeDeadlineSeconds: 900
@@ -46,11 +47,11 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - name: ROLE_NAMES
-              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage
+              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes
             # Reviewed together with chat-agentgateway-client.yaml (sync-wave 23):
             # the only service account allowed to hold a domain role.
             - name: ALLOWED_SERVICE_ACCOUNTS
-              value: agentgateway-write:media=service-account-chat-agentgateway
+              value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }

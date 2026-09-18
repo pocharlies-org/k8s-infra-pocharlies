@@ -185,10 +185,15 @@ def _run(mode, state, env_overrides=None):
         return result, log.read_text().splitlines(), json.loads(state_path.read_text())
 
 
+# Contract v2 (2026-09-17): the chat identity holds the six reviewed domains.
+REVIEWED_ROLES = "agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace".split()
+
+
 def _state(role_present=True, client=None, humans=None):
     state = {"clients": {}, "roles": {}, "humans": humans or []}
     if role_present:
-        state["roles"]["agentgateway-write:media"] = {"id": "role-media", "composite": False}
+        for role in REVIEWED_ROLES:
+            state["roles"][role] = {"id": f"role-{role.split(':')[1]}", "composite": False}
     if client is not None:
         state["clients"]["uuid-chat-agentgateway"] = client
     return state
@@ -199,8 +204,8 @@ def _existing_client(**extra):
         "clientId": "chat-agentgateway", "enabled": "true", "publicClient": "false",
         "standardFlowEnabled": "false", "directAccessGrantsEnabled": "false",
         "serviceAccountsEnabled": "true", "fullScopeAllowed": "false",
-        "secret": "chat-secret", "sa_roles": ["agentgateway-write:media"],
-        "scope_roles": ["agentgateway-write:media"],
+        "secret": "chat-secret", "sa_roles": list(REVIEWED_ROLES),
+        "scope_roles": list(REVIEWED_ROLES),
         "mappers": {"m1": {"name": "chat-agentgateway-audience", "audience": "mcp.lan.e-dani.com"}},
     }
     client.update(extra)
@@ -211,13 +216,15 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_reconciler_is_fixed_scope_and_never_owns_the_domain_role(self):
         script = SCRIPT.read_text()
         self.assertIn('CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"', script)
-        self.assertIn('ROLE_NAME="${ROLE_NAME:-agentgateway-write:media}"', script)
+        self.assertIn('ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"', script)
+        self.assertIn('EXPECTED_ROLE_NAMES="agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"', script)
         self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', script)
         self.assertIn('FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"', script)
-        self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"', script)
-        self.assertIn("chat-agentgateway:agentgateway-write:media)", script)
+        self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"', script)
+        self.assertIn("  chat-agentgateway)", script)
         self.assertIn('CLIENT_SECRET="${CHAT_AGENTGATEWAY_CLIENT_SECRET:-}"', script)
-        self.assertIn("unsupported immutable client/role pair", script)
+        self.assertIn("unsupported immutable client", script)
+        self.assertIn("ROLE_NAMES is immutable", script)
         self.assertIn("serviceAccountsEnabled=true", script)
         self.assertIn("standardFlowEnabled=false", script)
         self.assertIn("directAccessGrantsEnabled=false", script)
@@ -225,9 +232,9 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("oidc-audience-mapper", script)
         self.assertIn('"clients/${CLIENT_UUID}/scope-mappings/realm"', script)
         self.assertIn("ensure_role_scope_mapping", script)
-        self.assertIn('"roles/${ROLE_NAME}/users" -q first=0 -q max=2', script)
-        self.assertIn('"roles/${ROLE_NAME}/groups" -q first=0 -q max=2', script)
-        self.assertIn("assert_single_write_role", script)
+        self.assertIn('"roles/$1/users" -q first=0 -q max=2', script)
+        self.assertIn('"roles/$1/groups" -q first=0 -q max=2', script)
+        self.assertIn("assert_reviewed_write_roles", script)
         self.assertIn("verify_minted_claims", script)
         self.assertIn("rollback_identity", script)
         # The domain role belongs to agentgateway-domain-roles.sh: never created
@@ -239,18 +246,19 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertNotIn('echo "${CHAT_AGENTGATEWAY_CLIENT_SECRET}"', script)
         self.assertNotIn('echo "${token}"', script)
 
-    def test_ensure_creates_the_client_and_maps_only_the_media_role(self):
+    def test_ensure_creates_the_client_and_maps_only_the_reviewed_roles(self):
         result, calls, state = _run("ensure", _state())
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn('"client_id":"chat-agentgateway","realm_role":"agentgateway-write:media","present":true', result.stdout)
+        self.assertIn('"client_id":"chat-agentgateway","realm_roles":"agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace","present":true', result.stdout)
         self.assertNotIn("chat-secret", result.stdout + result.stderr)
         self.assertTrue(any(c.startswith("create clients ") and "clientId=chat-agentgateway" in c for c in calls))
-        self.assertTrue(any(c.startswith("add-roles ") and "--rolename agentgateway-write:media" in c for c in calls))
+        for role in REVIEWED_ROLES:
+            self.assertTrue(any(c.startswith("add-roles ") and f"--rolename {role}" in c for c in calls), role)
         self.assertFalse(any(c.startswith("create roles") for c in calls))
         self.assertFalse(any(c.startswith("delete roles") for c in calls))
         client = state["clients"]["uuid-chat-agentgateway"]
-        self.assertEqual(["agentgateway-write:media"], client["sa_roles"])
-        self.assertEqual(["agentgateway-write:media"], client["scope_roles"])
+        self.assertEqual(sorted(REVIEWED_ROLES), sorted(client["sa_roles"]))
+        self.assertEqual(sorted(REVIEWED_ROLES), sorted(client["scope_roles"]))
         self.assertEqual("false", client["fullScopeAllowed"])
         self.assertEqual(["mcp.lan.e-dani.com"], [m["audience"] for m in client["mappers"].values()])
 
@@ -264,15 +272,21 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_ensure_refuses_to_run_before_the_domain_role_exists(self):
         result, calls, state = _run("ensure", _state(role_present=False))
         self.assertEqual(1, result.returncode)
-        self.assertIn("agentgateway-write:media is missing; the agentgateway-domain-roles hook owns it", result.stderr)
+        self.assertIn("is missing; the agentgateway-domain-roles hook owns it", result.stderr)
         self.assertFalse(any(c.startswith("create") for c in calls))
         self.assertEqual({}, state["clients"])
 
-    def test_ensure_fails_when_the_service_account_holds_another_write_role(self):
-        client = _existing_client(sa_roles=["agentgateway-write:media", "agentgateway-write"])
+    def test_ensure_fails_when_the_service_account_holds_an_unreviewed_write_role(self):
+        client = _existing_client(sa_roles=REVIEWED_ROLES + ["agentgateway-write:shopify"])
         result, _, _ = _run("ensure", _state(client=client))
         self.assertEqual(1, result.returncode)
-        self.assertIn("service account holds an extra AgentGateway write role", result.stderr)
+        self.assertIn("unreviewed AgentGateway write role: agentgateway-write:shopify", result.stderr)
+
+    def test_ensure_fails_when_the_service_account_holds_the_umbrella_role(self):
+        client = _existing_client(sa_roles=REVIEWED_ROLES + ["agentgateway-write"])
+        result, _, _ = _run("ensure", _state(client=client))
+        self.assertEqual(1, result.returncode)
+        self.assertIn("unreviewed AgentGateway write role: agentgateway-write", result.stderr)
 
     def test_ensure_fails_when_a_human_holds_the_media_role(self):
         humans = [{"username": "dani", "roles": ["agentgateway-write:media"]}]
@@ -284,26 +298,33 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_ensure_rejects_a_token_that_carries_the_umbrella_role(self):
         # Scope-mapping drift: the umbrella role leaks into the scope even though
         # the service account mapping looks right on paper.
-        client = _existing_client(scope_roles=["agentgateway-write:media", "agentgateway-write"],
-                                  sa_roles=["agentgateway-write:media", "agentgateway-write"])
+        client = _existing_client(scope_roles=REVIEWED_ROLES + ["agentgateway-write"],
+                                  sa_roles=REVIEWED_ROLES + ["agentgateway-write"])
         result, _, _ = _run("audit", _state(client=client))
         self.assertEqual(1, result.returncode)
-        self.assertIn("extra AgentGateway write role", result.stderr)
+        self.assertIn("unreviewed AgentGateway write role", result.stderr)
 
     def test_rollback_deletes_the_client_but_retains_the_domain_role(self):
         result, calls, state = _run("rollback", _state(client=_existing_client()),
                                     {"CHAT_AGENTGATEWAY_CLIENT_SECRET": ""})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn('"client_present":false,"role_retained":true', result.stdout)
+        self.assertIn('"client_present":false,"roles_retained":true', result.stdout)
         self.assertTrue(any(c.startswith("delete clients/uuid-chat-agentgateway ") for c in calls))
         self.assertFalse(any(c.startswith("delete roles") for c in calls))
-        self.assertIn("agentgateway-write:media", state["roles"])
+        for role in REVIEWED_ROLES:
+            self.assertIn(role, state["roles"])
         self.assertEqual({}, state["clients"])
 
-    def test_immutable_pair_and_secret_are_enforced_before_any_call(self):
+    def test_immutable_client_roles_and_secret_are_enforced_before_any_call(self):
         result, calls, _ = _run("ensure", _state(), {"CLIENT_ID": "chat-agentgateway-2"})
         self.assertEqual(1, result.returncode)
-        self.assertIn("unsupported immutable client/role pair", result.stderr)
+        self.assertIn("unsupported immutable client", result.stderr)
+        self.assertEqual([], calls)
+        result, calls, _ = _run(
+            "ensure", _state(), {"ROLE_NAMES": "agentgateway-write:media agentgateway-write:shopify"}
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("ROLE_NAMES is immutable", result.stderr)
         self.assertEqual([], calls)
         result, calls, _ = _run("ensure", _state(), {"CHAT_AGENTGATEWAY_CLIENT_SECRET": ""})
         self.assertEqual(1, result.returncode)
@@ -316,14 +337,14 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("key: secret/agentgateway/prod", manifest)
         self.assertIn("property: chat_agentgateway_client_secret", manifest)
         self.assertIn("name: CLIENT_ID, value: chat-agentgateway", manifest)
-        self.assertIn("name: ROLE_NAME, value: agentgateway-write:media", manifest)
+        self.assertIn("value: agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace", manifest)
         self.assertIn("name: FORBIDDEN_REALM_ROLE, value: agentgateway-write", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
         self.assertIn("argocd.argoproj.io/hook-delete-policy: BeforeHookCreation", manifest)
         # After the domain roles (19), the umbrella role (20), OpenClaw (21)
         # and the Synapse M2M clients (22).
         self.assertIn('argocd.argoproj.io/sync-wave: "23"', manifest)
-        self.assertIn('name: RECONCILE_CONTRACT_VERSION, value: "1"', manifest)
+        self.assertIn('name: RECONCILE_CONTRACT_VERSION, value: "2"', manifest)
         self.assertIn('synapse.e-dani.com/agentgateway-m2m-client: "true"', manifest)
         self.assertIn("activeDeadlineSeconds: 900", manifest)
         self.assertIn("automountServiceAccountToken: false", manifest)
@@ -336,8 +357,8 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_domain_roles_hook_allowlists_exactly_this_service_account(self):
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         job = (BASE / "agentgateway-domain-roles-job.yaml").read_text()
-        self.assertIn('EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway"', script)
-        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway", job)
+        self.assertIn('EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway"', script)
+        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway", job)
 
     def test_kustomization_excludes_manual_rollback(self):
         kustomization = (BASE / "kustomization.yaml").read_text()
