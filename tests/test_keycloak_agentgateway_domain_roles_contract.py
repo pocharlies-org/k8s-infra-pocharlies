@@ -15,14 +15,14 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
-            "social", "workspace", "gsc", "offers",
+            "social", "workspace", "gsc", "offers", "sauvage", "hermes",
         }
         for domain in expected:
             self.assertIn(f"agentgateway-write:{domain}", script)
         self.assertIn("ROLE_NAMES is immutable", script)
         self.assertIn("ALLOWED_SERVICE_ACCOUNTS is immutable", script)
         self.assertIn(
-            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway"',
+            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway"',
             script,
         )
         self.assertIn('roles/${role}/users', script)
@@ -89,20 +89,27 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             )
             return result, log.read_text().splitlines()
 
-    def test_reconciler_creates_exactly_ten_roles_without_assigning_them(self):
+    def test_reconciler_creates_exactly_eleven_roles_without_assigning_them(self):
         result, calls = self._run_reconciler()
         self.assertEqual(0, result.returncode, result.stderr)
         creations = [call for call in calls if call.startswith("create roles ")]
-        self.assertEqual(10, len(creations))
-        self.assertIn('"roles":10,"created":10,"human_assigned":false,"service_account_grants":0', result.stdout)
+        self.assertEqual(11, len(creations))
+        self.assertIn('"roles":11,"created":11,"human_assigned":false,"service_account_grants":0', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
 
     def test_reconciler_tolerates_only_the_reviewed_chat_service_account(self):
+        # Contract v2: the chat identity is reviewed on six domains, so the hook
+        # tolerates its grant on each of them and counts one per role.
         result, calls = self._run_reconciler({
             "roles/agentgateway-write:media/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:social/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:workspace/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:gsc/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:synapse/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:hermes/users": "service-account-chat-agentgateway",
         })
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn('"human_assigned":false,"service_account_grants":1', result.stdout)
+        self.assertIn('"human_assigned":false,"service_account_grants":6', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
 
     def test_reconciler_rejects_a_human_on_the_allowlisted_role(self):
@@ -113,12 +120,14 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn("agentgateway-write:media is assigned to an unauthorized user", result.stderr)
         self.assertNotIn("dani", result.stderr)
 
-    def test_reconciler_rejects_the_chat_service_account_on_any_other_role(self):
+    def test_reconciler_rejects_the_chat_service_account_on_an_unreviewed_role(self):
+        # :shopify is outside the reviewed set, so even the chat identity is a
+        # violation there — the allowlist is per role, not per client.
         result, _ = self._run_reconciler({
-            "roles/agentgateway-write:synapse/users": "service-account-chat-agentgateway",
+            "roles/agentgateway-write:shopify/users": "service-account-chat-agentgateway",
         })
         self.assertEqual(1, result.returncode)
-        self.assertIn("agentgateway-write:synapse is assigned to a user; dedicated-client rollout is not ready", result.stderr)
+        self.assertIn("agentgateway-write:shopify is assigned to a user; dedicated-client rollout is not ready", result.stderr)
 
     def test_reconciler_rejects_a_second_holder_next_to_the_service_account(self):
         result, _ = self._run_reconciler({
@@ -129,7 +138,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
 
     def test_allowlist_is_immutable(self):
         result, calls = self._run_reconciler(
-            env_overrides={"ALLOWED_SERVICE_ACCOUNTS": "agentgateway-write:synapse=service-account-chat-agentgateway"},
+            env_overrides={"ALLOWED_SERVICE_ACCOUNTS": "agentgateway-write:shopify=service-account-chat-agentgateway"},
         )
         self.assertEqual(1, result.returncode)
         self.assertIn("ALLOWED_SERVICE_ACCOUNTS is immutable", result.stderr)
@@ -145,7 +154,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn('capabilities: { drop: ["ALL"] }', manifest)
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("app.kubernetes.io/component: agentgateway-domain-roles", manifest)
-        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway", manifest)
+        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway", manifest)
         self.assertNotIn("0.0.0.0/0", manifest)
 
     def test_kustomize_owns_job_and_script(self):

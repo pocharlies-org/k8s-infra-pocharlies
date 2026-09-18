@@ -445,14 +445,17 @@ PostSync flips the flag back to `false`. Expected sanitized output:
 {"reconciler":"agentgateway-read-grants","mode":"fullscope-rollback","fullscope_allowed_agentgateway_mcp":true,"tokens_verified":true}
 ```
 
-## 12. Chat studio service identity (`chat-agentgateway`)
+## 12. Chat service identity (`chat-agentgateway`)
 
-Open WebUI at `chat.e-dani.com` reaches AgentGateway `/studio` through an
+Open WebUI at `chat.e-dani.com` reaches AgentGateway through an
 `agentgateway-auth-proxy` sidecar that mints client-credentials tokens as
-`chat-agentgateway`. The token carries only the domain role
-`agentgateway-write:media` (created by the domain-roles hook, sync-wave 19),
-which the gateway requires for `studio_generate_image`, `studio_generate_video`
-and `studio_cancel_job`; the umbrella `agentgateway-write` is forbidden.
+`chat-agentgateway`. The token carries the six reviewed domain roles
+`agentgateway-write:` `gsc`, `hermes`, `media`, `social`, `synapse` and
+`workspace` (created by the domain-roles hook, sync-wave 19); the umbrella
+`agentgateway-write` is forbidden. Contract v2 (2026-09-17): the set was
+`:media` alone while only `/studio` went through the sidecar; it grew when every
+MCP tool server of the chat moved onto the sidecar and stopped carrying a
+hand-pasted umbrella token.
 
 **Before merging** the commit that adds this identity, seed the client secret;
 without it the ExternalSecret never materializes and the PostSync hook pod
@@ -476,13 +479,13 @@ selective resource sync). Expected sanitized output:
 kubectl -n keycloak wait --for=condition=complete \
   job/keycloak-chat-agentgateway-client --timeout=300s
 kubectl -n keycloak logs job/keycloak-chat-agentgateway-client -c reconcile-client
-# {"client_id":"chat-agentgateway","realm_role":"agentgateway-write:media","present":true,"exclusive_service_account":true}
+# {"client_id":"chat-agentgateway","realm_roles":"agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace","present":true,"exclusive_service_account":true}
 ```
 
-On the next sync the domain-roles hook reports
-`"human_assigned":false,"service_account_grants":1`; any other holder of
-`agentgateway-write:media`, or this service account on any other domain role,
-fails that hook and therefore the whole sync.
+On the next sync the domain-roles hook reports `"human_assigned":false` with one
+service-account grant per reviewed role; any other holder of one of the six, or
+this service account on a domain role outside the set, fails that hook and
+therefore the whole sync.
 
 The chat Deployment consumes the same Vault property through its own
 ExternalSecret (in `dgx-infra`, `k8s/apps/chat`), so rotating the secret is one

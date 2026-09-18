@@ -100,26 +100,32 @@ and the AgentGateway CEL policy. Do not sync this hook independently while the
 shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
-`agentgateway-domain-roles-job.yaml` creates the ten reviewed domain roles
+`agentgateway-domain-roles-job.yaml` creates the eleven reviewed domain roles
 without assigning them. The hook fails if one is composite, mapped to a group,
 or held by any user other than the single reviewed service account in its
-immutable `ALLOWED_SERVICE_ACCOUNTS` map (today only
-`agentgateway-write:media=service-account-chat-agentgateway`). Every other
-domain role stays unassigned until a dedicated client and a new map entry are
-reviewed together; the global `agentgateway-mcp` client is never granted these
-roles by this hook.
+immutable `ALLOWED_SERVICE_ACCOUNTS` map (today the six chat pairs:
+`:media`, `:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
+`=service-account-chat-agentgateway`). Every other domain role stays unassigned
+until a dedicated client and a new map entry are reviewed together; the global
+`agentgateway-mcp` client is never granted these roles by this hook.
 
-## Chat studio identity (`chat-agentgateway`)
+## Chat identity (`chat-agentgateway`)
 
 `chat-agentgateway-client.yaml` reconciles the confidential client the chat
 surface (Open WebUI at `chat.e-dani.com`) uses, through its
-`agentgateway-auth-proxy` sidecar, to reach AgentGateway `/studio`. The client
-has client credentials only, the exact `mcp.lan.e-dani.com` audience,
-`fullScopeAllowed=false`, and exactly one realm role in its scope and on its
-service account: `agentgateway-write:media`. The role itself is owned by the
-domain-roles hook above; this reconciler refuses to run if it is missing and
-never creates or deletes it. It fails if the service account holds any other
-`agentgateway-write*` role, if a human or group holds `:media`, or if the minted
+`agentgateway-auth-proxy` sidecar, to reach AgentGateway. The client has client
+credentials only, the exact `mcp.lan.e-dani.com` audience,
+`fullScopeAllowed=false`, and the REVIEWED SET of realm roles in its scope and
+on its service account: `agentgateway-write:` `gsc`, `hermes`, `media`,
+`social`, `synapse`, `workspace` (contract v2, 2026-09-17 — it was `:media`
+alone while only `/studio` went through the sidecar). Those six are exactly the
+domains the chat already reached with the hand-pasted umbrella token its MCP
+tool servers used until that date, so moving every server onto the sidecar loses
+no capability and drops the umbrella's reach over shopify, picqer,
+skirmshop-plugins, offers and sauvage. The roles are owned by the domain-roles
+hook above; this reconciler refuses to run if one is missing and never creates
+or deletes them. It fails if the service account holds ANY `agentgateway-write*`
+role outside the set, if a human or group holds one of them, or if the minted
 token carries the umbrella `agentgateway-write`. The client secret is the single
 Vault property `secret/agentgateway/prod#chat_agentgateway_client_secret`; see
 `RUNBOOK.md` §12 for seeding and rollback.

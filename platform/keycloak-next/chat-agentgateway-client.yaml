@@ -86,10 +86,15 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - { name: CLIENT_ID, value: chat-agentgateway }
-            - { name: ROLE_NAME, value: agentgateway-write:media }
+            # Contrato v2 (17-09-2026): el conjunto REVISADO de dominios que el
+            # chat ya alcanza hoy con el token pegado a mano del cliente
+            # paraguas. Se revisa junto con ALLOWED_SERVICE_ACCOUNTS del job de
+            # roles (wave 19) y con el CEL de las rutas del gateway.
+            - name: ROLE_NAMES
+              value: agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
-            - { name: RECONCILE_CONTRACT_VERSION, value: "1" }
+            - { name: RECONCILE_CONTRACT_VERSION, value: "2" }
             - name: CHAT_AGENTGATEWAY_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
