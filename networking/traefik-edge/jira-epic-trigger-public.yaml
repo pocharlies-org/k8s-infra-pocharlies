@@ -52,7 +52,7 @@ spec:
   ingressClassName: traefik-edge
   routes:
     - kind: Rule
-      match: Host(`jira-webhook.e-dani.com`) && (Path(`/jira/epic`) || Path(`/healthz`))
+      match: Host(`jira-webhook.e-dani.com`) && (Path(`/jira/epic`) || Path(`/healthz`) || Path(`/hermes/cerrar`))
       priority: 100
       services:
         - name: jira-epic-trigger-edge-host
