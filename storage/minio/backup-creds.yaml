@@ -21,7 +21,7 @@ spec:
         cnpg-backup: "true"
   refreshTime: 1h
   externalSecretSpec:
-    refreshInterval: 6h
+    refreshInterval: 24h
     secretStoreRef:
       name: onepassword
       kind: ClusterSecretStore
