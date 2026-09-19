@@ -268,6 +268,21 @@ spec:
         passwordSecret:
           name: aurora-db-credentials
         comment: "Aurora — investigación de incidentes disparada por Keep (repo: pocharlies/k8s-observability-pocharlies)"
+      # SC-546: destino de archivo de la retención de sesiones opencode. El rol
+      # existía desde el 11-09 creado a mano; al pasarlo a managed.roles CNPG
+      # reconcilia su contraseña desde el secret (doc "Password management":
+      # "The declarative role management feature includes reconciling of role
+      # passwords"), por eso el secret de 1Password con la contraseña VIGENTE
+      # (item opencode-archive) debe estar materializado ANTES de aplicar este
+      # spec — ver secuencia de merge en el PR feat/SC-546-cnpg-declarativo.
+      # Un ALTER con la misma contraseña es inocuo; un ALTER con otra dejaría
+      # sin login al timer x86 opencode-archive-prune.
+      - name: opencode_archive
+        ensure: present
+        login: true
+        passwordSecret:
+          name: opencode-archive-db-credentials
+        comment: "SC-546 exportador de archivo/poda de sesiones opencode (timer x86 opencode-archive-prune, repo x86-host-runtime-pocharlies); dueño de agent_transcripts"
 
   backup:
     # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
