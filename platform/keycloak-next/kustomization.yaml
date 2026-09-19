@@ -19,6 +19,7 @@ resources:
   - chat-agentgateway-client.yaml
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
+  - agentgateway-mcp-token-ttl-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -50,6 +51,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-social-mcp-client
+  - name: keycloak-agentgateway-mcp-token-ttl
+    files:
+      - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-mcp-token-ttl
   - name: keycloak-skirmbooks-sso
     files:
       - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh

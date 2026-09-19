@@ -201,3 +201,16 @@ no secret, so there is no `ExternalSecret` and no minted-token check; the
 reconciler asserts the flow flags, the redirect URI, the PKCE attribute and the
 mapper and fails closed. State rollback deletes the client
 (`manual/agentgateway-social-mcp-client-rollback-job.yaml`, excluded from Argo).
+
+## AgentGateway MCP access token TTL (`agentgateway-mcp`)
+
+`agentgateway-mcp-token-ttl-job.yaml` (INFRA-187) owns the single client
+attribute `access.token.lifespan` of the confidential client
+`agentgateway-mcp`, reconciled to 3600 s (was a 30-day override; a stale
+pre-grant token of the local auth-proxy could then authenticate for days
+against the gated AgentGateway routes — INFRA-138/INFRA-139). It is the
+narrowest reconciler in this platform: it read-modify-writes exactly that
+one value in the client document, never creates the client, touches no
+role, scope mapping, secret or other attribute, and fails closed if the
+identity flags move across its write. Rollback is a git revert (RUNBOOK
+section 13).
