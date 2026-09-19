@@ -497,3 +497,36 @@ an authorized incident while the versioned ConfigMap still exists. It deletes
 only the client (and with it the service account and its role grant) and
 retains `agentgateway-write:media`; verify
 `"client_present":false,"role_retained":true` and remove the Job.
+
+## 13. AgentGateway MCP access token TTL (INFRA-187)
+
+`agentgateway-mcp-token-ttl-job.yaml` (sync-wave 24, PostSync) owns exactly
+one client attribute: `attributes."access.token.lifespan"` of
+`agentgateway-mcp`, reconciled to **3600 s**. Before INFRA-187 the client
+carried a 2592000 s (30 d) override (measured 2026-09-19), which let a stale
+pre-grant token of the local `agentgateway-auth-proxy` keep authenticating
+for days against the gated AgentGateway routes (INFRA-138/INFRA-139); with
+1 h the proxy's own refresh (`expires_in − 60 s`) bounds how long any token
+of this client can live. Roles, scope mappings, the secret and every other
+attribute stay owned by the other reconcilers — this hook only verifies the
+identity flags (`enabled`, `serviceAccountsEnabled`, `fullScopeAllowed`,
+`standardFlowEnabled`) did not move across its write.
+
+The attribute key contains dots, so `kcadm -s` cannot address it (it would
+build nested paths); the hook read-modify-writes the full client document
+with exactly the one value changed and fails closed if the override
+attribute is absent (then the realm default applies — shorter, the safe
+direction).
+
+```bash
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-mcp-token-ttl --timeout=900s
+kubectl -n keycloak logs job/keycloak-agentgateway-mcp-token-ttl -c reconcile-token-ttl
+# {"client_id":"agentgateway-mcp","access_token_lifespan":"3600","previous":"2592000","in_sync":true}
+# steady state: {"client_id":"agentgateway-mcp","access_token_lifespan":"3600","in_sync":true}
+```
+
+Rollback is a plain git revert: the target value lives in the script, so the
+next PostSync restores the reverted TTL; no manual rollback Job is shipped.
+Tokens minted before the change keep their old expiry — consumers that cache
+tokens (the auth-proxy) must be restarted once to pick up the new lifespan.
