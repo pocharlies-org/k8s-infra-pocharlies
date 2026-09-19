@@ -1,0 +1,89 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-mcp-token-ttl
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-mcp-token-ttl
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Runs after every identity reconciler (domain-roles 19, read-grants and
+    # write-role 20, openclaw/skirmbooks 21, social-mcp/synapse 22, chat 23):
+    # it only moves one client attribute and must not interleave with the
+    # reconcilers that mint agentgateway-mcp tokens and assert their roles.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # ~10 sequential kcadm calls (login retry + resolution + one
+  # read-modify-write + four read-backs). The 900s budget matches the other
+  # small client reconcilers and is >10x the measured per-call cost.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-mcp-token-ttl
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-token-ttl
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-mcp-token-ttl.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-mcp-token-ttl
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-agentgateway-mcp-token-ttl-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-mcp-token-ttl
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agentgateway-mcp-token-ttl
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: keycloak } }
+      ports: [{ protocol: TCP, port: 8080 }]
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
