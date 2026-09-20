@@ -3,6 +3,15 @@
 # Cloudflare → traefik-edge (Keycloak SSO via sso-chain@keycloak) →
 # Service dgx-dashboard-ui.control-nexus:80 (nginx UI pod) → host backend.
 # Replaces the old docker api-gateway + oauth2-proxy path (home IP 83.46.66.146).
+#
+# SC-702 (SC-1191/SC-1192): the ClientIP bypass route (prio 200) used to serve
+# the backend with no middlewares, so a tailnet/cluster caller could forge the
+# X-Auth-Request-* identity headers the backend trusts. H1 strips the 7 identity
+# headers on every route (before sso-chain where present); H2 puts the approved
+# control set behind sso-chain with higher-priority routes. The /openchamber
+# redirect (prio 300) is untouched; the new coverage sits above it in priority.
+# dgx-strip-identity-headers is defined once per Traefik instance — this copy
+# serves traefik-edge; the twin lives in networking/traefik-lan/.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -13,6 +22,22 @@ spec:
     regex: '^https?://dgx\.e-dani\.com/openchamber/?(.*)'
     replacement: 'https://chamber.e-dani.com/${1}'
     permanent: false
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dgx-strip-identity-headers
+  namespace: traefik-edge
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: ""
+      X-Auth-Request-Email: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Forwarded-User: ""
+      X-Forwarded-Email: ""
+      X-Forwarded-Groups: ""
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -28,10 +53,39 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # SC-1192: control set behind sso-chain for LAN/tailnet/cluster callers.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/email/state`))
+      priority: 400
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
+    # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      priority: 350
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       match: Host(`dgx.e-dani.com`) && PathPrefix(`/openchamber`)
       priority: 300
       middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
         - name: redirect-openchamber
           namespace: traefik-edge
       services:
@@ -41,6 +95,9 @@ spec:
     - kind: Rule
       match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 200
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -49,6 +106,8 @@ spec:
       match: Host(`dgx.e-dani.com`)
       priority: 100
       middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
       services:
