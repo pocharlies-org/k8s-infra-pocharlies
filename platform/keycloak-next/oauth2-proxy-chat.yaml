@@ -47,9 +47,10 @@ data:
     cookie_domains = [ "chat.e-dani.com" ]
     cookie_secure = true
     cookie_samesite = "lax"
-    # Mismos límites que el proxy compartido: por debajo de
-    # ssoSessionMaxLifespan (30d) y de ssoSessionIdleTimeout (7d).
-    cookie_expire = "720h"
+    # Alineado con el realm edani (20-09): ssoSessionMaxLifespan 365d,
+    # ssoSessionIdleTimeout 30d. La cookie no debe caducar antes que la
+    # sesión SSO o el PWA de Safari se queda colgado pidiendo login.
+    cookie_expire = "8760h"
     cookie_refresh = "1h"
 
     whitelist_domains = [ "chat.e-dani.com" ]
