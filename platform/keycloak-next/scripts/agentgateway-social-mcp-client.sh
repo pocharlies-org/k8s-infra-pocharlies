@@ -174,12 +174,13 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled false
   redirect="$(client_field "${CLIENT_UUID}" redirectUris)"
   printf '%s' "${redirect}" | grep -Fq "${REDIRECT_URI}" || fail "client redirect URI is missing"
-  # kcadm's CSV output does not serialize map fields like `attributes` (it
-  # comes back empty), so the PKCE check must read the client with
-  # --format json — same house pattern as read_redirect_uris in
-  # skirmbooks-sso.sh. Match key and value paired so an S256 living in any
-  # other attribute cannot satisfy the check.
-  attrs="$(kget "clients/${CLIENT_UUID}" --fields attributes --format json)"
+  # kcadm serializes map fields like `attributes` EMPTY when they are selected
+  # through the field filter (measured 2026-09-21, INFRA-197: selecting the
+  # attributes map returns {"attributes": {}} while the attribute is set on the
+  # server); the full JSON representation does serialize the map. So the PKCE
+  # check reads the client WITHOUT a field filter. Match key and value paired
+  # so an S256 living in any other attribute cannot satisfy the check.
+  attrs="$(kget "clients/${CLIENT_UUID}" --format json)"
   printf '%s' "${attrs}" | grep -Eq \
     "\"pkce\.code\.challenge\.method\"[[:space:]]*:[[:space:]]*\"${PKCE_METHOD}\"" || \
     fail "client PKCE challenge method is missing"
