@@ -1,0 +1,53 @@
+---
+# Blog drafts inbox (blog-panel on the x86 host), published at
+# borradores.e-dani.com — LAN and Tailscale only, no public route at all.
+#
+# The panel approves, edits and discards the posts that go out to
+# blog.e-dani.com, so it must never be reachable from the edge: there is no
+# counterpart of this file under networking/traefik-edge/ on purpose, and no
+# SSO fallback route either. Off the LAN it simply does not resolve to anything.
+#
+# borradores.e-dani.com has no Cloudflare record and no edge IngressRoute: off
+# the LAN it resolves to nothing. The AdGuard rewrite that points it at
+# traefik-lan lives in k8s-adguard-pocharlies; borradores.lan.e-dani.com works
+# too via the *.lan wildcard, but the wildcard cert only covers *.e-dani.com.
+#
+# It binds 0.0.0.0 on the host because Traefik reaches it over Tailscale, the
+# same reason as the claude panel beside it. blog-panel repeats the client-IP
+# check itself for anyone hitting the port directly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog-drafts-panel-lan-host
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: blog-drafts-panel-lan-host
+    app.kubernetes.io/part-of: traefik-lan
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 8793
+      targetPort: 8793
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-blog-drafts-panel
+  namespace: traefik-lan
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Publishing is a mutation, so unlike the claude panel there is no
+    # Method(GET) split: the whole panel is LAN/Tailscale or nothing.
+    - kind: Rule
+      match: (Host(`borradores.e-dani.com`) || Host(`borradores.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 500
+      services:
+        - name: blog-drafts-panel-lan-host
+          port: 8793
+  tls:
+    secretName: wildcard-edani-tls
