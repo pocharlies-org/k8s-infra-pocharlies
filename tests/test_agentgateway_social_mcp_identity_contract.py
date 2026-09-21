@@ -31,10 +31,14 @@ class AgentGatewaySocialMcpIdentityContractTest(unittest.TestCase):
         self.assertIn("serviceAccountsEnabled=false", script)
         self.assertIn("fullScopeAllowed=false", script)
         self.assertIn('attributes.\\"pkce.code.challenge.method\\"', script)
-        # Regression (SC-600): kcadm's CSV output does not serialize map
-        # fields like `attributes`, so verify_client must read the client
-        # with --format json and match key and value paired.
-        self.assertIn("--fields attributes --format json", script)
+        # Regression (SC-600): verify_client must read the client with
+        # --format json and match key and value paired.
+        # Regression (INFRA-197, measured 2026-09-21): kcadm serializes map
+        # fields like `attributes` EMPTY when selected through --fields
+        # ({"attributes": {}} even when the attribute is set server-side), so
+        # the read must NOT pass --fields — the full JSON carries the map.
+        self.assertIn('kget "clients/${CLIENT_UUID}" --format json', script)
+        self.assertNotIn("--fields attributes", script)
         self.assertIn('pkce\\.code\\.challenge\\.method', script)
         self.assertIn("oidc-audience-mapper", script)
         self.assertIn('config.\\"included.custom.audience\\"', script)
