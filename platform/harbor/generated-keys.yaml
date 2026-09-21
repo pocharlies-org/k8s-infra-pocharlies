@@ -31,7 +31,7 @@ metadata:
   name: harbor-core-keys
   namespace: harbor
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -70,7 +70,7 @@ metadata:
   name: harbor-token-cert
   namespace: harbor
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -96,7 +96,7 @@ metadata:
   name: harbor-jobservice-keys
   namespace: harbor
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -119,7 +119,7 @@ metadata:
   name: harbor-registry-keys
   namespace: harbor
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -147,7 +147,7 @@ metadata:
   name: harbor-registry-creds
   namespace: harbor
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
