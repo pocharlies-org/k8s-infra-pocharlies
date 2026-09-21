@@ -331,11 +331,12 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("client secret is empty", result.stderr)
         self.assertEqual([], calls)
 
-    def test_manifest_uses_one_vault_property_and_a_hardened_postsync_job(self):
+    def test_manifest_uses_one_onepassword_field_and_a_hardened_postsync_job(self):
         manifest = (BASE / "chat-agentgateway-client.yaml").read_text()
         self.assertEqual(manifest.count("kind: ExternalSecret"), 1)
-        self.assertIn("key: secret/agentgateway/prod", manifest)
-        self.assertIn("property: chat_agentgateway_client_secret", manifest)
+        self.assertIn("secretStoreRef:\n    name: onepassword", manifest)
+        self.assertIn("key: agentgateway-prod/chat_agentgateway_client_secret", manifest)
+        self.assertNotIn("property:", manifest)
         self.assertIn("name: CLIENT_ID, value: chat-agentgateway", manifest)
         self.assertIn("value: agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace", manifest)
         self.assertIn("name: FORBIDDEN_REALM_ROLE, value: agentgateway-write", manifest)
