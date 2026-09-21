@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: shared-rabbitmq
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore

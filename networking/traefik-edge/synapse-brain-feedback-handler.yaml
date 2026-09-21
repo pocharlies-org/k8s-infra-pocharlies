@@ -254,7 +254,7 @@ metadata:
     app.kubernetes.io/name: synapse-brain-feedback-handler
     app.kubernetes.io/part-of: synapse
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
