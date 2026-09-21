@@ -14,6 +14,7 @@ resources:
   - networking/traefik-lan/openchamber-lan.yaml
   - networking/traefik-lan/opencode-lan.yaml
   - networking/traefik-lan/opencode-claude-panel-lan.yaml
+  - networking/traefik-lan/blog-drafts-panel-lan.yaml
   - networking/traefik-lan/public-panels-lan.yaml
   - networking/traefik-lan/canonical-hosts-lan.yaml
   - networking/traefik-lan/admin-skirmshop-canonical-lan.yaml
