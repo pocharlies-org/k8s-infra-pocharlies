@@ -5,6 +5,36 @@
 # Tailscale and in-cluster callers can use the same public URLs without hitting
 # Cloudflare/Keycloak. Non-LAN callers should resolve the public Cloudflare route
 # and remain protected by the traefik-edge SSO route.
+#
+# SC-702 (SC-1191/SC-1192): the ClientIP bypass routes below used to serve the
+# dashboard backend with no middlewares at all, so a LAN caller could forge the
+# X-Auth-Request-* identity headers the backend trusts (measured live: forged
+# X-Auth-Request-Groups granted POST /api/company/control/on). Two fixes:
+#   H1 — dgx-strip-identity-headers empties the 7 identity headers on EVERY
+#        route, chained BEFORE sso-chain where present (never after: it would
+#        wipe the headers oauth2-proxy injects and break login).
+#   H2 — higher-priority routes put the approved control set behind sso-chain
+#        for LAN/tailnet/cluster callers too; telemetry reads stay open.
+# The same Middleware is defined once per Traefik instance (here and in
+# networking/traefik-edge/dgx-dashboard-public.yaml) — traefik-lan and
+# traefik-edge are separate instances and each resolves middlewares in the
+# namespaces it watches. Precedent: sauvage-bot-strip-auth-headers.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dgx-strip-identity-headers
+  namespace: traefik-lan
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: ""
+      X-Auth-Request-Email: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Forwarded-User: ""
+      X-Forwarded-Email: ""
+      X-Forwarded-Groups: ""
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -14,12 +44,44 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # SC-1192: control set behind sso-chain even for LAN/tailnet/cluster
+    # callers (reads of telemetry and the UI stay on the bypass below).
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/email/state`))
+      priority: 400
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
+    # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      priority: 350
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # dgx.lan.e-dani.com resolves publicly to the LAN VIP (DoH-proof, unlike the
     # AdGuard rewrite of dgx.e-dani.com that DoH clients skip), so LAN/Tailscale
     # browsers land here without Cloudflare/Keycloak. Same ClientIP gate.
+    # SC-1191: identity headers are stripped even on this open bypass.
     - kind: Rule
       match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -28,6 +90,8 @@ spec:
       match: Host(`dgx.e-dani.com`)
       priority: 100
       middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
       services:
@@ -48,9 +112,37 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # SC-1192: sister host of the same backend — same control set, same SSO.
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/email/state`))
+      priority: 400
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      priority: 350
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -59,6 +151,8 @@ spec:
       match: Host(`s3.e-dani.com`)
       priority: 100
       middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
       services:
