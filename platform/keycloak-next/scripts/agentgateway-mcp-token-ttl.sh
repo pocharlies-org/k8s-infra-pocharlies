@@ -104,8 +104,10 @@ resolve_client() {
 
 current_lifespan() {
   # Extract the one dotted-key attribute from the attributes map; empty when
-  # the client carries no override (realm default applies then).
-  kget "clients/$1" --fields attributes --format json | \
+  # the client carries no override (realm default applies then). Read WITHOUT
+  # --fields: kcadm serializes map fields EMPTY when selected through --fields
+  # (measured 2026-09-21, INFRA-197); the full JSON representation carries them.
+  kget "clients/$1" --format json | \
     sed -n 's/.*"access\.token\.lifespan"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)".*/\1/p' | \
     nonempty_lines
 }
