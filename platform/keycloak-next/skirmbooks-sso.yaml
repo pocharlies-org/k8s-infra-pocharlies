@@ -56,7 +56,10 @@ spec:
             - { name: USER_GROUP, value: /skirmbooks-users }
             - { name: ADMIN_GROUP, value: /skirmbooks-admins }
             - { name: ADMIN_EMAILS, value: "me@e-dani.com" }
-            - { name: USER_EMAILS, value: "daniel.ibanez@alphalinkcrossfit.com" }
+            # info@e-dani.com: owner de los tenants `skirmshop` y `alphalink` en
+            # gestoria_identity.auth_principal_tenants. Sin membresia aqui,
+            # allowed_groups del proxy lo rechazaba (403 -> /oauth2/sign_in -> bucle).
+            - { name: USER_EMAILS, value: "daniel.ibanez@alphalinkcrossfit.com info@e-dani.com" }
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }
