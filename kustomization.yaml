@@ -66,6 +66,7 @@ resources:
   - platform/harbor/generated-keys.yaml
   - storage/minio/backup-creds.yaml
   - storage/minio/synapse-email-attachments.yaml
+  - storage/minio/dgx-studio-identity.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - buildkit
   - kubernetes/apps/sauvage-bot

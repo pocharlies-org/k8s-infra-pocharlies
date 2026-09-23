@@ -1,0 +1,31 @@
+---
+# dgx-studio — bucket propio del DGX Studio (dashboard control-nexus: imagen,
+# vídeo, audio y texto que genera). Antes escribía en el bucket
+# `skirmshop-drive` del MinIO de Skirmshop (backup-hub); desde aquí vive en el
+# MinIO principal, con un usuario que solo ve este bucket.
+#
+# La clave se generó fuera de Git y vive solo en 1Password
+# (k8s-pocharlies/minio-dgx-studio-s3); External Secrets la proyecta aquí para
+# el Job de bootstrap (dgx-studio-bootstrap.yaml) y en control-nexus para el
+# dashboard (dgx-infra: k8s/control-nexus/externalsecret-dgx-studio-s3.yaml).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dgx-studio-s3-credentials
+  namespace: minio
+spec:
+  refreshInterval: 24h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: dgx-studio-s3-credentials
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: access-key
+      remoteRef:
+        key: minio-dgx-studio-s3/access_key
+    - secretKey: secret-key
+      remoteRef:
+        key: minio-dgx-studio-s3/secret_key
