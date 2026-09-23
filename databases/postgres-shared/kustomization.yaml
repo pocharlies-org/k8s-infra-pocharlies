@@ -10,6 +10,7 @@ resources:
   - app-databases.yaml
   - role-settings.yaml
   - monitoring.yaml
+  - aurora-rca-coverage-queries.yaml
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml

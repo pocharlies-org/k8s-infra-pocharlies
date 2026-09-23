@@ -1,0 +1,65 @@
+# INFRA-230 (P-B de INFRA-217): consulta a medida del exporter CNPG que hace
+# imposible repetir el mes de 403 silencioso (26-08..21-09: 159 despachos a
+# Aurora RCA sin análisis completo, sin que nadie se enterara). La consumen las
+# VMRules `AuroraRcaCoverageLow` / `AuroraRcaCoverageAbsent` de
+# k8s-observability-pocharlies (manifests/rules.yaml), enrutadas por
+# Alertmanager al Telegram backstop y al tablero de Keep.
+#
+# Predicado y umbral fijados por el tech-lead con la medida F1
+# (nota-sre-medida-f1.md, adjunta a INFRA-230):
+#   - "análisis completo" = source_type='grafana' AND aurora_status='complete'
+#     emparejado por alert_metadata->>'fingerprint' = aurora_dispatches.fingerprint.
+#     El mes muerto quedó en `error`, NO en `complete` con summary vacío
+#     (0/797 complete con summary vacío): no añadir condición de summary.
+#   - Ventana: 24 h sobre dispatched_at con gracia de 4 h (RCA medidos de hasta
+#     27 min, celery con concurrencia 1; ventana N=4 h aceptada por architect).
+#   - EXPLAIN ANALYZE medido: 2,479 ms (< 50 ms), todo shared hit (§5 nota SRE).
+#
+# Series exportadas — el exporter compone el nombre como
+# `<collector>_<query>_<column>` y el collector se instancia con el nombre fijo
+# "cnpg" (operator 1.29.1, internal/management/controller/instance_controller.go):
+#   cnpg_aurora_rca_coverage_dispatched
+#   cnpg_aurora_rca_coverage_without_rca
+# `dispatched` cuenta fingerprints distintos (PK de aurora_dispatches), no
+# eventos de despacho (hallazgo §3 nota SRE).
+#
+# ACCIÓN DB PENDIENTE antes de que esta consulta produzca serie (medido 23-09,
+# ver 50-entrega.md de INFRA-230): el exporter corre como cnpg_metrics_exporter
+# (miembro de pg_monitor, NO superuser, sin BYPASSRLS) y `incidents` /
+# `keep_bridge.aurora_dispatches` son de `aurora` con ACL por defecto y RLS
+# (`select_by_org`) en incidents. Sin GRANT USAGE en keep_bridge, GRANT SELECT
+# en las dos tablas y una política de lectura para cnpg_metrics_exporter sobre
+# incidents, la consulta da permission denied y solo disparará
+# AuroraRcaCoverageAbsent. Esa DDL toca tablas de Aurora → decisión de
+# contrato (tech-lead/cto), no se aplica desde este PR.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-aurora-rca-coverage
+  namespace: databases
+  labels:
+    # cnpg.io/reload es una LABEL (docs CNPG 1.29, Monitoring → User defined
+    # metrics), no una anotación: hace que las instancias recarguen las
+    # consultas al cambiar este ConfigMap sin `kubectl cnpg reload` manual.
+    cnpg.io/reload: "true"
+    app.kubernetes.io/component: postgres-monitoring
+data:
+  queries: |
+    aurora_rca_coverage:
+      query: |
+        SELECT count(*) AS dispatched, count(*) FILTER (WHERE c.fp IS NULL) AS without_rca
+          FROM keep_bridge.aurora_dispatches d
+          LEFT JOIN (SELECT DISTINCT alert_metadata->>'fingerprint' AS fp FROM incidents
+                      WHERE source_type='grafana' AND aurora_status='complete') c
+             ON c.fp = d.fingerprint
+         WHERE d.dispatched_at <= now()-interval '4 hours' AND d.dispatched_at > now()-interval '28 hours'
+      primary: true
+      target_databases:
+        - aurora
+      metrics:
+        - dispatched:
+            usage: "GAUGE"
+            description: "Fingerprints distintos despachados a Aurora RCA en la ventana de 24h con gracia de 4h"
+        - without_rca:
+            usage: "GAUGE"
+            description: "Despachos sin analisis completo (grafana/complete emparejado por fingerprint)"
