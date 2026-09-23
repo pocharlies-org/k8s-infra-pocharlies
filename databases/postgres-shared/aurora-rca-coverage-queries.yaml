@@ -5,8 +5,14 @@
 # k8s-observability-pocharlies (manifests/rules.yaml), enrutadas por
 # Alertmanager al Telegram backstop y al tablero de Keep.
 #
-# Predicado y umbral fijados por el tech-lead con la medida F1
-# (nota-sre-medida-f1.md, adjunta a INFRA-230):
+# Esta consulta NO lee tablas de Aurora directamente: ejecuta la función
+# `keep_bridge.aurora_rca_coverage()`, una SECURITY DEFINER en LANGUAGE sql
+# cuyo dueño es `postgres`. DDL y motivación (por qué función y no GRANT +
+# política sobre `public.incidents`) en docs/keep-aurora-contract.md §2 de
+# k8s-observability-pocharlies (contrato v1.2, revisión architect INFRA-217).
+#
+# Dentro de la función vive el predicado fijado por el tech-lead con la medida
+# F1 (nota-sre-medida-f1.md, adjunta a INFRA-230):
 #   - "análisis completo" = source_type='grafana' AND aurora_status='complete'
 #     emparejado por alert_metadata->>'fingerprint' = aurora_dispatches.fingerprint.
 #     El mes muerto quedó en `error`, NO en `complete` con summary vacío
@@ -23,15 +29,12 @@
 # `dispatched` cuenta fingerprints distintos (PK de aurora_dispatches), no
 # eventos de despacho (hallazgo §3 nota SRE).
 #
-# ACCIÓN DB PENDIENTE antes de que esta consulta produzca serie (medido 23-09,
-# ver 50-entrega.md de INFRA-230): el exporter corre como cnpg_metrics_exporter
-# (miembro de pg_monitor, NO superuser, sin BYPASSRLS) y `incidents` /
-# `keep_bridge.aurora_dispatches` son de `aurora` con ACL por defecto y RLS
-# (`select_by_org`) en incidents. Sin GRANT USAGE en keep_bridge, GRANT SELECT
-# en las dos tablas y una política de lectura para cnpg_metrics_exporter sobre
-# incidents, la consulta da permission denied y solo disparará
-# AuroraRcaCoverageAbsent. Esa DDL toca tablas de Aurora → decisión de
-# contrato (tech-lead/cto), no se aplica desde este PR.
+# REQUISITO antes de que esta consulta produzca serie: la función debe existir
+# en la base `aurora` del primario — DDL manual de keep_bridge, aplicada como
+# postgres (orden de merge del plan: contrato → DDL → este PR). El exporter
+# corre como cnpg_metrics_exporter y solo necesita GRANT USAGE sobre el esquema
+# keep_bridge y GRANT EXECUTE sobre la función, ambos incluidos en esa DDL;
+# no lee incidentes ni depende de políticas de RLS de terceros.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -47,12 +50,7 @@ data:
   queries: |
     aurora_rca_coverage:
       query: |
-        SELECT count(*) AS dispatched, count(*) FILTER (WHERE c.fp IS NULL) AS without_rca
-          FROM keep_bridge.aurora_dispatches d
-          LEFT JOIN (SELECT DISTINCT alert_metadata->>'fingerprint' AS fp FROM incidents
-                      WHERE source_type='grafana' AND aurora_status='complete') c
-             ON c.fp = d.fingerprint
-         WHERE d.dispatched_at <= now()-interval '4 hours' AND d.dispatched_at > now()-interval '28 hours'
+        SELECT dispatched, without_rca FROM keep_bridge.aurora_rca_coverage()
       primary: true
       target_databases:
         - aurora
