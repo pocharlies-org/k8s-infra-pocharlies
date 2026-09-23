@@ -1,0 +1,63 @@
+# INFRA-230 (P-B de INFRA-217): consulta a medida del exporter CNPG que hace
+# imposible repetir el mes de 403 silencioso (26-08..21-09: 159 despachos a
+# Aurora RCA sin análisis completo, sin que nadie se enterara). La consumen las
+# VMRules `AuroraRcaCoverageLow` / `AuroraRcaCoverageAbsent` de
+# k8s-observability-pocharlies (manifests/rules.yaml), enrutadas por
+# Alertmanager al Telegram backstop y al tablero de Keep.
+#
+# Esta consulta NO lee tablas de Aurora directamente: ejecuta la función
+# `keep_bridge.aurora_rca_coverage()`, una SECURITY DEFINER en LANGUAGE sql
+# cuyo dueño es `postgres`. DDL y motivación (por qué función y no GRANT +
+# política sobre `public.incidents`) en docs/keep-aurora-contract.md §2 de
+# k8s-observability-pocharlies (contrato v1.2, revisión architect INFRA-217).
+#
+# Dentro de la función vive el predicado fijado por el tech-lead con la medida
+# F1 (nota-sre-medida-f1.md, adjunta a INFRA-230):
+#   - "análisis completo" = source_type='grafana' AND aurora_status='complete'
+#     emparejado por alert_metadata->>'fingerprint' = aurora_dispatches.fingerprint.
+#     El mes muerto quedó en `error`, NO en `complete` con summary vacío
+#     (0/797 complete con summary vacío): no añadir condición de summary.
+#   - Ventana: 24 h sobre dispatched_at con gracia de 4 h (RCA medidos de hasta
+#     27 min, celery con concurrencia 1; ventana N=4 h aceptada por architect).
+#   - EXPLAIN ANALYZE medido: 2,479 ms (< 50 ms), todo shared hit (§5 nota SRE).
+#
+# Series exportadas — el exporter compone el nombre como
+# `<collector>_<query>_<column>` y el collector se instancia con el nombre fijo
+# "cnpg" (operator 1.29.1, internal/management/controller/instance_controller.go):
+#   cnpg_aurora_rca_coverage_dispatched
+#   cnpg_aurora_rca_coverage_without_rca
+# `dispatched` cuenta fingerprints distintos (PK de aurora_dispatches), no
+# eventos de despacho (hallazgo §3 nota SRE).
+#
+# REQUISITO antes de que esta consulta produzca serie: la función debe existir
+# en la base `aurora` del primario — DDL manual de keep_bridge, aplicada como
+# postgres (orden de merge del plan: contrato → DDL → este PR). El exporter
+# corre como cnpg_metrics_exporter y solo necesita GRANT USAGE sobre el esquema
+# keep_bridge y GRANT EXECUTE sobre la función, ambos incluidos en esa DDL;
+# no lee incidentes ni depende de políticas de RLS de terceros.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-aurora-rca-coverage
+  namespace: databases
+  labels:
+    # cnpg.io/reload es una LABEL (docs CNPG 1.29, Monitoring → User defined
+    # metrics), no una anotación: hace que las instancias recarguen las
+    # consultas al cambiar este ConfigMap sin `kubectl cnpg reload` manual.
+    cnpg.io/reload: "true"
+    app.kubernetes.io/component: postgres-monitoring
+data:
+  queries: |
+    aurora_rca_coverage:
+      query: |
+        SELECT dispatched, without_rca FROM keep_bridge.aurora_rca_coverage()
+      primary: true
+      target_databases:
+        - aurora
+      metrics:
+        - dispatched:
+            usage: "GAUGE"
+            description: "Fingerprints distintos despachados a Aurora RCA en la ventana de 24h con gracia de 4h"
+        - without_rca:
+            usage: "GAUGE"
+            description: "Despachos sin analisis completo (grafana/complete emparejado por fingerprint)"
