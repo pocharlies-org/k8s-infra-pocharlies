@@ -85,6 +85,14 @@ spec:
 
   monitoring:
     enablePodMonitor: false
+    # INFRA-230: consulta de cobertura RCA de Aurora (aurora-rca-coverage-queries.yaml).
+    # El webhook de defaulting del operador añade DELANTE la entrada de las
+    # consultas por defecto (cnpg-default-monitoring) si no está — por eso esa
+    # entrada aparece en el objeto vivo y no aquí; no hay que listarla (cluster_defaults.go,
+    # defaultMonitoringQueries, operador 1.29.1).
+    customQueriesConfigMap:
+      - name: postgres-shared-aurora-rca-coverage
+        key: queries
 
   managed:
     roles:
