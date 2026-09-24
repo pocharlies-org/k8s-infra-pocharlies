@@ -97,6 +97,9 @@ def _cfg(docs):
 KCADM_STUB = textwrap.dedent("""\
     #!/bin/sh
     set -eu
+    # The reconciler runs with umask 077 as the image user; the runner (another
+    # uid) must still read what the stub writes.
+    umask 022
     F="${FIXTURE_DIR:?}"
     printf '%s\\n' "$*" | sed 's/secret=[^ ]*/secret=REDACTED/' >> "${STUB_LOG:?}"
     sub="$1"; shift
@@ -203,6 +206,9 @@ def _run(files, mode="ensure"):
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="kc-dgx-messages-", dir=parent))
     try:
         (tmp / "kcadm.sh").write_text(KCADM_STUB)
+        # Pre-created world-writable: on the ARC runners the container uid is
+        # not the runner uid, and a log born inside the container is unreadable.
+        (tmp / "stub.log").write_text("")
         for name, content in files.items():
             (tmp / name).write_text(content)
         for f in tmp.iterdir():
