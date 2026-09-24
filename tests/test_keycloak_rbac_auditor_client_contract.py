@@ -6,9 +6,13 @@ objects the script touches — the client, its realm-management role scope,
 the service account's direct/effective/other-client/realm grants and groups,
 the minted token, and the two live probes made with the auditor's token —
 so every fail-closed branch is exercised, and an extra role anywhere must
-fail the job without the job removing anything.
+fail the job without the job removing anything. The fake also refuses any
+secret on argv: the admin password and the auditor secret must arrive in
+KC_CLI_PASSWORD / KC_CLI_CLIENT_SECRET, and the client secret in the JSON
+body on stdin (-f -).
 """
 
+import json
 import os
 import pathlib
 import subprocess
@@ -33,6 +37,18 @@ FAKE_KCADM = textwrap.dedent(
     shift
     state="$FAKE_STATE"
     printf '%s %s\n' "$command" "$*" >>"$FAKE_JOURNAL"
+
+    # Secrets never on argv (INFRA-250 architecture review).
+    for a in "$@"; do
+      case "$a" in
+        --password|--secret) exit 80 ;;
+        secret=*|*.secret=*) exit 81 ;;
+      esac
+    done
+    stdin_body=""
+    for a in "$@"; do
+      if [ "$a" = "-f" ]; then stdin_body="$(cat)"; break; fi
+    done
 
     config=""
     prev=""
@@ -74,9 +90,11 @@ FAKE_KCADM = textwrap.dedent(
 
     if [ "$command" = config ]; then
       if [ -n "$client" ]; then
+        [ "${KC_CLI_CLIENT_SECRET:-}" = "$FAKE_EXPECTED_SECRET" ] || exit 82
         [ -f "$state/client" ] || exit 71
         printf '{"token" : "%s"}\n' "$(token)" >"$config"
       else
+        [ "${KC_CLI_PASSWORD:-}" = "$FAKE_EXPECTED_ADMIN_PASSWORD" ] || exit 83
         printf '{"admin":true}\n' >"$config"
       fi
       exit 0
@@ -88,9 +106,11 @@ FAKE_KCADM = textwrap.dedent(
         get:roles|get:users) printf '[]\n'; exit 0 ;;
         get:clients/*/client-secret)
           if [ -n "${FAKE_ALLOW_SECRET:-}" ]; then printf '{"value":"leak"}\n'; exit 0; fi
+          if [ -n "${FAKE_SECRET_PROBE_ERROR:-}" ]; then printf '%s\n' "$FAKE_SECRET_PROBE_ERROR" >&2; exit 1; fi
           printf 'HTTP error - 403 Forbidden\n' >&2; exit 1 ;;
         create:users/*/role-mappings/realm)
           if [ -n "${FAKE_ALLOW_MAPPING:-}" ]; then exit 0; fi
+          if [ -n "${FAKE_MAPPING_PROBE_ERROR:-}" ]; then printf '%s\n' "$FAKE_MAPPING_PROBE_ERROR" >&2; exit 1; fi
           printf 'HTTP error - 403 Forbidden\n' >&2; exit 1 ;;
         *) exit 72 ;;
       esac
@@ -153,13 +173,19 @@ FAKE_KCADM = textwrap.dedent(
       create)
         endpoint="$1"
         case "$endpoint" in
-          clients) : >"$state/client"; printf 'default-roles-edani\n' >"$state/sa-realm"; exit 0 ;;
+          clients)
+            [ -n "$stdin_body" ] || exit 84
+            printf '%s' "$stdin_body" >"$state/client-body"
+            : >"$state/client"; printf 'default-roles-edani\n' >"$state/sa-realm"; exit 0 ;;
           clients/aud-uuid/scope-mappings/clients/rm-uuid) name_from_body >>"$state/scope"; printf '\n' >>"$state/scope"; exit 0 ;;
           *) exit 66 ;;
         esac
         ;;
       update)
         [ "$1" = clients/aud-uuid ] || exit 67
+        [ -n "$stdin_body" ] || exit 84
+        case " $* " in *" --merge "*) ;; *) exit 85 ;; esac
+        printf '%s' "$stdin_body" >"$state/client-body"
         exit 0 ;;
       add-roles)
         [ "$uid" = aud-sa ] && [ "$cclientid" = realm-management ] || exit 68
@@ -201,11 +227,21 @@ class AuditorReconcilerTest(unittest.TestCase):
             "KC_BOOTSTRAP_ADMIN_USERNAME": "admin",
             "KC_BOOTSTRAP_ADMIN_PASSWORD": "fake-admin-password",
             "KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET": SECRET,
+            "FAKE_EXPECTED_ADMIN_PASSWORD": "fake-admin-password",
+            "FAKE_EXPECTED_SECRET": overrides.get("KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET", SECRET),
         }
         env.update(overrides)
         result = subprocess.run(["sh", str(SCRIPT)], env=env, text=True, capture_output=True, timeout=60)
         self.assertNotIn(SECRET, result.stdout + result.stderr)
+        # No secret on argv: the fake exits 80/81 on one, and the journal
+        # (every argv the fake saw) must not carry it either.
+        for line in self.journal_lines():
+            self.assertNotIn(SECRET, line)
+            self.assertNotIn("fake-admin-password", line)
         return result
+
+    def client_body(self):
+        return json.loads((self.state / "client-body").read_text())
 
     def journal_lines(self):
         return self.journal.read_text().splitlines() if self.journal.exists() else []
@@ -235,6 +271,9 @@ class AuditorReconcilerTest(unittest.TestCase):
         self.assertFalse([line for line in journal if "view-clients" in line or "manage-" in line])
         # The role-mapping probe carries an empty body: a success would change nothing.
         self.assertTrue([line for line in journal if line.startswith("create users/aud-sa/role-mappings/realm -b []")])
+        # The client secret travels only in the stdin body.
+        self.assertEqual(self.client_body(), {"secret": SECRET})
+        self.assertIn(" -f - ", created[0])
 
     def test_rerun_is_idempotent(self):
         self.existing_auditor()
@@ -243,7 +282,21 @@ class AuditorReconcilerTest(unittest.TestCase):
         journal = self.journal_lines()
         self.assertFalse([line for line in journal if line.startswith("add-roles")])
         self.assertFalse([line for line in journal if line.startswith("create clients")])
-        self.assertTrue([line for line in journal if line.startswith("update clients/aud-uuid")])
+        updated = [line for line in journal if line.startswith("update clients/aud-uuid")]
+        self.assertEqual(len(updated), 1)
+        self.assertIn(" -f - --merge ", updated[0])
+        self.assertEqual(self.client_body(), {"secret": SECRET})
+
+    def test_secret_with_json_metacharacters_is_escaped_in_the_body(self):
+        tricky = 'fake-"quoted"\\back-slash-not-real'
+        result = self.run_script(KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET=tricky)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(tricky, result.stdout + result.stderr)
+        self.assertEqual(self.client_body(), {"secret": tricky})
+
+    def test_secret_with_a_control_character_is_refused(self):
+        self.assert_fails(self.run_script(KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET="fake-line\nbreak-not-real"),
+                          "client secret carries a control character")
 
     def test_audit_mode_changes_nothing_and_needs_the_client(self):
         result = self.run_script(mode="audit")
@@ -307,6 +360,18 @@ class AuditorReconcilerTest(unittest.TestCase):
         self.assert_fails(self.run_script(FAKE_ALLOW_SECRET="1"), "auditor token was allowed to read-client-secret")
         self.assert_fails(self.run_script(FAKE_ALLOW_MAPPING="1"), "auditor token was allowed to post-role-mapping")
 
+    def test_a_probe_error_that_is_not_403_fails(self):
+        # C-4 demands a 403: a 500, a 401 or a dead connection proves nothing.
+        self.existing_auditor()
+        self.assert_fails(self.run_script(FAKE_SECRET_PROBE_ERROR="HTTP error - 500 Internal Server Error"),
+                          "read-client-secret was not denied with 403")
+        self.assert_fails(self.run_script(FAKE_MAPPING_PROBE_ERROR="HTTP error - 401 Unauthorized"),
+                          "post-role-mapping was not denied with 403")
+        self.assert_fails(self.run_script(FAKE_SECRET_PROBE_ERROR="Failed to send request - Connection refused"),
+                          "read-client-secret was not denied with 403")
+        self.assert_fails(self.run_script(FAKE_MAPPING_PROBE_ERROR="HTTP error - 4031 Unknown"),
+                          "post-role-mapping was not denied with 403")
+
     def test_identity_and_privilege_are_immutable(self):
         self.assert_fails(self.run_script(KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET=""), "client secret is empty")
         self.assert_fails(self.run_script(EXPECTED_MANAGEMENT_ROLES="query-groups,query-users,view-clients,view-realm,view-users"),
@@ -322,8 +387,19 @@ class AuditorManifestContractTest(unittest.TestCase):
         self.assertIn('CLIENT_SECRET="${KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET:-}"', script)
         self.assertIn("-s fullScopeAllowed=false", script)
         self.assertNotIn("set -x", script)
+        # Secrets never on argv (architecture review of INFRA-250).
+        self.assertNotIn("--password", script)
+        self.assertNotIn("--secret", script)
+        self.assertNotIn("secret=", script)
+        self.assertIn('KC_CLI_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD}" "${KCADM}" config credentials', script)
+        self.assertIn('KC_CLI_CLIENT_SECRET="${CLIENT_SECRET}" "${KCADM}" config credentials', script)
+        self.assertIn("-f - ${merge}", script)
         self.assertNotIn('echo "${CLIENT_SECRET}"', script)
-        self.assertNotIn('printf \'%s\' "${CLIENT_SECRET}"', script)
+        # The secret is only ever piped (to tr/sed for the stdin body), never
+        # printed on its own: every printf of it feeds a pipe.
+        for line in script.splitlines():
+            if 'printf \'%s\' "${CLIENT_SECRET}"' in line:
+                self.assertIn('printf \'%s\' "${CLIENT_SECRET}" |', line)
         for verb in ('"${KCADM}" delete', "remove-roles"):
             self.assertNotIn(verb, script)
 
