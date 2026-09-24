@@ -13,18 +13,20 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 SCRIPT = BASE / "scripts" / "admin-keycloack-impersonation-grant.sh"
 
-# The reconciler Job runs inside the pinned Keycloak image, which is NOT a
+# The reconciler runs inside the pinned Keycloak image, which is NOT a
 # general-purpose shell image (SC-1215: it ships no awk and the reconciler died
-# on "awk: command not found"). The image reference is read from the Job
-# manifest so the tests audit exactly the image the Job runs.
+# on "awk: command not found"). The image reference is read from the retire Job
+# manifest (SC-1215 retirement: the ensure hook is gone, the pinned reference
+# travels with the Job that still runs the script) so the tests audit exactly
+# the image the Job runs.
 _IMAGE_RE = re.compile(r"image: (\S+/keycloak:26\.6\.2@sha256:[0-9a-f]{64})")
 
 
 def _pinned_image():
-    manifest = (BASE / "admin-keycloack-impersonation-grant-job.yaml").read_text()
+    manifest = (BASE / "admin-keycloack-impersonation-grant-retire-job.yaml").read_text()
     match = _IMAGE_RE.search(manifest)
     if not match:
-        raise AssertionError("pinned keycloak 26.6.2 image not found in the Job manifest")
+        raise AssertionError("pinned keycloak 26.6.2 image not found in the retire Job manifest")
     return match.group(1)
 
 
@@ -329,9 +331,25 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertNotIn('delete "roles', script)
         self.assertNotIn('delete "clients/${MAPPING_CLIENT_UUID}/roles"', script)
 
-    def test_job_is_postsync_nonroot_pinned_and_tokenless(self):
-        manifest = (BASE / "admin-keycloack-impersonation-grant-job.yaml").read_text()
-        self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
+    def test_retire_job_is_oneshot_nonroot_pinned_and_tokenless(self):
+        """SC-1215 retirement: the ensure PostSync hook is gone; the mapping is
+        removed ONCE by a plain Job running the reconciler's rollback mode. A
+        hook would re-assert absence on every sync forever and silently revoke
+        any future legitimate grant, so the manifest must carry no hook
+        annotations; and with the app automated selfHeal=true / prune=false
+        (measured on the live Application), a ttlSecondsAfterFinished would
+        make selfHeal recreate and re-run the Job on every sync forever, so it
+        must carry no TTL either. Every security invariant of the hook it
+        replaces is kept."""
+        manifest = (BASE / "admin-keycloack-impersonation-grant-retire-job.yaml").read_text()
+        # Checked against manifest content only: the header comment names the
+        # hook and the TTL precisely to explain why neither may appear.
+        spec_text = "\n".join(
+            line for line in manifest.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("argocd.argoproj.io/hook", spec_text)
+        self.assertNotIn("ttlSecondsAfterFinished", spec_text)
+        self.assertIn("value: rollback", manifest)
         self.assertIn("activeDeadlineSeconds: 900", manifest)
         self.assertIn("automountServiceAccountToken: false", manifest)
         self.assertIn("runAsNonRoot: true", manifest)
@@ -340,22 +358,32 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("name: keycloak-bootstrap", manifest)
         self.assertIn("value: admin-keycloack-server", manifest)
-        # The grant lives in master, on the edani realm-client (SC-1215 fix).
+        # The mapping being removed lives in master, on the edani realm-client
+        # (SC-1215 fix): the retire Job must target exactly what the ensure
+        # hook wrote, nothing else.
         self.assertIn("name: REALM\n              value: master", manifest)
         self.assertIn("name: MAPPING_CLIENT\n              value: edani-realm", manifest)
         self.assertNotIn("value: realm-management", manifest)
         self.assertIn("value: impersonation", manifest)
         self.assertNotIn("KC_BOOTSTRAP_ADMIN_PASSWORD\n              value:", manifest)
 
-    def test_wired_into_argo_and_rollback_is_manual(self):
+    def test_retirement_wired_into_argo_and_ensure_hook_is_gone(self):
         kustomization = (BASE / "kustomization.yaml").read_text()
         rollback = (BASE / "manual" / "admin-keycloack-impersonation-grant-rollback-job.yaml").read_text()
-        self.assertIn("admin-keycloack-impersonation-grant-job.yaml", kustomization)
+        # The ensure hook is retired: neither the file nor its kustomization
+        # entry may come back, or every future sync would re-grant
+        # impersonation (the VP mandate: the grant must not stay permanent).
+        self.assertFalse((BASE / "admin-keycloack-impersonation-grant-job.yaml").exists())
+        self.assertNotIn("admin-keycloack-impersonation-grant-job.yaml", kustomization)
+        # The one-shot retire Job is wired in, and the reconciler ConfigMap it
+        # mounts is kept (the retire Job runs the same pinned script).
+        self.assertIn("admin-keycloack-impersonation-grant-retire-job.yaml", kustomization)
+        self.assertIn("keycloak-admin-keycloack-impersonation-grant\n    files:", kustomization)
         self.assertIn("scripts/admin-keycloack-impersonation-grant.sh", kustomization)
+        # The manual rollback stays excluded from GitOps and still undoes
+        # exactly what the ensure hook wrote: same realm, same mapping client.
         self.assertNotIn("manual/admin-keycloack-impersonation-grant-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
-        # The manual rollback must undo exactly what the ensure job writes:
-        # same realm, same mapping client.
         self.assertIn("name: REALM\n              value: master", rollback)
         self.assertIn("name: MAPPING_CLIENT\n              value: edani-realm", rollback)
         self.assertNotIn("value: realm-management", rollback)
@@ -440,6 +468,44 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         # audit must be read-only: no create/delete reached the server.
         self.assertNotIn("create users/", log)
         self.assertNotIn("delete users/", log)
+
+    @in_keycloak_image
+    def test_rollback_removes_grant_and_verifies_absent_inside_keycloak_image(self):
+        """SC-1215 retirement, the pinned behavior of the retire Job: with the
+        mapping present (GET shows the role), MODE=rollback must DELETE it
+        from the role-mappings collection — the role representation body, no
+        "/roles" suffix — and READ THE COLLECTION AGAIN to verify the role is
+        gone before reporting present:false. The stub replays the real
+        server: its 204 delete mutates the mapped-roles fixture, so the
+        post-delete GET proves the verification path ran against mutated
+        state, not against a hardcoded success."""
+        rc, out, err, log = _run_in_image(CLIENTS_FIXTURE, "impersonation\n", "rollback")
+        self.assertEqual(rc, 0, f"script failed in image: rc={rc}\nstdout={out}\nstderr={err}\nlog={log}")
+        self.assertIn('"present":false', out)
+        self.assertNotIn('"present":true', out)
+        # DELETE hits the collection itself with the role representation body.
+        self.assertIn(f"delete users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID} ", log)
+        self.assertNotIn(f"role-mappings/clients/{MAPPING_UUID}/roles", log)
+        self.assertNotIn(MAPPING_UUID.replace("33333333", "44444444"), log)
+        self.assertIn('"name":"impersonation"', log)
+        # Verified, not trusted: the collection is read before AND after the
+        # DELETE (pre-check + post-verification).
+        self.assertEqual(
+            log.count(f"get users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID}"), 2,
+        )
+        # The retire never grants: nothing was created by this run.
+        self.assertNotIn("create users/", log)
+
+    @in_keycloak_image
+    def test_rollback_is_idempotent_when_already_absent_inside_keycloak_image(self):
+        """Re-running the retire Job (selfHeal re-creation) or the manual
+        rollback after the mapping is gone must be a read-only no-op success:
+        present:false, exit 0, no write ever reaches the server."""
+        rc, out, err, log = _run_in_image(CLIENTS_FIXTURE, "", "rollback")
+        self.assertEqual(rc, 0, f"rollback not idempotent: rc={rc}\nstdout={out}\nstderr={err}\nlog={log}")
+        self.assertIn('"present":false', out)
+        self.assertNotIn("delete users/", log)
+        self.assertNotIn("create users/", log)
 
     @in_keycloak_image
     def test_near_miss_only_fixture_fails_closed_inside_keycloak_image(self):

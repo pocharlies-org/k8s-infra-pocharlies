@@ -66,8 +66,18 @@ umask 077
 #     carries the response status and body instead of swallowing them.
 #
 # Rollback removes ONLY the target service account's impersonation mapping (the
-# role and every other holder are untouched). A git revert of this file restores
-# the grant on the next PostSync; the manual rollback Job is applied by hand.
+# role and every other holder are untouched) and is idempotent: an already
+# absent mapping reports "present":false and exits 0, so re-running it is a
+# safe no-op.
+#
+# Retirement (SC-1215, VP mandate 24-09): the grant was a one-off privilege to
+# mint the Leila test token for the SC-709 A/B run and must not stay in the
+# IdP. The ensure PostSync hook was removed from the kustomization and the
+# tree; admin-keycloack-impersonation-grant-retire-job.yaml runs THIS script
+# with MODE=rollback once to delete the mapping, and the manual rollback Job
+# under manual/ stays valid. All three modes remain in the script: to restore
+# the privilege later, revert the retirement commit (which restores the ensure
+# hook) rather than editing the retire Job.
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
