@@ -117,9 +117,22 @@ client_field() {
 # additionally matched exactly client-side. A failed lookup reports both row
 # counts and the clientIds involved (SC-1215: the first apply died on a bare
 # "expected exactly one client" with no way to tell 0 rows from >1).
+# The exact-match filter is a plain POSIX read loop, NOT awk: the
+# quay.io/keycloak/keycloak:26.6.2 image ships no awk and the second apply
+# died on "awk: command not found" (SC-1215). Only the binaries the image
+# actually carries may be invoked here (sed, grep, wc, tr, cut, rm, sleep);
+# the contract test audits every external command against the image itself.
 resolve_client() {
   fuzzy="$(kget clients -q "clientId=$1" --fields id,clientId --format csv --noquotes | nonempty_lines)"
-  rows="$(printf '%s\n' "${fuzzy}" | awk -F, -v want="$1" '$2 == want')"
+  rows="$(printf '%s\n' "${fuzzy}" | while IFS= read -r line; do
+    case "${line}" in
+      *,*)
+        if [ "${line#*,}" = "$1" ]; then
+          printf '%s\n' "${line}"
+        fi
+        ;;
+    esac
+  done)"
   exact_count="$(printf '%s\n' "${rows}" | line_count)"
   if [ "${exact_count}" != "1" ]; then
     fuzzy_count="$(printf '%s\n' "${fuzzy}" | line_count)"

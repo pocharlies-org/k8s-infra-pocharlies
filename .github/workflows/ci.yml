@@ -25,9 +25,30 @@ jobs:
 
   keycloak-agentgateway-role-contract:
     runs-on: arc-k8s
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      # The impersonation-grant reconciler runs INSIDE the pinned keycloak
+      # image, which is not a general-purpose shell (SC-1215: no awk, the
+      # PostSync job died on "awk: command not found"). Its contract tests
+      # execute the script inside that image, so CI pulls the exact pinned
+      # reference from the Job manifest and REQUIRE_IMAGE_CONTRACT=1 turns a
+      # missing image into a hard failure instead of a silent skip.
+      - name: Pull the pinned Keycloak image for the in-image contract tests
+        run: |
+          set -eu
+          image="$(python3 - <<'PY'
+          import pathlib, re
+          m = re.search(r"image: (\S+/keycloak:26\.6\.2@sha256:[0-9a-f]{64})",
+                        pathlib.Path("platform/keycloak-next/admin-keycloack-impersonation-grant-job.yaml").read_text())
+          assert m, "pinned keycloak image not found in the Job manifest"
+          print(m.group(1))
+          PY
+          )"
+          timeout 15m docker pull "$image"
       - name: Validate Keycloak role reconciler contract
+        env:
+          REQUIRE_IMAGE_CONTRACT: "1"
         run: |
           sh -n platform/keycloak-next/scripts/agentgateway-write-role.sh
           sh -n platform/keycloak-next/scripts/openclaw-readonly-clients.sh
