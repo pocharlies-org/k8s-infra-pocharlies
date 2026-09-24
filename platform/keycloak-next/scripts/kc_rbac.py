@@ -144,6 +144,7 @@ class Client:
         self.realm = realm
         self._token = token
         self.page_size = page_size or DEFAULT_PAGE_SIZE
+        self._client_ids = {}
 
     @classmethod
     def from_env(cls, env=None):
@@ -219,16 +220,35 @@ class Client:
     def groups_with_role(self, role_name):
         return self.paged(f"{self._role(role_name)}/groups", {"briefRepresentation": "true"})
 
-    def realm_composites(self, role_name):
-        """Names of the realm roles a role contains (its client-role composites are left out).
-
-        Not paged: /roles/{name}/composites returns the whole list and ignores
-        first/max, so paged() would never see a short page.
-        """
+    def _composites(self, role_name):
+        """Not paged: /roles/{name}/composites returns the whole list and ignores
+        first/max, so paged() would never see a short page."""
         composites = self.get(f"{self._role(role_name)}/composites")
         if not isinstance(composites, list):
             raise KcError(f"{self._role(role_name)}/composites no devuelve una lista")
-        return sorted(role["name"] for role in composites if not role.get("clientRole"))
+        return composites
+
+    def realm_composites(self, role_name):
+        """Names of the realm roles a role contains (its client-role composites are left out)."""
+        return sorted(role["name"] for role in self._composites(role_name) if not role.get("clientRole"))
+
+    def client_id(self, client_uuid):
+        """clientId of a client by its internal id (cached: composites only carry containerId)."""
+        cache = self._client_ids
+        if client_uuid not in cache:
+            client = self.get(f"clients/{urllib.parse.quote(client_uuid, safe='')}")
+            if not isinstance(client, dict) or not client.get("clientId"):
+                raise KcError(f"clients/{client_uuid} no devuelve un clientId")
+            cache[client_uuid] = client["clientId"]
+        return cache[client_uuid]
+
+    def client_composites(self, role_name):
+        """{clientId: sorted client-role names} a role contains (empty clients left out)."""
+        grouped = {}
+        for role in self._composites(role_name):
+            if role.get("clientRole"):
+                grouped.setdefault(self.client_id(role["containerId"]), []).append(role["name"])
+        return {client: sorted(names) for client, names in grouped.items()}
 
 
 _JSON_FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
@@ -254,7 +274,9 @@ def load_role_catalog(path):
     """ROLES.yaml (JSON, which is YAML 1.2), validated against its own contract.
 
     `composites` is optional: the exact realm roles a composite role contains
-    (absent = none), each of them a catalogued role.
+    (absent = none), each of them a catalogued role. `client_composites` is
+    optional too: {clientId: exact client roles} the role contains (absent =
+    none); client roles are not catalogued here, so only the shape is checked.
 
     Returns {name: entry}. Raises CatalogError on any shape violation.
     """
@@ -299,6 +321,16 @@ def load_role_catalog(path):
             raise CatalogError(f"{where}: composites de {name} debe ser una lista de nombres de rol de realm")
         if composites != sorted(set(composites)):
             raise CatalogError(f"{where}: composites de {name} debe ir ordenado y sin repetidos")
+        client_composites = entry.get("client_composites", {})
+        if not isinstance(client_composites, dict) or not all(
+            isinstance(client, str) and client and isinstance(names, list) and names
+            and all(isinstance(n, str) and n for n in names)
+            for client, names in client_composites.items()
+        ):
+            raise CatalogError(f"{where}: client_composites de {name} debe ser un objeto clientId → lista no vacía de roles de cliente")
+        for client, names in client_composites.items():
+            if names != sorted(set(names)):
+                raise CatalogError(f"{where}: client_composites de {name} ({client}) debe ir ordenado y sin repetidos")
         catalog[name] = entry
     for name, entry in catalog.items():
         unknown = [c for c in entry.get("composites", []) if c not in catalog or c == name]
