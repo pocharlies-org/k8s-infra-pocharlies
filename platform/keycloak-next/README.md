@@ -291,3 +291,30 @@ verifiers: auth, paginated admin reads, and `load_json_block`, the single
 parser of the one json fenced block that markdown contracts
 (`PRINCIPALS.md`, `ROUTE-ROLES.md`) carry. CI job `keycloak-rbac-contract`
 runs `tests/test_keycloak_rbac_*.py` against a fake Keycloak on loopback.
+
+## Principal inventory (`PRINCIPALS.md`, INFRA-219 C4)
+
+`PRINCIPALS.md` lists every user and service account of `edani` with a
+named `owner` (a person or a company role), the `source` that owner rests
+on, its `purpose`, the `realm_roles` it holds (mirrored from the `grantees`
+of `ROLES.yaml`) and its `status` (`activo` or `retirada-propuesta` with a
+`retirement_reason`). The contract is its single json block. A proposed
+retirement is documentation only: deleting a principal is the CTO's decision.
+A new user or client needs an entry here in the same PR as its
+`ROLES.yaml` grantees.
+
+```bash
+KUBECONFIG=~/.kube/config python3 platform/keycloak-next/scripts/verify-principals.py
+# OK: <N> principals, 0 sin dueño   -> exit 0
+# DRIFT: <finding>, one line each   -> exit 1  (live principal without entry,
+#                                               entry without owner, entry with
+#                                               no live principal, roles that
+#                                               differ from ROLES.yaml)
+# ERROR: <auth/network/file>        -> exit 2
+```
+
+It lists the default users page plus `users?username=service-account&exact=false`
+(the default listing hides service accounts), both paginated, and reads
+nothing else — no clients, no role mappings — so the drift CronJob's auditor
+can run it without `view-clients`. `--principals <path>` and `--catalog <path>`
+check other copies; authentication is the same as `verify-role-catalog.py`.
