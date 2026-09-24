@@ -10,6 +10,11 @@
 # grants, client role scope, the minted token, and two live denials made with
 # the auditor's own token (client-secret read and a role-mapping POST).
 # An extra role anywhere is a failure, never something this job removes.
+#
+# Secrets never reach argv (visible in /proc to anyone on the node): the admin
+# password and the auditor secret reach kcadm through KC_CLI_PASSWORD and
+# KC_CLI_CLIENT_SECRET (documented by `kcadm.sh config credentials --help` of
+# the pinned image), and the client secret travels in the JSON body on stdin.
 set -eu
 
 umask 077
@@ -71,12 +76,11 @@ as_set() {
 login_admin() {
   attempt=1
   while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
+    if KC_CLI_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD}" "${KCADM}" config credentials \
       --config "${ADMIN_CONFIG}" \
       --server "${KEYCLOAK_URL}" \
       --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
+      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" >/dev/null 2>&1; then
       return 0
     fi
     attempt=$((attempt + 1))
@@ -110,15 +114,33 @@ assert_client_boolean() {
   [ "${actual}" = "$3" ] || fail "client field $2 expected $3"
 }
 
+# The client secret as a JSON string: backslash and double quote escaped, and
+# a control character refused (it cannot be written safely without jq).
+secret_json_body() {
+  # Counted, not captured: $(...) would strip a trailing newline.
+  controls="$(printf '%s' "${CLIENT_SECRET}" | tr -d '[:print:]' | wc -c | tr -d '[:space:]')"
+  [ "${controls}" = "0" ] || fail "client secret carries a control character"
+  unset controls
+  escaped="$(printf '%s' "${CLIENT_SECRET}" | sed 's/[\\"]/\\&/g')"
+  printf '{"secret":"%s"}' "${escaped}"
+  unset escaped
+}
+
 upsert_client() {
   uuid="$(resolve_client_optional "${CLIENT_ID}")"
   endpoint=clients
   action=create
+  merge=""
   if [ -n "${uuid}" ]; then
     endpoint="clients/${uuid}"
     action=update
+    # -f turns kcadm's default merge off; keep it, as the -s-only update did.
+    merge=--merge
   fi
-  "${KCADM}" "${action}" "${endpoint}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+  body="$(secret_json_body)"
+  # shellcheck disable=SC2086 # merge is empty or one flag
+  printf '%s' "${body}" | "${KCADM}" "${action}" "${endpoint}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+    -f - ${merge} \
     -s "clientId=${CLIENT_ID}" \
     -s 'description=Read-only auditor of the realm RBAC (keycloak-role-drift CronJob, INFRA-250)' \
     -s enabled=true \
@@ -129,9 +151,9 @@ upsert_client() {
     -s directAccessGrantsEnabled=false \
     -s serviceAccountsEnabled=true \
     -s fullScopeAllowed=false \
-    -s protocol=openid-connect \
-    -s "secret=${CLIENT_SECRET}" >/dev/null 2>&1 || \
+    -s protocol=openid-connect >/dev/null 2>&1 || \
     fail "failed to reconcile ${CLIENT_ID}"
+  unset body
   CLIENT_UUID="$(require_client "${CLIENT_ID}")"
 }
 
@@ -255,12 +277,11 @@ verify_client() {
 # --- the auditor's own token ------------------------------------------------
 
 mint_claims() {
-  "${KCADM}" config credentials \
+  KC_CLI_CLIENT_SECRET="${CLIENT_SECRET}" "${KCADM}" config credentials \
     --config "${CLIENT_CONFIG}" \
     --server "${KEYCLOAK_URL}" \
     --realm "${REALM}" \
-    --client "${CLIENT_ID}" \
-    --secret "${CLIENT_SECRET}" >/dev/null 2>&1 || fail "auditor token mint failed"
+    --client "${CLIENT_ID}" >/dev/null 2>&1 || fail "auditor token mint failed"
   token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${CLIENT_CONFIG}" | head -n1)"
   [ -n "${token}" ] || fail "access token is missing"
   payload="$(printf '%s' "${token}" | cut -d. -f2)"
@@ -304,12 +325,14 @@ probe_denied() {
   if "$@" --config "${CLIENT_CONFIG}" -r "${REALM}" >/dev/null 2>"${PROBE_ERR}"; then
     fail "auditor token was allowed to ${name}"
   fi
-  status=other
-  if grep -q '403' "${PROBE_ERR}"; then
-    status=403
+  # Only a 403 proves the denial (C-4). A 401, a 5xx or a dead connection
+  # proves nothing about the auditor's privilege, so it fails the job.
+  if ! grep -Eq '(^|[^0-9])403([^0-9]|$)' "${PROBE_ERR}"; then
+    : >"${PROBE_ERR}"
+    fail "auditor probe ${name} was not denied with 403"
   fi
   : >"${PROBE_ERR}"
-  printf '{"client_id":"%s","probe":"%s","denied":true,"status":"%s"}\n' "${CLIENT_ID}" "${name}" "${status}"
+  printf '{"client_id":"%s","probe":"%s","denied":true,"status":"403"}\n' "${CLIENT_ID}" "${name}"
 }
 
 verify_auditor_access() {
