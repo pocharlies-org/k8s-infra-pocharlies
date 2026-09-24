@@ -60,6 +60,14 @@ spec:
             - --addr
             - tcp://0.0.0.0:1234
             - --oci-worker-no-process-sandbox
+            # GC explícito (24-09-2026): el PVC es local-path sin cuota, así que
+            # el DefaultGCPolicy se calculaba sobre el disco entero del nodo
+            # (916G) -> maxUsedSpace = 100GB y la caché llegó a 83G en el NVMe
+            # que comparte con el LLM. Un único policy `all` con techo de 40GB.
+            # No se usa --oci-worker-gc-keepstorage: ver la historia en
+            # buildkitd-amd64.yaml (fija reservedSpace en las 4 políticas).
+            - --config
+            - /etc/buildkit/buildkitd.toml
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
@@ -117,7 +125,13 @@ spec:
             - name: harbor-push
               mountPath: /home/user/.docker
               readOnly: true
+            - name: config
+              mountPath: /etc/buildkit
+              readOnly: true
       volumes:
+        - name: config
+          configMap:
+            name: buildkitd-arm64-config
         - name: cache
           persistentVolumeClaim:
             claimName: buildkitd-arm64-cache
@@ -127,6 +141,22 @@ spec:
             items:
               - key: .dockerconfigjson
                 path: config.json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-arm64-config
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64
+data:
+  buildkitd.toml: |
+    [worker.oci]
+      gc = true
+      [[worker.oci.gcpolicy]]
+        all = true
+        maxUsedSpace = "40GB"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
