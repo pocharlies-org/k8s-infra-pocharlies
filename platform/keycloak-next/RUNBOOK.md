@@ -596,6 +596,7 @@ Run the sweep now instead of waiting for the next quarter hour:
 kubectl create job -n keycloak --from=cronjob/keycloak-role-drift keycloak-role-drift-manual-1
 kubectl -n keycloak wait --for=condition=complete job/keycloak-role-drift-manual-1 --timeout=600s
 kubectl -n keycloak logs job/keycloak-role-drift-manual-1
+# SKIP: client_uuids (<N>) no comprobado contra el realm (--skip-client-uuid-check)
 # OK: <N> roles en catálogo, 0 sin catalogar, 0 catalogados inexistentes
 # OK: <N> principals, 0 sin dueño
 kubectl -n keycloak delete job keycloak-role-drift-manual-1
@@ -606,4 +607,10 @@ A red run prints one `DRIFT:` line per finding (exit 1) — e.g.
 or `ERROR:` (exit 2: token, network, a catalog that breaks its contract).
 Fix the realm or declare the change in `ROLES.yaml` / `PRINCIPALS.md` by PR;
 the next run clears `K8sCronJobFailed` on its own.
+
+The `SKIP:` line is expected: the auditor has no `view-clients`, so the sweep
+translates client-role composites with `ROLES.yaml` `client_uuids` and does
+not re-check that map (INFRA-253). A recreated client shows up as
+`DRIFT: ... rol de cliente uuid:<id>/...`; re-measure the map with
+`verify-role-catalog.py` run locally without the flag (netrc auth, see README).
 
