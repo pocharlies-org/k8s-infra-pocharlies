@@ -7,8 +7,12 @@ KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes}"
-EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes"
+# agentgateway-write:dgx-control (INFRA-249, CTO decision in ROUTE-ROLES.md)
+# is created inert: the gateway already gates compute_mode_set,
+# refusal_lambda_set and opencode_restart on it, and it has no entry in
+# ALLOWED_SERVICE_ACCOUNTS, so nobody may hold it and those tools stay denied.
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control}"
+EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control"
 # Dedicated confidential clients reviewed to hold exactly one domain role each,
 # as "<role>=<service-account-username>". The client itself is reconciled by a
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
@@ -109,5 +113,5 @@ for role in ${ROLE_NAMES}; do
 done
 IFS="${old_ifs}"
 
-printf '{"role_family":"agentgateway-write-domain","roles":11,"created":%s,"human_assigned":false,"service_account_grants":%s}\n' \
+printf '{"role_family":"agentgateway-write-domain","roles":12,"created":%s,"human_assigned":false,"service_account_grants":%s}\n' \
   "${created}" "${granted}"
