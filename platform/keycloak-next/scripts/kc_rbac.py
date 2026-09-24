@@ -44,7 +44,14 @@ CATALOG_ROLE_FIELDS = ("name", "meaning", "grantees", "privilege", "origin", "st
 
 
 class KcError(Exception):
-    """Authentication, network or protocol failure (verifiers exit 2)."""
+    """Authentication, network or protocol failure (verifiers exit 2).
+
+    `status` is the HTTP status when the server answered with an error, else None.
+    """
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 class CatalogError(Exception):
@@ -61,7 +68,7 @@ def _request(url, data=None, headers=None):
     except urllib.error.HTTPError as exc:
         # The body of a token error is safe (error/error_description), but
         # it is not echoed: the status and URL are enough to diagnose.
-        raise KcError(f"HTTP {exc.code} en {url}") from None
+        raise KcError(f"HTTP {exc.code} en {url}", status=exc.code) from None
     except (urllib.error.URLError, OSError) as exc:
         raise KcError(f"sin respuesta de {url}: {exc}") from None
     try:
@@ -144,7 +151,6 @@ class Client:
         self.realm = realm
         self._token = token
         self.page_size = page_size or DEFAULT_PAGE_SIZE
-        self._client_ids = {}
 
     @classmethod
     def from_env(cls, env=None):
@@ -233,21 +239,36 @@ class Client:
         return sorted(role["name"] for role in self._composites(role_name) if not role.get("clientRole"))
 
     def client_id(self, client_uuid):
-        """clientId of a client by its internal id (cached: composites only carry containerId)."""
-        cache = self._client_ids
-        if client_uuid not in cache:
-            client = self.get(f"clients/{urllib.parse.quote(client_uuid, safe='')}")
-            if not isinstance(client, dict) or not client.get("clientId"):
-                raise KcError(f"clients/{client_uuid} no devuelve un clientId")
-            cache[client_uuid] = client["clientId"]
-        return cache[client_uuid]
+        """clientId of a client by its internal id, or None if the realm has no such client.
 
-    def client_composites(self, role_name):
-        """{clientId: sorted client-role names} a role contains (empty clients left out)."""
+        Privileged: GET clients/{id} needs realm-management view-clients, which
+        also reads every client secret. Only the check of the catalog's
+        client_uuids calls it; the role auditor never does.
+        """
+        try:
+            client = self.get(f"clients/{urllib.parse.quote(client_uuid, safe='')}")
+        except KcError as exc:
+            if exc.status == 404:
+                return None
+            raise
+        if not isinstance(client, dict) or not client.get("clientId"):
+            raise KcError(f"clients/{client_uuid} no devuelve un clientId")
+        return client["clientId"]
+
+    def client_composites(self, role_name, client_uuids):
+        """{clientId: sorted client-role names} a role contains (empty clients left out).
+
+        Composites carry only the client's internal id (containerId); it is
+        translated with the catalog's client_uuids ({clientId: id}), never with
+        GET clients. An id the map does not know comes out as `uuid:<id>`, so it
+        never matches a declared clientId.
+        """
+        by_uuid = {uuid: client for client, uuid in client_uuids.items()}
         grouped = {}
         for role in self._composites(role_name):
             if role.get("clientRole"):
-                grouped.setdefault(self.client_id(role["containerId"]), []).append(role["name"])
+                container = role["containerId"]
+                grouped.setdefault(by_uuid.get(container, f"uuid:{container}"), []).append(role["name"])
         return {client: sorted(names) for client, names in grouped.items()}
 
 
@@ -277,9 +298,21 @@ def load_role_catalog(path):
     (absent = none), each of them a catalogued role. `client_composites` is
     optional too: {clientId: exact client roles} the role contains (absent =
     none); client roles are not catalogued here, so only the shape is checked.
+    The top-level `client_uuids` ({clientId: internal id}) names exactly the
+    clientIds some `client_composites` uses, no more and no less.
 
     Returns {name: entry}. Raises CatalogError on any shape violation.
     """
+    return load_catalog(path)[0]
+
+
+def load_client_uuids(path):
+    """The validated top-level client_uuids of ROLES.yaml ({clientId: internal id})."""
+    return load_catalog(path)[1]
+
+
+def load_catalog(path):
+    """(roles {name: entry}, client_uuids {clientId: id}) of ROLES.yaml; see load_role_catalog."""
     try:
         with open(path, encoding="utf-8") as handle:
             document = json.load(handle)
@@ -336,4 +369,18 @@ def load_role_catalog(path):
         unknown = [c for c in entry.get("composites", []) if c not in catalog or c == name]
         if unknown:
             raise CatalogError(f"{path}: composites de {name} nombra roles no catalogados: {', '.join(unknown)}")
-    return catalog
+    client_uuids = document.get("client_uuids", {})
+    if not isinstance(client_uuids, dict) or not all(
+        isinstance(client, str) and client and isinstance(uuid, str) and uuid for client, uuid in client_uuids.items()
+    ):
+        raise CatalogError(f"{path}: client_uuids debe ser un objeto clientId → id interno")
+    if len(set(client_uuids.values())) != len(client_uuids):
+        raise CatalogError(f"{path}: client_uuids repite un id interno")
+    used = {client for entry in catalog.values() for client in entry.get("client_composites", {})}
+    unmapped = sorted(used - set(client_uuids))
+    if unmapped:
+        raise CatalogError(f"{path}: client_uuids no tiene el id de {', '.join(unmapped)} (usado en client_composites)")
+    unused = sorted(set(client_uuids) - used)
+    if unused:
+        raise CatalogError(f"{path}: client_uuids sobra {', '.join(unused)} (ningún client_composites lo usa)")
+    return catalog, client_uuids
