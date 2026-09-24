@@ -20,6 +20,7 @@ resources:
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
+  - admin-keycloack-impersonation-grant-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -57,6 +58,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-mcp-token-ttl
+  - name: keycloak-admin-keycloack-impersonation-grant
+    files:
+      - admin-keycloack-impersonation-grant.sh=scripts/admin-keycloack-impersonation-grant.sh
+    options:
+      labels:
+        app.kubernetes.io/component: admin-keycloack-impersonation-grant
   - name: keycloak-skirmbooks-sso
     files:
       - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh
