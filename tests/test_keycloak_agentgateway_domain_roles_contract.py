@@ -16,6 +16,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
             "social", "workspace", "gsc", "offers", "sauvage", "hermes",
+            "dgx-control",
         }
         for domain in expected:
             self.assertIn(f"agentgateway-write:{domain}", script)
@@ -33,13 +34,15 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertNotIn("set -x", script)
 
     @staticmethod
-    def _run_reconciler(role_members=None, env_overrides=None):
+    def _run_reconciler(role_members=None, env_overrides=None, existing=False):
         """Run the reconciler against a fake kcadm.
 
         ``role_members`` maps ``roles/<name>/users`` to the usernames Keycloak
         would report as direct holders; every role is reported missing (so it
-        gets created) and non-composite, and no role has groups.
+        gets created) unless ``existing``, always non-composite, and no role
+        has groups.
         """
+        lookup = "printf 'id\\n'; exit 0" if existing else "exit 1"
         script = BASE / "scripts" / "agentgateway-domain-roles.sh"
         members = "\n".join(
             f'                    {endpoint}) printf \'{users}\\n\'; exit 0 ;;'
@@ -62,7 +65,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
                     roles/*/users|roles/*/groups) exit 0 ;;
                     roles/*)
                       case " $* " in
-                        *" --fields id "*) exit 1 ;;
+                        *" --fields id "*) {lookup} ;;
                         *" --fields composite "*) printf 'false\\n'; exit 0 ;;
                       esac
                       ;;
@@ -89,13 +92,32 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             )
             return result, log.read_text().splitlines()
 
-    def test_reconciler_creates_exactly_eleven_roles_without_assigning_them(self):
+    def test_reconciler_creates_exactly_twelve_roles_without_assigning_them(self):
         result, calls = self._run_reconciler()
         self.assertEqual(0, result.returncode, result.stderr)
         creations = [call for call in calls if call.startswith("create roles ")]
-        self.assertEqual(11, len(creations))
-        self.assertIn('"roles":11,"created":11,"human_assigned":false,"service_account_grants":0', result.stdout)
+        self.assertEqual(12, len(creations))
+        self.assertTrue(any("-s name=agentgateway-write:dgx-control " in call for call in creations))
+        self.assertIn('"roles":12,"created":12,"human_assigned":false,"service_account_grants":0', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
+
+    def test_reconciler_is_idempotent_when_the_roles_exist(self):
+        result, calls = self._run_reconciler(existing=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(any(call.startswith("create roles ") for call in calls))
+        self.assertIn('"roles":12,"created":0,"human_assigned":false,"service_account_grants":0', result.stdout)
+
+    def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
+        # INFRA-249: created without grantees; any holder, even the reviewed chat
+        # identity, fails the reconcile, so the three dgx-control write tools
+        # stay fail-closed until a dedicated client and map entry are reviewed.
+        script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
+        self.assertNotIn("agentgateway-write:dgx-control=", script)
+        result, _ = self._run_reconciler({
+            "roles/agentgateway-write:dgx-control/users": "service-account-chat-agentgateway",
+        })
+        self.assertEqual(1, result.returncode)
+        self.assertIn("agentgateway-write:dgx-control is assigned to a user; dedicated-client rollout is not ready", result.stderr)
 
     def test_reconciler_tolerates_only_the_reviewed_chat_service_account(self):
         # Contract v2: the chat identity is reviewed on six domains, so the hook
