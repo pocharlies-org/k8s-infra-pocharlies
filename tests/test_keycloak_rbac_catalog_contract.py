@@ -41,7 +41,7 @@ class FakeKeycloak:
     """Minimal Keycloak: client_credentials token + read-only realm admin API."""
 
     def __init__(self, roles):
-        # roles: {name: {"users": [...], "groups": [...]}}
+        # roles: {name: {"users": [...], "groups": [...], "composites": [...]}}
         self.roles = roles
         self.token_status = 200
         self.requests = []
@@ -87,6 +87,11 @@ class FakeKeycloak:
                     return self._send(404, {"error": "not found"})
                 if len(parts) == 5:
                     items = [{"name": name} for name in sorted(fake.roles)]
+                elif len(parts) == 7 and parts[5] in fake.roles and parts[6] == "composites":
+                    # Not paged, like Keycloak; client-role composites ride along.
+                    items = [{"name": value, "clientRole": False} for value in fake.roles[parts[5]].get("composites", [])]
+                    items += [{"name": value, "clientRole": True} for value in fake.roles[parts[5]].get("client_composites", [])]
+                    return self._send(200, items)
                 elif len(parts) == 7 and parts[5] in fake.roles and parts[6] in ("users", "groups"):
                     values = fake.roles[parts[5]][parts[6]]
                     key = "username" if parts[6] == "users" else "path"
@@ -109,7 +114,10 @@ class FakeKeycloak:
 
 
 def realm_from_catalog(catalog):
-    return {name: {"users": list(entry["grantees"]), "groups": []} for name, entry in catalog.items()}
+    return {
+        name: {"users": list(entry["grantees"]), "groups": [], "composites": list(entry.get("composites", []))}
+        for name, entry in catalog.items()
+    }
 
 
 class RoleCatalogShapeTest(unittest.TestCase):
@@ -149,6 +157,21 @@ class RoleCatalogShapeTest(unittest.TestCase):
             path.write_text(json.dumps(bad))
             with self.assertRaisesRegex(kc_rbac.CatalogError, "active o deprecated"):
                 kc_rbac.load_role_catalog(path)
+            ghost = copy.deepcopy(document)
+            ghost["roles"][0]["composites"] = ["no-existe"]
+            path.write_text(json.dumps(ghost))
+            with self.assertRaisesRegex(kc_rbac.CatalogError, "no catalogados: no-existe"):
+                kc_rbac.load_role_catalog(path)
+            unsorted = copy.deepcopy(document)
+            unsorted["roles"][0]["composites"] = ["uma_authorization", "offline_access"]
+            path.write_text(json.dumps(unsorted))
+            with self.assertRaisesRegex(kc_rbac.CatalogError, "ordenado y sin repetidos"):
+                kc_rbac.load_role_catalog(path)
+
+    def test_measured_composites(self):
+        catalog = kc_rbac.load_role_catalog(CATALOG)
+        composite = {name: entry["composites"] for name, entry in catalog.items() if "composites" in entry}
+        self.assertEqual(composite, {"default-roles-edani": ["offline_access", "uma_authorization"]})
 
     def test_load_json_block_requires_exactly_one_block(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,6 +267,33 @@ class VerifyRoleCatalogTest(unittest.TestCase):
         code, lines = self.run_verify(realm)
         self.assertEqual(code, 1)
         self.assertEqual(lines, ["DRIFT: service-account-agentgateway-mcp declarado en agentgateway-write no la tiene concedida"])
+
+    def test_client_role_composites_are_not_realm_composites(self):
+        realm = realm_from_catalog(self.catalog)
+        realm["default-roles-edani"]["client_composites"] = ["manage-account", "view-profile"]
+        code, lines = self.run_verify(realm)
+        self.assertEqual(code, 0, lines)
+
+    def test_composite_added_in_the_realm_is_drift(self):
+        realm = realm_from_catalog(self.catalog)
+        realm["default-roles-edani"]["composites"].append("agentgateway-read:weight")
+        code, lines = self.run_verify(realm)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["DRIFT: default-roles-edani contiene agentgateway-read:weight y el catálogo no lo declara en composites"])
+
+    def test_composite_removed_in_the_realm_is_drift(self):
+        realm = realm_from_catalog(self.catalog)
+        realm["default-roles-edani"]["composites"].remove("uma_authorization")
+        code, lines = self.run_verify(realm)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["DRIFT: default-roles-edani declara uma_authorization en composites y el realm no lo contiene"])
+
+    def test_role_turned_composite_without_catalog_entry_is_drift(self):
+        realm = realm_from_catalog(self.catalog)
+        realm["agentgateway-read:weight"]["composites"] = ["agentgateway-write"]
+        code, lines = self.run_verify(realm)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["DRIFT: agentgateway-read:weight contiene agentgateway-write y el catálogo no lo declara en composites"])
 
     def test_group_holding_a_catalogued_role_is_drift(self):
         realm = realm_from_catalog(self.catalog)

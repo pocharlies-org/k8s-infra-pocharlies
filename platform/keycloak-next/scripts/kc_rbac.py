@@ -219,6 +219,17 @@ class Client:
     def groups_with_role(self, role_name):
         return self.paged(f"{self._role(role_name)}/groups", {"briefRepresentation": "true"})
 
+    def realm_composites(self, role_name):
+        """Names of the realm roles a role contains (its client-role composites are left out).
+
+        Not paged: /roles/{name}/composites returns the whole list and ignores
+        first/max, so paged() would never see a short page.
+        """
+        composites = self.get(f"{self._role(role_name)}/composites")
+        if not isinstance(composites, list):
+            raise KcError(f"{self._role(role_name)}/composites no devuelve una lista")
+        return sorted(role["name"] for role in composites if not role.get("clientRole"))
+
 
 _JSON_FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
@@ -241,6 +252,9 @@ def load_json_block(md_path):
 
 def load_role_catalog(path):
     """ROLES.yaml (JSON, which is YAML 1.2), validated against its own contract.
+
+    `composites` is optional: the exact realm roles a composite role contains
+    (absent = none), each of them a catalogued role.
 
     Returns {name: entry}. Raises CatalogError on any shape violation.
     """
@@ -280,5 +294,14 @@ def load_role_catalog(path):
         for field in ("meaning", "origin"):
             if not isinstance(entry[field], str) or not entry[field].strip():
                 raise CatalogError(f"{where}: {field} de {name} vacío")
+        composites = entry.get("composites", [])
+        if not isinstance(composites, list) or not all(isinstance(c, str) and c for c in composites):
+            raise CatalogError(f"{where}: composites de {name} debe ser una lista de nombres de rol de realm")
+        if composites != sorted(set(composites)):
+            raise CatalogError(f"{where}: composites de {name} debe ir ordenado y sin repetidos")
         catalog[name] = entry
+    for name, entry in catalog.items():
+        unknown = [c for c in entry.get("composites", []) if c not in catalog or c == name]
+        if unknown:
+            raise CatalogError(f"{path}: composites de {name} nombra roles no catalogados: {', '.join(unknown)}")
     return catalog
