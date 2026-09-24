@@ -1,0 +1,138 @@
+# INFRA-250 (INFRA-219 P4): the read-only identity of the keycloak-role-drift
+# CronJob. Its secret has its own 1Password item (vault k8s-pocharlies, item
+# keycloak-rbac-auditor, field password), created by op with a generated
+# value; nobody else reads it. The PostSync below fixes the client with that
+# secret and proves the exact realm-management roles, fail-closed.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: keycloak-rbac-auditor
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-rbac-auditor
+spec:
+  refreshInterval: 24h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: keycloak-rbac-auditor
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        # The CronJob reads both as files (KC_CLIENT_ID_FILE, KC_CLIENT_SECRET_FILE).
+        client_id: keycloak-rbac-auditor
+        client_secret: "{{ .client_secret }}"
+  data:
+    - secretKey: client_secret
+      remoteRef:
+        key: keycloak-rbac-auditor/password
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-rbac-auditor-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-rbac-auditor-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "22"
+    keycloak.e-dani.com/reconcile-contract-version: "1"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: keycloak-rbac-auditor-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/keycloak-rbac-auditor-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: keycloak-rbac-auditor }
+            - { name: EXPECTED_MANAGEMENT_ROLES, value: "query-groups,query-users,view-realm,view-users" }
+            - { name: RECONCILE_CONTRACT_VERSION, value: "1" }
+            - name: KEYCLOAK_RBAC_AUDITOR_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-rbac-auditor
+                  key: client_secret
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-rbac-auditor-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-rbac-auditor-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-rbac-auditor-client
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: keycloak-rbac-auditor-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

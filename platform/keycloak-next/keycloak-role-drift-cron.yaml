@@ -1,0 +1,122 @@
+# INFRA-250 (INFRA-219 C5): periodic sweep of the live edani realm against
+# ROLES.yaml and PRINCIPALS.md. Read-only, with the keycloak-rbac-auditor
+# client (view-realm, view-users, query-users, query-groups; no view-clients,
+# no manage-*). It never mounts keycloak-bootstrap nor keycloak-automation,
+# and it does not reimplement the kcadm MODE=audit of agentgateway-read-grants
+# (no admin needed; kcadm starts one JVM per call, ~630 s measured).
+#
+# Red = the existing K8sCronJobFailed alert (k8s-observability-pocharlies
+# manifests/rules.yaml, Telegram topic Crons): DRIFT: exits 1, ERROR: exits 2.
+# Manual run:
+#   kubectl create job -n keycloak --from=cronjob/keycloak-role-drift keycloak-role-drift-manual-1
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: keycloak-role-drift
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-role-drift
+spec:
+  schedule: "*/15 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # One attempt per slot: a retry would only repeat the same verdict.
+      backoffLimit: 0
+      # Well under the 4 h window of K8sCronJobFailed.
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: keycloak
+            app.kubernetes.io/component: keycloak-role-drift
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          enableServiceLinks: false
+          nodeSelector:
+            node-pool: ks5-nvme
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: verify
+              image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "/opt/rbac/keycloak-role-drift.sh"]
+              env:
+                - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+                - { name: KC_REALM, value: edani }
+                - { name: KC_CLIENT_ID_FILE, value: /var/run/secrets/keycloak-rbac-auditor/client_id }
+                - { name: KC_CLIENT_SECRET_FILE, value: /var/run/secrets/keycloak-rbac-auditor/client_secret }
+                - { name: RBAC_DIR, value: /opt/rbac }
+                - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+                - { name: TMPDIR, value: /tmp }
+                - { name: HOME, value: /tmp }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              volumeMounts:
+                - { name: rbac, mountPath: /opt/rbac, readOnly: true }
+                - { name: auditor, mountPath: /var/run/secrets/keycloak-rbac-auditor, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: rbac
+              configMap:
+                name: keycloak-role-drift
+                defaultMode: 0444
+            - name: auditor
+              secret:
+                secretName: keycloak-rbac-auditor
+                defaultMode: 0440
+                items:
+                  - { key: client_id, path: client_id }
+                  - { key: client_secret, path: client_secret }
+            - name: tmp
+              emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-role-drift-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-role-drift
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: keycloak-role-drift
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
