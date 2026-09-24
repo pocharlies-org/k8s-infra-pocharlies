@@ -6,8 +6,10 @@ role may be present or gone), nobody holds it directly outside `grantees`,
 every declared grantee still holds it, no group carries it (R2), and the
 realm roles it contains are exactly its `composites` (absent = none), so a
 role slipped into default-roles-edani is caught even though it reaches users
-only through the composite. Any live realm role missing from the catalog is
-drift too.
+only through the composite; the client roles it contains are exactly its
+`client_composites` ({clientId: roles}, absent = none), so a client role such
+as realm-management view-users slipped into the composite is caught too. Any
+live realm role missing from the catalog is drift too.
 
   OK: <N> roles en catálogo, 0 sin catalogar, 0 catalogados inexistentes   exit 0
   DRIFT: <one line per finding>                                            exit 1
@@ -53,6 +55,14 @@ def find_drift(catalog, client):
             drift.append(f"DRIFT: {name} contiene {composite} y el catálogo no lo declara en composites")
         for composite in sorted(declared_composites - live_composites):
             drift.append(f"DRIFT: {name} declara {composite} en composites y el realm no lo contiene")
+        declared_client = {
+            (client_id, role) for client_id, roles in catalog[name].get("client_composites", {}).items() for role in roles
+        }
+        live_client = {(client_id, role) for client_id, roles in client.client_composites(name).items() for role in roles}
+        for client_id, role in sorted(live_client - declared_client):
+            drift.append(f"DRIFT: {name} contiene el rol de cliente {client_id}/{role} y el catálogo no lo declara en client_composites")
+        for client_id, role in sorted(declared_client - live_client):
+            drift.append(f"DRIFT: {name} declara {client_id}/{role} en client_composites y el realm no lo contiene")
     return drift, len(uncatalogued), len(missing)
 
 

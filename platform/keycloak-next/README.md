@@ -231,10 +231,12 @@ PyYAML.
   from the branch, or a trunk `deprecated` role back to `active`, fails the
   job (skipped, with a `SKIP:` line, while the trunk has no `ROLES.yaml`).
 - A composite role lists in `composites` the exact realm roles it contains
-  (absent = none; its client-role composites are not listed). The verifier
-  reads `roles/{name}/composites` for every catalogued role, so a realm role
-  added to or removed from a composite such as `default-roles-edani` is
-  drift even though nobody holds it directly.
+  and in `client_composites` the exact client roles, by `clientId` (today
+  `default-roles-edani` → `account`: `manage-account`, `view-profile`);
+  absent = none. The verifier reads `roles/{name}/composites` for every
+  catalogued role, so a realm or client role (e.g. `realm-management`
+  `view-users`) added to or removed from a composite such as
+  `default-roles-edani` is drift even though nobody holds it directly.
 - A new role, grant or revoke lands in `ROLES.yaml` in the same PR as the
   reconciler change. The roles owned by `agentgateway-read-grants.sh` and
   `agentgateway-domain-roles.sh` must match those scripts' `EXPECTED_*`
