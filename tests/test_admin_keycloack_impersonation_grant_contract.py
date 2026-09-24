@@ -158,7 +158,13 @@ def _run_in_image(fixture_clients, fixture_mapped_roles, mode):
     """Run the reconciler script inside the pinned Keycloak image with the
     kcadm stub and CSV fixtures mounted. Returns (returncode, stdout, stderr,
     stub log)."""
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="kc-impersonation-"))
+    # The fixture dir is bind-mounted into the container, so it must live on a
+    # path the docker daemon can see. On the ARC runners the daemon does not
+    # share the job's /tmp (a /tmp fixture mounted empty, the kcadm stub was
+    # "missing" and login_admin's 30x5s retry loop hung the run); RUNNER_TEMP
+    # is under the shared runner home. Locally it falls back to the default.
+    parent = os.environ.get("RUNNER_TEMP") or None
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="kc-impersonation-", dir=parent))
     try:
         (tmp / "kcadm.sh").write_text(KCADM_STUB)
         (tmp / "kcadm.sh").chmod(0o755)
@@ -182,6 +188,23 @@ def _run_in_image(fixture_clients, fixture_mapped_roles, mode):
             "--entrypoint", "/bin/sh", IMAGE,
             "/opt/bootstrap/admin-keycloack-impersonation-grant.sh",
         ]
+        # Fail fast and legibly if the mounts are not visible to the daemon
+        # (empty bind mounts make the script's login retry loop hang).
+        probe = subprocess.run(
+            [DOCKER, "run", "--rm",
+             "-v", f"{tmp}:/fixture",
+             "-v", f"{BASE / 'scripts'}:/opt/bootstrap:ro",
+             "--entrypoint", "/bin/sh", IMAGE, "-c",
+             "test -x /fixture/kcadm.sh && test -f /fixture/clients.csv "
+             "&& test -f /opt/bootstrap/admin-keycloack-impersonation-grant.sh"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if probe.returncode != 0:
+            raise AssertionError(
+                f"bind mounts not visible inside {IMAGE}: the fixture dir "
+                f"{tmp} must be on a path the docker daemon shares with the "
+                f"runner (RUNNER_TEMP); probe stderr: {probe.stderr.strip()}"
+            )
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         log_file = tmp / "stub.log"
         log = log_file.read_text() if log_file.exists() else ""
