@@ -1,6 +1,6 @@
 # Manual state rollback. This file is intentionally excluded from kustomization.
 # It removes ONLY the admin-keycloack-server service account's impersonation
-# mapping; the built-in realm-management role and every other holder are left
+# mapping; the built-in edani-realm role and every other holder are left
 # untouched. To restore the grant, git revert the commit owning this reconciler
 # and let the next PostSync re-apply it.
 apiVersion: batch/v1
@@ -45,11 +45,11 @@ spec:
             - name: KEYCLOAK_URL
               value: http://keycloak.keycloak.svc.cluster.local
             - name: REALM
-              value: edani
+              value: master
             - name: CLIENT_ID
               value: admin-keycloack-server
             - name: MAPPING_CLIENT
-              value: realm-management
+              value: edani-realm
             - name: ROLE_NAME
               value: impersonation
             - name: HOME
