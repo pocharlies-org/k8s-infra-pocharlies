@@ -35,15 +35,25 @@ _spec.loader.exec_module(verify)
 
 CLIENT_ID = "keycloak-role-auditor"
 CLIENT_SECRET = "fake-secret-not-real"
+# The realm's clients by clientId: the catalog's measured ids plus one it
+# does not map (realm-management).
+LIVE_CLIENTS = {
+    **json.loads(CATALOG.read_text(encoding="utf-8"))["client_uuids"],
+    "realm-management": "uuid-realm-management",
+}
 
 
 class FakeKeycloak:
     """Minimal Keycloak: client_credentials token + read-only realm admin API."""
 
-    def __init__(self, roles):
+    def __init__(self, roles, clients=None, view_clients=True):
         # roles: {name: {"users": [...], "groups": [...], "composites": [...],
         #                "client_composites": {clientId: [...]}}}
+        # clients: {clientId: internal id}; view_clients=False answers 403 to
+        # GET clients/{id}, like Keycloak to a principal without view-clients.
         self.roles = roles
+        self.clients = dict(LIVE_CLIENTS if clients is None else clients)
+        self.view_clients = view_clients
         self.token_status = 200
         self.requests = []
         fake = self
@@ -85,9 +95,12 @@ class FakeKeycloak:
                 parts = [urllib.parse.unquote(p) for p in url.path.split("/")]
                 # ['', 'admin', 'realms', 'edani', 'roles', <name>?, <kind>?]
                 if parts[:5] == ["", "admin", "realms", "edani", "clients"] and len(parts) == 6:
-                    if not parts[5].startswith("uuid-"):
+                    if not fake.view_clients:
+                        return self._send(403, {"error": "HTTP 403 Forbidden"})
+                    by_uuid = {uuid: client_id for client_id, uuid in fake.clients.items()}
+                    if parts[5] not in by_uuid:
                         return self._send(404, {"error": "Could not find client"})
-                    return self._send(200, {"id": parts[5], "clientId": parts[5][len("uuid-"):]})
+                    return self._send(200, {"id": parts[5], "clientId": by_uuid[parts[5]]})
                 if parts[:4] != ["", "admin", "realms", "edani"] or len(parts) < 5 or parts[4] != "roles":
                     return self._send(404, {"error": "not found"})
                 if len(parts) == 5:
@@ -98,7 +111,7 @@ class FakeKeycloak:
                     role = fake.roles[parts[5]]
                     items = [{"name": value, "clientRole": False, "containerId": "realm-uuid"} for value in role.get("composites", [])]
                     items += [
-                        {"name": value, "clientRole": True, "containerId": f"uuid-{client_id}"}
+                        {"name": value, "clientRole": True, "containerId": fake.clients[client_id]}
                         for client_id, values in role.get("client_composites", {}).items()
                         for value in values
                     ]
@@ -190,6 +203,25 @@ class RoleCatalogShapeTest(unittest.TestCase):
         self.assertEqual(composite, {"default-roles-edani": ["offline_access", "uma_authorization"]})
         client = {name: entry["client_composites"] for name, entry in catalog.items() if "client_composites" in entry}
         self.assertEqual(client, {"default-roles-edani": {"account": ["manage-account", "view-profile"]}})
+        # Measured live on 2026-09-25 (GET clients?clientId=account and the
+        # containerId of default-roles-edani's client composites agree).
+        self.assertEqual(kc_rbac.load_client_uuids(CATALOG), {"account": "5402c4f9-25fc-4a60-8027-2ff55fae0677"})
+
+    def test_catalog_requires_exactly_the_client_uuids_it_uses(self):
+        document = json.loads(CATALOG.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "ROLES.yaml"
+            for bad, message in (
+                ({}, "no tiene el id de account"),
+                ({**document["client_uuids"], "broker": "uuid-broker"}, "sobra broker"),
+                ({"account": ""}, "objeto clientId → id interno"),
+                (["account"], "objeto clientId → id interno"),
+            ):
+                broken = copy.deepcopy(document)
+                broken["client_uuids"] = bad
+                path.write_text(json.dumps(broken))
+                with self.assertRaisesRegex(kc_rbac.CatalogError, message):
+                    kc_rbac.load_role_catalog(path)
 
     def test_catalog_rejects_malformed_client_composites(self):
         document = json.loads(CATALOG.read_text(encoding="utf-8"))
@@ -237,20 +269,63 @@ class VerifyRoleCatalogTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_verify(self, realm, catalog_document=None, token_status=200):
+    def run_verify(self, realm, catalog_document=None, token_status=200, clients=None, view_clients=True, args=()):
         if catalog_document is None:
             catalog_path = CATALOG
         else:
             self.catalog_path.write_text(json.dumps(catalog_document))
             catalog_path = self.catalog_path
-        with FakeKeycloak(realm) as fake:
+        with FakeKeycloak(realm, clients=clients, view_clients=view_clients) as fake:
             fake.token_status = token_status
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                code = verify.main(["--catalog", str(catalog_path)], env={**self.env, "KEYCLOAK_URL": fake.url})
+                code = verify.main(["--catalog", str(catalog_path), *args], env={**self.env, "KEYCLOAK_URL": fake.url})
             self.assertTrue(all(method == "GET" for method, path in fake.requests if "/admin/" in path),
                             "the verifier must never mutate the realm")
+            self.requests = list(fake.requests)
         return code, out.getvalue().splitlines()
+
+    def test_auditor_without_view_clients_is_ok_with_the_skip_flag(self):
+        realm = realm_from_catalog(self.catalog)
+        code, lines = self.run_verify(realm, view_clients=False)
+        self.assertEqual(code, 2, "the client_uuids check is on by default and needs view-clients")
+        self.assertTrue(lines[0].startswith("ERROR: HTTP 403"), lines)
+        code, lines = self.run_verify(realm, view_clients=False, args=["--skip-client-uuid-check"])
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines, [
+            "SKIP: client_uuids (1) no comprobado contra el realm (--skip-client-uuid-check)",
+            f"OK: {len(self.catalog)} roles en catálogo, 0 sin catalogar, 0 catalogados inexistentes",
+        ])
+        self.assertEqual([path for _, path in self.requests if "/clients" in path], [])
+
+    def test_unmapped_container_id_is_drift(self):
+        # The account client was recreated: its composites now carry an id the catalog does not map.
+        clients = {**LIVE_CLIENTS, "account": "uuid-account-recreada"}
+        code, lines = self.run_verify(realm_from_catalog(self.catalog), clients=clients, args=["--skip-client-uuid-check"])
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, [
+            "SKIP: client_uuids (1) no comprobado contra el realm (--skip-client-uuid-check)",
+            "DRIFT: default-roles-edani contiene el rol de cliente uuid:uuid-account-recreada/manage-account "
+            "y el catálogo no lo declara en client_composites",
+            "DRIFT: default-roles-edani contiene el rol de cliente uuid:uuid-account-recreada/view-profile "
+            "y el catálogo no lo declara en client_composites",
+            "DRIFT: default-roles-edani declara account/manage-account en client_composites y el realm no lo contiene",
+            "DRIFT: default-roles-edani declara account/view-profile en client_composites y el realm no lo contiene",
+        ])
+
+    def test_declared_client_uuid_that_does_not_match_is_drift(self):
+        realm = realm_from_catalog(self.catalog)
+        # A realm where the declared id belongs to another client, and one where no client has it.
+        clients = {**LIVE_CLIENTS, "account": "uuid-account-real", "broker": LIVE_CLIENTS["account"]}
+        code, lines = self.run_verify(realm, clients=clients)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[0], f"DRIFT: client_uuids declara account → {LIVE_CLIENTS['account']} y ese id es el cliente broker")
+        document = json.loads(CATALOG.read_text(encoding="utf-8"))
+        document["client_uuids"]["account"] = "00000000-0000-0000-0000-000000000000"
+        code, lines = self.run_verify(realm, document)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[0], "DRIFT: client_uuids declara account → 00000000-0000-0000-0000-000000000000 "
+                                   "y el realm no tiene un cliente con ese id")
 
     def test_exact_realm_is_ok(self):
         code, lines = self.run_verify(realm_from_catalog(self.catalog))
@@ -313,8 +388,9 @@ class VerifyRoleCatalogTest(unittest.TestCase):
         realm["default-roles-edani"]["client_composites"]["realm-management"] = ["view-users"]
         code, lines = self.run_verify(realm)
         self.assertEqual(code, 1)
+        # realm-management is not in client_uuids, so it is named by its internal id.
         self.assertEqual(lines, [
-            "DRIFT: default-roles-edani contiene el rol de cliente realm-management/view-users "
+            "DRIFT: default-roles-edani contiene el rol de cliente uuid:uuid-realm-management/view-users "
             "y el catálogo no lo declara en client_composites"
         ])
 
@@ -330,11 +406,13 @@ class VerifyRoleCatalogTest(unittest.TestCase):
         for role in document["roles"]:
             if role["name"] == "default-roles-edani":
                 del role["client_composites"]
+        del document["client_uuids"]  # nothing uses it any more, so it must go too
         code, lines = self.run_verify(realm_from_catalog(self.catalog), document)
         self.assertEqual(code, 1)
+        account = LIVE_CLIENTS["account"]
         self.assertEqual(lines, [
-            "DRIFT: default-roles-edani contiene el rol de cliente account/manage-account y el catálogo no lo declara en client_composites",
-            "DRIFT: default-roles-edani contiene el rol de cliente account/view-profile y el catálogo no lo declara en client_composites",
+            f"DRIFT: default-roles-edani contiene el rol de cliente uuid:{account}/manage-account y el catálogo no lo declara en client_composites",
+            f"DRIFT: default-roles-edani contiene el rol de cliente uuid:{account}/view-profile y el catálogo no lo declara en client_composites",
         ])
 
     def test_composite_added_in_the_realm_is_drift(self):
