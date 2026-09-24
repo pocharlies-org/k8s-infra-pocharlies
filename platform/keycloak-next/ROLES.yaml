@@ -521,6 +521,7 @@
         "service-account-claude-sessions-test",
         "service-account-cloudblue",
         "service-account-company-metrics-agentgateway",
+        "service-account-keycloak-rbac-auditor",
         "service-account-openclaw-readonly-agentgateway",
         "service-account-synapse-draft-orchestrator",
         "service-account-synapse-sre-orchestrator",
