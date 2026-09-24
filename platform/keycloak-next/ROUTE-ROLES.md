@@ -11,7 +11,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **43 rutas, 70 gates**.
+  Hoy: **42 rutas, 68 gates**.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
   Ninguno se retira desde aquí.
 
@@ -58,7 +58,7 @@ los pares de `chat-agentgateway`. No se toca el `require:` de ninguna ruta.
 | rol | disposición | para qué existe |
 |---|---|---|
 | `agentgateway-read:dgx-control` | reservado | /dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente. |
-| `agentgateway-read:image` | reservado | /image no exige rol lector (solo jwtAuth); la unica tool gateada es de escritura. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require. |
+| `agentgateway-read:image` | reservado | Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44). |
 | `agentgateway-read:offers` | reservado | /offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require. |
 | `agentgateway-read:tts` | reservado | /tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require. |
 | `claude-sessions` | aplicacion | Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions. |
@@ -104,7 +104,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `hermes` | `/hermes` | — | `agentgateway-write` (2), `agentgateway-write:hermes` (2) |
 | `browser` | `/browser` | — | `agentgateway-write` (38) |
 | `tts` | `/tts` | — | `agentgateway-write` (2), `agentgateway-write:media` (2) |
-| `image` | `/image` | — | `agentgateway-write` (1), `agentgateway-write:media` (1) |
 | `weight` | `/weight` | `agentgateway-read:weight` | — |
 | `chat-dgx-control` | `/chat-dgx-control` | — | `agentgateway-write:dgx-control` (3) |
 | `dgx-control` | `/dgx-control` | — | `agentgateway-write:dgx-control` (3) |
@@ -312,15 +311,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       }
     },
     {
-      "route": "image",
-      "path": "/image",
-      "require": [],
-      "tools": {
-        "agentgateway-write": ["dgx_image_generate"],
-        "agentgateway-write:media": ["dgx_image_generate"]
-      }
-    },
-    {
       "route": "weight",
       "path": "/weight",
       "require": ["agentgateway-read:weight"],
@@ -475,7 +465,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
   ],
   "unrouted": [
     {"role": "agentgateway-read:dgx-control", "disposition": "reservado", "purpose": "/dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente."},
-    {"role": "agentgateway-read:image", "disposition": "reservado", "purpose": "/image no exige rol lector (solo jwtAuth); la unica tool gateada es de escritura. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
+    {"role": "agentgateway-read:image", "disposition": "reservado", "purpose": "Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44)."},
     {"role": "agentgateway-read:offers", "disposition": "reservado", "purpose": "/offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-read:tts", "disposition": "reservado", "purpose": "/tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "claude-sessions", "disposition": "aplicacion", "purpose": "Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions."}
