@@ -370,10 +370,26 @@ spec:
       match: Host(`vault.e-dani.com`)
       services:
         - {name: vault-active, namespace: vault, port: 8200}
+    # /api/public/* del conector no tiene auth (chats, historial, backfill):
+    # deny en LAN igual que en el edge (middleware en whatsapp-mcp).
+    - kind: Rule
+      match: Host(`whatsapp.e-dani.com`) && PathPrefix(`/api/public`)
+      middlewares:
+        - {name: connector-public-api-deny, namespace: whatsapp-mcp}
+      services:
+        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
     - kind: Rule
       match: Host(`whatsapp.e-dani.com`)
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
+    # /api/public/* del conector no tiene auth (chats, historial, backfill):
+    # deny en LAN igual que en el edge (middleware en whatsapp-mcp).
+    - kind: Rule
+      match: Host(`whatsapp-pro.e-dani.com`) && PathPrefix(`/api/public`)
+      middlewares:
+        - {name: connector-public-api-deny, namespace: whatsapp-mcp}
+      services:
+        - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
     - kind: Rule
       match: Host(`whatsapp-pro.e-dani.com`)
       services:
