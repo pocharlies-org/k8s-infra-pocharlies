@@ -20,7 +20,7 @@ resources:
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
-  - admin-keycloack-impersonation-grant-job.yaml
+  - admin-keycloack-impersonation-grant-retire-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:

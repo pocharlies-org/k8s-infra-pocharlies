@@ -32,16 +32,18 @@ jobs:
       # image, which is not a general-purpose shell (SC-1215: no awk, the
       # PostSync job died on "awk: command not found"). Its contract tests
       # execute the script inside that image, so CI pulls the exact pinned
-      # reference from the Job manifest and REQUIRE_IMAGE_CONTRACT=1 turns a
-      # missing image into a hard failure instead of a silent skip.
+      # reference from the retire Job manifest (SC-1215 retirement: the ensure
+      # hook is gone, the reference lives in the Job that still runs the
+      # script) and REQUIRE_IMAGE_CONTRACT=1 turns a missing image into a hard
+      # failure instead of a silent skip.
       - name: Pull the pinned Keycloak image for the in-image contract tests
         run: |
           set -eu
           image="$(python3 - <<'PY'
           import pathlib, re
           m = re.search(r"image: (\S+/keycloak:26\.6\.2@sha256:[0-9a-f]{64})",
-                        pathlib.Path("platform/keycloak-next/admin-keycloack-impersonation-grant-job.yaml").read_text())
-          assert m, "pinned keycloak image not found in the Job manifest"
+                        pathlib.Path("platform/keycloak-next/admin-keycloack-impersonation-grant-retire-job.yaml").read_text())
+          assert m, "pinned keycloak image not found in the retire Job manifest"
           print(m.group(1))
           PY
           )"

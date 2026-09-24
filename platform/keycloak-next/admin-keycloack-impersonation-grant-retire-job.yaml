@@ -1,23 +1,46 @@
+# SC-1215 retirement (VP mandate): the impersonation grant was a one-off
+# privilege to mint the Leila test token for the SC-709 A/B run and must NOT
+# remain in the IdP once the run is verified. This one-shot Job removes the
+# mapping using the reconciler's existing absence mode (MODE=rollback): the
+# script deletes exactly the admin-keycloack-server service account's
+# impersonation mapping on the edani-realm client and is idempotent — an
+# already-absent mapping reports "present":false and exits 0, so re-creating
+# this Job (selfHeal after a manual delete, or a re-apply) is a safe no-op.
+#
+# Why a plain Job and not a PostSync hook (measured pattern, 24-09): every
+# grant hook in this platform asserts PRESENCE on every sync; no hook here
+# permanently asserts absence, and one would silently revoke any future
+# legitimate grant. The repo's revocation pattern (RUNBOOK "State rollback")
+# is one-shot rollback + removal of the ensure entry; this file is that
+# pattern committed to GitOps so the revoke happens at merge, not by an
+# operator remembering to apply manual/. The ensure hook
+# (admin-keycloack-impersonation-grant-job.yaml) is deleted from the tree and
+# from the kustomization, so nothing re-grants on later syncs; the manual
+# rollback Job under manual/ stays valid and excluded from GitOps.
+#
+# Deliberately NO ttlSecondsAfterFinished: the k8s-infra app is automated
+# with selfHeal=true and prune=false (measured on the live Application), so a
+# self-deleted completed Job would be recreated and re-run on every sync
+# forever. This tombstone stays Completed and in sync until a later cleanup
+# PR removes it together with the reconciler script and ConfigMap.
+#
+# To restore the privilege: revert this retirement commit (which restores the
+# ensure PostSync hook); never edit this file into MODE=ensure.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: keycloak-admin-keycloack-impersonation-grant
+  name: keycloak-admin-keycloack-impersonation-grant-retire
   namespace: keycloak
   labels:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: admin-keycloack-impersonation-grant
   annotations:
-    argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-wave: "25"
 spec:
-  backoffLimit: 1
-  # The reconciler resolves the privileged client, its service account, the
-  # edani-realm realm-client and the built-in role through several kcadm calls
-  # before it writes the single mapping. Keep the same production-safe margin as
-  # the sibling role reconcilers rather than racing a five-minute sync deadline.
+  # Same posture as the manual rollback Job: fail loudly on error, the
+  # reconciler itself retries the admin login for up to 150s.
+  backoffLimit: 0
   activeDeadlineSeconds: 900
-  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:
@@ -35,7 +58,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: reconcile-impersonation-grant
+        - name: retire-impersonation-grant
           image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/opt/bootstrap/admin-keycloack-impersonation-grant.sh"]
@@ -44,7 +67,7 @@ spec:
                 name: keycloak-bootstrap
           env:
             - name: MODE
-              value: ensure
+              value: rollback
             - name: KEYCLOAK_URL
               value: http://keycloak.keycloak.svc.cluster.local
             - name: REALM
@@ -87,7 +110,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: keycloak-admin-keycloack-impersonation-grant-egress
+  name: keycloak-admin-keycloack-impersonation-grant-retire-egress
   namespace: keycloak
   labels:
     app.kubernetes.io/name: keycloak
