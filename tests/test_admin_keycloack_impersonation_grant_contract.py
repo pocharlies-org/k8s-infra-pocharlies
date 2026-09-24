@@ -8,14 +8,25 @@ BASE = ROOT / "platform" / "keycloak-next"
 
 class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
     """SC-709 / SC-1215: the reconciler adds exactly one client-role mapping
-    (impersonation of realm-management) to the admin-keycloack-server service
-    account and is additive-only — it never enforces exclusivity, never creates
-    or deletes the built-in role, and never touches other identities."""
+    (impersonation of the edani realm-client "edani-realm", which lives in the
+    master realm together with the admin-keycloack-server client and its
+    service-account user) and is additive-only — it never enforces exclusivity,
+    never creates or deletes the built-in role, and never touches other
+    identities.
+
+    The grant target is "edani-realm" in master, NOT "realm-management" in
+    edani: the SA is a master-realm user and cannot hold client roles of
+    another realm's realm-management; "edani-realm" (attribute
+    realm_client=true) is the client through which this SA already exercises
+    every other edani permission, and the measured 403 on
+    POST /admin/realms/edani/users/<id>/impersonation is the one role missing
+    there (SC-1215, measured 2026-09-24)."""
 
     def test_reconciler_is_additive_and_redacted(self):
         script = (BASE / "scripts" / "admin-keycloack-impersonation-grant.sh").read_text()
         self.assertIn('CLIENT_ID="${CLIENT_ID:-admin-keycloack-server}"', script)
-        self.assertIn('MAPPING_CLIENT="${MAPPING_CLIENT:-realm-management}"', script)
+        self.assertIn('REALM="${REALM:-master}"', script)
+        self.assertIn('MAPPING_CLIENT="${MAPPING_CLIENT:-edani-realm}"', script)
         self.assertIn('ROLE_NAME="${ROLE_NAME:-impersonation}"', script)
         self.assertIn('service-account-${CLIENT_ID}', script)
         # Canonical REST collection with fully-resolved uuids (no --in-client).
@@ -37,6 +48,26 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertNotIn('set -x', script)
         self.assertNotIn('echo "${KC_BOOTSTRAP_ADMIN_PASSWORD}"', script)
 
+    def test_reconciler_identity_is_immutable(self):
+        script = (BASE / "scripts" / "admin-keycloack-impersonation-grant.sh").read_text()
+        # The reconciler cannot be pointed at another realm, client or role.
+        self.assertIn('[ "${REALM}" = "master" ]', script)
+        self.assertIn('[ "${CLIENT_ID}" = "admin-keycloack-server" ]', script)
+        self.assertIn('[ "${MAPPING_CLIENT}" = "edani-realm" ]', script)
+        self.assertIn('[ "${ROLE_NAME}" = "impersonation" ]', script)
+
+    def test_client_lookup_is_exact_and_diagnostics_report_rows(self):
+        script = (BASE / "scripts" / "admin-keycloack-impersonation-grant.sh").read_text()
+        # The server-side "-q clientId=" filter is a substring match; the alias
+        # must additionally be matched exactly client-side (SC-1215).
+        self.assertIn("$2 == want", script)
+        # A failed lookup reports both row counts and the clientIds involved,
+        # so the operator can tell 0 rows from >1 without re-running anything.
+        self.assertIn("expected exactly one client clientId=", script)
+        self.assertIn("exact=${exact_count}", script)
+        self.assertIn("substring=${fuzzy_count}", script)
+        self.assertIn("cut -d, -f2", script)
+
     def test_reconciler_does_not_enforce_exclusivity_or_touch_the_role(self):
         script = (BASE / "scripts" / "admin-keycloack-impersonation-grant.sh").read_text()
         # Additive-only: no exclusivity auditing copied from write-role.
@@ -57,7 +88,10 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("name: keycloak-bootstrap", manifest)
         self.assertIn("value: admin-keycloack-server", manifest)
-        self.assertIn("value: realm-management", manifest)
+        # The grant lives in master, on the edani realm-client (SC-1215 fix).
+        self.assertIn("name: REALM\n              value: master", manifest)
+        self.assertIn("name: MAPPING_CLIENT\n              value: edani-realm", manifest)
+        self.assertNotIn("value: realm-management", manifest)
         self.assertIn("value: impersonation", manifest)
         self.assertNotIn("KC_BOOTSTRAP_ADMIN_PASSWORD\n              value:", manifest)
 
@@ -68,6 +102,11 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn("scripts/admin-keycloack-impersonation-grant.sh", kustomization)
         self.assertNotIn("manual/admin-keycloack-impersonation-grant-rollback-job.yaml", kustomization)
         self.assertIn("value: rollback", rollback)
+        # The manual rollback must undo exactly what the ensure job writes:
+        # same realm, same mapping client.
+        self.assertIn("name: REALM\n              value: master", rollback)
+        self.assertIn("name: MAPPING_CLIENT\n              value: edani-realm", rollback)
+        self.assertNotIn("value: realm-management", rollback)
         self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
 

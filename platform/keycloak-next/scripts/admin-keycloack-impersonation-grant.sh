@@ -4,27 +4,43 @@ set -eu
 umask 077
 
 # SC-709 / SC-1215 (mandato del VP, progreso 14062): owns EXACTLY ONE IdP fact —
-# the mapping of the built-in client role "impersonation" of the "realm-management"
-# client onto the service-account user of the "admin-keycloack-server" client, in
-# the edani realm. It grants that one client role to that one service identity and
-# NOTHING else.
+# the mapping of the client role "impersonation" of the "edani-realm"
+# realm-client onto the service-account user of the "admin-keycloack-server"
+# client. Both the client and the mapping live in the master realm. It grants
+# that one client role to that one service identity and NOTHING else.
+#
+# Why "edani-realm" in master and not "realm-management" in edani (SC-1215 fix,
+# measured 2026-09-24 against the live IdP): the automation client
+# admin-keycloack-server and its service-account user live in the MASTER realm —
+# the first apply failed because "kcadm get clients -r edani -q
+# clientId=admin-keycloack-server" returns 0 rows — and a user of one realm
+# cannot hold client roles of another realm's realm-management, so the
+# edani-side mapping the first revision asserted was unaddressable. Keycloak
+# exposes each realm's realm-management roles to master-realm identities
+# through that realm's realm-client "<realm>-realm" (attribute
+# realm_client=true): every edani power this SA already has (manage-users,
+# manage-clients, manage-realm, ...) is a role it holds on "edani-realm", and
+# the measured 403 on POST /admin/realms/edani/users/<id>/impersonation is
+# exactly the one role missing there — "impersonation". Granting it is the same
+# privilege the mandate asked for (impersonate edani users), placed where the
+# IdP actually checks it.
 #
 # Scope is the narrowest in this platform, on purpose:
-#   * It never creates, edits or deletes the "impersonation" role itself, nor any
-#     other realm-management role: those are Keycloak built-ins. The role is only
-#     READ to resolve its id; if it is missing the hook fails closed.
+#   * It never creates, edits or deletes the "impersonation" role itself, nor
+#     any other realm-client role: those are Keycloak built-ins. The role is
+#     only READ to resolve its id; if it is missing the hook fails closed.
 #   * It never asserts or enforces exclusivity. "impersonation" is a shared
-#     realm-management role that other admin identities may legitimately hold, so
-#     the hook adds the target mapping and leaves every other user's mappings
-#     exactly as it found them (unlike agentgateway-write-role, which owns an
-#     exclusive realm role).
+#     role that other admin identities may legitimately hold, so the hook adds
+#     the target mapping and leaves every other user's mappings exactly as it
+#     found them (unlike agentgateway-write-role, which owns an exclusive realm
+#     role).
 #   * It touches no client attribute, no TTL, no secret, no other grant.
 #
 # Why raw REST collections with fully-resolved UUIDs instead of "kcadm add-roles
 # --in-client": the --in-client flag's client selector (internal id vs clientId
 # alias) is version-sensitive, and a wrong reading would silently map the wrong
-# client. The hook therefore resolves both the realm-management client uuid and
-# the impersonation role id by explicit lookups and POSTs/DELETEs the canonical
+# client. The hook therefore resolves both the edani-realm client uuid and the
+# impersonation role id by explicit lookups and POSTs/DELETEs the canonical
 # admin endpoint "users/<userId>/role-mappings/clients/<clientUuid>/roles", the
 # same REST collection style the read-grants and synapse-sre reconcilers use.
 #
@@ -34,9 +50,9 @@ umask 077
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
-REALM="${REALM:-edani}"
+REALM="${REALM:-master}"
 CLIENT_ID="${CLIENT_ID:-admin-keycloack-server}"
-MAPPING_CLIENT="${MAPPING_CLIENT:-realm-management}"
+MAPPING_CLIENT="${MAPPING_CLIENT:-edani-realm}"
 ROLE_NAME="${ROLE_NAME:-impersonation}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-impersonation-admin.config
@@ -53,9 +69,10 @@ fail() {
 }
 
 # The identity of this reconciler is fixed; it cannot be pointed at another
-# client, role or mapping-client through the environment.
+# realm, client, role or mapping-client through the environment.
+[ "${REALM}" = "master" ] || fail "REALM is immutable for this reconciler"
 [ "${CLIENT_ID}" = "admin-keycloack-server" ] || fail "CLIENT_ID is immutable for this reconciler"
-[ "${MAPPING_CLIENT}" = "realm-management" ] || fail "MAPPING_CLIENT is immutable for this reconciler"
+[ "${MAPPING_CLIENT}" = "edani-realm" ] || fail "MAPPING_CLIENT is immutable for this reconciler"
 [ "${ROLE_NAME}" = "impersonation" ] || fail "ROLE_NAME is immutable for this reconciler"
 case "${MODE}" in
   ensure|audit|rollback) ;;
@@ -95,12 +112,20 @@ client_field() {
   kget "clients/$1" --fields "$2" --format csv --noquotes | nonempty_lines
 }
 
-# Resolve a client by its clientId alias to exactly one internal uuid.
+# Resolve a client by its clientId alias to exactly one internal uuid. The
+# server-side "-q clientId=" filter is a SUBSTRING match, so the alias is
+# additionally matched exactly client-side. A failed lookup reports both row
+# counts and the clientIds involved (SC-1215: the first apply died on a bare
+# "expected exactly one client" with no way to tell 0 rows from >1).
 resolve_client() {
-  rows="$(kget clients -q "clientId=$1" --fields id --format csv --noquotes | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" = "1" ] || \
-    fail "expected exactly one client $1"
-  printf '%s' "${rows}"
+  fuzzy="$(kget clients -q "clientId=$1" --fields id,clientId --format csv --noquotes | nonempty_lines)"
+  rows="$(printf '%s\n' "${fuzzy}" | awk -F, -v want="$1" '$2 == want')"
+  exact_count="$(printf '%s\n' "${rows}" | line_count)"
+  if [ "${exact_count}" != "1" ]; then
+    fuzzy_count="$(printf '%s\n' "${fuzzy}" | line_count)"
+    fail "expected exactly one client clientId=$1 in realm ${REALM}: exact=${exact_count} [$(printf '%s\n' "${rows}" | cut -d, -f2 | tr '\n' ' ')]; substring=${fuzzy_count} [$(printf '%s\n' "${fuzzy}" | cut -d, -f2 | tr '\n' ' ')]"
+  fi
+  printf '%s' "${rows}" | cut -d, -f1
 }
 
 # Directly-mapped client roles of ${MAPPING_CLIENT} for the target service account.
@@ -121,7 +146,8 @@ write_role_body() {
 
 login_admin
 
-# Target service account: the SA of the privileged admin-keycloack-server client.
+# Target service account: the SA of the privileged admin-keycloack-server
+# client, which lives in the master realm.
 SA_CLIENT_UUID="$(resolve_client "${CLIENT_ID}")"
 [ "$(client_field "${SA_CLIENT_UUID}" enabled)" = "true" ] || \
   fail "client ${CLIENT_ID} is disabled"
@@ -133,7 +159,9 @@ SERVICE_ACCOUNT_USERNAME="$(kget "clients/${SA_CLIENT_UUID}/service-account-user
 [ "${SERVICE_ACCOUNT_USERNAME}" = "service-account-${CLIENT_ID}" ] || \
   fail "resolved service account username does not match the privileged client"
 
-# realm-management client and its built-in impersonation role (read-only).
+# The edani realm-client in master (the "edani-realm" mirror through which this
+# master-realm SA exercises its edani permissions) and its built-in
+# impersonation role (read-only).
 MAPPING_CLIENT_UUID="$(resolve_client "${MAPPING_CLIENT}")"
 ROLE_ID="$(kget "clients/${MAPPING_CLIENT_UUID}/roles/${ROLE_NAME}" --fields id --format csv --noquotes | nonempty_lines)"
 [ -n "${ROLE_ID}" ] || \
