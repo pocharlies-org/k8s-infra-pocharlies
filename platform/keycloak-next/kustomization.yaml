@@ -23,6 +23,7 @@ resources:
   - agentgateway-social-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
+  - agentgateway-token-smoke-job.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -66,6 +67,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: admin-keycloack-impersonation-grant
+  - name: keycloak-agentgateway-token-smoke
+    files:
+      - agentgateway-token-smoke.sh=scripts/agentgateway-token-smoke.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-token-smoke
   - name: keycloak-skirmbooks-sso
     files:
       - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh

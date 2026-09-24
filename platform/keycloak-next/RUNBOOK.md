@@ -530,3 +530,33 @@ Rollback is a plain git revert: the target value lives in the script, so the
 next PostSync restores the reverted TTL; no manual rollback Job is shipped.
 Tokens minted before the change keep their old expiry — consumers that cache
 tokens (the auth-proxy) must be restarted once to pick up the new lifespan.
+
+## 14. AgentGateway roles→token smoke (INFRA-248)
+
+`agentgateway-token-smoke-job.yaml` is a read-only PostSync hook in sync wave
+26 — after every identity reconciler, so a failed smoke never holds one back.
+It proves one rule for every gateway client without copying any role matrix:
+the `realm_access.roles` of a freshly minted token equal the service
+account's effective realm roles within the client's effective realm scope.
+
+- Mints `chat-agentgateway`, `company-metrics-agentgateway` and the negative
+  subject `cloudblue` (its service account holds only `default-roles-edani`;
+  the smoke fails if it ever gains an `agentgateway-*` role, so the negative
+  is re-chosen instead of passing silently).
+- Does NOT mint `agentgateway-mcp` / `openclaw-readonly-agentgateway`: the
+  section 10 reconciler mints and asserts them exactly in wave 20 (ruling
+  C-5). Those two and the public `agentgateway-social-mcp` are checked by
+  config: `fullScopeAllowed`, the `roles` default client scope and the realm
+  scope mappings.
+- Asserts the realm `roles` client scope maps realm roles to
+  `realm_access.roles` in the access token.
+- Secrets reach kcadm through `KC_CLI_PASSWORD` / `KC_CLI_CLIENT_SECRET`,
+  never argv; only role names are logged. No realm mutation, so no rollback.
+
+Evidence (one JSON line per client, then `"result":"PASS"`; the Job is kept
+24 h):
+
+```sh
+kubectl logs -n keycloak job/keycloak-agentgateway-token-smoke
+kubectl logs -n keycloak job/keycloak-agentgateway-read-grants   # agentgateway-mcp / openclaw tokens
+```
