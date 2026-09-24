@@ -66,6 +66,31 @@ jobs:
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_admin_keycloack_impersonation_grant_contract.py
 
+  # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
+  # no Keycloak image, no PyYAML; the verifiers run against a fake Keycloak
+  # on 127.0.0.1. Later parts add tests with the same file pattern.
+  keycloak-rbac-contract:
+    runs-on: arc-k8s
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the realm role catalog and its verifiers
+        run: python3 -m unittest discover -s tests -p 'test_keycloak_rbac_*.py' -v
+      # C-2 registry contract: no trunk role is deleted from ROLES.yaml and no
+      # trunk-deprecated role comes back as active.
+      - name: Registry contract of ROLES.yaml against the trunk
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          catalog=platform/keycloak-next/ROLES.yaml
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          if ! git cat-file -e "FETCH_HEAD:$catalog" 2>/dev/null; then
+            echo "SKIP: origin/$GITHUB_BASE_REF no tiene $catalog; no hay catálogo previo contra el que comprobar borrados"
+            exit 0
+          fi
+          git show "FETCH_HEAD:$catalog" > "$RUNNER_TEMP/ROLES.base.yaml"
+          python3 platform/keycloak-next/scripts/check-catalog-evolution.py --base "$RUNNER_TEMP/ROLES.base.yaml" --head "$catalog"
+
   velero-operability-contract:
     runs-on: arc-k8s
     steps:
