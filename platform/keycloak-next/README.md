@@ -214,3 +214,53 @@ one value in the client document, never creates the client, touches no
 role, scope mapping, secret or other attribute, and fails closed if the
 identity flags move across its write. Rollback is a git revert (RUNBOOK
 section 13).
+
+## Realm role catalog (`ROLES.yaml`, INFRA-219 C1)
+
+`ROLES.yaml` is the contract registry of every realm role of `edani`: per
+role its `meaning`, the exact `grantees` (usernames holding it *directly*,
+not through a composite), the `privilege` it allows and denies, its `origin`
+(the reconciler or epic that creates it, or `keycloak-builtin`) and
+`status`. It is JSON, which is valid YAML 1.2, read with `json.load` — no
+PyYAML.
+
+- **An entry is never deleted.** A retired role changes to
+  `status: deprecated`; the verifier accepts a deprecated role whether it is
+  still in the realm or gone. On every pull request CI fetches the trunk
+  copy and runs `scripts/check-catalog-evolution.py`: a trunk role missing
+  from the branch, or a trunk `deprecated` role back to `active`, fails the
+  job (skipped, with a `SKIP:` line, while the trunk has no `ROLES.yaml`).
+- A composite role lists in `composites` the exact realm roles it contains
+  and in `client_composites` the exact client roles, by `clientId` (today
+  `default-roles-edani` → `account`: `manage-account`, `view-profile`);
+  absent = none. The verifier reads `roles/{name}/composites` for every
+  catalogued role, so a realm or client role (e.g. `realm-management`
+  `view-users`) added to or removed from a composite such as
+  `default-roles-edani` is drift even though nobody holds it directly.
+- A new role, grant or revoke lands in `ROLES.yaml` in the same PR as the
+  reconciler change. The roles owned by `agentgateway-read-grants.sh` and
+  `agentgateway-domain-roles.sh` must match those scripts' `EXPECTED_*`
+  matrices (`tests/test_keycloak_rbac_parity_contract.py`).
+- No catalogued role may be mapped to a group (R2).
+- `default-roles-edani` lists every user and service account: Keycloak grants
+  it on creation, so a new principal shows up as drift until it is added.
+
+Check it against the live realm (read-only; local flow of the
+`keycloak-admin` skill: `keycloak/keycloak-automation` is written to a 0600
+netrc that is deleted once the token is minted, never passed through argv):
+
+```bash
+KUBECONFIG=~/.kube/config python3 platform/keycloak-next/scripts/verify-role-catalog.py
+# OK: <N> roles en catálogo, 0 sin catalogar, 0 catalogados inexistentes  -> exit 0
+# DRIFT: <finding>, one line each                                        -> exit 1
+# ERROR: <auth/network/catalog>                                          -> exit 2
+```
+
+`--catalog <path>` checks another copy. In-cluster it authenticates with
+client credentials read from mounted files: `KEYCLOAK_URL`,
+`KC_CLIENT_ID_FILE`, `KC_CLIENT_SECRET_FILE` (optional `KC_REALM`,
+`KC_TOKEN_REALM`). `scripts/kc_rbac.py` is the shared stdlib library of these
+verifiers: auth, paginated admin reads, and `load_json_block`, the single
+parser of the one json fenced block that markdown contracts
+(`PRINCIPALS.md`, `ROUTE-ROLES.md`) carry. CI job `keycloak-rbac-contract`
+runs `tests/test_keycloak_rbac_*.py` against a fake Keycloak on loopback.
