@@ -11,7 +11,9 @@ block wins.
 Measured against the live realm on 2026-09-24: 9 users + 10 service accounts
 = **19 principals** (the 16 of 2026-09-23 plus the three OWU-27 clients
 `claude-sessions-norol`, `-other`, `-test`, created by admin API outside this
-repo).
+repo). INFRA-250 adds the 20th, `service-account-keycloak-rbac-auditor`,
+created by its own PostSync (`keycloak-rbac-auditor-client.yaml`) in the same
+sync that ships this entry.
 
 ## Rules
 
@@ -70,6 +72,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
+| `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
 | `service-account-synapse-draft-orchestrator` | sa | DevOps | activo | M2M de los borradores de Synapse; porta synapse-draft-m2m. |
 | `service-account-synapse-sre-orchestrator` | sa | DevOps | activo | M2M del orquestador SRE de Synapse; porta synapse-sre-m2m y cto-office-send. |
@@ -314,6 +317,18 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Consumidor MCP de las métricas de la compañía; porta company-metrics-read.",
       "realm_roles": [
         "company-metrics-read",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-keycloak-rbac-auditor",
+      "type": "sa",
+      "client": "keycloak-rbac-auditor",
+      "owner": "DevOps",
+      "source": "INFRA-250 (P4 de INFRA-219): platform/keycloak-next/keycloak-rbac-auditor-client.yaml, identidad del CronJob keycloak-role-drift",
+      "purpose": "Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*).",
+      "realm_roles": [
         "default-roles-edani"
       ],
       "status": "activo"
