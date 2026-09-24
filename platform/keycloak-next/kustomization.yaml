@@ -11,6 +11,8 @@ resources:
   - oauth2-proxy-chat.yaml
   - oauth2-proxy-skirmbooks.yaml
   - skirmbooks-sso.yaml
+  - oauth2-proxy-messages.yaml
+  - dgx-messages-client.yaml
   - routing.yaml
   - agentgateway-write-role-job.yaml
   - openclaw-readonly-clients.yaml
@@ -70,6 +72,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: skirmbooks-sso
+  - name: keycloak-dgx-messages-client
+    files:
+      - dgx-messages-client.sh=scripts/dgx-messages-client.sh
+    options:
+      labels:
+        app.kubernetes.io/component: dgx-messages-client
 generatorOptions:
   disableNameSuffixHash: true
   labels:

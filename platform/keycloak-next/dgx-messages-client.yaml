@@ -1,0 +1,144 @@
+# SC-1233 (P0 de SC-1198) — cliente OIDC `dgx-messages` y sus secretos.
+#
+# El ítem 1Password `keycloak-next-dgx-messages` (vault k8s-pocharlies) lleva
+# `client_secret` (el del cliente Keycloak) y `cookie_secret` (32 bytes
+# base64url, cookie de oauth2-proxy-messages). Lo consumen el reconciler de
+# abajo y el Deployment de oauth2-proxy-messages.yaml.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dgx-messages-sso-secrets
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: client-credentials
+spec:
+  refreshInterval: 24h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: dgx-messages-sso-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: OAUTH2_PROXY_CLIENT_SECRET
+      remoteRef:
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-dgx-messages/client_secret
+    - secretKey: OAUTH2_PROXY_COOKIE_SECRET
+      remoteRef:
+        key: keycloak-next-dgx-messages/cookie_secret
+---
+# Reconciler PostSync (patrón skirmbooks-sso / openclaw-readonly-clients): el
+# cliente tiene que existir con su redirect EXACTO y sus claims antes de que
+# messages.lan.e-dani.com mande a nadie a Keycloak. Falla (y deja el hook en
+# rojo) si el redirect registrado no es el esperado o si el access token de
+# ejemplo no lleva azp=dgx-messages y aud con social-api.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-dgx-messages-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: dgx-messages-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "21"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: dgx-messages-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-dgx-messages-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/dgx-messages-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: dgx-messages }
+            - { name: REDIRECT_URI, value: https://messages.lan.e-dani.com/oauth2/callback }
+            - { name: WEB_ORIGIN, value: https://messages.lan.e-dani.com }
+            - { name: POST_LOGOUT_REDIRECT_URI, value: https://messages.lan.e-dani.com/ }
+            - { name: SOCIAL_AUDIENCE, value: social-api }
+            # Dani (me@e-dani.com): usuario del token de ejemplo que se evalúa.
+            - { name: CHECK_USER_ID, value: e51253a7-c137-4c6c-9fb9-af9cecd3b147 }
+            - name: DGX_MESSAGES_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dgx-messages-sso-secrets
+                  key: OAUTH2_PROXY_CLIENT_SECRET
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-dgx-messages-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-dgx-messages-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: dgx-messages-client
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: dgx-messages-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
