@@ -100,8 +100,9 @@ and the AgentGateway CEL policy. Do not sync this hook independently while the
 shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
-`agentgateway-domain-roles-job.yaml` creates the eleven reviewed domain roles
-without assigning them. The hook fails if one is composite, mapped to a group,
+`agentgateway-domain-roles-job.yaml` creates the twelve reviewed domain roles
+without assigning them (`agentgateway-write:dgx-control` joined inert in
+INFRA-249: no allowlist entry, so its three gated tools stay denied). The hook fails if one is composite, mapped to a group,
 or held by any user other than the single reviewed service account in its
 immutable `ALLOWED_SERVICE_ACCOUNTS` map (today the six chat pairs:
 `:media`, `:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
@@ -262,3 +263,20 @@ verifiers: auth, paginated admin reads, and `load_json_block`, the single
 parser of the one json fenced block that markdown contracts
 (`PRINCIPALS.md`, `ROUTE-ROLES.md`) carry. CI job `keycloak-rbac-contract`
 runs `tests/test_keycloak_rbac_*.py` against a fake Keycloak on loopback.
+
+## Route×role matrix (`ROUTE-ROLES.md`, INFRA-219 C3)
+
+`ROUTE-ROLES.md` records which realm role each AgentGateway route requires,
+measured against the **live** ConfigMap `agentgateway/agentgateway-config`
+(route-level role and, per role, the exact gated tools), plus the gateway
+roles no route requires and why they exist. Its single json block is what the
+verifier reads. Check it (read-only):
+
+```bash
+KUBECONFIG=~/.kube/config python3 platform/keycloak-next/scripts/verify-route-roles.py
+# OK: <N> gates coherentes, 0 roles referenciados inexistentes, 0 roles sin ruta documentada  -> exit 0
+# DRIFT: <finding>, one line each                                                          -> exit 1
+# ERROR: <kubectl/auth/network/parse/matrix>                                               -> exit 2
+```
+
+A gate change in `k8s-agentgateway-pocharlies` needs its row updated here.
