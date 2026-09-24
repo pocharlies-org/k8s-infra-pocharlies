@@ -1,0 +1,284 @@
+# SC-1233 (P0 de SC-1198) — proxy SSO DEDICADO para messages.lan.e-dani.com
+# (dgx-messages, solo LAN).
+#
+# Por qué no vale `sso-chain` ni `sso-chat-chain`: esos proxies usan el cliente
+# Keycloak compartido `oauth2-proxy`, y el panel /social de dgx-messages manda
+# el ACCESS TOKEN de la sesión a social-api (SC-1197), que exige
+# `azp=dgx-messages` y `aud` con `social-api`. Cliente propio (reconciliado por
+# dgx-messages-client.yaml), cookie propia y grupos propios.
+#
+# Tiempos, medidos en el realm edani el 24-09-2026 (Admin REST GET
+# /admin/realms/edani): accessTokenLifespan=300 s, ssoSessionIdleTimeout=30 d,
+# ssoSessionMaxLifespan=365 d.
+#   - cookie_refresh = 4m: un minuto menos que la vida del access token, para
+#     que el token que llega a la app (X-Auth-Request-Access-Token) nunca esté
+#     caducado cuando lo reenvía a social-api.
+#   - cookie_expire = 8760h: igual a ssoSessionMaxLifespan (nunca más). Antes
+#     de eso manda Keycloak: si la sesión SSO muere (30 d sin uso), el refresh
+#     falla y el proxy vuelve a pedir login.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-messages-config
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+data:
+  oauth2_proxy.cfg: |
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
+    skip_oidc_discovery = true
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/certs"
+    redirect_url = "https://messages.lan.e-dani.com/oauth2/callback"
+    scope = "openid email profile"
+    code_challenge_method = "S256"
+
+    reverse_proxy = true
+    http_address = "0.0.0.0:4180"
+    upstreams = [ "static://202" ]
+
+    # Cookie propia y SIN cookie_domains: cookie de host, solo viaja a
+    # messages.lan.e-dani.com; no colisiona con `_edani_sso` ni `_chat_sso`.
+    cookie_name = "_messages_sso"
+    cookie_secure = true
+    cookie_httponly = true
+    cookie_samesite = "lax"
+    cookie_expire = "8760h"
+    cookie_refresh = "4m"
+
+    whitelist_domains = [ "messages.lan.e-dani.com", "auth-next.e-dani.com" ]
+    email_domains = [ "*" ]
+    allowed_groups = [ "/edani-admins", "/edani-operators", "/edani-users" ]
+
+    # El access token (azp=dgx-messages, aud social-api) sale en
+    # X-Auth-Request-Access-Token. set_authorization_header=false: ese
+    # Authorization llevaría el ID token, que no tiene aud social-api.
+    pass_access_token = true
+    set_xauthrequest = true
+    set_authorization_header = false
+    skip_provider_button = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-messages
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: oauth2-proxy-messages }
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-messages
+        app.kubernetes.io/name: oauth2-proxy-messages
+        app.kubernetes.io/component: forward-auth
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # Misma colocación que oauth2-proxy-openclaw-readonly: pool ks5 (HA), fuera
+      # de `ubuntu` (se reinicia sin aviso) y de los Sparks.
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app: oauth2-proxy-messages }
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd
+          args: ["--config=/etc/oauth2-proxy/oauth2_proxy.cfg"]
+          env:
+            - { name: OAUTH2_PROXY_CLIENT_ID, value: dgx-messages }
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dgx-messages-sso-secrets
+                  key: OAUTH2_PROXY_CLIENT_SECRET
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dgx-messages-sso-secrets
+                  key: OAUTH2_PROXY_COOKIE_SECRET
+          ports:
+            - { name: http, containerPort: 4180 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy/oauth2_proxy.cfg
+              subPath: oauth2_proxy.cfg
+              readOnly: true
+            - { name: tmp, mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: config
+          configMap:
+            name: oauth2-proxy-messages-config
+            defaultMode: 0444
+        - name: tmp
+          emptyDir: { sizeLimit: 32Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-messages
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  selector: { app: oauth2-proxy-messages }
+  ports:
+    - { name: http, port: 4180, targetPort: http }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oauth2-proxy-messages
+  namespace: keycloak
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: oauth2-proxy-messages }
+---
+# /api de dgx-messages usa SOLO este middleware: sin sesión, 401 (nunca 302).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-messages-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-messages.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    # Traefik BORRA de la petición cada cabecera de esta lista y solo pone la
+    # que devuelva oauth2-proxy: un cliente no puede colar su propio
+    # X-Auth-Request-* ni un Authorization hasta la app.
+    authResponseHeaders:
+      - X-Auth-Request-Access-Token
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Preferred-Username
+      - X-Auth-Request-Groups
+      - Authorization
+      - X-Forwarded-User
+    # Cuando /oauth2/auth refresca la sesión (cada 4m) devuelve la cookie
+    # nueva; sin esto Traefik la tira y el proxy refrescaría en cada petición.
+    # La sesión (access + id + refresh token) pasa de 4 KB y oauth2-proxy la
+    # parte en _messages_sso_0, _1…: se listan también los trozos.
+    addAuthCookiesToResponse:
+      - _messages_sso
+      - _messages_sso_0
+      - _messages_sso_1
+      - _messages_sso_2
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-messages-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    status: ["401-403"]
+    service:
+      name: oauth2-proxy-messages
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+      "403": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-messages-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-messages-errors
+      - name: sso-messages-forward-auth
+---
+# Entrada SOLO desde traefik-lan (pod de red normal en `ubuntu`, no
+# hostNetwork: su IP de pod llega intacta por flannel). messages es LAN-only:
+# a diferencia de oauth2-proxy-openclaw-readonly no se abre a traefik-edge ni
+# a los VTEP de OVH.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: oauth2-proxy-messages
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-messages
+    app.kubernetes.io/component: forward-auth
+spec:
+  podSelector:
+    matchLabels: { app: oauth2-proxy-messages }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: traefik-lan }
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+              app.kubernetes.io/instance: traefik-lan-traefik-lan
+      ports:
+        - { protocol: TCP, port: 4180 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
