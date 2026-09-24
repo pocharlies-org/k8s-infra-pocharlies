@@ -39,6 +39,9 @@ to the root `kustomization.yaml`:
   - `ui_client_secret`
   - `cookie_secret`
   - `agentgateway_client_secret`
+- `keycloak-next-dgx-messages`
+  - `client_secret`
+  - `cookie_secret` (32 bytes, base64url)
 
 The `onepassword` ClusterSecretStore resolves every ExternalSecret
 `remoteRef.key` as `<item>/<field label>`, e.g.
@@ -166,6 +169,30 @@ the Keycloak bootstrap administrator and deletes the two immutable dedicated
 client IDs even if the operator was disabled, an application secret was lost,
 or the service client accidentally acquired the forbidden write role:
 `manual/openclaw-readonly-clients-rollback-job.yaml`.
+
+## dgx-messages (`messages.lan.e-dani.com`, SC-1198)
+
+LAN-only messages app behind its own proxy and its own client, because the
+`/social` panel forwards the session access token to social-api, which only
+accepts `azp=dgx-messages` with `social-api` in `aud`:
+
+- `dgx-messages-client.yaml` + `scripts/dgx-messages-client.sh` (PostSync)
+  reconcile the confidential client `dgx-messages`: standard flow only, no
+  service account, `fullScopeAllowed=false`, exact redirect
+  `https://messages.lan.e-dani.com/oauth2/callback`, PKCE S256, an Audience
+  mapper `social-api` on the access token only and a full-path groups mapper.
+  The Job fails if the registered redirect is not exactly that one, or if the
+  example access token for Dani (Admin API `evaluate-scopes`) lacks
+  `azp=dgx-messages`, `aud` with `social-api` or an `/edani-*` group.
+- `oauth2-proxy-messages.yaml`: the proxy (`allowed_groups` edani
+  admins/operators/users, host-only cookie `_messages_sso`,
+  `cookie_refresh=4m` against the realm's 5 min `accessTokenLifespan`), ingress
+  only from traefik-lan, and the middlewares `sso-messages-forward-auth`
+  (the app's `/api`: 401 without session), `sso-messages-errors` and
+  `sso-messages-chain` (the UI: 302 to Keycloak). The IngressRoute that uses
+  them lives in the `dgx-messages` repo.
+- Rollback: `manual/dgx-messages-client-rollback-job.yaml`, after taking the
+  middlewares off the IngressRoute.
 
 ## Synapse SRE M2M identity
 
