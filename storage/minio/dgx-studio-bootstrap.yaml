@@ -24,8 +24,16 @@ spec:
           effect: NoSchedule
       containers:
         - name: mc
-          image: minio/mc:RELEASE.2025-04-08T15-39-49Z
+          # minio/mc ya no se publica en Docker Hub (pull access denied); la
+          # imagen del servidor trae /usr/bin/mc y ya está en sauvage.
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          command: ["sh", "-c"]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
           env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef: {name: minio-root, key: root-user}
@@ -38,9 +46,7 @@ spec:
             - name: RW_SECRET_KEY
               valueFrom:
                 secretKeyRef: {name: dgx-studio-s3-credentials, key: secret-key}
-          command:
-            - sh
-            - -c
+          args:
             - |
               set -e
               BUCKET=dgx-studio
