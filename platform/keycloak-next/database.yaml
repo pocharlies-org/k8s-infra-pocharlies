@@ -45,7 +45,7 @@ spec:
   data:
     - secretKey: ACCESS_KEY_ID
       remoteRef:
-        key: postgres-shared-minio/access_key_id
+        key: minio-dump-keycloak/access_key_id
     - secretKey: ACCESS_SECRET_KEY
       remoteRef:
-        key: postgres-shared-minio/secret_access_key
+        key: minio-dump-keycloak/secret_access_key
