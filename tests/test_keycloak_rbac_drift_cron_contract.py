@@ -176,13 +176,15 @@ class CronManifestContractTest(unittest.TestCase):
 class FakeRealm:
     """Stdlib Keycloak: token endpoint plus the read-only admin API of both verifiers."""
 
-    def __init__(self, roles, usernames, view_clients=False):
+    def __init__(self, roles, usernames, client_uuids, view_clients=False):
         # roles: {name: {"users": [...], "groups": [...], "composites": [...],
         #                "client_composites": {clientId: [...]}}}
+        # client_uuids: {clientId: internal id}, the ids composites carry.
         # view_clients=False is the auditor as specified (view-realm,
         # view-users, query-users, query-groups): Keycloak refuses
         # GET clients/{uuid} to it. True models a principal that may read clients.
         self.roles = roles
+        self.client_uuids = client_uuids
         self.usernames = sorted(usernames)
         self.view_clients = view_clients
         self.token_status = 200
@@ -233,7 +235,10 @@ class FakeRealm:
                         names = [n for n in fake.usernames if search in n]
                     items = [{"id": f"id-{n}", "username": n} for n in names]
                 elif parts[4] == "clients" and len(parts) == 6 and fake.view_clients:
-                    return self._send(200, {"id": parts[5], "clientId": parts[5][len("uuid-"):]})
+                    by_uuid = {uuid: client_id for client_id, uuid in fake.client_uuids.items()}
+                    if parts[5] not in by_uuid:
+                        return self._send(404, {"error": "Could not find client"})
+                    return self._send(200, {"id": parts[5], "clientId": by_uuid[parts[5]]})
                 elif parts[4] != "roles":
                     # Without view-clients anything else is refused.
                     return self._send(403, {"error": "HTTP 403 Forbidden"})
@@ -245,7 +250,7 @@ class FakeRealm:
                     # only the client's internal id (containerId).
                     items = [{"name": c, "clientRole": False, "containerId": "realm-uuid"} for c in role["composites"]]
                     items += [
-                        {"name": c, "clientRole": True, "containerId": f"uuid-{client_id}"}
+                        {"name": c, "clientRole": True, "containerId": fake.client_uuids[client_id]}
                         for client_id, names in role["client_composites"].items()
                         for c in names
                     ]
@@ -271,7 +276,8 @@ class FakeRealm:
 
 
 def realm_as_declared():
-    catalog = kc_rbac.load_role_catalog(BASE / "ROLES.yaml")
+    """(roles, usernames, client_uuids) of a realm exactly as ROLES.yaml and PRINCIPALS.md declare it."""
+    catalog, client_uuids = kc_rbac.load_catalog(BASE / "ROLES.yaml")
     roles = {
         name: {
             "users": list(entry["grantees"]),
@@ -282,7 +288,7 @@ def realm_as_declared():
         for name, entry in catalog.items()
     }
     usernames = [p["username"] for p in kc_rbac.load_json_block(BASE / "PRINCIPALS.md")["principals"]]
-    return roles, usernames
+    return roles, usernames, client_uuids
 
 
 class CronEntrypointTest(unittest.TestCase):
@@ -323,56 +329,61 @@ class CronEntrypointTest(unittest.TestCase):
         self.assertNotIn(CLIENT_SECRET, result.stdout + result.stderr)
         return result.returncode, result.stdout.splitlines()
 
-    def test_blocker_auditor_without_view_clients_cannot_resolve_client_composites(self):
-        # BLOQUEO INFRA-250 (documented, not hidden): since INFRA-247
-        # client_composites (#169), verify-role-catalog.py resolves the clientId
-        # of every client-role composite with kc_rbac.Client.client_id ->
-        # GET /admin/realms/edani/clients/{uuid}, which Keycloak serves only
-        # with view-clients. The auditor as specified has no view-clients, so
-        # every run ends in ERROR (exit 2). This test must change together
-        # with the fix (kc_rbac or the auditor's role set), not before it.
-        roles, usernames = realm_as_declared()
+    def test_auditor_without_view_clients_resolves_client_composites_from_client_uuids(self):
+        # The INFRA-250 blocker, closed by INFRA-253 (#180): client-role
+        # composites carry only the client's internal id, and the cron
+        # translates it with ROLES.yaml client_uuids (--skip-client-uuid-check)
+        # instead of GET clients/{uuid}, which Keycloak serves only with
+        # view-clients. The auditor as specified (no view-clients) is OK.
+        roles, usernames, client_uuids = realm_as_declared()
         self.assertTrue(roles["default-roles-edani"]["client_composites"], "precondition: a client-role composite")
-        with FakeRealm(roles, usernames) as realm:
-            code, lines = self.run_cron(realm.url)
-        self.assertEqual(code, 2, lines)
-        self.assertIn(f"ERROR: HTTP 403 en {realm.url}/admin/realms/edani/clients/uuid-account", lines)
-        self.assertTrue([line for line in lines if line.startswith("OK: ")], lines)  # verify-principals still passes
-
-    def test_realm_as_declared_is_ok_once_clients_resolve(self):
-        roles, usernames = realm_as_declared()
-        with FakeRealm(roles, usernames, view_clients=True) as realm:
+        with FakeRealm(roles, usernames, client_uuids) as realm:
             code, lines = self.run_cron(realm.url)
             touched = {path for _, path in realm.requests}
         self.assertEqual(code, 0, lines)
-        self.assertEqual(len(lines), 2, lines)
-        self.assertTrue(lines[0].startswith("OK: "), lines)
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(lines[0].startswith("SKIP: client_uuids "), lines)
         self.assertTrue(lines[1].startswith("OK: "), lines)
-        # Read-only: token, roles, users and the client lookup; never role-mappings.
+        self.assertTrue(lines[2].startswith("OK: "), lines)
+        self.assertFalse([p for p in touched if p.startswith("/admin/realms/edani/clients")], touched)
+
+    def test_realm_as_declared_is_ok_and_read_only(self):
+        # Even for a principal that could read clients, the cron never asks.
+        roles, usernames, client_uuids = realm_as_declared()
+        with FakeRealm(roles, usernames, client_uuids, view_clients=True) as realm:
+            code, lines = self.run_cron(realm.url)
+            touched = {path for _, path in realm.requests}
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(lines[0].startswith("SKIP: "), lines)
+        self.assertTrue(lines[1].startswith("OK: "), lines)
+        self.assertTrue(lines[2].startswith("OK: "), lines)
+        self.assertFalse([p for p in touched if p.startswith("/admin/realms/edani/clients")], touched)
+        # Read-only: token, roles and users; never clients, role-mappings or secrets.
         self.assertFalse([p for p in touched if "role-mappings" in p or "client-secret" in p])
         self.assertEqual(list(self.work.iterdir()), [])
 
     def test_qa_drift_is_exit_1_with_the_named_finding(self):
         # The C5 drift proof qa runs live: an undeclared agentgateway-read:* on qa-con-rol.
-        roles, usernames = realm_as_declared()
+        roles, usernames, client_uuids = realm_as_declared()
         roles["agentgateway-read:gsc"]["users"].append("qa-con-rol@e-dani.com")
-        with FakeRealm(roles, usernames, view_clients=True) as realm:
+        with FakeRealm(roles, usernames, client_uuids) as realm:
             code, lines = self.run_cron(realm.url)
         self.assertEqual(code, 1, lines)
         self.assertIn("DRIFT: qa-con-rol@e-dani.com tiene agentgateway-read:gsc no declarada", lines)
 
     def test_group_grant_and_unowned_principal_are_drift(self):
-        roles, usernames = realm_as_declared()
+        roles, usernames, client_uuids = realm_as_declared()
         roles["agentgateway-write"]["groups"].append("/edani-operators")
-        with FakeRealm(roles, usernames + ["service-account-nuevo"], view_clients=True) as realm:
+        with FakeRealm(roles, usernames + ["service-account-nuevo"], client_uuids) as realm:
             code, lines = self.run_cron(realm.url)
         self.assertEqual(code, 1, lines)
         self.assertIn("DRIFT: grupo /edani-operators tiene agentgateway-write (R2: sin role-mapping por grupo)", lines)
         self.assertIn("DRIFT: principal service-account-nuevo existe en el realm y no tiene entrada en PRINCIPALS.md", lines)
 
     def test_auth_failure_is_exit_2_even_with_drift_elsewhere(self):
-        roles, usernames = realm_as_declared()
-        with FakeRealm(roles, usernames) as realm:
+        roles, usernames, client_uuids = realm_as_declared()
+        with FakeRealm(roles, usernames, client_uuids) as realm:
             realm.token_status = 401
             code, lines = self.run_cron(realm.url)
         self.assertEqual(code, 2, lines)
