@@ -1,9 +1,216 @@
+import functools
+import os
 import pathlib
+import re
+import shutil
+import subprocess
+import tempfile
+import textwrap
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
+SCRIPT = BASE / "scripts" / "admin-keycloack-impersonation-grant.sh"
+
+# The reconciler Job runs inside the pinned Keycloak image, which is NOT a
+# general-purpose shell image (SC-1215: it ships no awk and the reconciler died
+# on "awk: command not found"). The image reference is read from the Job
+# manifest so the tests audit exactly the image the Job runs.
+_IMAGE_RE = re.compile(r"image: (\S+/keycloak:26\.6\.2@sha256:[0-9a-f]{64})")
+
+
+def _pinned_image():
+    manifest = (BASE / "admin-keycloack-impersonation-grant-job.yaml").read_text()
+    match = _IMAGE_RE.search(manifest)
+    if not match:
+        raise AssertionError("pinned keycloak 26.6.2 image not found in the Job manifest")
+    return match.group(1)
+
+
+DOCKER = shutil.which("docker")
+IMAGE = _pinned_image()
+
+
+def _image_ready():
+    if not DOCKER:
+        return False
+    try:
+        return subprocess.run(
+            [DOCKER, "image", "inspect", IMAGE],
+            capture_output=True, timeout=60,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+IMAGE_READY = _image_ready()
+
+# CI must not go green on skipped in-image tests: the CI job docker-pulls the
+# pinned image and sets REQUIRE_IMAGE_CONTRACT=1, which turns "image missing"
+# from a skip into a hard failure.
+REQUIRE_IMAGE_CONTRACT = os.environ.get("REQUIRE_IMAGE_CONTRACT") == "1"
+
+
+def in_keycloak_image(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not IMAGE_READY:
+            if REQUIRE_IMAGE_CONTRACT:
+                self.fail(
+                    "in-image contract test cannot run: docker or the pinned "
+                    "keycloak image is unavailable while REQUIRE_IMAGE_CONTRACT=1 "
+                    "(the CI job must docker-pull the image before this suite)"
+                )
+            self.skipTest("requires docker and the pinned keycloak 26.6.2 image")
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
+# POSIX-sh kcadm stub served to the reconciler inside the Keycloak image. It
+# reproduces the two server behaviors the reconciler depends on: "-q
+# clientId=" is a SUBSTRING match, and the role-mappings collection is mutable
+# so ensure/rollback are observable. Every invocation is appended to STUB_LOG.
+KCADM_STUB = textwrap.dedent("""\
+    #!/bin/sh
+    set -eu
+    umask 022
+    LOG="${STUB_LOG:?}"
+    FIXTURE_DIR="${FIXTURE_DIR:?}"
+    printf '%s\\n' "$*" >> "$LOG"
+    sub="$1"; shift
+    if [ "$sub" = config ]; then exit 0; fi
+    if [ "$sub" = create ] || [ "$sub" = delete ]; then
+      body=""; prev=""
+      for a in "$@"; do
+        if [ "$prev" = -f ]; then body="$a"; fi
+        prev="$a"
+      done
+      [ -n "$body" ] && cat "$body" >> "$LOG"
+      if [ -f "${FIXTURE_DIR}/mapped_roles.csv" ]; then
+        if [ "$sub" = create ]; then
+          printf 'impersonation\\n' >> "${FIXTURE_DIR}/mapped_roles.csv"
+        else
+          sed -i '/^impersonation$/d' "${FIXTURE_DIR}/mapped_roles.csv"
+        fi
+      fi
+      exit 0
+    fi
+    [ "$sub" = get ] || { printf 'stub: unsupported sub %s\\n' "$sub" >&2; exit 2; }
+    res="$1"; shift
+    fields=""; q=""; prev=""
+    for a in "$@"; do
+      case "$prev" in
+        --fields) fields="$a" ;;
+        -q) q="${a#clientId=}" ;;
+      esac
+      prev="$a"
+    done
+    case "$res" in
+      clients)
+        # server-side -q clientId= is a SUBSTRING match, like the real server
+        grep -F "$q" "${FIXTURE_DIR}/clients.csv" || true
+        ;;
+      clients/*/service-account-user)
+        case "$fields" in
+          id) printf 'sa-user-uuid\\n' ;;
+          username) printf 'service-account-admin-keycloack-server\\n' ;;
+        esac
+        ;;
+      clients/*/roles/*)
+        printf 'role-impersonation-uuid\\n' ;;
+      clients/*)
+        case "$fields" in
+          enabled|serviceAccountsEnabled) printf 'true\\n' ;;
+        esac
+        ;;
+      users/*/role-mappings/clients/*)
+        [ -f "${FIXTURE_DIR}/mapped_roles.csv" ] && cat "${FIXTURE_DIR}/mapped_roles.csv" || true
+        ;;
+      *)
+        printf 'stub: unsupported resource %s\\n' "$res" >&2; exit 2 ;;
+    esac
+""")
+
+# Fixture for the substring-match trap the exact filter must survive: the
+# aliases have near-miss siblings that the server-side "-q clientId=" filter
+# also returns, and only the exact rows may be accepted.
+CLIENTS_FIXTURE = textwrap.dedent("""\
+    11111111-1111-1111-1111-111111111111,admin-keycloack-server
+    22222222-2222-2222-2222-222222222222,admin-keycloack-server-v2
+    33333333-3333-3333-3333-333333333333,edani-realm
+    44444444-4444-4444-4444-444444444444,edani-realm-old
+""")
+
+# Same fixture minus the exact admin-keycloack-server row: the substring query
+# still returns one row (the -v2 near-miss), so a run that accepted it would
+# silently grant against the wrong client. The reconciler must fail closed.
+CLIENTS_FIXTURE_NO_EXACT = textwrap.dedent("""\
+    22222222-2222-2222-2222-222222222222,admin-keycloack-server-v2
+    33333333-3333-3333-3333-333333333333,edani-realm
+""")
+
+SA_UUID = "11111111-1111-1111-1111-111111111111"
+MAPPING_UUID = "33333333-3333-3333-3333-333333333333"
+
+
+def _run_in_image(fixture_clients, fixture_mapped_roles, mode):
+    """Run the reconciler script inside the pinned Keycloak image with the
+    kcadm stub and CSV fixtures mounted. Returns (returncode, stdout, stderr,
+    stub log)."""
+    # The fixture dir is bind-mounted into the container, so it must live on a
+    # path the docker daemon can see. On the ARC runners the daemon does not
+    # share the job's /tmp (a /tmp fixture mounted empty, the kcadm stub was
+    # "missing" and login_admin's 30x5s retry loop hung the run); RUNNER_TEMP
+    # is under the shared runner home. Locally it falls back to the default.
+    parent = os.environ.get("RUNNER_TEMP") or None
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="kc-impersonation-", dir=parent))
+    try:
+        (tmp / "kcadm.sh").write_text(KCADM_STUB)
+        (tmp / "kcadm.sh").chmod(0o755)
+        (tmp / "clients.csv").write_text(fixture_clients)
+        (tmp / "mapped_roles.csv").write_text(fixture_mapped_roles)
+        for f in tmp.iterdir():
+            f.chmod(0o666)
+        (tmp / "kcadm.sh").chmod(0o755)
+        tmp.chmod(0o777)
+        cmd = [
+            DOCKER, "run", "--rm",
+            "-v", f"{tmp}:/fixture",
+            "-v", f"{BASE / 'scripts'}:/opt/bootstrap:ro",
+            "-e", f"MODE={mode}",
+            "-e", "KCADM=/fixture/kcadm.sh",
+            "-e", "FIXTURE_DIR=/fixture",
+            "-e", "STUB_LOG=/fixture/stub.log",
+            "-e", "KC_BOOTSTRAP_ADMIN_USERNAME=stub-user",
+            "-e", "KC_BOOTSTRAP_ADMIN_PASSWORD=stub-password",
+            "-e", "KEYCLOAK_URL=http://keycloak.stub.invalid",
+            "--entrypoint", "/bin/sh", IMAGE,
+            "/opt/bootstrap/admin-keycloack-impersonation-grant.sh",
+        ]
+        # Fail fast and legibly if the mounts are not visible to the daemon
+        # (empty bind mounts make the script's login retry loop hang).
+        probe = subprocess.run(
+            [DOCKER, "run", "--rm",
+             "-v", f"{tmp}:/fixture",
+             "-v", f"{BASE / 'scripts'}:/opt/bootstrap:ro",
+             "--entrypoint", "/bin/sh", IMAGE, "-c",
+             "test -x /fixture/kcadm.sh && test -f /fixture/clients.csv "
+             "&& test -f /opt/bootstrap/admin-keycloack-impersonation-grant.sh"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if probe.returncode != 0:
+            raise AssertionError(
+                f"bind mounts not visible inside {IMAGE}: the fixture dir "
+                f"{tmp} must be on a path the docker daemon shares with the "
+                f"runner (RUNNER_TEMP); probe stderr: {probe.stderr.strip()}"
+            )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        log_file = tmp / "stub.log"
+        log = log_file.read_text() if log_file.exists() else ""
+        return proc.returncode, proc.stdout, proc.stderr, log
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
@@ -57,10 +264,17 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn('[ "${ROLE_NAME}" = "impersonation" ]', script)
 
     def test_client_lookup_is_exact_and_diagnostics_report_rows(self):
-        script = (BASE / "scripts" / "admin-keycloack-impersonation-grant.sh").read_text()
+        script = SCRIPT.read_text()
         # The server-side "-q clientId=" filter is a substring match; the alias
         # must additionally be matched exactly client-side (SC-1215).
-        self.assertIn("$2 == want", script)
+        self.assertIn('if [ "${line#*,}" = "$1" ]; then', script)
+        # The exact filter must be plain POSIX shell: the keycloak image ships
+        # no awk, and #163 died on "awk: command not found" (SC-1215). Checked
+        # against executable code only; the comments name awk to explain why.
+        code = "\n".join(
+            line for line in script.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("awk", code)
         # A failed lookup reports both row counts and the clientIds involved,
         # so the operator can tell 0 rows from >1 without re-running anything.
         self.assertIn("expected exactly one client clientId=", script)
@@ -109,6 +323,138 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertNotIn("value: realm-management", rollback)
         self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
+
+    # ------------------------------------------------------------------
+    # In-image tests: the reconciler runs inside the pinned Keycloak image,
+    # which is not a general-purpose shell image. These exercise the real
+    # script inside the real image against a kcadm stub, so a missing binary
+    # or a broken filter fails here, not on a PostSync hook ~75 min later.
+    # ------------------------------------------------------------------
+
+    @in_keycloak_image
+    def test_ensure_grants_exact_match_inside_keycloak_image(self):
+        """Full ensure run inside quay.io/keycloak/keycloak:26.6.2 with the
+        substring-match fixture: the exact-match filter must pick the exact
+        uuids (not the near-miss siblings) and write exactly the impersonation
+        role mapping."""
+        rc, out, err, log = _run_in_image(CLIENTS_FIXTURE, "", "ensure")
+        self.assertEqual(rc, 0, f"script failed in image: rc={rc}\nstdout={out}\nstderr={err}\nlog={log}")
+        self.assertIn('"present":true', out)
+        self.assertIn('"changed":true', out)
+        # The service-account client resolved to the EXACT uuid, never the
+        # admin-keycloack-server-v2 near-miss.
+        self.assertIn(f"get clients/{SA_UUID} --fields enabled", log)
+        self.assertNotIn(SA_UUID.replace("11111111", "22222222"), log)
+        # The mapping client resolved to the EXACT edani-realm uuid, never
+        # edani-realm-old, and the grant POSTed exactly the role id body.
+        self.assertIn(f"create users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID}/roles", log)
+        self.assertNotIn(MAPPING_UUID.replace("33333333", "44444444"), log)
+        self.assertIn('[{"id":"role-impersonation-uuid"}]', log)
+
+    @in_keycloak_image
+    def test_audit_passes_when_role_already_mapped_inside_keycloak_image(self):
+        rc, out, err, log = _run_in_image(CLIENTS_FIXTURE, "impersonation\n", "audit")
+        self.assertEqual(rc, 0, f"stdout={out}\nstderr={err}\nlog={log}")
+        self.assertIn('"present":true', out)
+        # audit must be read-only: no create/delete reached the server.
+        self.assertNotIn("create users/", log)
+        self.assertNotIn("delete users/", log)
+
+    @in_keycloak_image
+    def test_near_miss_only_fixture_fails_closed_inside_keycloak_image(self):
+        """The substring query returns the -v2 near-miss but no exact row:
+        the reconciler must fail closed with the full diagnostic, never grant
+        against the wrong client."""
+        rc, out, err, log = _run_in_image(CLIENTS_FIXTURE_NO_EXACT, "", "audit")
+        self.assertNotEqual(rc, 0, f"script wrongly succeeded: stdout={out}\nlog={log}")
+        self.assertIn("expected exactly one client clientId=admin-keycloack-server", err)
+        self.assertIn("exact=0", err)
+        self.assertIn("substring=1", err)
+        self.assertIn("admin-keycloack-server-v2", err)
+        # Nothing was written: the failure happened before any grant.
+        self.assertNotIn("create users/", log)
+        self.assertNotIn("delete users/", log)
+
+    # ------------------------------------------------------------------
+    # Static audit: every external command the script invokes must exist in
+    # the image it runs in. This is the guard that would have caught the awk
+    # failure on the day #163 merged, instead of on the next sync wave.
+    # ------------------------------------------------------------------
+
+    SHELL_KEYWORDS = {
+        "if", "then", "else", "elif", "fi", "case", "esac", "while", "until",
+        "for", "do", "done", "in", "function", "select", "time",
+    }
+    SHELL_BUILTINS = {
+        "printf", "read", "set", "umask", "trap", "exit", "return", "break",
+        "continue", "export", "unset", "local", "eval", "shift", "test",
+        "command", ":", "[", "cd", "echo", "exec", "wait", "jobs",
+    }
+
+    def _external_commands(self, text):
+        """Command-position tokens of a POSIX shell script: the first word of
+        every fragment after a command separator, minus comments, function
+        names, keywords, builtins and assignments. The KCADM variable resolves
+        to the script's default absolute kcadm.sh path."""
+        funcs = set(re.findall(r"(?m)^([A-Za-z_]\w*)\s*\(\)", text))
+        code = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        # Case-pattern prefixes ("ensure|audit|rollback)" or "*)") are labels,
+        # not commands; blank them out but keep whatever follows the ")".
+        code = re.sub(
+            r"(?m)^(\s*(?:\*|[A-Za-z_]\w*)(?:\|(?:\*|[A-Za-z_]\w*))*\))",
+            lambda m: " " * len(m.group(1)),
+            code,
+        )
+        cmds = set()
+        for frag in re.split(r"\$\(|[|;&\n]", code):
+            parts = frag.split()
+            if not parts:
+                continue
+            # "{ cmd ... }" brace blocks run cmd at command position.
+            tok = parts[1] if parts[0] == "{" and len(parts) > 1 else parts[0]
+            tok = tok.strip("\"'").rstrip("()")
+            if re.fullmatch(r"\$\{?KCADM\}?", tok):
+                cmds.add("/opt/keycloak/bin/kcadm.sh")
+                continue
+            if not tok or not tok[0].isalpha():
+                continue
+            if "=" in tok:
+                continue
+            if tok in self.SHELL_KEYWORDS or tok in self.SHELL_BUILTINS or tok in funcs:
+                continue
+            cmds.add(tok)
+        return cmds
+
+    @in_keycloak_image
+    def test_every_external_command_exists_in_the_keycloak_image(self):
+        cmds = self._external_commands(SCRIPT.read_text())
+        # Sanity: the extraction must actually see the commands the script is
+        # known to use, or the audit is vacuous.
+        for expected in {"sed", "grep", "wc", "tr", "cut", "rm", "sleep",
+                         "/opt/keycloak/bin/kcadm.sh"}:
+            self.assertIn(expected, cmds, f"audit extraction lost {expected}")
+        probe = (
+            'for c in "$@"; do command -v "$c" >/dev/null 2>&1 '
+            '&& echo "OK $c" || echo "MISSING $c"; done'
+        )
+        proc = subprocess.run(
+            [DOCKER, "run", "--rm", "--entrypoint", "/bin/sh", IMAGE,
+             "-c", probe, "sh"] + sorted(cmds),
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        missing = [
+            line.split(" ", 1)[1] for line in proc.stdout.splitlines()
+            if line.startswith("MISSING ")
+        ]
+        self.assertEqual(
+            missing, [],
+            f"binaries invoked by the reconciler but absent from {IMAGE}: "
+            f"{', '.join(missing)} — the PostSync job will die with "
+            f"'command not found' (SC-1215 awk regression class)",
+        )
 
 
 if __name__ == "__main__":
