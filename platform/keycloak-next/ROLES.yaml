@@ -1,0 +1,581 @@
+{
+  "schema": "keycloak-role-catalog/v1",
+  "realm": "edani",
+  "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
+  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles)",
+  "roles": [
+    {
+      "name": "agentgateway-read:analytics",
+      "status": "active",
+      "meaning": "Lectura de la ruta /analytics de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /analytics de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /analytics (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:atlassian",
+      "status": "active",
+      "meaning": "Lectura de la ruta /atlassian de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /atlassian de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /atlassian (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:brain",
+      "status": "active",
+      "meaning": "Lectura de la ruta /brain de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /brain de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /brain (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:claude-sessions",
+      "status": "active",
+      "meaning": "Lectura de la ruta /claude-sessions de AgentGateway (transcripts de sesiones creadas desde el chat).",
+      "grantees": [
+        "service-account-claude-sessions-test"
+      ],
+      "privilege": {
+        "allows": "GET de /claude-sessions (p. ej. GET /sessions/{sid}/transcript) a través del gateway.",
+        "denies": "POST /sessions (exige agentgateway-write:claude-sessions) y cualquier otra ruta."
+      },
+      "origin": "OWU-27 (servicio chat-session-trigger y ruta /claude-sessions); creado por admin API con la skill keycloak-admin, sin reconciliador en este repo"
+    },
+    {
+      "name": "agentgateway-read:dgx-control",
+      "status": "active",
+      "meaning": "Lectura de la ruta /dgx-control de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /dgx-control de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /dgx-control (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:gsc",
+      "status": "active",
+      "meaning": "Lectura de la ruta /gsc de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /gsc de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /gsc (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:image",
+      "status": "active",
+      "meaning": "Lectura de la ruta /image de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /image de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /image (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:merchant",
+      "status": "active",
+      "meaning": "Lectura de la ruta /merchant de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /merchant de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /merchant (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:offers",
+      "status": "active",
+      "meaning": "Lectura de la ruta /offers de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /offers de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /offers (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:picqer",
+      "status": "active",
+      "meaning": "Lectura de la ruta /picqer de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /picqer de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /picqer (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:shopify",
+      "status": "active",
+      "meaning": "Lectura de la ruta /shopify de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /shopify de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /shopify (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:shopify-admin",
+      "status": "active",
+      "meaning": "Lectura de la ruta /shopify-admin de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /shopify-admin de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /shopify-admin (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:skirmshop-plugins",
+      "status": "active",
+      "meaning": "Lectura de la ruta /skirmshop-plugins de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /skirmshop-plugins de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /skirmshop-plugins (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:social",
+      "status": "active",
+      "meaning": "Lectura de la ruta /social de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /social de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /social (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:stt",
+      "status": "active",
+      "meaning": "Lectura de la ruta /stt de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /stt de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /stt (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:studio",
+      "status": "active",
+      "meaning": "Lectura de la ruta /studio de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /studio de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /studio (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:synapse",
+      "status": "active",
+      "meaning": "Lectura de la ruta /synapse de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /synapse de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /synapse (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:synapse-sre",
+      "status": "active",
+      "meaning": "Lectura de la ruta /synapse-sre de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /synapse-sre de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /synapse-sre (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:synapse-tools",
+      "status": "active",
+      "meaning": "Lectura de la ruta /synapse-tools de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /synapse-tools de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /synapse-tools (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:tts",
+      "status": "active",
+      "meaning": "Lectura de la ruta /tts de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /tts de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /tts (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:weight",
+      "status": "active",
+      "meaning": "Lectura de la ruta /weight de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /weight de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /weight (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:workspace",
+      "status": "active",
+      "meaning": "Lectura de la ruta /workspace de AgentGateway (INFRA-23).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /workspace de AgentGateway.",
+        "denies": "Cualquier tool de escritura de /workspace (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-write",
+      "status": "active",
+      "meaning": "Write global de AgentGateway: habilita las tools MCP de escritura con puerta explícita.",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Tools de escritura gated por GATEWAY_WRITE en las rutas que aceptan el write global (plano admin, p. ej. /skirmshop-plugins-admin).",
+        "denies": "No da lectura por sí solo (cada ruta exige su agentgateway-read:<ruta>) ni administración de Keycloak; nunca a humanos ni a grupos."
+      },
+      "origin": "agentgateway-write-role.sh (PostSync agentgateway-write-role-job.yaml; SC-44)"
+    },
+    {
+      "name": "agentgateway-write:claude-sessions",
+      "status": "active",
+      "meaning": "Escritura de la ruta /claude-sessions de AgentGateway: crear sesiones de Claude CLI desde el chat.",
+      "grantees": [
+        "service-account-claude-sessions-test"
+      ],
+      "privilege": {
+        "allows": "POST /sessions en /claude-sessions con GATEWAY_WRITE activo.",
+        "denies": "Escrituras de otros dominios y el write global agentgateway-write."
+      },
+      "origin": "OWU-27 (servicio chat-session-trigger y ruta /claude-sessions); creado por admin API con la skill keycloak-admin, sin reconciliador en este repo"
+    },
+    {
+      "name": "agentgateway-write:gsc",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio gsc en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio gsc, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:hermes",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio hermes en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio hermes, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:media",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio media en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio media, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:offers",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio offers en AgentGateway (write por dominio).",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio offers, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:picqer",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio picqer en AgentGateway (write por dominio).",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio picqer, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:sauvage",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio sauvage en AgentGateway (write por dominio).",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio sauvage, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:shopify",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio shopify en AgentGateway (write por dominio).",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio shopify, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:skirmshop-plugins",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio skirmshop-plugins en AgentGateway (write por dominio).",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio skirmshop-plugins, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:social",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio social en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio social, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:synapse",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio synapse en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio synapse, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "agentgateway-write:workspace",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio workspace en AgentGateway (write por dominio).",
+      "grantees": [
+        "service-account-chat-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio workspace, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
+    },
+    {
+      "name": "claude-sessions",
+      "status": "active",
+      "meaning": "Rol de aplicación de chat-session-trigger: quién puede crear y seguir sesiones de Claude CLI desde el chat.",
+      "grantees": [
+        "daniel.ibanez@alphalinkcrossfit.com",
+        "service-account-claude-sessions-other",
+        "service-account-claude-sessions-test"
+      ],
+      "privilege": {
+        "allows": "Que chat-session-trigger (:19913) acepte el JWT del titular (default-deny 403 sin él), con cuota por usuario.",
+        "denies": "No abre ninguna ruta de AgentGateway por sí solo (el gateway exige agentgateway-read/write:claude-sessions) ni da permisos de herramienta fuera de los que fija el lanzador."
+      },
+      "origin": "OWU-27 (servicio chat-session-trigger y ruta /claude-sessions); creado por admin API con la skill keycloak-admin, sin reconciliador en este repo"
+    },
+    {
+      "name": "company-metrics-read",
+      "status": "active",
+      "meaning": "Lectura de la ruta MCP /company-metrics.",
+      "grantees": [
+        "service-account-company-metrics-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Las tools de solo lectura de /company-metrics.",
+        "denies": "Cualquier escritura y cualquier otra ruta de AgentGateway."
+      },
+      "origin": "SC-255 (épica SC-226); creado por admin API, sin reconciliador en este repo"
+    },
+    {
+      "name": "cto-office-send",
+      "status": "active",
+      "meaning": "Canal consultivo hacia la sesión de la oficina del CTO (ruta /cto-office, ADR-0004).",
+      "grantees": [
+        "me@e-dani.com",
+        "service-account-openclaw-readonly-agentgateway",
+        "service-account-synapse-sre-orchestrator"
+      ],
+      "privilege": {
+        "allows": "Enviar mensajes a la oficina del CTO por /cto-office.",
+        "denies": "Cualquier escritura de dominio; no se concede por grupo. Intocable mientras viva SC-320."
+      },
+      "origin": "ADR-0004; creado fuera de este repo. openclaw-readonly-clients.sh y synapse-sre-client.sh lo exigen y lo conceden a sus service accounts, no lo crean"
+    },
+    {
+      "name": "default-roles-edani",
+      "status": "active",
+      "meaning": "Rol compuesto por defecto del realm: Keycloak lo concede a todo usuario y service account nuevo.",
+      "grantees": [
+        "daniel.ibanez@alphalinkcrossfit.com",
+        "daniel.ibanez@cloudblue.com",
+        "info@e-dani.com",
+        "lays84.mv@gmail.com",
+        "me@e-dani.com",
+        "pocharlies@gmail.com",
+        "qa-con-rol@e-dani.com",
+        "qa-sin-rol@e-dani.com",
+        "service-account-agentgateway-mcp",
+        "service-account-chat-agentgateway",
+        "service-account-claude-sessions-norol",
+        "service-account-claude-sessions-other",
+        "service-account-claude-sessions-test",
+        "service-account-cloudblue",
+        "service-account-company-metrics-agentgateway",
+        "service-account-openclaw-readonly-agentgateway",
+        "service-account-synapse-draft-orchestrator",
+        "service-account-synapse-sre-orchestrator",
+        "uriel"
+      ],
+      "privilege": {
+        "allows": "Sus compuestos: offline_access, uma_authorization y los roles de cliente account manage-account y view-profile (autoservicio de cuenta).",
+        "denies": "Ninguna ruta de AgentGateway ni ningún rol de dominio."
+      },
+      "origin": "keycloak-builtin"
+    },
+    {
+      "name": "offline_access",
+      "status": "active",
+      "meaning": "Rol builtin de Keycloak para pedir refresh tokens offline.",
+      "grantees": [],
+      "privilege": {
+        "allows": "Solicitar tokens offline (scope offline_access).",
+        "denies": "Cualquier autorización de aplicación."
+      },
+      "origin": "keycloak-builtin (llega por el compuesto default-roles-edani)"
+    },
+    {
+      "name": "synapse-draft-m2m",
+      "status": "active",
+      "meaning": "Plano M2M tipado de borradores de Synapse y OpenClaw.",
+      "grantees": [
+        "service-account-synapse-draft-orchestrator"
+      ],
+      "privilege": {
+        "allows": "Solo las operaciones tipadas del plano draft M2M de Synapse/OpenClaw.",
+        "denies": "agentgateway-write, cto-office-send y el plano SRE; ningún humano."
+      },
+      "origin": "synapse-sre-client.sh (PostSync synapse-sre-client.yaml, par synapse-draft-orchestrator)"
+    },
+    {
+      "name": "synapse-sre-m2m",
+      "status": "active",
+      "meaning": "Plano M2M tipado de SRE de Synapse y OpenClaw.",
+      "grantees": [
+        "service-account-synapse-sre-orchestrator"
+      ],
+      "privilege": {
+        "allows": "Solo las operaciones tipadas del plano SRE M2M de Synapse/OpenClaw.",
+        "denies": "agentgateway-write y el plano draft; ningún humano."
+      },
+      "origin": "synapse-sre-client.sh (PostSync synapse-sre-client.yaml, par synapse-sre-orchestrator)"
+    },
+    {
+      "name": "uma_authorization",
+      "status": "active",
+      "meaning": "Rol builtin de Keycloak para User-Managed Access.",
+      "grantees": [],
+      "privilege": {
+        "allows": "Gestionar permisos UMA sobre recursos propios.",
+        "denies": "Cualquier autorización de aplicación."
+      },
+      "origin": "keycloak-builtin (llega por el compuesto default-roles-edani)"
+    }
+  ]
+}
