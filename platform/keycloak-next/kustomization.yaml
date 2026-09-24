@@ -21,6 +21,8 @@ resources:
   - agentgateway-social-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
+  - keycloak-rbac-auditor-client.yaml
+  - keycloak-role-drift-cron.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
@@ -70,6 +72,23 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: skirmbooks-sso
+  - name: keycloak-rbac-auditor-client
+    files:
+      - keycloak-rbac-auditor-client.sh=scripts/keycloak-rbac-auditor-client.sh
+    options:
+      labels:
+        app.kubernetes.io/component: keycloak-rbac-auditor-client
+  - name: keycloak-role-drift
+    files:
+      - keycloak-role-drift.sh=scripts/keycloak-role-drift.sh
+      - kc_rbac.py=scripts/kc_rbac.py
+      - verify-role-catalog.py=scripts/verify-role-catalog.py
+      - verify-principals.py=scripts/verify-principals.py
+      - ROLES.yaml
+      - PRINCIPALS.md
+    options:
+      labels:
+        app.kubernetes.io/component: keycloak-role-drift
 generatorOptions:
   disableNameSuffixHash: true
   labels:
