@@ -323,6 +323,17 @@
       "origin": "OWU-27 (servicio chat-session-trigger y ruta /claude-sessions); creado por admin API con la skill keycloak-admin, sin reconciliador en este repo"
     },
     {
+      "name": "agentgateway-write:dgx-control",
+      "status": "active",
+      "meaning": "Escrituras enumeradas del dominio dgx-control en AgentGateway (compute_mode_set, refusal_lambda_set, opencode_restart en /dgx-control y /chat-dgx-control). Alta inerte (INFRA-249, decisión del CTO en ROUTE-ROLES.md): sin concesionarios, esas tools siguen denegadas hasta que se revise un client dedicado.",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura explícitamente enumeradas del dominio dgx-control, con GATEWAY_WRITE activo en la ruta; hoy nadie lo tiene.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; INFRA-249)"
+    },
+    {
       "name": "agentgateway-write:gsc",
       "status": "active",
       "meaning": "Escrituras enumeradas del dominio gsc en AgentGateway (write por dominio).",
