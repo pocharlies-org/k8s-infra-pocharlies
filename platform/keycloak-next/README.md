@@ -226,7 +226,15 @@ PyYAML.
 
 - **An entry is never deleted.** A retired role changes to
   `status: deprecated`; the verifier accepts a deprecated role whether it is
-  still in the realm or gone.
+  still in the realm or gone. On every pull request CI fetches the trunk
+  copy and runs `scripts/check-catalog-evolution.py`: a trunk role missing
+  from the branch, or a trunk `deprecated` role back to `active`, fails the
+  job (skipped, with a `SKIP:` line, while the trunk has no `ROLES.yaml`).
+- A composite role lists in `composites` the exact realm roles it contains
+  (absent = none; its client-role composites are not listed). The verifier
+  reads `roles/{name}/composites` for every catalogued role, so a realm role
+  added to or removed from a composite such as `default-roles-edani` is
+  drift even though nobody holds it directly.
 - A new role, grant or revoke lands in `ROLES.yaml` in the same PR as the
   reconciler change. The roles owned by `agentgateway-read-grants.sh` and
   `agentgateway-domain-roles.sh` must match those scripts' `EXPECTED_*`
