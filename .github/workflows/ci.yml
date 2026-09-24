@@ -66,6 +66,17 @@ jobs:
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_admin_keycloack_impersonation_grant_contract.py
 
+  # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
+  # no Keycloak image, no PyYAML; the verifiers run against a fake Keycloak
+  # on 127.0.0.1. Later parts add tests with the same file pattern.
+  keycloak-rbac-contract:
+    runs-on: arc-k8s
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the realm role catalog and its verifiers
+        run: python3 -m unittest discover -s tests -p 'test_keycloak_rbac_*.py' -v
+
   velero-operability-contract:
     runs-on: arc-k8s
     steps:
