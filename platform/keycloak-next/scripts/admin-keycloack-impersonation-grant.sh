@@ -41,8 +41,29 @@ umask 077
 # alias) is version-sensitive, and a wrong reading would silently map the wrong
 # client. The hook therefore resolves both the edani-realm client uuid and the
 # impersonation role id by explicit lookups and POSTs/DELETEs the canonical
-# admin endpoint "users/<userId>/role-mappings/clients/<clientUuid>/roles", the
+# admin endpoint "users/<userId>/role-mappings/clients/<clientUuid>", the
 # same REST collection style the read-grants and synapse-sre reconcilers use.
+#
+# Third-failure fix (SC-1215, measured 2026-09-24 against the live IdP and the
+# pinned image's own kcadm): the previous revision POSTed to the same
+# collection with a "/roles" suffix and a body of bare role uuids
+# '[{"id":...}]'. Both are wrong, each measured against the live server:
+#   * ".../role-mappings/clients/<uuid>/roles" answers 404 "HTTP 404 Not
+#     Found" — the user's client-role-mappings collection has no "/roles"
+#     sub-resource; the POST/DELETE target is the collection itself.
+#   * On the correct collection, '[{"id":...}]' answers 404 "Role not found":
+#     the server resolves each entry by its "name" (and cross-checks "id"),
+#     so the body must be an array of role REPRESENTATIONS. The hook sends the
+#     minimal representation {id,name,clientRole,composite,containerId} built
+#     from the values its own lookups resolved.
+#   * kcadm exits 0 silently on this endpoint's 204 (measured in-image), and
+#     on errors its message carries the body's error text but not the numeric
+#     status. "-H" makes kcadm print the response status line on BOTH paths
+#     (measured: "HTTP/1.1 204 No Content" on success, "HTTP/1.1 400 ..." +
+#     body error on failure, response headers only — never the request
+#     Authorization header), so the final POST/DELETE runs with -H and its
+#     captured output is echoed into the failure message: the job log now
+#     carries the response status and body instead of swallowing them.
 #
 # Rollback removes ONLY the target service account's impersonation mapping (the
 # role and every other holder are untouched). A git revert of this file restores
@@ -57,9 +78,10 @@ ROLE_NAME="${ROLE_NAME:-impersonation}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-impersonation-admin.config
 ROLE_BODY=/tmp/kcadm-impersonation-role.json
+KCADM_OUT=/tmp/kcadm-impersonation-reply.txt
 
 cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${ROLE_BODY}"
+  rm -f "${ADMIN_CONFIG}" "${ROLE_BODY}" "${KCADM_OUT}"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -151,10 +173,14 @@ target_has_direct_role() {
   target_mapped_role_names | grep -Fxq "${ROLE_NAME}"
 }
 
-# Minimal valid body for the client-role-mappings endpoint: the role is resolved
-# by id server-side, so only its id is sent. This never carries any other field.
+# Body for the client-role-mappings collection: the server resolves each entry
+# by its "name" and cross-checks "id" (measured 2026-09-24: a bare '[{"id":...}]'
+# answers 404 "Role not found"), so the body is an array of role
+# REPRESENTATIONS. Every field below is a value this hook already resolved by
+# its own read-only lookups; it never carries any other field.
 write_role_body() {
-  printf '[{"id":"%s"}]' "${ROLE_ID}" > "${ROLE_BODY}"
+  printf '[{"id":"%s","name":"%s","clientRole":true,"composite":false,"containerId":"%s"}]' \
+    "${ROLE_ID}" "${ROLE_NAME}" "${MAPPING_CLIENT_UUID}" > "${ROLE_BODY}"
 }
 
 login_admin
@@ -188,9 +214,15 @@ case "${MODE}" in
       exit 0
     fi
     write_role_body
-    "${KCADM}" create "users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}/roles" \
-      --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" >/dev/null 2>&1 || \
-      fail "failed to map ${ROLE_NAME} (${MAPPING_CLIENT}) to the ${CLIENT_ID} service account"
+    # -H: kcadm prints the response status line on success AND on failure
+    # (response headers only, never the request Authorization header). The
+    # captured reply is echoed into the failure message so the job log carries
+    # the response status and body (SC-1215: the third apply swallowed them).
+    if ! "${KCADM}" create "users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" -H \
+      > "${KCADM_OUT}" 2>&1; then
+      fail "failed to map ${ROLE_NAME} (${MAPPING_CLIENT}) to the ${CLIENT_ID} service account: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
+    fi
     target_has_direct_role || \
       fail "${ROLE_NAME} did not become a direct mapping of the ${CLIENT_ID} service account"
     printf '{"client_id":"%s","mapping_client":"%s","role":"%s","present":true,"changed":true}\n' \
@@ -205,9 +237,11 @@ case "${MODE}" in
   rollback)
     if target_has_direct_role; then
       write_role_body
-      "${KCADM}" delete "users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}/roles" \
-        --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" >/dev/null 2>&1 || \
-        fail "failed to remove ${ROLE_NAME} (${MAPPING_CLIENT}) from the ${CLIENT_ID} service account"
+      if ! "${KCADM}" delete "users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}" \
+        --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" -H \
+        > "${KCADM_OUT}" 2>&1; then
+        fail "failed to remove ${ROLE_NAME} (${MAPPING_CLIENT}) from the ${CLIENT_ID} service account: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
+      fi
       if target_has_direct_role; then
         fail "${ROLE_NAME} remains mapped to the ${CLIENT_ID} service account after rollback"
       fi

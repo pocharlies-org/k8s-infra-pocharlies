@@ -87,14 +87,33 @@ KCADM_STUB = textwrap.dedent("""\
         prev="$a"
       done
       [ -n "$body" ] && cat "$body" >> "$LOG"
-      if [ -f "${FIXTURE_DIR}/mapped_roles.csv" ]; then
-        if [ "$sub" = create ]; then
-          printf 'impersonation\\n' >> "${FIXTURE_DIR}/mapped_roles.csv"
-        else
-          sed -i '/^impersonation$/d' "${FIXTURE_DIR}/mapped_roles.csv"
-        fi
-      fi
-      exit 0
+      # The real server answers this collection with 204 on success and with
+      # 4xx + a JSON error body otherwise; kcadm -H prints the response status
+      # line on BOTH paths and its error message carries the body's error text
+      # (measured in-image 2026-09-24). The stub replays that contract: the
+      # status line comes from the optional create_status fixture (default
+      # "204 No Content") and the body error from create_error.
+      status="204 No Content"
+      [ -f "${FIXTURE_DIR}/create_status" ] && status="$(cat "${FIXTURE_DIR}/create_status")"
+      case "$status" in
+        204*)
+          printf 'HTTP/1.1 204 No Content\\n'
+          if [ -f "${FIXTURE_DIR}/mapped_roles.csv" ]; then
+            if [ "$sub" = create ]; then
+              printf 'impersonation\\n' >> "${FIXTURE_DIR}/mapped_roles.csv"
+            else
+              sed -i '/^impersonation$/d' "${FIXTURE_DIR}/mapped_roles.csv"
+            fi
+          fi
+          exit 0
+          ;;
+      esac
+      error="server rejected the request"
+      [ -f "${FIXTURE_DIR}/create_error" ] && error="$(cat "${FIXTURE_DIR}/create_error")"
+      printf 'HTTP/1.1 %s\\n' "$status"
+      printf 'Content-Type: application/json\\n\\n'
+      printf 'null [%s]\\n' "$error"
+      exit 1
     fi
     [ "$sub" = get ] || { printf 'stub: unsupported sub %s\\n' "$sub" >&2; exit 2; }
     res="$1"; shift
@@ -154,7 +173,7 @@ SA_UUID = "11111111-1111-1111-1111-111111111111"
 MAPPING_UUID = "33333333-3333-3333-3333-333333333333"
 
 
-def _run_in_image(fixture_clients, fixture_mapped_roles, mode):
+def _run_in_image(fixture_clients, fixture_mapped_roles, mode, extra_fixtures=None):
     """Run the reconciler script inside the pinned Keycloak image with the
     kcadm stub and CSV fixtures mounted. Returns (returncode, stdout, stderr,
     stub log)."""
@@ -170,6 +189,8 @@ def _run_in_image(fixture_clients, fixture_mapped_roles, mode):
         (tmp / "kcadm.sh").chmod(0o755)
         (tmp / "clients.csv").write_text(fixture_clients)
         (tmp / "mapped_roles.csv").write_text(fixture_mapped_roles)
+        for name, content in (extra_fixtures or {}).items():
+            (tmp / name).write_text(content)
         for f in tmp.iterdir():
             f.chmod(0o666)
         (tmp / "kcadm.sh").chmod(0o755)
@@ -237,10 +258,27 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn('ROLE_NAME="${ROLE_NAME:-impersonation}"', script)
         self.assertIn('service-account-${CLIENT_ID}', script)
         # Canonical REST collection with fully-resolved uuids (no --in-client).
+        # The POST/DELETE target is the collection itself: the user's
+        # client-role-mappings resource has NO "/roles" sub-resource (measured
+        # 2026-09-24: a "/roles" suffix answers 404) — SC-1215 third failure.
         self.assertIn(
-            'users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}/roles',
+            'users/${SERVICE_ACCOUNT_ID}/role-mappings/clients/${MAPPING_CLIENT_UUID}"',
             script,
         )
+        self.assertNotIn(
+            'role-mappings/clients/${MAPPING_CLIENT_UUID}/roles', script
+        )
+        # The body must be an array of role REPRESENTATIONS: the server
+        # resolves each entry by name (measured: a bare [{"id":...}] answers
+        # 404 "Role not found").
+        self.assertIn('"name":"%s"', script)
+        self.assertIn('"containerId":"%s"', script)
+        # The final POST/DELETE must surface the server's answer: -H makes
+        # kcadm print the response status line, and the captured reply is
+        # echoed into the failure message (SC-1215: the third apply swallowed
+        # the response).
+        self.assertIn('-H \\', script)
+        self.assertIn('server replied [', script)
         # Raw REST, never the version-sensitive "kcadm add-roles --in-client".
         # Checked against executable code only: the header comment names the
         # flag precisely to explain why it is avoided.
@@ -346,10 +384,53 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         self.assertIn(f"get clients/{SA_UUID} --fields enabled", log)
         self.assertNotIn(SA_UUID.replace("11111111", "22222222"), log)
         # The mapping client resolved to the EXACT edani-realm uuid, never
-        # edani-realm-old, and the grant POSTed exactly the role id body.
-        self.assertIn(f"create users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID}/roles", log)
+        # edani-realm-old. The grant POSTs the role REPRESENTATION to the
+        # role-mappings COLLECTION — no "/roles" suffix (the server answers
+        # 404 there, SC-1215 third failure) — and never the near-miss client.
+        self.assertIn(f"create users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID} ", log)
+        self.assertNotIn(f"role-mappings/clients/{MAPPING_UUID}/roles", log)
         self.assertNotIn(MAPPING_UUID.replace("33333333", "44444444"), log)
-        self.assertIn('[{"id":"role-impersonation-uuid"}]', log)
+        self.assertIn(
+            f'[{{"id":"role-impersonation-uuid","name":"impersonation",'
+            f'"clientRole":true,"composite":false,"containerId":"{MAPPING_UUID}"}}]',
+            log,
+        )
+
+    @in_keycloak_image
+    def test_ensure_applies_grant_when_server_answers_204_inside_keycloak_image(self):
+        """The live collection answers the successful grant with 204 No
+        Content (measured 2026-09-24): with the stub replaying exactly that,
+        the reconciler must report the grant as applied, POSTing the role
+        representation to the collection itself."""
+        rc, out, err, log = _run_in_image(
+            CLIENTS_FIXTURE, "", "ensure",
+            {"create_status": "204 No Content\n"},
+        )
+        self.assertEqual(rc, 0, f"script failed on 204: rc={rc}\nstdout={out}\nstderr={err}\nlog={log}")
+        self.assertIn('"present":true', out)
+        self.assertIn('"changed":true', out)
+        self.assertIn(f"create users/sa-user-uuid/role-mappings/clients/{MAPPING_UUID} ", log)
+        self.assertIn('"name":"impersonation"', log)
+
+    @in_keycloak_image
+    def test_ensure_400_reports_status_and_body_inside_keycloak_image(self):
+        """When the server rejects the grant (measured failure class: 404/400
+        with a JSON error body), the failure message must carry the response
+        status AND the body error — the third apply died with the response
+        swallowed (SC-1215). The stub replays kcadm's measured -H output for
+        a 400."""
+        rc, out, err, log = _run_in_image(
+            CLIENTS_FIXTURE, "", "ensure",
+            {"create_status": "400 Bad Request\n",
+             "create_error": "Role not found\n"},
+        )
+        self.assertNotEqual(rc, 0, f"script wrongly succeeded: stdout={out}\nlog={log}")
+        self.assertIn("failed to map impersonation (edani-realm)", err)
+        # Response status line and body error, as kcadm -H prints them.
+        self.assertIn("400 Bad Request", err)
+        self.assertIn("Role not found", err)
+        # Fails closed: no success line, and the mapping was never applied.
+        self.assertNotIn('"present":true', out)
 
     @in_keycloak_image
     def test_audit_passes_when_role_already_mapped_inside_keycloak_image(self):
