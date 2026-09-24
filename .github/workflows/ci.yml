@@ -84,6 +84,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # INFRA-250: the auditor reconciler (fake kcadm) and the drift CronJob
+      # entrypoint; their tests are test_keycloak_rbac_auditor_client_contract
+      # and test_keycloak_rbac_drift_cron_contract, picked up by discover.
+      - name: Syntax of the auditor reconciler and the drift CronJob entrypoint
+        run: |
+          sh -n platform/keycloak-next/scripts/keycloak-rbac-auditor-client.sh
+          sh -n platform/keycloak-next/scripts/keycloak-role-drift.sh
       - name: Validate the realm role catalog and its verifiers
         run: python3 -m unittest discover -s tests -p 'test_keycloak_rbac_*.py' -v
       # C-2 registry contract: no trunk role is deleted from ROLES.yaml and no
