@@ -46,6 +46,12 @@ jobs:
           PY
           )"
           timeout 15m docker pull "$image"
+      # test_dgx_messages_sso_contract.py parses the manifests with PyYAML.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate Keycloak role reconciler contract
         env:
           REQUIRE_IMAGE_CONTRACT: "1"
@@ -57,6 +63,7 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
+          sh -n platform/keycloak-next/scripts/dgx-messages-client.sh
           python3 -m unittest \
             tests/test_keycloak_agentgateway_role_contract.py \
             tests/test_openclaw_readonly_identity_contract.py \
@@ -64,7 +71,8 @@ jobs:
             tests/test_chat_agentgateway_identity_contract.py \
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
-            tests/test_admin_keycloack_impersonation_grant_contract.py
+            tests/test_admin_keycloack_impersonation_grant_contract.py \
+            tests/test_dgx_messages_sso_contract.py
 
   # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
   # no Keycloak image, no PyYAML; the verifiers run against a fake Keycloak

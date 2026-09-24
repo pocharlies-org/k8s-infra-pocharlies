@@ -1,0 +1,63 @@
+# Emergency rollback, deliberately excluded from kustomization.yaml. Deletes the
+# dgx-messages client (SC-1233). Order: first take the sso-messages-* middlewares
+# off messages.lan.e-dani.com (dgx-messages repo, k8s/ingressroute.yaml), then
+# apply this Job while this revision's ConfigMap still exists, check its
+# `"present":false` output, and only then revert oauth2-proxy-messages.yaml and
+# dgx-messages-client.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-dgx-messages-client-rollback
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: dgx-messages-client
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        # Same component label as the reconciler: reuses its egress NetworkPolicy.
+        app.kubernetes.io/component: dgx-messages-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector: { node-pool: ks5-nvme }
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: rollback-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          command: ["/bin/sh", "/opt/bootstrap/dgx-messages-client.sh"]
+          envFrom:
+            - secretRef: { name: keycloak-bootstrap }
+          env:
+            - { name: MODE, value: rollback }
+            - { name: CLIENT_ID, value: dgx-messages }
+            - { name: HOME, value: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-dgx-messages-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
