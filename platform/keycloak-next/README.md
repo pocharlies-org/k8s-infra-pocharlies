@@ -331,8 +331,10 @@ check other copies; authentication is the same as `verify-role-catalog.py`.
 ## Realm drift sweep (`keycloak-role-drift`, INFRA-219 C5)
 
 `keycloak-role-drift-cron.yaml` runs every 15 min in `keycloak`:
-`scripts/keycloak-role-drift.sh` calls `verify-role-catalog.py` and
-`verify-principals.py` against the live realm and exits 0 (both `OK:`), 1
+`scripts/keycloak-role-drift.sh` calls `verify-role-catalog.py
+--skip-client-uuid-check` (client-role composites translated with
+`client_uuids`, never `GET clients`) and `verify-principals.py` against the
+live realm and exits 0 (both `OK:`), 1
 (`DRIFT:`) or 2 (`ERROR:`, or a verifier that died without its verdict).
 Scripts and data (`kc_rbac.py`, both verifiers, `ROLES.yaml`,
 `PRINCIPALS.md`) travel in the `keycloak-role-drift` ConfigMap, so a merged
