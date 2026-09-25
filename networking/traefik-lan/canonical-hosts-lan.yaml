@@ -378,6 +378,13 @@ spec:
         - {name: connector-public-api-deny, namespace: whatsapp-mcp}
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
+    # QR (pagina, imagen y renovacion) solo con login de Keycloak.
+    - kind: Rule
+      match: Host(`whatsapp.e-dani.com`) && PathPrefix(`/qr`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
+      services:
+        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
     - kind: Rule
       match: Host(`whatsapp.e-dani.com`)
       services:
@@ -388,6 +395,13 @@ spec:
       match: Host(`whatsapp-pro.e-dani.com`) && PathPrefix(`/api/public`)
       middlewares:
         - {name: connector-public-api-deny, namespace: whatsapp-mcp}
+      services:
+        - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
+    # QR (pagina, imagen y renovacion) solo con login de Keycloak.
+    - kind: Rule
+      match: Host(`whatsapp-pro.e-dani.com`) && PathPrefix(`/qr`)
+      middlewares:
+        - {name: sso-chain, namespace: keycloak}
       services:
         - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
     - kind: Rule
