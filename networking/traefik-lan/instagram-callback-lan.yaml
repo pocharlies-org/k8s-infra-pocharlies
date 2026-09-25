@@ -26,11 +26,23 @@
 # NetworkPolicy: traefik-lan pods are regular pods (not hostNetwork), so the
 # namespaceSelector traefik-lan in whatsapp-mcp-allow-traefik-instagram
 # (k8s-socialmedia repo) admits this path already.
+#
+# external-dns: the traefik-proxy source (v0.21) extracts hostnames from every
+# route's Host() match, not just from annotations — a LAN mirror of a public
+# canonical host without this exclude annotation joins the endpoint set of
+# whatsapp.e-dani.com (public DNS is owned by the edge IngressRoute
+# whatsapp-public with its target annotation). This is the documented house
+# pattern for canonical split-horizon routes (see canonical-hosts-lan and the
+# annotationFilter comment in networking/external-dns/values.yaml); the
+# edge+LAN double-source without exclude is what flaps dgx.e-dani.com in the
+# external-dns log every sync.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: lan-instagram-callback
   namespace: traefik-lan
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
   labels:
     app.kubernetes.io/part-of: whatsapp-mcp
     app.kubernetes.io/managed-by: gitops
