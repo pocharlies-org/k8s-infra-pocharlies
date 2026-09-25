@@ -246,12 +246,23 @@ verify_client() {
   # Redirect EXACTO: ni comodin ni una segunda URI colada a mano en la consola.
   assert_exact_list "${CLIENT_UUID}" redirectUris "${REDIRECT_URI}"
   assert_exact_list "${CLIENT_UUID}" webOrigins "${WEB_ORIGIN}"
-  attrs="$(kget "clients/${CLIENT_UUID}" --fields attributes --format json | tr -d '\n')"
-  printf '%s' "${attrs}" | grep -Eq '"post\.logout\.redirect\.uris"[[:space:]]*:[[:space:]]*"'"${POST_LOGOUT_REDIRECT_URI}"'"' || \
+  # OJO kcadm 26.6.2: pedir el campo-objeto `attributes` SIN subcampos
+  # (`--fields attributes`) pinta `"attributes" : { }` VACÍO — el filtro es
+  # CLIENTE de kcadm (FilterUtil.copyFilteredObject + ReturnFields.child):
+  # el servidor devuelve el mapa relleno (medido por REST: la representación
+  # completa lleva post.logout.redirect.uris y pkce.code.challenge.method),
+  # pero la impresión filtrada de kcadm lo descarta y el grep nunca casa.
+  # Los campos escalares y los arrays (redirectUris) sí sobreviven al filtro;
+  # un mapa de claves con puntos no. Fix: representación COMPLETA del cliente
+  # (sin --fields no hay filtro de cliente) y grep sobre la región attributes.
+  # NUNCA se imprime ${client}: contiene el secreto del cliente; los fail de
+  # abajo solo re-imprimen valores esperados.
+  client="$(kget "clients/${CLIENT_UUID}" --format json | tr -d '\n')"
+  printf '%s' "${client}" | grep -Eq '"post\.logout\.redirect\.uris"[[:space:]]*:[[:space:]]*"'"${POST_LOGOUT_REDIRECT_URI}"'"' || \
     fail "post.logout.redirect.uris is not ${POST_LOGOUT_REDIRECT_URI}"
-  printf '%s' "${attrs}" | grep -Eq '"pkce\.code\.challenge\.method"[[:space:]]*:[[:space:]]*"S256"' || \
+  printf '%s' "${client}" | grep -Eq '"pkce\.code\.challenge\.method"[[:space:]]*:[[:space:]]*"S256"' || \
     fail "pkce.code.challenge.method is not S256"
-  unset attrs
+  unset client
   [ -n "$(mapper_uuid_optional "${AUDIENCE_MAPPER}")" ] || fail "audience mapper missing"
   [ -n "$(mapper_uuid_optional "${GROUPS_MAPPER}")" ] || fail "groups mapper missing"
 }
