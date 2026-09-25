@@ -64,6 +64,7 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-write-grant-daniel.sh
           sh -n platform/keycloak-next/scripts/dgx-messages-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-token-smoke.sh
           python3 -m unittest \
@@ -75,6 +76,7 @@ jobs:
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \
             tests/test_admin_keycloack_impersonation_grant_contract.py \
+            tests/test_agentgateway_write_grant_daniel_contract.py \
             tests/test_dgx_messages_sso_contract.py \
             tests/test_agentgateway_token_smoke_contract.py
 

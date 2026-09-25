@@ -24,6 +24,7 @@ resources:
   - agentgateway-chat-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
+  - agentgateway-write-grant-daniel-job.yaml
   - agentgateway-token-smoke-job.yaml
   - keycloak-rbac-auditor-client.yaml
   - keycloak-role-drift-cron.yaml
@@ -76,6 +77,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: admin-keycloack-impersonation-grant
+  - name: keycloak-agentgateway-write-grant-daniel
+    files:
+      - agentgateway-write-grant-daniel.sh=scripts/agentgateway-write-grant-daniel.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-write-grant-daniel
   - name: keycloak-agentgateway-token-smoke
     files:
       - agentgateway-token-smoke.sh=scripts/agentgateway-token-smoke.sh

@@ -193,7 +193,8 @@ Do not merge or sync any of the three independently. During the approved window:
 
 The hook is idempotent. It refuses to proceed if `agentgateway-write` is
 composite, mapped to a group, mapped to any user other than the exact service
-account, or missing from a freshly minted service token.
+account and the single pinned human grantee of OWU-80 (section 16), or missing
+from a freshly minted service token.
 
 ### State rollback
 
@@ -613,4 +614,51 @@ translates client-role composites with `ROLES.yaml` `client_uuids` and does
 not re-check that map (INFRA-253). A recreated client shows up as
 `DRIFT: ... rol de cliente uuid:<id>/...`; re-measure the map with
 `verify-role-catalog.py` run locally without the flag (netrc auth, see README).
+
+## 16. Human write grant (`agentgateway-write` → `me@e-dani.com`, OWU-80)
+
+`agentgateway-write-grant-daniel-job.yaml` (PostSync wave 25) maps the global
+write role directly onto the human user of Daniel, pinned by subject
+`e51253a7-c137-4c6c-9fb9-af9cecd3b147`. **Merge gate (binding security
+condition, OWU-28 nota-security-owu28.md (b)):** the grant must not reach prod
+before the ProForma guard extension of OWU-77 is merged in
+`k8s-agentgateway-pocharlies` and deployed (ArgoCD `agentgateway-mcp` Synced
+with that commit). Order: guard → grant; the CTO governs it.
+
+Steady state after sync:
+
+```bash
+kubectl -n keycloak logs job/keycloak-agentgateway-write-grant-daniel -c reconcile-write-grant-daniel
+# {"realm":"edani","role":"agentgateway-write","user_id":"e51253a7-c137-4c6c-9fb9-af9cecd3b147","username":"me@e-dani.com","present":true,"changed":true}
+```
+
+The hook never creates users or the role: an absent subject or an absent role
+fails the job loud. `agentgateway-write-role.sh` tolerates exactly this holder
+and fails on any other; `ROLES.yaml` and `PRINCIPALS.md` declare it (the drift
+sweep of section 15 is the backstop — expect at most one transient `DRIFT:`
+between the sync start and wave 25 completing).
+
+### State rollback
+
+Apply the manual rollback Job (excluded from Kustomize). It removes ONLY the
+human mapping; the role and the service-account grant stay. Do this BEFORE
+`manual/agentgateway-write-role-rollback-job.yaml` (section 7), which refuses
+to delete the role while the human grant exists:
+
+```bash
+kubectl apply -f platform/keycloak-next/manual/agentgateway-write-grant-daniel-rollback-job.yaml
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-write-grant-daniel-rollback --timeout=300s
+kubectl -n keycloak logs job/keycloak-agentgateway-write-grant-daniel-rollback -c rollback-write-grant-daniel
+# {"realm":"edani","role":"agentgateway-write","user_id":"e51253a7-c137-4c6c-9fb9-af9cecd3b147","username":"me@e-dani.com","present":false,"changed":true}
+kubectl -n keycloak delete job keycloak-agentgateway-write-grant-daniel-rollback
+```
+
+Rollback honesty: while `agentgateway-write-grant-daniel-job.yaml` stays in
+Kustomize, the next PostSync re-applies the mapping — the manual Job above
+removes the role only until that sync (which is also how a rolled-back grant
+comes back, with no git change). To remove the grant permanently, git revert
+the commit owning the reconciler Job, so the hook is gone before the next
+sync; the same revert retires the `ROLES.yaml` / `PRINCIPALS.md`
+declarations. Restore it afterwards by reverting that revert.
 

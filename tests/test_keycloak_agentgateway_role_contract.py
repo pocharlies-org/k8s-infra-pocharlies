@@ -26,6 +26,40 @@ class KeycloakAgentGatewayRoleContractTest(unittest.TestCase):
         self.assertNotIn('echo "${token}"', script)
         self.assertNotIn('echo "${client_secret}"', script)
 
+    def test_owu80_tolerates_exactly_one_pinned_human_grantee(self):
+        # SC-44 owned the role exclusively for the service account. OWU-80
+        # (OWU-28 P6, security ruling nota-security-owu28.md (b)) extends the
+        # reviewed holder set with EXACTLY ONE human, pinned by immutable
+        # subject; the mapping itself is owned by
+        # agentgateway-write-grant-daniel.sh.
+        script = (BASE / "scripts" / "agentgateway-write-role.sh").read_text()
+        self.assertIn(
+            'HUMAN_GRANTEE_ID="${HUMAN_GRANTEE_ID:-e51253a7-c137-4c6c-9fb9-af9cecd3b147}"',
+            script,
+        )
+        self.assertIn(
+            'HUMAN_GRANTEE_USERNAME="${HUMAN_GRANTEE_USERNAME:-me@e-dani.com}"', script
+        )
+        self.assertIn(
+            '[ "${HUMAN_GRANTEE_ID}" = "e51253a7-c137-4c6c-9fb9-af9cecd3b147" ]', script
+        )
+        self.assertIn('[ "${HUMAN_GRANTEE_USERNAME}" = "me@e-dani.com" ]', script)
+        # Tolerance is per pinned identity only: the effective-role audit skips
+        # the failure exactly for the pinned subject, and the direct-mapping
+        # audit accepts exactly the pinned username. Any other holder still
+        # hits the fail-closed messages.
+        self.assertIn('[ "${user_id}" = "${HUMAN_GRANTEE_ID}" ]', script)
+        self.assertIn('[ "${username}" = "${HUMAN_GRANTEE_USERNAME}" ]', script)
+        self.assertIn('non-service user', script)
+        self.assertIn('unauthorized user', script)
+        # The role rollback cascades every holder: it must refuse BEFORE any
+        # mutation while the human grant exists, pointing at the grant's own
+        # manual rollback.
+        self.assertIn('human_holds_direct_role', script)
+        self.assertIn(
+            'agentgateway-write-grant-daniel-rollback-job.yaml first', script
+        )
+
     def test_job_is_postsync_nonroot_pinned_and_tokenless(self):
         manifest = (BASE / "agentgateway-write-role-job.yaml").read_text()
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
