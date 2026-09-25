@@ -60,6 +60,16 @@ spec:
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: MAPPER_NAME, value: aud-mcp }
             - { name: PKCE_METHOD, value: S256 }
+            # Explicit realm scope of this public client (OWU-28 C2, security
+            # nota-security-c2-token.md): the gateway's write rules on
+            # /chat-atlassian require `agentgateway-write` in
+            # jwt.realm_access.roles, and with fullScopeAllowed=false only
+            # roles mapped here can ever be emitted — for users who already
+            # hold them (the role and its holders belong to
+            # agentgateway-write-role.sh / agentgateway-write-grant-daniel.sh).
+            # The set is pinned immutable in the script; widening it is a
+            # reviewed contract change.
+            - { name: REALM_SCOPE_ROLE_NAMES, value: agentgateway-write }
             - { name: RECONCILE_CONTRACT_VERSION, value: "1" }
             - { name: HOME, value: /tmp }
           resources:
