@@ -60,7 +60,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `daniel.ibanez@cloudblue.com` | humano | Dani (operador) (origen-desconocido) | activo | Cuenta Google de trabajo de Dani (CloudBlue); SSO del realm, sin roles propios. |
 | `info@e-dani.com` | humano | Dani (operador) | activo | Buzón del negocio (Skirmshop Spain); SSO del realm, grupos edani-operators y skirmbooks-users. |
 | `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace. |
-| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos y cto-office-send para /cto-office. |
+| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office y el write global agentgateway-write concedido por OWU-80. |
 | `pocharlies@gmail.com` | humano | Dani (operador) | activo | Cuenta Google de administración de la plataforma (Plataforma Admin); grupos edani-admins y company-operator. |
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
@@ -82,7 +82,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 ```json
 {
   "realm": "edani",
-  "measured": "2026-09-24",
+  "measured": "2026-09-25",
   "principals": [
     {
       "username": "daniel.ibanez@alphalinkcrossfit.com",
@@ -141,9 +141,10 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "humano",
       "client": null,
       "owner": "Dani (operador)",
-      "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel)",
-      "purpose": "Usuario principal del operador; admin del realm por grupos y cto-office-send para /cto-office.",
+      "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel); agentgateway-write por OWU-80 (veredicto de security de OWU-28, condición (b))",
+      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office y el write global agentgateway-write concedido por OWU-80.",
       "realm_roles": [
+        "agentgateway-write",
         "cto-office-send",
         "default-roles-edani"
       ],
