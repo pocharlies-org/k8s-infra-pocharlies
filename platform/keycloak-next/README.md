@@ -275,8 +275,16 @@ house `oidc-audience-mapper` `aud-mcp`
 (`included.custom.audience=mcp.lan.e-dani.com`, access and introspection token
 claims only). It changes no realm registration policy. Being public it carries
 no secret, so there is no `ExternalSecret` and no minted-token check; the
-reconciler asserts the flow flags, every redirect URI, the PKCE attribute and
-the mapper and fails closed. State rollback deletes the client
+reconciler asserts the flow flags, every redirect URI, the PKCE attribute, the
+mapper and the realm scope mapping below, and fails closed. Since OWU-28 C2
+(security note `nota-security-c2-token.md`, 2026-09-25) it also reconciles the
+client's **realm scope mapping** (`REALM_SCOPE_ROLE_NAMES`, pinned to exactly
+`agentgateway-write`): the gateway's write rules on `/chat-atlassian` read
+that role from `jwt.realm_access.roles`, and with `fullScopeAllowed=false`
+Keycloak 26 emits only roles explicitly mapped into the client's realm scope —
+for users who already hold them. The mapping grants nothing to anyone; the
+role and its holders belong to `agentgateway-write-role.sh` and
+`agentgateway-write-grant-daniel.sh`. State rollback deletes the client
 (`manual/agentgateway-chat-mcp-client-rollback-job.yaml`, excluded from Argo).
 
 ## AgentGateway MCP access token TTL (`agentgateway-mcp`)
