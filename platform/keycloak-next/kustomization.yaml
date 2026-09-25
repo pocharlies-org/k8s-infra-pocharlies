@@ -21,6 +21,7 @@ resources:
   - chat-agentgateway-client.yaml
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
+  - agentgateway-chat-mcp-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-token-smoke-job.yaml
@@ -57,6 +58,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-social-mcp-client
+  - name: keycloak-agentgateway-chat-mcp-client
+    files:
+      - agentgateway-chat-mcp-client.sh=scripts/agentgateway-chat-mcp-client.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-chat-mcp-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh
