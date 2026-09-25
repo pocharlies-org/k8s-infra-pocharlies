@@ -654,7 +654,11 @@ kubectl -n keycloak logs job/keycloak-agentgateway-write-grant-daniel-rollback -
 kubectl -n keycloak delete job keycloak-agentgateway-write-grant-daniel-rollback
 ```
 
-To restore the grant afterwards, git revert the commit owning the reconciler
-and let the next PostSync re-apply it; then re-land the `ROLES.yaml` /
-`PRINCIPALS.md` declarations in the same PR.
+Rollback honesty: while `agentgateway-write-grant-daniel-job.yaml` stays in
+Kustomize, the next PostSync re-applies the mapping — the manual Job above
+removes the role only until that sync (which is also how a rolled-back grant
+comes back, with no git change). To remove the grant permanently, git revert
+the commit owning the reconciler Job, so the hook is gone before the next
+sync; the same revert retires the `ROLES.yaml` / `PRINCIPALS.md`
+declarations. Restore it afterwards by reverting that revert.
 
