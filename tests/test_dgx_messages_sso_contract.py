@@ -93,7 +93,8 @@ def _cfg(docs):
 
 # POSIX-sh kcadm stub. State lives in FIXTURE_DIR so create/update/delete are
 # observable: clients.csv (id,clientId; "-q clientId=" is a SUBSTRING match
-# like the real server), mappers.csv (id,name) and per-field fixtures.
+# like the real server), mappers.csv (id,name), per-field fixtures and
+# client.json (the full representation, served when --fields is absent).
 KCADM_STUB = textwrap.dedent("""\
     #!/bin/sh
     set -eu
@@ -133,6 +134,14 @@ KCADM_STUB = textwrap.dedent("""\
       get:clients/*/evaluate-scopes/generate-example-id-token)
         cat "$F/id.json"; exit 0 ;;
       get:clients/*)
+        # verify_client lee la representacion COMPLETA del cliente (sin
+        # --fields): kcadm 26.6.2 filtra los campos-objeto en el CLIENTE y
+        # pinta "attributes" vacio con --fields attributes. Sin fields =>
+        # volcar client.json; las llamadas con --fields conservan su fixture.
+        if [ -z "$fields" ]; then
+          if [ -f "$F/client.json" ]; then cat "$F/client.json"; exit 0; fi
+          printf 'stub: no full-client fixture\\n' >&2; exit 2
+        fi
         if [ -f "$F/field_$fields" ]; then cat "$F/field_$fields"; exit 0; fi
         printf 'stub: no fixture for field %s\\n' "$fields" >&2; exit 2 ;;
     esac
@@ -162,6 +171,52 @@ ATTRS_JSON = textwrap.dedent("""\
       }
     }
 """)
+# La representacion COMPLETA del cliente tal como kcadm 26.6.2 la pinta SIN
+# --fields (forma medida en vivo 25-09-2026, cliente 6c11a719-... del realm
+# edani). verify_client la usa para los dos grep de attributes desde que
+# --fields attributes se cayo: el filtro de kcadm es de CLIENTE
+# (FilterUtil.copyFilteredObject) y con --fields attributes pinta el mapa
+# vacio. Lleva el secreto del lado servidor (SERVER_SECRET) porque la
+# representacion real lo lleva: el script lo lee y NUNCA lo imprime.
+SERVER_SECRET = "kc-server-side-secret-never-printed-9f3a"
+CLIENT_FULL_JSON = textwrap.dedent("""\
+    {
+      "id" : "6c11a719-a6d2-4bc8-aa3f-9bb608b8b509",
+      "clientId" : "dgx-messages",
+      "rootUrl" : "https://messages.lan.e-dani.com",
+      "adminUrl" : "https://messages.lan.e-dani.com",
+      "baseUrl" : "https://messages.lan.e-dani.com/",
+      "surrogateAuthRequired" : false,
+      "enabled" : true,
+      "alwaysDisplayInConsole" : false,
+      "clientAuthenticatorType" : "client-secret",
+      "secret" : "%s",
+      "redirectUris" : [ "https://messages.lan.e-dani.com/oauth2/callback" ],
+      "webOrigins" : [ "https://messages.lan.e-dani.com" ],
+      "notBefore" : 0,
+      "bearerOnly" : false,
+      "consentRequired" : false,
+      "standardFlowEnabled" : true,
+      "implicitFlowEnabled" : false,
+      "directAccessGrantsEnabled" : false,
+      "serviceAccountsEnabled" : false,
+      "publicClient" : false,
+      "frontchannelLogout" : false,
+      "protocol" : "openid-connect",
+      "attributes" : {
+        "realm_client" : "false",
+        "backchannel.logout.session.required" : "true",
+        "post.logout.redirect.uris" : "https://messages.lan.e-dani.com/",
+        "pkce.code.challenge.method" : "S256",
+        "backchannel.logout.revoke.offline.tokens" : "false"
+      },
+      "authenticationFlowBindingOverrides" : { },
+      "fullScopeAllowed" : false,
+      "nodeReRegistrationTimeout" : -1,
+      "defaultClientScopes" : [ "web-origins", "acr", "roles", "profile", "basic", "email" ],
+      "optionalClientScopes" : [ "address", "phone", "offline_access", "organization", "microprofile-jwt" ]
+    }
+""" % SERVER_SECRET)
 # Measured shape of evaluate-scopes (24-09-2026, openclaw-readonly-ui): a single
 # audience serializes as a string, several as an array.
 ACCESS_JSON = textwrap.dedent("""\
@@ -192,6 +247,7 @@ def _fixtures(**overrides):
         "field_redirectUris": REDIRECT_JSON,
         "field_webOrigins": ORIGINS_JSON,
         "field_attributes": ATTRS_JSON,
+        "client.json": CLIENT_FULL_JSON,
         "access.json": ACCESS_JSON,
         "id.json": ID_JSON,
     }
@@ -357,6 +413,23 @@ class DgxMessagesReconcilerInImageTest(unittest.TestCase):
         self.assertIn("name=dgx-messages-social-api-audience", log)
         self.assertIn("name=dgx-messages-groups", log)
         self.assertNotIn(SECRET, out + err)
+
+    @in_keycloak_image
+    def test_full_client_secret_never_printed(self):
+        # verify_client lee ahora la representacion COMPLETA del cliente, que
+        # lleva el secreto del lado servidor. La garantia del fix: el script
+        # lo lee pero NUNCA lo imprime, ni en exito ni en el fallo duro que
+        # sigue lanzando cuando post.logout.redirect.uris no es el esperado.
+        rc, out, err, log = _run(_fixtures())
+        self.assertEqual(rc, 0, err)
+        self.assertNotIn(SERVER_SECRET, out + err + log)
+        broken = CLIENT_FULL_JSON.replace(
+            '"post.logout.redirect.uris" : "https://messages.lan.e-dani.com/"',
+            '"post.logout.redirect.uris" : "https://logout.example.invalid/"')
+        rc, out, err, log = _run(_fixtures(**{"client.json": broken}))
+        self.assertNotEqual(rc, 0)
+        self.assertIn("post.logout.redirect.uris is not", err)
+        self.assertNotIn(SERVER_SECRET, out + err + log)
 
     @in_keycloak_image
     def test_substring_near_miss_is_not_updated(self):
