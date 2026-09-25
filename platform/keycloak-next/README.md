@@ -265,6 +265,12 @@ PyYAML.
   catalogued role, so a realm or client role (e.g. `realm-management`
   `view-users`) added to or removed from a composite such as
   `default-roles-edani` is drift even though nobody holds it directly.
+- Composites name a client only by internal id: the top-level `client_uuids`
+  (`clientId` → id, exactly the clientIds some `client_composites` uses)
+  translates them without `GET clients`, and an unmapped id is drift
+  (`uuid:<id>`); the verifier checks the map against the realm by default
+  (needs `view-clients`), and `--skip-client-uuid-check` (prints `SKIP:`)
+  leaves that out for the auditor CronJob, which has no `view-clients`.
 - A new role, grant or revoke lands in `ROLES.yaml` in the same PR as the
   reconciler change. The roles owned by `agentgateway-read-grants.sh` and
   `agentgateway-domain-roles.sh` must match those scripts' `EXPECTED_*`
