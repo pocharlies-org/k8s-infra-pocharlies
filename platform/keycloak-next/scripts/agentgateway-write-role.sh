@@ -3,11 +3,27 @@ set -eu
 
 umask 077
 
+# SC-44 owned this role EXCLUSIVELY for the agentgateway-mcp service account.
+# OWU-80 (OWU-28 P6, security ruling of 2026-09-25 in OWU-28's
+# nota-security-owu28.md) extends the reviewed holder set with EXACTLY ONE
+# human: Daniel, pinned by his immutable subject
+# HUMAN_GRANTEE_ID=e51253a7-c137-4c6c-9fb9-af9cecd3b147 (username
+# HUMAN_GRANTEE_USERNAME=me@e-dani.com). The human mapping itself is owned by
+# agentgateway-write-grant-daniel.sh (PostSync wave 25); this hook only stops
+# failing on that one holder. Every other user, every group and every other
+# service account still fail closed here, and the human grantee is tolerated
+# whether or not it is present yet (the grant hook runs later in the same
+# sync, so ensure must not require it). The rollback path is stricter: it
+# refuses to delete the role while the human grant exists — the grant's own
+# manual rollback must run first.
+
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 CLIENT_ID="${CLIENT_ID:-agentgateway-mcp}"
 ROLE_NAME="${ROLE_NAME:-agentgateway-write}"
+HUMAN_GRANTEE_ID="${HUMAN_GRANTEE_ID:-e51253a7-c137-4c6c-9fb9-af9cecd3b147}"
+HUMAN_GRANTEE_USERNAME="${HUMAN_GRANTEE_USERNAME:-me@e-dani.com}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-admin.config
 CLIENT_CONFIG=/tmp/kcadm-client.config
@@ -24,6 +40,8 @@ fail() {
 
 [ "${CLIENT_ID}" = "agentgateway-mcp" ] || fail "CLIENT_ID is immutable for this reconciler"
 [ "${ROLE_NAME}" = "agentgateway-write" ] || fail "ROLE_NAME is immutable for this reconciler"
+[ "${HUMAN_GRANTEE_ID}" = "e51253a7-c137-4c6c-9fb9-af9cecd3b147" ] || fail "HUMAN_GRANTEE_ID is immutable for this reconciler"
+[ "${HUMAN_GRANTEE_USERNAME}" = "me@e-dani.com" ] || fail "HUMAN_GRANTEE_USERNAME is immutable for this reconciler"
 
 nonempty_lines() {
   sed '/^[[:space:]]*$/d'
@@ -84,7 +102,25 @@ role_groups() {
   kget "roles/${ROLE_NAME}/groups" --fields path --format csv --noquotes | nonempty_lines
 }
 
+human_holds_direct_role() {
+  # Direct mapping of the pinned OWU-80 human grantee, read by user id. A
+  # missing user (kcadm 404) holds nothing.
+  kget "users/${HUMAN_GRANTEE_ID}/role-mappings/realm" \
+    --fields name --format csv --noquotes 2>/dev/null | nonempty_lines | grep -Fxq "${ROLE_NAME}"
+}
+
+human_grantee_holds_json() {
+  if human_holds_direct_role; then
+    printf 'true'
+  else
+    printf 'false'
+  fi
+}
+
 assert_exclusive_role_mapping() {
+  # expected_count is the expectation for the SERVICE-ACCOUNT axis: 1 = the
+  # privileged service account must be a direct holder (the pinned human
+  # grantee may appear alongside it — OWU-80), 0 = nobody holds it directly.
   expected_count="$1"
   users="$(direct_role_users)"
   groups="$(role_groups)"
@@ -93,13 +129,25 @@ assert_exclusive_role_mapping() {
   if [ -n "${users}" ]; then
     while IFS= read -r username; do
       [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || \
+        [ "${username}" = "${HUMAN_GRANTEE_USERNAME}" ] || \
         fail "${ROLE_NAME} is mapped to an unauthorized user; refusing to continue"
     done <<EOF
 ${users}
 EOF
   fi
-  [ "$(printf '%s\n' "${users}" | line_count)" = "${expected_count}" ] || \
-    fail "${ROLE_NAME} direct user assignment count is not ${expected_count}"
+  case "${expected_count}" in
+    1)
+      printf '%s\n' "${users}" | nonempty_lines | grep -Fxq "${SERVICE_ACCOUNT_USERNAME}" || \
+        fail "${ROLE_NAME} is not directly mapped to the privileged service account"
+      ;;
+    0)
+      [ -z "${users}" ] || \
+        fail "${ROLE_NAME} still has direct user assignments outside the reviewed holders"
+      ;;
+    *)
+      fail "internal: unexpected expected_count ${expected_count}"
+      ;;
+  esac
 }
 
 target_has_direct_role() {
@@ -118,12 +166,14 @@ assert_effective_role_exclusivity() {
 
   # `GET users` excludes service-account users. Any effective mapping here is
   # therefore a human/operator grant, including grants inherited via groups or
-  # composite roles.
+  # composite roles. OWU-80 tolerates exactly the pinned human grantee (by
+  # subject id); every other regular user still fails closed.
   regular_user_ids="$(kget users -q max=1000 --fields id --format csv --noquotes | nonempty_lines)"
   if [ -n "${regular_user_ids}" ]; then
     while IFS= read -r user_id; do
       if user_has_effective_role "${user_id}"; then
-        fail "${ROLE_NAME} is effective for a non-service user; refusing to continue"
+        [ "${user_id}" = "${HUMAN_GRANTEE_ID}" ] || \
+          fail "${ROLE_NAME} is effective for a non-service user; refusing to continue"
       fi
     done <<EOF
 ${regular_user_ids}
@@ -230,34 +280,41 @@ case "${MODE}" in
     fi
     assert_effective_role_exclusivity 1
     verify_token_claim_present
-    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true}\n' \
-      "${CLIENT_ID}" "${ROLE_NAME}"
+    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true,"human_grantee_holds":%s}\n' \
+      "${CLIENT_ID}" "${ROLE_NAME}" "$(human_grantee_holds_json)"
     ;;
   audit)
     if ! role_exists; then
       assert_effective_role_exclusivity 0
       verify_token_claim_absent
-      printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true}\n' \
-        "${CLIENT_ID}" "${ROLE_NAME}"
+      printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true,"human_grantee_holds":%s}\n' \
+        "${CLIENT_ID}" "${ROLE_NAME}" "$(human_grantee_holds_json)"
       exit 0
     fi
     assert_exclusive_role_mapping 1
     target_has_direct_role || fail "target service account is missing ${ROLE_NAME}"
     assert_effective_role_exclusivity 1
     verify_token_claim_present
-    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true}\n' \
-      "${CLIENT_ID}" "${ROLE_NAME}"
+    printf '{"client_id":"%s","realm_role":"%s","present":true,"exclusive_service_account":true,"human_grantee_holds":%s}\n' \
+      "${CLIENT_ID}" "${ROLE_NAME}" "$(human_grantee_holds_json)"
     ;;
   rollback)
     if ! role_exists; then
       assert_effective_role_exclusivity 0
       verify_token_claim_absent
-      printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true}\n' \
-        "${CLIENT_ID}" "${ROLE_NAME}"
+      printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true,"human_grantee_holds":%s}\n' \
+        "${CLIENT_ID}" "${ROLE_NAME}" "$(human_grantee_holds_json)"
       exit 0
     fi
     assert_exclusive_role_mapping 1
     target_has_direct_role || fail "target service account is missing ${ROLE_NAME}"
+    # OWU-80: the role delete below cascades every holder's mapping, the
+    # pinned human's included. Refuse BEFORE any mutation while the human
+    # grant exists: run manual/agentgateway-write-grant-daniel-rollback-job.yaml
+    # first so each rollback undoes exactly its own fact.
+    if human_holds_direct_role; then
+      fail "${ROLE_NAME} is still granted to the pinned human grantee ${HUMAN_GRANTEE_USERNAME}: run manual/agentgateway-write-grant-daniel-rollback-job.yaml first"
+    fi
     "${KCADM}" remove-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
       --uid "${SERVICE_ACCOUNT_ID}" --rolename "${ROLE_NAME}" >/dev/null 2>&1 || \
       fail "failed to remove ${ROLE_NAME} from the privileged service account"
@@ -266,7 +323,7 @@ case "${MODE}" in
     "${KCADM}" delete "roles/${ROLE_NAME}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
       >/dev/null 2>&1 || fail "failed to delete ${ROLE_NAME}"
     verify_token_claim_absent
-    printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true}\n' \
+    printf '{"client_id":"%s","realm_role":"%s","present":false,"exclusive_service_account":true,"human_grantee_holds":false}\n' \
       "${CLIENT_ID}" "${ROLE_NAME}"
     ;;
   *)
