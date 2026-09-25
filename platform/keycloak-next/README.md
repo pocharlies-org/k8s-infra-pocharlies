@@ -96,10 +96,32 @@ were removed. Recovery now uses the backups of `postgres-shared`.
 
 `agentgateway-write-role-job.yaml` is an idempotent Argo PostSync hook for the
 existing confidential client `agentgateway-mcp`. It creates non-composite realm
-role `agentgateway-write`, maps it directly to only
-`service-account-agentgateway-mcp`, rejects any user or group mapping, and mints
+role `agentgateway-write`, maps it directly to
+`service-account-agentgateway-mcp` (plus, since OWU-80, exactly the one pinned
+human grantee below), rejects any other user or any group mapping, and mints
 a fresh client-credentials JWT to verify `realm_access.roles` without logging
 the token or client secret.
+
+## AgentGateway human write grant (`agentgateway-write` → `me@e-dani.com`, OWU-80)
+
+`agentgateway-write-grant-daniel-job.yaml` (PostSync wave 25, after the
+write-role hook that owns the role) is the reviewed single human grant of the
+global write role: it maps `agentgateway-write` (realm `edani`) directly onto
+the human user of Daniel, pinned by his immutable subject
+`e51253a7-c137-4c6c-9fb9-af9cecd3b147` (username `me@e-dani.com`, cross-checked
+at runtime; the hook fails loud and never creates or edits users). The
+`agentgateway-write-role.sh` exclusivity audit tolerates exactly this one
+holder; its role rollback refuses to run while the human grant exists (undo the
+grant first — `manual/agentgateway-write-grant-daniel-rollback-job.yaml`,
+RUNBOOK section 16). Purpose: make the 40 `GATEWAY_WRITE`-gated tools of
+`/chat-atlassian` reachable for the operator (OWU-28 C2).
+
+**Security merge condition (binding, OWU-28 nota-security-owu28.md (b)):** this
+grant must not reach prod before the ProForma guard extension of OWU-77
+(`jira_update_proforma_form_answers` question names bound to
+`customfield_10074`/`10075`) is merged in `k8s-agentgateway-pocharlies` and
+deployed (ArgoCD `agentgateway-mcp` Synced). The PR may open in parallel; the
+CTO governs the merge order: guard → grant.
 
 This role must be cut over together with the OpenClaw privileged-plane allowlist
 and the AgentGateway CEL policy. Do not sync this hook independently while the

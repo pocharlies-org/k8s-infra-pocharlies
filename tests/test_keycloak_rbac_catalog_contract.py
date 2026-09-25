@@ -166,7 +166,13 @@ class RoleCatalogShapeTest(unittest.TestCase):
         reads = {name for name in held if name.startswith("agentgateway-read:")}
         self.assertEqual(len(reads), 21)
         self.assertEqual(held - reads, {"agentgateway-write", "default-roles-edani"})
-        self.assertEqual(catalog["agentgateway-write"]["grantees"], [mcp])
+        # OWU-80 (2026-09-25): the reviewed holders of agentgateway-write are
+        # the privileged service account plus exactly one human, pinned by
+        # subject e51253a7-c137-4c6c-9fb9-af9cecd3b147 (me@e-dani.com) and
+        # owned by agentgateway-write-grant-daniel.sh.
+        self.assertEqual(
+            catalog["agentgateway-write"]["grantees"], ["me@e-dani.com", mcp]
+        )
         # cto-office-send is untouchable (SC-320): catalogued as measured, active.
         self.assertEqual(catalog["cto-office-send"]["status"], "active")
         for builtin in ("default-roles-edani", "offline_access", "uma_authorization"):
@@ -375,7 +381,13 @@ class VerifyRoleCatalogTest(unittest.TestCase):
         realm["agentgateway-write"]["users"] = []
         code, lines = self.run_verify(realm)
         self.assertEqual(code, 1)
-        self.assertEqual(lines, ["DRIFT: service-account-agentgateway-mcp declarado en agentgateway-write no la tiene concedida"])
+        # OWU-80: agentgateway-write declares two reviewed grantees (the
+        # privileged service account and the pinned human me@e-dani.com);
+        # losing both is two drift lines, sorted by username.
+        self.assertEqual(lines, [
+            "DRIFT: me@e-dani.com declarado en agentgateway-write no la tiene concedida",
+            "DRIFT: service-account-agentgateway-mcp declarado en agentgateway-write no la tiene concedida",
+        ])
 
     def test_client_role_composites_are_not_realm_composites(self):
         realm = realm_from_catalog(self.catalog)
