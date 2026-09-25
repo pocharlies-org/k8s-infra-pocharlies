@@ -1,8 +1,11 @@
 {
   "schema": "keycloak-role-catalog/v1",
   "realm": "edani",
-  "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); composites = roles de realm exactos que contiene un rol compuesto (ausente = ninguno); client_composites = objeto clientId → lista exacta de roles de cliente que contiene (ausente = ninguno); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
-  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles)",
+  "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); composites = roles de realm exactos que contiene un rol compuesto (ausente = ninguno); client_composites = objeto clientId → lista exacta de roles de cliente que contiene (ausente = ninguno); client_uuids = objeto clientId → id interno del cliente, exactamente los clientIds que usa algún client_composites (los compuestos solo traen el id interno y así se traducen sin GET clients, que exige view-clients); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
+  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25",
+  "client_uuids": {
+    "account": "5402c4f9-25fc-4a60-8027-2ff55fae0677"
+  },
   "roles": [
     {
       "name": "agentgateway-read:analytics",
