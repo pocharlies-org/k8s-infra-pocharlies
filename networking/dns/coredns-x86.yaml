@@ -1,0 +1,106 @@
+# CoreDNS local del nodo x86 (`ubuntu`).
+#
+# Por qué (25-09-2026): el CoreDNS que empaqueta k3s solo corre en ks5-cp-2 y
+# ks5-cp-3. Desde el x86 esos dos nodos van por el relay DERP de Tailscale
+# (el NAT del router de casa impide la vía directa), así que cada consulta DNS
+# de un pod del x86 costaba ~180 ms y llegaba a 0,8–2,8 s con el relay
+# saturado. Eso retrasaba LiteLLM, el sidecar de peticiones en vuelo y
+# cualquier cosa que resolviera nombres desde el x86.
+#
+# Qué es: una réplica MÁS de CoreDNS fijada al x86, con la MISMA imagen y la
+# MISMA configuración que la de k3s (ConfigMaps `coredns` y `coredns-custom`)
+# y la etiqueta `k8s-app: kube-dns`. Así la selecciona el Service `kube-dns` y
+# las NetworkPolicies que permiten DNS hacia pods kube-dns de kube-system la
+# siguen aceptando. Por eso se eligió esto y NO NodeLocal DNSCache: esa
+# intercepta 10.43.0.10 en el host y rompería el DNS de los 48 pods con
+# NetworkPolicy de salida restringida a kube-dns.
+#
+# Que los pods del x86 la usen a ella lo decide `trafficDistribution:
+# PreferSameNode` en el Service `kube-dns`. Ese Service lo gestiona k3s, no
+# ArgoCD; el campo se puso con `kubectl patch` y la reaplicación de k3s
+# (three-way merge) lo conserva. Si desapareciera, el x86 vuelve a resolver
+# por los ks5: más lento, pero sin romperse.
+#
+# Upstream: MagicDNS (100.100.100.100), igual que los CoreDNS de los ks5, para
+# que las respuestas sean idénticas (incluidos los *.ts.net). No se hereda el
+# resolv.conf del nodo: en el x86 empieza por 10.43.0.10 y sería un bucle.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns-x86
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: coredns-x86
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coredns-x86
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coredns-x86
+        k8s-app: kube-dns
+    spec:
+      serviceAccountName: coredns
+      priorityClassName: system-cluster-critical
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: pool
+          operator: Exists
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 100.100.100.100
+      containers:
+        - name: coredns
+          # Misma imagen que el Deployment `coredns` de k3s (v1.36.2+k3s1).
+          image: rancher/mirrored-coredns-coredns:1.14.4
+          args: ["-conf", "/etc/coredns/Corefile"]
+          ports:
+            - { name: dns, containerPort: 53, protocol: UDP }
+            - { name: dns-tcp, containerPort: 53, protocol: TCP }
+            - { name: metrics, containerPort: 9153, protocol: TCP }
+          resources:
+            requests: { cpu: 100m, memory: 70Mi }
+            limits: { memory: 170Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+              drop: ["all"]
+          livenessProbe:
+            httpGet: { path: /health, port: 8080, scheme: HTTP }
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 8181, scheme: HTTP }
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 3
+          volumeMounts:
+            - { name: config-volume, mountPath: /etc/coredns, readOnly: true }
+            - { name: custom-config-volume, mountPath: /etc/coredns/custom, readOnly: true }
+      volumes:
+        - name: config-volume
+          configMap:
+            name: coredns
+            items:
+              - { key: Corefile, path: Corefile }
+              - { key: NodeHosts, path: NodeHosts }
+        - name: custom-config-volume
+          configMap:
+            name: coredns-custom
+            optional: true
