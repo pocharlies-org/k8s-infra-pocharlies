@@ -230,6 +230,30 @@ reconciler asserts the flow flags, the redirect URI, the PKCE attribute and the
 mapper and fails closed. State rollback deletes the client
 (`manual/agentgateway-social-mcp-client-rollback-job.yaml`, excluded from Argo).
 
+## AgentGateway chat MCP public client
+
+`agentgateway-chat-mcp-client.yaml` reconciles the public client
+`agentgateway-chat-mcp` used by the AgentGateway `mcpAuthentication` policies
+on the `/chat-*` routes (OWU-10 / epic OWU-2; created by OWU-75 for the
+`/chat-atlassian` criterion C1 of OWU-28). It is the pre-registered client the
+gateway short-circuits MCP Dynamic Client Registration to, so Open WebUI can
+run the authorization-code + PKCE flow against the `edani` realm without a
+client secret. The reconciler pins `publicClient=true` with no secret,
+`standardFlowEnabled=true`, direct access / implicit / service accounts off,
+`fullScopeAllowed=false`, PKCE `S256`, the exact redirect URIs from the
+space-separated `REDIRECT_URIS` list (no wildcards — the reconciler rejects
+them; Open WebUI derives the callback from the connection id, so registering a
+new chat connection is one additive token there — the chat-atlassian
+connection itself is registered by OWU-29), starting with
+`https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback`, and the
+house `oidc-audience-mapper` `aud-mcp`
+(`included.custom.audience=mcp.lan.e-dani.com`, access and introspection token
+claims only). It changes no realm registration policy. Being public it carries
+no secret, so there is no `ExternalSecret` and no minted-token check; the
+reconciler asserts the flow flags, every redirect URI, the PKCE attribute and
+the mapper and fails closed. State rollback deletes the client
+(`manual/agentgateway-chat-mcp-client-rollback-job.yaml`, excluded from Argo).
+
 ## AgentGateway MCP access token TTL (`agentgateway-mcp`)
 
 `agentgateway-mcp-token-ttl-job.yaml` (INFRA-187) owns the single client
