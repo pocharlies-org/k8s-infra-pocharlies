@@ -1,0 +1,61 @@
+---
+# SC-1254: LAN/tailnet door for the Instagram Login OAuth callback.
+#
+# After consent, Instagram redirects the user's browser to
+# https://whatsapp.e-dani.com/oauth/instagram/callback. AdGuard resolves
+# whatsapp.e-dani.com to the traefik-lan VIP (192.168.50.240), where the
+# canonical-hosts-lan catch-all handed the path to whatsapp-connector:3001
+# (Express "Cannot GET" — measured 2026-09-25). The exact-path rule lives only
+# in the IngressRoute whatsapp-public (k8s-socialmedia repo), which is pinned
+# to ingressClassName traefik-edge; traefik-lan runs the CRD provider WITHOUT
+# an ingressClass filter and does not process class-pinned routes, so the LAN
+# entry never saw it.
+#
+# This carve-out mirrors the edge rule on the LAN entry, path-exact so nothing
+# else of the connector's 3003 surface opens: priority 400 beats the
+# catch-all (same pattern as synapse-email-attachments-lan). No middlewares:
+# the OAuth state check inside the connector is the gate, and the same rule
+# behind traefik-edge carries none.
+#
+# TLS reuses secretName wildcard-edani-tls — the secret canonical-hosts-lan
+# already serves this host with (*.e-dani.com, valid for whatsapp.e-dani.com;
+# the traefik-lan default store cert is *.lan.e-dani.com and would NOT match).
+# No second TLSStore "default" is defined (traefik logs the multi-namespace
+# collision).
+#
+# NetworkPolicy: traefik-lan pods are regular pods (not hostNetwork), so the
+# namespaceSelector traefik-lan in whatsapp-mcp-allow-traefik-instagram
+# (k8s-socialmedia repo) admits this path already.
+#
+# external-dns: the traefik-proxy source (v0.21) extracts hostnames from every
+# route's Host() match, not just from annotations — a LAN mirror of a public
+# canonical host without this exclude annotation joins the endpoint set of
+# whatsapp.e-dani.com (public DNS is owned by the edge IngressRoute
+# whatsapp-public with its target annotation). This is the documented house
+# pattern for canonical split-horizon routes (see canonical-hosts-lan and the
+# annotationFilter comment in networking/external-dns/values.yaml); the
+# edge+LAN double-source without exclude is what flaps dgx.e-dani.com in the
+# external-dns log every sync.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-instagram-callback
+  namespace: traefik-lan
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+  labels:
+    app.kubernetes.io/part-of: whatsapp-mcp
+    app.kubernetes.io/managed-by: gitops
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`whatsapp.e-dani.com`) && Path(`/oauth/instagram/callback`)
+      priority: 400
+      services:
+        - name: instagram-connector
+          namespace: whatsapp-mcp
+          port: 3003
+  tls:
+    secretName: wildcard-edani-tls

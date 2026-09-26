@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: keycloak-postgres
     app.kubernetes.io/component: database
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -34,7 +34,7 @@ metadata:
     app.kubernetes.io/name: keycloak-postgres
     app.kubernetes.io/component: backup-credentials
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -45,7 +45,7 @@ spec:
   data:
     - secretKey: ACCESS_KEY_ID
       remoteRef:
-        key: postgres-shared-minio/access_key_id
+        key: minio-dump-keycloak/access_key_id
     - secretKey: ACCESS_SECRET_KEY
       remoteRef:
-        key: postgres-shared-minio/secret_access_key
+        key: minio-dump-keycloak/secret_access_key

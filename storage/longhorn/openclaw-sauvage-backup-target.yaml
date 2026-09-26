@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/part-of: longhorn
     backup.e-dani.com/scope: openclaw
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   refreshPolicy: Periodic
   secretStoreRef:
     name: onepassword

@@ -1,0 +1,119 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-chat-mcp-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-chat-mcp-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "23"
+    agentgateway.e-dani.com/reconcile-contract-version: "1"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-chat-mcp-client
+        agentgateway.e-dani.com/chat-mcp-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-chat-mcp-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: agentgateway-chat-mcp }
+            # Space-separated list. Open WebUI builds the callback path from the
+            # connection id (`/oauth/clients/mcp:<id>/callback`); the chat-atlassian
+            # connection is registered by OWU-29 and this is the URI the OWU-28 spec
+            # pins as the candidate (measured precedents: mcp:social, mcp:workspace).
+            # Adding a connection id later is one additive token here, never a
+            # wildcard.
+            - { name: REDIRECT_URIS, value: "https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback" }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: PKCE_METHOD, value: S256 }
+            # Explicit realm scope of this public client (OWU-28 C2, security
+            # nota-security-c2-token.md): the gateway's write rules on
+            # /chat-atlassian require `agentgateway-write` in
+            # jwt.realm_access.roles, and with fullScopeAllowed=false only
+            # roles mapped here can ever be emitted — for users who already
+            # hold them (the role and its holders belong to
+            # agentgateway-write-role.sh / agentgateway-write-grant-daniel.sh).
+            # The set is pinned immutable in the script; widening it is a
+            # reviewed contract change.
+            - { name: REALM_SCOPE_ROLE_NAMES, value: agentgateway-write }
+            - { name: RECONCILE_CONTRACT_VERSION, value: "1" }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-chat-mcp-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-agentgateway-chat-mcp-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-chat-mcp-client
+spec:
+  podSelector:
+    matchLabels:
+      agentgateway.e-dani.com/chat-mcp-client: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

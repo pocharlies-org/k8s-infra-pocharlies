@@ -1,0 +1,88 @@
+# One-shot bootstrap del bucket dgx-studio: bucket privado + caducidad de 7 días
+# para las imágenes efímeras del Studio + usuario y política de mínimo
+# privilegio. NO está en kustomization.yaml a propósito (misma convención que
+# bootstrap-buckets.yaml): los Job son inmutables y ttlSecondsAfterFinished
+# haría que ArgoCD lo recreara sin fin. Se aplica a mano:
+#   kubectl apply -f storage/minio/dgx-studio-bootstrap.yaml
+# Idempotente: se puede reaplicar tras borrar el Job terminado.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dgx-studio-bootstrap
+  namespace: minio
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/hostname: sauvage
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      containers:
+        - name: mc
+          # minio/mc ya no se publica en Docker Hub (pull access denied); la
+          # imagen del servidor trae /usr/bin/mc y ya está en sauvage.
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          command: ["sh", "-c"]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: minio-root, key: root-user}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: minio-root, key: root-password}
+            - name: RW_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: dgx-studio-s3-credentials, key: access-key}
+            - name: RW_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: dgx-studio-s3-credentials, key: secret-key}
+          args:
+            - |
+              set -e
+              BUCKET=dgx-studio
+              mc alias set local http://minio-s3:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+
+              mc mb --ignore-existing "local/$BUCKET"
+              mc anonymous set none "local/$BUCKET"
+
+              # Las imágenes efímeras del Studio caducan a los 7 días
+              # (STUDIO_IMAGE_EPHEMERAL_S3_DAYS del dashboard, que no gestiona
+              # el ciclo de vida: STUDIO_IMAGE_MANAGE_S3_LIFECYCLE=false).
+              # Este Job es el único que escribe ILM en el bucket: cualquier
+              # regla listada significa que ya está.
+              if [ -z "$(mc ilm rule ls "local/$BUCKET" 2>/dev/null)" ]; then
+                mc ilm rule add --prefix "media/images/studio/ephemeral/" --expire-days 7 "local/$BUCKET"
+              fi
+              mc ilm rule ls "local/$BUCKET"
+
+              cat > /tmp/rw.json <<'POL'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {"Effect": "Allow",
+                   "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+                   "Resource": ["arn:aws:s3:::dgx-studio/*"]},
+                  {"Effect": "Allow",
+                   "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+                   "Resource": ["arn:aws:s3:::dgx-studio"]}
+                ]
+              }
+              POL
+              mc admin policy create local dgx-studio-rw /tmp/rw.json
+
+              # mc admin user add es un upsert (rota el secreto si ya existe)
+              mc admin user add local "$RW_ACCESS_KEY" "$RW_SECRET_KEY"
+              mc admin policy attach local dgx-studio-rw --user "$RW_ACCESS_KEY" || true
+
+              echo "--- result ---"
+              mc admin user info local "$RW_ACCESS_KEY"
