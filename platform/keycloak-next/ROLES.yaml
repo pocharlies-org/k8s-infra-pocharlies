@@ -208,9 +208,10 @@
     {
       "name": "agentgateway-read:studio",
       "status": "active",
-      "meaning": "Lectura de la ruta /studio de AgentGateway (INFRA-23).",
+      "meaning": "Lectura de la ruta /studio de AgentGateway (INFRA-23). Desde SC-699 tambien la puerta de ruta del chat: el sidecar de Open WebUI la necesita para alcanzar sus tools de escritura, que siguen gateadas por agentgateway-write:media.",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-chat-agentgateway",
         "service-account-openclaw-readonly-agentgateway"
       ],
       "privilege": {
