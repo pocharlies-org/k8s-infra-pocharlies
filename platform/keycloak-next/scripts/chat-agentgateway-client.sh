@@ -6,9 +6,11 @@ umask 077
 # Dedicated confidential client for the chat surface (Open WebUI at
 # chat.e-dani.com) to reach AgentGateway through its auth-proxy sidecar.
 # It holds the REVIEWED SET of domain roles below and nothing else from the
-# agentgateway-write family — never the legacy umbrella role. Every role is
-# CREATED by agentgateway-domain-roles.sh (sync-wave 19) and only VERIFIED
-# here: this reconciler never creates, deletes or widens a realm role.
+# agentgateway-write family — never the legacy umbrella role — plus the one
+# shared route role agentgateway-read:studio. Every role is CREATED elsewhere
+# (agentgateway-domain-roles.sh, sync-wave 19, for the write domains;
+# agentgateway-read-grants.sh, sync-wave 20, for the read role) and only
+# VERIFIED here: this reconciler never creates, deletes or widens a realm role.
 #
 # 2026-09-17 (contract v2): the set grew from one role to six. The chat moved
 # ALL its MCP tool servers onto the sidecar (they used to carry a hand-pasted,
@@ -17,14 +19,24 @@ umask 077
 # the domains the chat already reaches today — media, social, workspace, gsc,
 # synapse and the new hermes — so the move loses no capability while dropping
 # the umbrella's reach over shopify, picqer, skirmshop-plugins and sauvage.
+#
+# 2026-09-26 (SC-699): the set grew to seven with agentgateway-read:studio,
+# the ROUTE role /studio has required since INFRA-143 (2026-09-19, measured by
+# qa: the sidecar's client-credentials token carried only the six write roles
+# and initialize on /studio answered 403 authorization failed while /grok
+# answered 200). Unlike the six write roles this one is SHARED: the same role
+# is held by the agentgateway-mcp and openclaw service accounts, so the
+# exclusive-service-account invariant applies to the agentgateway-write family
+# only; the holder allowlist of the shared read role is owned by
+# agentgateway-read-grants.sh (sync-wave 20), which runs before this hook.
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"
 # Space-separated and ORDER-INSENSITIVE for the guard below; keep it sorted.
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"
-EXPECTED_ROLE_NAMES="agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"
+EXPECTED_ROLE_NAMES="agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"
@@ -180,9 +192,10 @@ role_exists() {
 }
 
 verify_role() {
-  # The domain role is owned by agentgateway-domain-roles.sh; a missing role
-  # means that hook has not run for this commit, never a reason to create it.
-  role_exists "$1" || fail "$1 is missing; the agentgateway-domain-roles hook owns it"
+  # Write-domain roles are owned by agentgateway-domain-roles.sh and the read
+  # role by agentgateway-read-grants.sh; a missing role means that hook has
+  # not run for this commit, never a reason to create it here.
+  role_exists "$1" || fail "$1 is missing; the agentgateway-domain-roles or agentgateway-read-grants hook owns it"
   composite="$(kget "roles/$1" --fields composite --format csv --noquotes | nonempty_lines)"
   [ "${composite}" = "false" ] || fail "$1 must remain non-composite"
 }
@@ -243,8 +256,14 @@ assert_reviewed_write_roles() {
       *) fail "service account holds an unreviewed AgentGateway write role: ${role}" ;;
     esac
   done
+  # The completeness check is write-family only: the shared read role is
+  # granted by ensure_role_mapping and its presence asserted there and in
+  # verify_client, but it never appears in the write-family listing above.
   for role in ${ROLE_NAMES}; do
-    printf '%s\n' "${held}" | grep -Fxq "${role}" || fail "service account is missing ${role}"
+    case "${role}" in
+      agentgateway-write*)
+        printf '%s\n' "${held}" | grep -Fxq "${role}" || fail "service account is missing ${role}" ;;
+    esac
   done
 }
 
@@ -266,11 +285,17 @@ EOF
 }
 
 ensure_role_mapping() {
-  # TWO passes on purpose: with six roles, checking and granting in the same
-  # loop would have already granted the first roles by the time an unauthorized
-  # holder is found on the fourth. Nothing is mutated until every role is clean.
+  # TWO passes on purpose: with several roles, checking and granting in the
+  # same loop would have already granted the first roles by the time an
+  # unauthorized holder is found on a later one. Nothing is mutated until
+  # every role is clean. Exclusivity is checked for the agentgateway-write
+  # family only: agentgateway-read:studio is a SHARED route role also held by
+  # the agentgateway-mcp and openclaw service accounts, and its holder
+  # allowlist is owned by agentgateway-read-grants.sh.
   for role in ${ROLE_NAMES}; do
-    assert_exclusive_role_mapping "${role}"
+    case "${role}" in
+      agentgateway-write*) assert_exclusive_role_mapping "${role}" ;;
+    esac
   done
   for role in ${ROLE_NAMES}; do
     if ! target_has_direct_role "${role}"; then
@@ -278,7 +303,9 @@ ensure_role_mapping() {
         --uid "${SERVICE_ACCOUNT_ID}" --rolename "${role}" >/dev/null 2>&1 || \
         fail "failed to map ${role}"
     fi
-    assert_exclusive_role_mapping "${role}"
+    case "${role}" in
+      agentgateway-write*) assert_exclusive_role_mapping "${role}" ;;
+    esac
   done
   assert_reviewed_write_roles
 }
@@ -296,7 +323,11 @@ verify_client() {
   for role in ${ROLE_NAMES}; do
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
     target_has_direct_role "${role}" || fail "direct realm role missing: ${role}"
-    assert_exclusive_role_mapping "${role}"
+    # Exclusivity is a write-family invariant (shared read role: see
+    # ensure_role_mapping).
+    case "${role}" in
+      agentgateway-write*) assert_exclusive_role_mapping "${role}" ;;
+    esac
   done
   assert_reviewed_write_roles
 }
@@ -349,12 +380,19 @@ rollback_identity() {
       fail "failed to delete ${CLIENT_ID}"
   fi
   [ -z "$(resolve_client_optional)" ] || fail "client ${CLIENT_ID} remains after rollback"
+  # Write-family roles only: deleting the client removes its service account,
+  # the only reviewed holder of each write domain. The shared read role stays
+  # in the realm WITH its other reviewed holders (agentgateway-mcp, openclaw)
+  # — asserting emptiness there would fail by design.
   for role in ${ROLE_NAMES}; do
-    if role_exists "${role}"; then
-      users="$(kget "roles/${role}/users" --fields username --format csv --noquotes | nonempty_lines)"
-      groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
-      [ -z "${users}${groups}" ] || fail "${role} still has mappings after client deletion"
-    fi
+    case "${role}" in
+      agentgateway-write*)
+        if role_exists "${role}"; then
+          users="$(kget "roles/${role}/users" --fields username --format csv --noquotes | nonempty_lines)"
+          groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
+          [ -z "${users}${groups}" ] || fail "${role} still has mappings after client deletion"
+        fi ;;
+    esac
   done
   printf '{"client_id":"%s","realm_roles":"%s","client_present":false,"roles_retained":true}\n' \
     "${CLIENT_ID}" "${ROLE_NAMES}"

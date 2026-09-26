@@ -23,6 +23,12 @@ umask 077
 # baseline 2026-09-12), so an abort must not leave its token broken. MODE
 # fullscope-rollback is the emergency inverse (manual Job, excluded from
 # Kustomize; see RUNBOOK section 11).
+#
+# SC-699 (2026-09-26): the holder ALLOWLIST of the shared route role
+# agentgateway-read:studio widens to a third service account,
+# service-account-chat-agentgateway — its grant and client scope mapping are
+# owned by chat-agentgateway-client.sh (wave 23); this hook only asserts that
+# the extra holder is reviewed (see CHAT_READ_ROLE_NAMES below).
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
@@ -38,6 +44,17 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 
 READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
 OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools}"
+# SC-699 (2026-09-26): chat-agentgateway holds the shared route role
+# agentgateway-read:studio so its auth-proxy sidecar can pass the /studio
+# route gate (INFRA-143, measured 403 by qa on 2026-09-26). This reconciler
+# only widens the HOLDER ALLOWLIST of that role: the grant and the client
+# scope mapping are owned by chat-agentgateway-client.sh (sync-wave 23), and
+# the chat client is deliberately never resolved here — this hook runs at
+# wave 20, before the chat hook may have created the client on a fresh
+# bootstrap.
+CHAT_READ_ROLE_NAMES="${CHAT_READ_ROLE_NAMES:-agentgateway-read:studio}"
+EXPECTED_CHAT_READ_ROLE_NAMES="agentgateway-read:studio"
+CHAT_SA_USERNAME="service-account-chat-agentgateway"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -73,6 +90,8 @@ fail() {
   fail "READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${OPENCLAW_READ_ROLE_NAMES}" = "${EXPECTED_OPENCLAW_READ_ROLE_NAMES}" ] || \
   fail "OPENCLAW_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${CHAT_READ_ROLE_NAMES}" = "${EXPECTED_CHAT_READ_ROLE_NAMES}" ] || \
+  fail "CHAT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -179,15 +198,26 @@ role_allowed_users() {
   else
     printf '%s\n' "${MCP_SA_USERNAME}"
   fi
+  # SC-699: the chat service account is a reviewed holder of the shared route
+  # role (granted by chat-agentgateway-client.sh, wave 23). Held by username
+  # constant, never resolved: this hook must not depend on the chat client
+  # existing at wave 20.
+  if printf '%s\n' "${CHAT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${CHAT_SA_USERNAME}"
+  fi
 }
 
 assert_role_exclusivity() {
   role="$1"
   # Bounded role-member endpoints (same idiom as the SRE reconciler): at most
-  # the allowed service accounts, never a group, never a human.
-  users="$(kget "roles/${role}/users" -q first=0 -q max=3 \
+  # the allowed service accounts, never a group, never a human. The bound is
+  # the widest reviewed holder set plus one — since SC-699 that is three
+  # service accounts on agentgateway-read:studio (agentgateway-mcp, openclaw,
+  # chat-agentgateway), so max=4 is what makes a fourth, unauthorized holder
+  # visible.
+  users="$(kget "roles/${role}/users" -q first=0 -q max=4 \
     --fields username --format csv --noquotes | nonempty_lines)"
-  groups="$(kget "roles/${role}/groups" -q first=0 -q max=3 \
+  groups="$(kget "roles/${role}/groups" -q first=0 -q max=4 \
     --fields path --format csv --noquotes | nonempty_lines)"
   [ -z "${groups}" ] || fail "${role} is mapped to a group; group role-mapping is forbidden (SC-44 C6)"
   allowed="$(role_allowed_users "${role}")"

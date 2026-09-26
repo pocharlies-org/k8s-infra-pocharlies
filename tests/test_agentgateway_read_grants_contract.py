@@ -23,6 +23,11 @@ READ_ROLE_NAMES = [f"agentgateway-read:{route}" for route in READ_ROUTES]
 OPENCLAW_ROLE_NAMES = [f"agentgateway-read:{route}" for route in OPENCLAW_ROUTES]
 MCP_SA = "service-account-agentgateway-mcp"
 OC_SA = "service-account-openclaw-readonly-agentgateway"
+# SC-699 (2026-09-26): the chat service account is a reviewed holder of the
+# shared route role agentgateway-read:studio (granted by
+# chat-agentgateway-client.sh; this hook only widens the allowlist).
+CHAT_SA = "service-account-chat-agentgateway"
+CHAT_SHARED_ROLES = ["agentgateway-read:studio"]
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): agentgateway-mcp with
 # fullScopeAllowed=true carries the reviewed 22 PLUS the flattened composites
@@ -368,6 +373,9 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
         self.assertIn("OPENCLAW_READ_ROLE_NAMES is immutable", script)
+        # SC-699: the chat holder allowlist is its own reviewed constant.
+        self.assertIn("CHAT_READ_ROLE_NAMES is immutable", script)
+        self.assertIn("service-account-chat-agentgateway", script)
         self.assertIn("group role-mapping is forbidden (SC-44 C6)", script)
         # INFRA-45: fullScopeAllowed=false is part of the owned matrix.
         self.assertIn("must keep fullScopeAllowed=false", script)
@@ -439,6 +447,31 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, _, _ = self.run_reconciler(mode="ensure", seed=seed, expect_ok=False)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("group role-mapping is forbidden", result.stderr)
+
+    def test_chat_holder_on_the_shared_read_role_passes(self):
+        # SC-699: service-account-chat-agentgateway is a reviewed holder of
+        # agentgateway-read:studio (granted by chat-agentgateway-client.sh).
+        # The exclusivity assertion must accept it without this hook ever
+        # resolving the chat client.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:studio|{CHAT_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_chat_holder_on_any_other_read_role_fails_closed(self):
+        # The chat allowlist entry is EXACTLY agentgateway-read:studio: the
+        # same service account on any other read role is drift or an attack.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{CHAT_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user service-account-chat-agentgateway", result.stderr)
 
     def test_unauthorized_token_roles_fail_closed(self):
         # A minted agentgateway-mcp token missing agentgateway-write (the 21
