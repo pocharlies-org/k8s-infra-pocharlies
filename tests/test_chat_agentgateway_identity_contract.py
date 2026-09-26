@@ -186,7 +186,11 @@ def _run(mode, state, env_overrides=None):
 
 
 # Contract v2 (2026-09-17): the chat identity holds the six reviewed domains.
-REVIEWED_ROLES = "agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace".split()
+# SC-699 (2026-09-26): plus the shared route role agentgateway-read:studio —
+# the only role whose other reviewed holders (agentgateway-mcp, openclaw) must
+# NOT trip the exclusive-service-account check.
+REVIEWED_ROLES = "agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace".split()
+WRITE_ROLES = [role for role in REVIEWED_ROLES if role.startswith("agentgateway-write")]
 
 
 def _state(role_present=True, client=None, humans=None):
@@ -216,8 +220,11 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_reconciler_is_fixed_scope_and_never_owns_the_domain_role(self):
         script = SCRIPT.read_text()
         self.assertIn('CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"', script)
-        self.assertIn('ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"', script)
-        self.assertIn('EXPECTED_ROLE_NAMES="agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"', script)
+        self.assertIn('ROLE_NAMES="${ROLE_NAMES:-agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"', script)
+        self.assertIn('EXPECTED_ROLE_NAMES="agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"', script)
+        # SC-699: exclusivity is scoped to the write family — the shared read
+        # role legitimately has other reviewed holders.
+        self.assertIn('agentgateway-write*) assert_exclusive_role_mapping', script)
         self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', script)
         self.assertIn('FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"', script)
         self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"', script)
@@ -241,7 +248,7 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         # or deleted here, and the reconciler refuses to run without it.
         self.assertNotIn("create roles", script)
         self.assertNotIn('delete "roles/', script)
-        self.assertIn("the agentgateway-domain-roles hook owns it", script)
+        self.assertIn("the agentgateway-domain-roles or agentgateway-read-grants hook owns it", script)
         self.assertNotIn("set -x", script)
         self.assertNotIn('echo "${CHAT_AGENTGATEWAY_CLIENT_SECRET}"', script)
         self.assertNotIn('echo "${token}"', script)
@@ -249,7 +256,7 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_ensure_creates_the_client_and_maps_only_the_reviewed_roles(self):
         result, calls, state = _run("ensure", _state())
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn('"client_id":"chat-agentgateway","realm_roles":"agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace","present":true', result.stdout)
+        self.assertIn('"client_id":"chat-agentgateway","realm_roles":"agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace","present":true', result.stdout)
         self.assertNotIn("chat-secret", result.stdout + result.stderr)
         self.assertTrue(any(c.startswith("create clients ") and "clientId=chat-agentgateway" in c for c in calls))
         for role in REVIEWED_ROLES:
@@ -272,7 +279,7 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
     def test_ensure_refuses_to_run_before_the_domain_role_exists(self):
         result, calls, state = _run("ensure", _state(role_present=False))
         self.assertEqual(1, result.returncode)
-        self.assertIn("is missing; the agentgateway-domain-roles hook owns it", result.stderr)
+        self.assertIn("is missing; the agentgateway-domain-roles or agentgateway-read-grants hook owns it", result.stderr)
         self.assertFalse(any(c.startswith("create") for c in calls))
         self.assertEqual({}, state["clients"])
 
@@ -294,6 +301,36 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("agentgateway-write:media has an unauthorized user", result.stderr)
         self.assertFalse(any(c.startswith("add-roles") for c in calls))
+
+    def test_shared_read_role_tolerates_other_holders(self):
+        # SC-699: agentgateway-read:studio is shared — agentgateway-mcp and
+        # openclaw hold it too, and its holder allowlist is owned by
+        # agentgateway-read-grants.sh. The exclusive-service-account check is
+        # a write-family invariant, so another principal holding the READ
+        # role must not abort the chat hook.
+        humans = [{"username": "dani", "roles": ["agentgateway-read:studio"]}]
+        result, _, _ = _run("ensure", _state(humans=humans))
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_ensure_grants_the_read_role_on_a_write_only_client(self):
+        # The state qa measured live on 2026-09-26: the client exists with
+        # exactly the six write roles. Ensure must map and grant
+        # agentgateway-read:studio and converge.
+        client = _existing_client(sa_roles=list(WRITE_ROLES), scope_roles=list(WRITE_ROLES))
+        result, calls, state = _run("ensure", _state(client=client))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue(any(
+            c.startswith("add-roles ") and "--rolename agentgateway-read:studio" in c for c in calls
+        ))
+        client = state["clients"]["uuid-chat-agentgateway"]
+        self.assertEqual(sorted(REVIEWED_ROLES), sorted(client["sa_roles"]))
+        self.assertEqual(sorted(REVIEWED_ROLES), sorted(client["scope_roles"]))
+
+    def test_audit_fails_when_the_service_account_is_missing_the_read_role(self):
+        client = _existing_client(sa_roles=list(WRITE_ROLES))
+        result, _, _ = _run("audit", _state(client=client))
+        self.assertEqual(1, result.returncode)
+        self.assertIn("direct realm role missing: agentgateway-read:studio", result.stderr)
 
     def test_ensure_rejects_a_token_that_carries_the_umbrella_role(self):
         # Scope-mapping drift: the umbrella role leaks into the scope even though
@@ -338,7 +375,7 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("key: agentgateway-prod/chat_agentgateway_client_secret", manifest)
         self.assertNotIn("property:", manifest)
         self.assertIn("name: CLIENT_ID, value: chat-agentgateway", manifest)
-        self.assertIn("value: agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace", manifest)
+        self.assertIn("value: agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace", manifest)
         self.assertIn("name: FORBIDDEN_REALM_ROLE, value: agentgateway-write", manifest)
         self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
         self.assertIn("argocd.argoproj.io/hook-delete-policy: BeforeHookCreation", manifest)

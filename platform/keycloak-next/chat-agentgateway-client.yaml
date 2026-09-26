@@ -4,6 +4,9 @@
 # AgentGateway /studio requires for studio_generate_image, studio_generate_video
 # and studio_cancel_job. The role is created by agentgateway-domain-roles-job
 # (sync-wave 19); this hook runs after every other identity reconciler.
+# Since SC-699 (26-09-2026) the token also carries the shared route role
+# agentgateway-read:studio, which the /studio route itself requires since
+# INFRA-143; without it the gateway answered 403 before the tool gate.
 #
 # Prerequisite before the first sync: seed a random value as the field
 # chat_agentgateway_client_secret of the 1Password item agentgateway-prod
@@ -98,8 +101,15 @@ spec:
             # chat ya alcanza hoy con el token pegado a mano del cliente
             # paraguas. Se revisa junto con ALLOWED_SERVICE_ACCOUNTS del job de
             # roles (wave 19) y con el CEL de las rutas del gateway.
+            # SC-699 (26-09-2026): se anade agentgateway-read:studio, el rol de
+            # ruta que /studio exige desde INFRA-143 (19-09): sin el, el
+            # sidecar del chat recibia 403 authorization failed antes de
+            # alcanzar sus tools de escritura (agentgateway-write:media). Es
+            # un rol COMPARTIDO (lo tienen tambien agentgateway-mcp y
+            # openclaw): la allowlist de holders la posee
+            # agentgateway-read-grants.sh (wave 20).
             - name: ROLE_NAMES
-              value: agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace
+              value: agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: FORBIDDEN_REALM_ROLE, value: agentgateway-write }
             - { name: RECONCILE_CONTRACT_VERSION, value: "2" }

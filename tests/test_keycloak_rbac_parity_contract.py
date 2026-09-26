@@ -21,6 +21,7 @@ READ_GRANTS = SCRIPTS / "agentgateway-read-grants.sh"
 DOMAIN_ROLES = SCRIPTS / "agentgateway-domain-roles.sh"
 MCP_SA = "service-account-agentgateway-mcp"
 OPENCLAW_SA = "service-account-openclaw-readonly-agentgateway"
+CHAT_SA = "service-account-chat-agentgateway"
 
 
 def shell_list(path, variable):
@@ -42,11 +43,20 @@ class RoleCatalogParityTest(unittest.TestCase):
     def test_read_grants_matrix_matches_catalog(self):
         reads = shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")
         openclaw = shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")
+        chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
         self.assertTrue(set(openclaw) <= set(reads))
+        self.assertTrue(set(chat) <= set(reads))
         owned = owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
-            expected = {MCP_SA} | ({OPENCLAW_SA} if role in openclaw else set())
+            # SC-699: the chat grantee travels in the read-grants holder
+            # allowlist (EXPECTED_CHAT_READ_ROLE_NAMES); the grant itself is
+            # owned by chat-agentgateway-client.sh.
+            expected = (
+                {MCP_SA}
+                | ({OPENCLAW_SA} if role in openclaw else set())
+                | ({CHAT_SA} if role in chat else set())
+            )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
     def test_domain_roles_matrix_matches_catalog(self):
@@ -65,6 +75,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         # Guard against a silent parse: the matrices are non-trivial today.
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 21)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 11)
 
 
