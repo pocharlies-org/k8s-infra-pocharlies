@@ -74,4 +74,5 @@ resources:
   - buildkit
   - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
+  - kubernetes/workloads/company-dreaming-cronjob.yaml
   - kubernetes/workloads/sauvage-pod-reaper.yaml
