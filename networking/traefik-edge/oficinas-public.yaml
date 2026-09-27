@@ -1,0 +1,72 @@
+---
+# Las Oficinas (oficinas-pocharlies): la vista 3D en vivo de las sesiones de agentes y del barrio de la
+# Compañía (una oficina por bot de Hermes, la Sala Kanban y los mensajes entre bots). La sirve
+# oficinas.service en el puerto 19930 del x86 (0.0.0.0, tailnet); enlazada desde la pestaña «Compañía» de
+# dgx.e-dani.com/claude-sessions (27-09-2026, Dani).
+#
+# Misma forma que opencode-claude-panel-public.yaml: Service sin selector + EndpointSlice a la IP de
+# Tailscale del x86. Keycloak (sso-chain) SIEMPRE: la vista enseña nombres de sesión y claves de Jira, y su
+# /api/ask habla con Hermes. El oauth2-proxy de sso-chain usa el callback central de auth-next y la cookie de
+# .e-dani.com, así que un host nuevo no necesita tocar el cliente de Keycloak.
+apiVersion: v1
+kind: Service
+metadata:
+  name: oficinas-edge-host
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: oficinas-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  ports:
+    - name: http
+      port: 19930
+      targetPort: 19930
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: oficinas-edge-host
+  namespace: traefik-edge
+  labels:
+    kubernetes.io/service-name: oficinas-edge-host
+    app.kubernetes.io/name: oficinas-edge-host
+    app.kubernetes.io/part-of: traefik-edge-cutover
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 19930
+endpoints:
+  - addresses:
+      - 100.83.56.98
+    conditions: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-oficinas
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: oficinas.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`oficinas.e-dani.com`)
+      priority: 200
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: oficinas-edge-host
+          namespace: traefik-edge
+          port: 19930
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
