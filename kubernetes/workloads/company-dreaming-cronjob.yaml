@@ -1,0 +1,103 @@
+# company-dreaming — el pase diario que audita las memorias de Claude Code contra
+# el código que corre (épica SC-711, núcleo SC-1208, despliegue original SC-1209).
+#
+# Migrado del timer systemd --user del x86 al cluster PARA VISIBILIDAD: historial de
+# Jobs en `kubectl`, métricas de CronJob/Job vía kube-state-metrics -> Prometheus, y
+# ArgoCD como dueño del estado deseado. El trabajo sigue siendo del host.
+#
+# Por qué el pod entra en el host en vez de llevarse el trabajo dentro: la pasada está
+# casada con esta máquina — lee y reescribe ~/.claude/projects/*/memory, mide con grep
+# contra ~/src y ~/k8s, consulta `systemctl --user cat` para las afirmaciones de
+# unidades, invoca `claude -p` (binario nativo del home) contra el router local
+# (127.0.0.1:18791) y respalda en ~/.company/dreaming. Un contenedor con fragmentos
+# montados replicaría mal esas dependencias (p. ej. el `systemctl --user` por dbus o
+# la versión del claude del home). Así que el pod NO es el entorno de ejecución: es el
+# disparador. `nsenter -t 1` (hostPID + privileged) entra en los namespaces del host y
+# ejecuta EXACTAMENTE el mismo comando que ejecutaba la unidad, como dibanez, con su
+# sesión systemd-user viva. Cero duplicación de runtime: el script desplegado por
+# install.sh en ~/.local/libexec/x86-host-runtime es la fuente, igual que antes.
+#
+# Patrón de host-ops del repo: sauvage-zombie-watchdog / sauvage-pod-reaper (hostPID +
+# nodeName + kube-system).
+#
+# Equivalencias con la unidad systemd que se retira (x86-host-runtime-pocharlies, PR
+# hermana):
+#   OnCalendar=*-*-* 03:30 + Persistent  -> schedule 03:30 Europe/Madrid +
+#     startingDeadlineSeconds 43200 (12 h: si el node estuvo caído a esa hora, el pase
+#     se corre al volver, no se pierde el día — mismo espíritu del Persistent=true).
+#   TimeoutStartSec=21600 (6 h)          -> activeDeadlineSeconds 21600.
+#   MemoryHigh=2G / MemoryMax=4G         -> requests 512Mi / limits 4Gi.
+#   oneshot, dueño único el timer         -> concurrencyPolicy Forbid + backoffLimit 0
+#     (el script ya reintenta el clasificador dentro de la pasada; un segundo intento
+#     completo la misma noche doblaría la carga del router local y escribiría dos veces
+#     sobre los mismos ficheros).
+#   --aplicar con guarda estado.json      -> intacto en el comando: la primera pasada y
+#     cualquier cambio de criterio siguen forzándose en seco dentro del script.
+#
+# La aleatorización de ±5 min del timer no tiene equivalente directo: se asume — el
+# conflicto de hora era con blog-daily (05:00) y el informe del VP (08:00), y 03:30
+# sigue estando muy antes.
+#
+# Verificación (no se puede encender sin esto):
+#   1. Job manual de un lote en seco:
+#      kubectl -n kube-system create job dream-verify --from=cronjob/company-dreaming
+#      (o el Job equivalente con --lote sesiones_rc --dry-run) -> verde y sin tocar memorias.
+#   2. Retirada del timer del host (install.sh lo deshabilita y borra) ANTES de quitar
+#      suspend — si no, dos planificadores a las 03:30.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: company-dreaming
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: company-dreaming
+    app.kubernetes.io/part-of: x86-host-runtime
+    compania.sc/epic: SC-711
+spec:
+  schedule: "30 3 * * *"
+  timeZone: Europe/Madrid
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 43200
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  # true hasta que el timer systemd del x86 esté retirado (PR hermana en
+  # x86-host-runtime-pocharlies): dos planificadores a la misma hora sobre los mismos
+  # ficheros es exactamente lo que la guarda de la épica prohíbe.
+  suspend: true
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 21600
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: company-dreaming
+        spec:
+          hostPID: true
+          nodeName: ubuntu
+          restartPolicy: Never
+          enableServiceLinks: false
+          containers:
+            - name: dreaming
+              image: ubuntu:24.04
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  memory: 4Gi
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  exec nsenter -t 1 -m -u -i -n -p -- \
+                    runuser -u dibanez -- env \
+                      HOME=/home/dibanez USER=dibanez LOGNAME=dibanez \
+                      XDG_RUNTIME_DIR=/run/user/1000 \
+                      DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+                      PATH=/home/dibanez/.local/bin:/usr/local/bin:/usr/bin:/bin \
+                      /usr/bin/python3 /home/dibanez/.local/libexec/x86-host-runtime/company-dreaming.py --aplicar
