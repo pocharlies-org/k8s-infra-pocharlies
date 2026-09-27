@@ -17,6 +17,7 @@ resources:
   - networking/traefik-lan/opencode-claude-panel-lan.yaml
   - networking/traefik-lan/blog-drafts-panel-lan.yaml
   - networking/traefik-lan/public-panels-lan.yaml
+  - networking/traefik-lan/oficinas-lan.yaml
   - networking/traefik-lan/canonical-hosts-lan.yaml
   - networking/traefik-lan/admin-skirmshop-canonical-lan.yaml
   - networking/traefik-lan/sauvage-bot-lan.yaml
@@ -36,6 +37,7 @@ resources:
   - networking/traefik-edge/company-viewer-public.yaml
   - networking/traefik-edge/opencode-public.yaml
   - networking/traefik-edge/jira-epic-trigger-public.yaml
+  - networking/traefik-edge/oficinas-public.yaml
   - networking/traefik-edge/opencode-claude-panel-public.yaml
   - networking/traefik-edge/openchamber-public.yaml
   - networking/traefik-edge/openchamber-beta-public.yaml
