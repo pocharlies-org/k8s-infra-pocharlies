@@ -54,12 +54,3 @@ metadata:
   annotations:
     argocd.argoproj.io/compare-options: IgnoreExtraneous
     reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wildcard-lan-tls
-  namespace: vault
-  annotations:
-    argocd.argoproj.io/compare-options: IgnoreExtraneous
-    reflector.v1.k8s.emberstack.com/reflects: traefik-lan/wildcard-lan-tls
