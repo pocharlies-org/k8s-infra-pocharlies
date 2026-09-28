@@ -22,9 +22,10 @@
 #
 # Equivalencias con la unidad systemd que se retira (x86-host-runtime-pocharlies, PR
 # hermana):
-#   OnCalendar=*-*-* 03:30 + Persistent  -> schedule 03:30 Europe/Madrid +
-#     startingDeadlineSeconds 43200 (12 h: si el node estuvo caído a esa hora, el pase
-#     se corre al volver, no se pierde el día — mismo espíritu del Persistent=true).
+#   OnCalendar=*-*-* 03:30 + Persistent  -> startingDeadlineSeconds 43200 (12 h: si
+#     el node estuvo caído a esa hora, el pase se corre al volver, no se pierde el
+#     día — mismo espíritu del Persistent=true). HORA: 01:30 desde 28-09 (antes
+#     03:30, como la unidad; ver el porqué abajo, junto al schedule).
 #   TimeoutStartSec=21600 (6 h)          -> activeDeadlineSeconds 21600.
 #   MemoryHigh=2G / MemoryMax=4G         -> requests 512Mi / limits 4Gi.
 #   oneshot, dueño único el timer         -> concurrencyPolicy Forbid + backoffLimit 0
@@ -35,8 +36,19 @@
 #     cualquier cambio de criterio siguen forzándose en seco dentro del script.
 #
 # La aleatorización de ±5 min del timer no tiene equivalente directo: se asume — el
-# conflicto de hora era con blog-daily (05:00) y el informe del VP (08:00), y 03:30
-# sigue estando muy antes.
+# conflicto de hora era con blog-daily (05:00) y el informe del VP (08:00).
+#
+# HORA — 01:30 Europe/Madrid (movida desde 03:30 el 28-09): la ventana 03:00-04:00
+# está atestada en el cluster (picker-ga4-refresh a las 03:30 clavados, y alrededor
+# affiliate-gdpr-prune, skirmbooks-classifier-sweep, brain-knowledge-pages,
+# banking-klarna/paypal, product-relations-projector, dlq-archive-purge,
+# keepsvc-maintenance, litellm-spendlogs...). 01:30 es la hora más limpia (nada
+# hasta el snapshot longhorn de las 02:00, y ese no toca el router). No 05:30: la
+# pasada dura 3-5,5 h y su clasificador ocupa el router local de punta a punta; a
+# las 05:30 acabaría 08:30-11:00, solapando con el informe del VP (08:00) y con las
+# sesiones de mañana — la saturación del router (11 en vuelo) es justo lo que abortó
+# la pasada del 27-09. 01:30 además mantiene la invariante de arrancar antes que
+# blog-daily (05:00).
 #
 # Verificación (hecha el 28-09, antes de armar):
 #   1. Job manual de un lote en seco (company-dreaming-verify, --lote sesiones_rc
@@ -54,7 +66,7 @@ metadata:
     app.kubernetes.io/part-of: x86-host-runtime
     compania.sc/epic: SC-711
 spec:
-  schedule: "30 3 * * *"
+  schedule: "30 1 * * *"
   timeZone: Europe/Madrid
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 43200
