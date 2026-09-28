@@ -157,11 +157,6 @@ spec:
       services:
         - {name: openclaw-qwen36-openclaw, namespace: openclaw-qwen36, port: 8080}
     - kind: Rule
-      match: Host(`vault.e-dani.com`)
-      middlewares: *generic-sso
-      services:
-        - {name: vault-active, namespace: vault, port: 8200}
-    - kind: Rule
       match: Host(`whatsapp-pro.e-dani.com`)
       middlewares: *generic-sso
       services:

@@ -366,10 +366,6 @@ spec:
       match: Host(`uriel.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       services:
         - {name: uriel-site, namespace: traefik-edge, port: 80}
-    - kind: Rule
-      match: Host(`vault.e-dani.com`)
-      services:
-        - {name: vault-active, namespace: vault, port: 8200}
     # /api/public/* del conector no tiene auth (chats, historial, backfill):
     # deny en LAN igual que en el edge (middleware en whatsapp-mcp).
     - kind: Rule
