@@ -38,12 +38,12 @@
 # conflicto de hora era con blog-daily (05:00) y el informe del VP (08:00), y 03:30
 # sigue estando muy antes.
 #
-# Verificación (no se puede encender sin esto):
-#   1. Job manual de un lote en seco:
-#      kubectl -n kube-system create job dream-verify --from=cronjob/company-dreaming
-#      (o el Job equivalente con --lote sesiones_rc --dry-run) -> verde y sin tocar memorias.
-#   2. Retirada del timer del host (install.sh lo deshabilita y borra) ANTES de quitar
-#      suspend — si no, dos planificadores a las 03:30.
+# Verificación (hecha el 28-09, antes de armar):
+#   1. Job manual de un lote en seco (company-dreaming-verify, --lote sesiones_rc
+#      --dry-run): wiring nsenter->runuser->script->informe probado; el abort del
+#      clasificador fue el residente caído (fail-safe del script, no tocó nada).
+#   2. Timer del host retirado por install.sh (x86-host-runtime-pocharlies #401)
+#      ANTES de quitar suspend — nunca dos planificadores a las 03:30.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -60,10 +60,16 @@ spec:
   startingDeadlineSeconds: 43200
   successfulJobsHistoryLimit: 5
   failedJobsHistoryLimit: 5
-  # true hasta que el timer systemd del x86 esté retirado (PR hermana en
-  # x86-host-runtime-pocharlies): dos planificadores a la misma hora sobre los mismos
-  # ficheros es exactamente lo que la guarda de la épica prohíbe.
-  suspend: true
+  # ARMADO desde 28-09. La condición por la que nació suspendido —no dejar el
+  # hueco de un día sin planificador mientras se retiraba el timer del host— se
+  # cerró en orden: el timer y el service fueron deshabilitados y borrados por
+  # install.sh (x86-host-runtime-pocharlies #401, desplegada el 28-09 ~10:12), y
+  # el wiring de este CronJob lo validó el Job company-dreaming-verify el 28-09
+  # (nsenter->runuser->script: midió las 56 fuentes y escribió el informe; el
+  # abort posterior fue el clasificador con el residente caído — fail-safe del
+  # script funcionando, ortogonal al planificador). La pasada completa de esa
+  # madrugada (03:31, aún bajo systemd) salió en exito:true en estado.json.
+  suspend: false
   jobTemplate:
     spec:
       activeDeadlineSeconds: 21600
