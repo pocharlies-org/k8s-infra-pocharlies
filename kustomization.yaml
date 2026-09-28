@@ -57,7 +57,6 @@ resources:
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
-  - platform/vault/auto-unseal.yaml
   - platform/external-secrets/runtime-credentials.yaml
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
   - platform/velero/node-agent-config.yaml
