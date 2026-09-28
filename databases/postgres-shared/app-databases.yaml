@@ -345,3 +345,25 @@ spec:
   owner: dgxbench
   cluster:
     name: postgres-shared
+---
+# SC-546: destino de archivo de la retención de sesiones (opencode hoy; mismo
+# sitio para cualquier agente). Creada a mano el 11-09; declarada aquí para
+# sobreviva a un rebuild. El esquema `transcripts` y la tabla
+# `agent_sessions` NO los declara este CRD (CNPG solo declara la base): los
+# crea de forma idempotente el Job PostSync de agent-transcripts-schema.yaml.
+# Dueño = el managed role opencode_archive (igual que el estado vivo medido
+# 15-09: datdba=opencode_archive, schema y tabla también).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: agent-transcripts
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: agent_transcripts
+  owner: opencode_archive
+  ensure: present
+  cluster:
+    name: postgres-shared
