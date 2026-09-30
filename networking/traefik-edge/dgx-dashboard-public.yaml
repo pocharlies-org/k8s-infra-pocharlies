@@ -48,9 +48,6 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: dgx.e-dani.com
     external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
     external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
-    # SC-1397: el A de dgx.e-dani.com lo posee el DDNS de casa (cloudflare-ddns.sh);
-    # external-dns lo excluye para dejar de pisarlo cada 5 min.
-    external-dns.alpha.kubernetes.io/exclude: "true"
 spec:
   entryPoints:
     - websecure
