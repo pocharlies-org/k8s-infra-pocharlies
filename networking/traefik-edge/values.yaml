@@ -106,6 +106,7 @@ providers:
       - skirmshop-brain-prod
       - cv
       - blog
+      - web
       - homeassistant
       - teslamate
       - jarvis
@@ -149,6 +150,7 @@ providers:
       - skirmshop-brain-prod
       - cv
       - blog
+      - web
       - homeassistant
       - teslamate
       - jarvis
