@@ -39,6 +39,28 @@ spec:
       X-Forwarded-Email: ""
       X-Forwarded-Groups: ""
 ---
+# SC-1198/consola: la consola de mensajería vive en `messages/dgx-messages`
+# (repo pocharlies-org/dgx-messages); el dashboard solo conserva una copia
+# antigua de /messages. El edge solo vigila un allowlist de namespaces que no
+# incluye `messages` (ver chat-public.yaml), así que se alcanza con el patrón
+# ExternalName dentro de traefik-edge. La NetworkPolicy de ns messages admite
+# las IPs de host del edge (hostNetwork) en el repo dgx-messages.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-dgx-messages
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-dgx-dashboard-public
+spec:
+  type: ExternalName
+  externalName: dgx-messages.messages.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -53,6 +75,25 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # Consola de mensajería (página, assets propios, API y SSE
+    # /api/messages/stream) → dgx-messages, para TODO origen y siempre tras
+    # sso-chain: la identidad X-Auth-Request-User la estampa el forwardAuth
+    # (dgx-strip-identity-headers va antes y borra cualquier copia del
+    # cliente). Prioridad 450: por encima del control set (400), que antes
+    # mandaba /api/messages a la copia vieja del dashboard. Los assets
+    # compartidos (/static/navbar.js, colors_and_type.css, vendor) siguen en el
+    # dashboard: son los suyos y navbar.js llama a APIs del dashboard.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && (PathPrefix(`/messages`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      priority: 450
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: edge-dgx-messages
+          port: 80
     # SC-1192: control set behind sso-chain for LAN/tailnet/cluster callers.
     # SC-1316: la pagina /entregas del dashboard y sus assets propios van
     # tambien por sso-chain para LAN/tailnet/cluster (C3): sin esto, la lista
