@@ -7,6 +7,15 @@ deployment:
 podDisruptionBudget:
   enabled: false
 
+# Single pod pinned to ubuntu with pod anti-affinity: a surge pod can never
+# schedule, so a rolling update with maxSurge 1 / maxUnavailable 0 hangs forever
+# (01-10: the 1Gi rollout sat Pending). Same strategy as traefik-edge.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
 ingressClass:
   enabled: true
   name: traefik-lan
