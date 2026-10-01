@@ -44,6 +44,24 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Consola de mensajería → dgx-messages (ns messages), gemela de la ruta 450
+    # del edge (networking/traefik-edge/dgx-dashboard-public.yaml): página,
+    # assets propios, API y SSE, siempre tras sso-chain y con las cabeceras de
+    # identidad borradas antes. Sin gate ClientIP: también para quien no pase
+    # por el bypass. Por encima del control set (400), que antes mandaba
+    # /api/messages a la copia vieja del dashboard.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (PathPrefix(`/messages`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      priority: 450
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-messages
+          namespace: messages
+          port: http
     # SC-1192: control set behind sso-chain even for LAN/tailnet/cluster
     # callers (reads of telemetry and the UI stay on the bypass below).
     # SC-1316: la pagina /entregas del dashboard y sus assets propios
