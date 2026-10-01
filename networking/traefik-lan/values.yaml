@@ -85,13 +85,15 @@ metrics:
     service:
       enabled: true
 
-# Allow some resilience
+# Allow some resilience. 512Mi was the ceiling it lived against (01-10: 511Mi
+# used, GC burning 4 cores, liveness timeouts and a restart loop that took the
+# whole *.lan.e-dani.com down, Harbor included).
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 256Mi
   limits:
-    memory: 512Mi
+    memory: 1Gi
 
 nodeSelector:
   kubernetes.io/hostname: ubuntu
