@@ -46,7 +46,8 @@ ownership:
 
 1. Merge and sync `k8s-infra-pocharlies` first. It owns
    `ConfigMap/velero-fsb-volume-policy`, the primary schedules, node-agent
-   ConfigMap and a suspended, manually triggered repository-frequency migrator.
+   ConfigMap. (The one-shot repository-frequency migrator ran on 2026-07-15 and
+   was removed on 2026-10-03: all 90 BackupRepositories are at `24h0m0s`.)
 2. Require the policy ConfigMap and all three primary schedules to be Synced.
 3. Merge and sync `dgx-infra` second. Its `backup-hub` application adopts the
    previously orphaned `daily-x86-critical` Schedule and references the shared
@@ -110,9 +111,6 @@ kubectl -n velero get configmap velero-node-agent-config -o json | jq -er '
     memoryRequest: "128Mi", memoryLimit: "1Gi"
   }
 ' >/dev/null
-
-kubectl -n velero get cronjob velero-repository-frequency-24h-v1 -o json |
-  jq -e '.spec.suspend == true and .spec.concurrencyPolicy == "Forbid"' >/dev/null
 ```
 
 After the `dgx-infra` sync:
@@ -154,24 +152,14 @@ Require the rendered server argument to be `24h0m0s`, the maintenance
 ConfigMap to keep one Job, and all six LAN/OVH node agents Ready. No node-agent
 may run on a `topology=remote` node.
 
-Only after those gates pass, start the guarded one-shot migration from the
-suspended CronJob template. A Git merge or Argo sync cannot start it:
+The repository-frequency migration (168h → 24h) already ran on 2026-07-15 and
+its CronJob was removed on 2026-10-03. Check it still holds:
 
 ```bash
-migration_job="velero-repository-frequency-$(date -u +%Y%m%d%H%M%S)"
-kubectl -n velero create job "$migration_job" \
-  --from=cronjob/velero-repository-frequency-24h-v1
-kubectl -n velero wait --for=condition=complete "job/$migration_job" --timeout=10m
-kubectl -n velero logs "job/$migration_job"
 kubectl -n velero get backuprepositories.velero.io -o json | jq -e '
   all(.items[]; .spec.maintenanceFrequency != "168h0m0s")
 ' >/dev/null
 ```
-
-The migrator rechecks backups, restores and maintenance Jobs plus both BSLs
-immediately before its first patch. Backup and Restore phases use a terminal
-allowlist; an active, unknown or missing phase fails closed. It changes only
-the exact old value; any custom frequency is logged and left untouched.
 
 Changing existing repositories from seven days to one day makes overdue
 maintenance immediately eligible. Let Velero drain it serially; do not delete
