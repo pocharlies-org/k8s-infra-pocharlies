@@ -430,7 +430,7 @@ The CronJob does not mount `keycloak-bootstrap` nor `keycloak-automation`,
 and it does not run the kcadm `MODE=audit` of `agentgateway-read-grants.sh`:
 that needs the realm admin and starts one JVM per kcadm call (~630 s
 measured), while the verifiers read the same facts over plain HTTP with a
-read-only token. Pod: `python:3.13.5-alpine3.22` pinned by the digest of
-`storage/longhorn/system-backup-cron.yaml`, ks5 pool, non-root, read-only
+read-only token. Pod: `python:3.13.5-alpine3.22` pinned by digest (the
+`PINNED_PYTHON` of its contract test), ks5 pool, non-root, read-only
 root, no service-account token, egress only to `keycloak:8080` and DNS.
 Operations: `RUNBOOK.md` section 15.
