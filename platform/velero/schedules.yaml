@@ -10,7 +10,10 @@ spec:
   template:
     ttl: 336h0m0s   # 14 days retention
     includedNamespaces:
-      - vault
+      # 'vault' quitado (SC-1612): el namespace ya no existe y velero marcaba
+      # cada Backup como PartiallyFailed con "fail to get the namespace vault",
+      # manteniendo la app k8s-infra Degraded y la regla argocd-app-degraded
+      # disparando desde el 01-10.
       - harbor
       - argocd
       - longhorn-system
