@@ -10,7 +10,6 @@ spec:
   template:
     ttl: 336h0m0s   # 14 days retention
     includedNamespaces:
-      - vault
       - harbor
       - argocd
       - longhorn-system
