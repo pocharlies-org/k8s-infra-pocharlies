@@ -3,7 +3,7 @@
 Two halves:
 
 * the manifest, read as text (no PyYAML in the keycloak-rbac-contract job):
-  pinned image equal to the one of storage/longhorn/system-backup-cron.yaml,
+  pinned image equal to PINNED_PYTHON,
   no keycloak-bootstrap / keycloak-automation, history/deadline/backoff
   limits, ks5 placement (never the Sparks), a restricted pod, and egress only
   to keycloak:8080 plus DNS;
@@ -32,7 +32,7 @@ BASE = ROOT / "platform" / "keycloak-next"
 SCRIPTS = BASE / "scripts"
 CRON = BASE / "keycloak-role-drift-cron.yaml"
 KUSTOMIZATION = BASE / "kustomization.yaml"
-BACKUP_CRON = ROOT / "storage" / "longhorn" / "system-backup-cron.yaml"
+PINNED_PYTHON = "python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf"
 ENTRYPOINT = SCRIPTS / "keycloak-role-drift.sh"
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 
@@ -79,12 +79,10 @@ def generator_files(name):
 
 
 class CronManifestContractTest(unittest.TestCase):
-    def test_image_is_the_pinned_python_of_the_longhorn_backup_cron(self):
+    def test_image_is_the_pinned_python(self):
         pattern = r"image:\s*(python:3\.13\.5-alpine3\.22@sha256:[0-9a-f]{64})"
-        reference = re.findall(pattern, BACKUP_CRON.read_text())
         ours = re.findall(pattern, manifest_text())
-        self.assertEqual(len(reference), 1)
-        self.assertEqual(ours, reference)
+        self.assertEqual(ours, [PINNED_PYTHON])
         self.assertEqual(len(re.findall(r"^\s*image:", manifest_text(), re.MULTILINE)), 1)
 
     def test_no_admin_credential_and_no_kcadm(self):

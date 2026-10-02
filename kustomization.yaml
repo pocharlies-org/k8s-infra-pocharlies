@@ -51,7 +51,6 @@ resources:
   - storage/longhorn/ingressroute.yaml
   - storage/longhorn/openclaw-sauvage-backup-target.yaml
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
-  - storage/longhorn/system-backup-cron.yaml
   - storage/longhorn/metrics-and-alerts.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
   - platform/keycloak-next
@@ -61,7 +60,6 @@ resources:
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
-  - platform/velero/repository-frequency-migration.yaml
   - platform/velero/schedules.yaml
   - storage/minio/minio.yaml
   - storage/minio/harbor-identity.yaml
