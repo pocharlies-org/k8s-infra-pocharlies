@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: onepassword-change-detector
+  namespace: external-secrets-operator
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+---
+# Read every (Cluster)ExternalSecret; write only the force-sync annotation
+# (patch on the object — RBAC cannot narrow it to one field).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: onepassword-change-detector
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+rules:
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets, clusterexternalsecrets]
+    verbs: [get, list, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: onepassword-change-detector
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: onepassword-change-detector
+subjects:
+  - kind: ServiceAccount
+    name: onepassword-change-detector
+    namespace: external-secrets-operator
+---
+# Its own state ConfigMap (create cannot be narrowed by name).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: onepassword-change-detector
+  namespace: external-secrets-operator
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [onepassword-change-detector-state]
+    verbs: [get, patch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: onepassword-change-detector
+  namespace: external-secrets-operator
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: onepassword-change-detector
+subjects:
+  - kind: ServiceAccount
+    name: onepassword-change-detector
+    namespace: external-secrets-operator
