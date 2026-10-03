@@ -285,3 +285,108 @@ spec:
           metadata:
             labels:
               infra: "false"
+---
+# POLICY 6: ExternalSecrets on the 1Password store refresh only on change (DGX-505)
+# The 1Password account allows 1,000 requests a day in total. With the default
+# Periodic policy ESO re-reads every reference each refreshInterval, and the
+# provider cache that absorbed those reads lives in the controller process,
+# keyed by the store's resourceVersion: a restart or ANY change to the
+# ClusterSecretStore (an annotation, or flipping to InvalidProviderConfig when
+# the quota runs out) drops it, and the next refresh window re-reads everything.
+# That loop emptied the quota on 30-09, 01-10, 02-10 and 03-10.
+# OnChange reads only when the ExternalSecret is created or its spec, labels or
+# annotations change, so restarts and store changes cost nothing. An explicit
+# refreshPolicy in git wins (that is the opt-out); generator-based
+# ExternalSecrets are left alone. How a rotated value reaches the cluster: see
+# platform/external-secrets/cluster-secret-store-onepassword.yaml.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: externalsecret-onepassword-onchange
+  annotations:
+    # After the ClusterRoles below: Kyverno refuses a mutate-existing policy
+    # until its background controller already holds the RBAC to patch targets.
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/title: ExternalSecret OnChange On The 1Password Store
+    policies.kyverno.io/description: >
+      Sets refreshPolicy OnChange on ExternalSecrets that read the onepassword
+      ClusterSecretStore and do not choose a refreshPolicy themselves.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: onchange-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
+            operator: Equals
+            value: onepassword
+          - key: "{{ request.object.spec.refreshPolicy || '' }}"
+            operator: Equals
+            value: ""
+          - key: "{{ length(request.object.spec.dataFrom[?sourceRef.generatorRef] || `[]`) }}"
+            operator: Equals
+            value: 0
+      mutate:
+        patchStrategicMerge:
+          spec:
+            refreshPolicy: OnChange
+    # Same patch for the ExternalSecrets that already exist when the policy lands.
+    - name: onchange-existing
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
+            operator: Equals
+            value: onepassword
+          - key: "{{ request.object.spec.refreshPolicy || '' }}"
+            operator: Equals
+            value: ""
+          - key: "{{ length(request.object.spec.dataFrom[?sourceRef.generatorRef] || `[]`) }}"
+            operator: Equals
+            value: 0
+      mutate:
+        mutateExistingOnPolicyUpdate: true
+        targets:
+          - apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            namespace: "{{ request.object.metadata.namespace }}"
+            name: "{{ request.object.metadata.name }}"
+        patchStrategicMerge:
+          spec:
+            refreshPolicy: OnChange
+---
+# POLICY 6 needs the background controller to patch ExternalSecrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:background-controller:externalsecrets
+  labels:
+    rbac.kyverno.io/aggregate-to-background-controller: "true"
+rules:
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [get, list, watch, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:admission-controller:externalsecrets
+  labels:
+    rbac.kyverno.io/aggregate-to-admission-controller: "true"
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"
+rules:
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [get, list, watch]

@@ -22,6 +22,7 @@ spec:
   refreshTime: 1h
   externalSecretSpec:
     refreshInterval: 24h
+    refreshPolicy: OnChange
     secretStoreRef:
       name: onepassword
       kind: ClusterSecretStore

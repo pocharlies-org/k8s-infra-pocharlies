@@ -18,7 +18,7 @@ metadata:
     backup.e-dani.com/scope: openclaw
 spec:
   refreshInterval: 24h
-  refreshPolicy: Periodic
+  refreshPolicy: OnChange
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
