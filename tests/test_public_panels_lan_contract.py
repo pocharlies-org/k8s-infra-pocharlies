@@ -54,13 +54,15 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
 
 
-def test_jarvis_preserves_hud_rewrite_and_trusted_catchall():
+def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
     hud, catchall = route["spec"]["routes"]
     assert hud["priority"] == 400 and catchall["priority"] == 300
     assert "ingressClassName" not in route["spec"]
-    assert hud["middlewares"] == [{"name": "jarvis-public-hud-shell", "namespace": "jarvis"}]
-    assert "middlewares" not in catchall
+    strip = {"name": "dgx-strip-identity-headers", "namespace": "traefik-lan"}
+    # sin SSO en jarvis: la identidad nunca llega del cliente (es_dani del dashboard; security 03-10-2026)
+    assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}]
+    assert catchall["middlewares"] == [strip]
     assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, catchall))
 
 

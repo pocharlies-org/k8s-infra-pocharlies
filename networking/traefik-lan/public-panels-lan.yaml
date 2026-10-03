@@ -46,6 +46,8 @@ spec:
       priority: 400
       match: Host(`jarvis.e-dani.com`) && (Path(`/`) || Path(`/jarvis`) || Path(`/jarvis.html`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
         - name: jarvis-public-hud-shell
           namespace: jarvis
       services:
@@ -55,6 +57,12 @@ spec:
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      # Sin SSO en este host: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
+      # dgx.lan; si no, cualquiera de la LAN/tailnet se haría pasar por Dani ante `es_dani` del dashboard
+      # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
