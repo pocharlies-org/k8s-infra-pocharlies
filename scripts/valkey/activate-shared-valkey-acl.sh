@@ -4,7 +4,9 @@ set -euo pipefail
 # Activate an ACL file already reconciled by External Secrets. Kubernetes
 # refreshes the mounted Secret eventually, but Valkey keeps its ACL in memory
 # until ACL LOAD (or a process restart). This gate waits for both layers before
-# loading the file on every member and proving the new account's boundaries.
+# loading the file on every member and checks the quorum topology afterwards.
+# Per-account boundaries are not proven here: the ACL content is owned by the
+# secret in 1Password, not by this script.
 
 namespace="${VALKEY_NAMESPACE:-databases}"
 external_secret="${VALKEY_EXTERNAL_SECRET:-shared-valkey-acl}"
@@ -45,18 +47,23 @@ done
 
 # Wait until kubelet has projected the reconciled ACL file on every pod before
 # changing any process. This keeps a retry from leaving members on two files.
+# The projected file is compared against the Secret content by hash, so the
+# gate is independent of which accounts the ACL happens to define.
+expected_sha="$(kubectl -n "$namespace" get "secret/${secret_name}" \
+  -o "jsonpath={.data.users\.acl}" | base64 -d | sha256sum | cut -d' ' -f1)"
+[[ -n "$expected_sha" ]] || fail "secret/${secret_name} has no users.acl content"
 for pod in "${pods[@]}"; do
   kubectl -n "$namespace" exec "$pod" -c valkey -- sh -ec '
+    expected="$1"
     attempt=1
     while [ "$attempt" -le 60 ]; do
-      if grep -q "^user chatbot " /acl/users.acl; then
-        exit 0
-      fi
+      actual="$(sha256sum /acl/users.acl 2>/dev/null | cut -d" " -f1)"
+      [ "$actual" = "$expected" ] && exit 0
       attempt=$((attempt + 1))
       sleep 2
     done
     exit 1
-  ' || fail "projected ACL file is stale on ${pod}"
+  ' sh "$expected_sha" || fail "projected ACL file is stale on ${pod}"
 done
 
 for pod in "${pods[@]}"; do
@@ -68,15 +75,11 @@ done
 
 master_count=0
 replica_count=0
-master_pod=""
 for pod in "${pods[@]}"; do
   role="$(kubectl -n "$namespace" exec "$pod" -c valkey -- sh -ec \
     'valkey-cli -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning ROLE | head -1')"
   case "$role" in
-    master)
-      master_count=$((master_count + 1))
-      master_pod="$pod"
-      ;;
+    master) master_count=$((master_count + 1)) ;;
     slave|replica) replica_count=$((replica_count + 1)) ;;
     *) fail "unexpected role on ${pod}: ${role}" ;;
   esac
@@ -85,39 +88,4 @@ done
 [[ "$master_count" == 1 && "$replica_count" == 2 ]] || \
   fail "expected one master and two replicas; observed ${master_count} master(s) and ${replica_count} replica(s)"
 
-for pod in "${pods[@]}"; do
-  kubectl -n "$namespace" exec "$pod" -c valkey -- sh -ec '
-    admin() {
-      valkey-cli -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning "$@"
-    }
-
-    [ "$(admin ACL DRYRUN chatbot PING)" = "OK" ]
-    [ "$(admin ACL DRYRUN chatbot HSET skirmshop:commerce:v1:acl-activation-probe field value)" = "OK" ]
-    denied="$(admin ACL DRYRUN chatbot HSET rho:forbidden:acl-activation-probe field value 2>&1 || true)"
-    case "$denied" in
-      *NOPERM*) ;;
-      *) exit 1 ;;
-    esac
-
-    chatbot_password="$(awk '\''$1 == "user" && $2 == "chatbot" { for (i = 3; i <= NF; i += 1) if ($i ~ /^>/) { print substr($i, 2); exit } }'\'' /acl/users.acl)"
-    [ -n "$chatbot_password" ]
-    VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning PING | grep -qx PONG
-    VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
-      HGET skirmshop:commerce:v1:acl-activation-probe field >/dev/null
-    unset chatbot_password
-  ' || fail "chatbot ACL verification failed on ${pod}"
-done
-
-# A real write proves command authentication end to end. Run it only against
-# the elected master; healthy replicas correctly reject writes as READONLY.
-kubectl -n "$namespace" exec "$master_pod" -c valkey -- sh -ec '
-  chatbot_password="$(awk '\''$1 == "user" && $2 == "chatbot" { for (i = 3; i <= NF; i += 1) if ($i ~ /^>/) { print substr($i, 2); exit } }'\'' /acl/users.acl)"
-  [ -n "$chatbot_password" ]
-  VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
-    HSET skirmshop:commerce:v1:acl-activation-probe field value | grep -Eq '\''^[01]$'\''
-  VALKEYCLI_AUTH="$chatbot_password" valkey-cli -p 6379 --user chatbot --no-auth-warning \
-    DEL skirmshop:commerce:v1:acl-activation-probe >/dev/null
-  unset chatbot_password
-' || fail "authenticated chatbot write probe failed on ${master_pod}"
-
-printf 'shared-valkey ACL activation verified on all three members\n'
+printf 'shared-valkey ACL activation loaded on all three members\n'
