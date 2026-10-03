@@ -1,0 +1,102 @@
+# DGX-506: brings a value rotated in 1Password to the cluster without anyone
+# restarting ESO. ExternalSecrets on the onepassword store are OnChange
+# (DGX-505) and never re-read on their own; this job lists the vault once per
+# run (1-2 of the account's 1,000 requests/day) and sets force-sync only on
+# the ExternalSecrets whose item changed. Logic and matching: detect.py.
+#
+# Every 4 h: a rotation lands within 4 h on its own. Something that cannot
+# wait does not wait for this job:
+#   kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite
+# or run it now:
+#   kubectl create job -n external-secrets-operator --from=cronjob/onepassword-change-detector onepassword-change-detector-manual-1
+# Red = K8sCronJobFailed (k8s-observability-pocharlies manifests/rules.yaml).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: onepassword-change-detector
+  namespace: external-secrets-operator
+  labels:
+    app.kubernetes.io/name: onepassword-change-detector
+spec:
+  schedule: "23 */4 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # A retry is another vault listing against the daily quota.
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: onepassword-change-detector
+        spec:
+          serviceAccountName: onepassword-change-detector
+          restartPolicy: Never
+          enableServiceLinks: false
+          nodeSelector:
+            node-pool: ks5-nvme
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: list-vault
+              image: docker.io/1password/op:2.40.0@sha256:3835e4e0fa5eb0fd9c12672c6ae65530f00789663dca3ea39e5b02eb90cd1b54
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-ec", "op item list --vault \"$VAULT\" --format json > /work/items.json"]
+              env:
+                - { name: VAULT, value: k8s-pocharlies }
+                - { name: HOME, value: /tmp }
+                - name: OP_SERVICE_ACCOUNT_TOKEN
+                  valueFrom:
+                    secretKeyRef: { name: onepassword-service-account, key: token }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: tmp, mountPath: /tmp }
+          containers:
+            - name: force-sync
+              image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/opt/detector/detect.py"]
+              env:
+                - { name: ITEMS_FILE, value: /work/items.json }
+                - { name: STORE_NAME, value: onepassword }
+                - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              volumeMounts:
+                - { name: detector, mountPath: /opt/detector, readOnly: true }
+                - { name: work, mountPath: /work, readOnly: true }
+          volumes:
+            - name: detector
+              configMap:
+                name: onepassword-change-detector
+                defaultMode: 0444
+            - name: work
+              emptyDir: { sizeLimit: 16Mi }
+            - name: tmp
+              emptyDir: { sizeLimit: 16Mi }

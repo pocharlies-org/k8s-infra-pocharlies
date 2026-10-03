@@ -150,6 +150,13 @@ jobs:
       - name: Validate Sauvage dashboard deployment contract
         run: python3 -m unittest tests/test_sauvage_bot_contract.py
 
+  onepassword-change-detector-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the 1Password change detector (DGX-506)
+        run: python3 -m unittest tests/test_onepassword_change_detector.py -v
+
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
     steps:
