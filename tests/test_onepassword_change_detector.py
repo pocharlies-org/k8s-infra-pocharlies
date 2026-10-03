@@ -166,6 +166,21 @@ class ChangeDetectorTest(unittest.TestCase):
         self.assertEqual(list(patch), ["metadata"])
         self.assertRegex(patch["metadata"]["annotations"]["force-sync"], r"^\d{10}$")
 
+    def test_failed_patch_leaves_state_unwritten(self):
+        """A force-sync PATCH that fails must not save the new versions: the
+        next run sees the same items as changed and forces them again."""
+        class FailingPatch(FakeAPI):
+            def __call__(self, method, path, body=None, ctype="application/json"):
+                if method == "PATCH" and path != STATE:
+                    raise OSError("apiserver unavailable")
+                return super().__call__(method, path, body, ctype)
+
+        items = [dict(i, version=i["version"] + (1 if i["id"] == "bbb" else 0)) for i in ITEMS_V1]
+        api = FailingPatch(CLUSTER_ES, CLUSTER_CES, state=state_of(ITEMS_V1))
+        with self.assertRaises(OSError):
+            self.run_detector(items, api)
+        self.assertEqual([w for w in api.writes if w[1] == STATE], [])
+
     def test_dry_run_writes_nothing(self):
         items = [dict(i, version=i["version"] + 1) for i in ITEMS_V1]
         api = self.run_detector(items, FakeAPI(CLUSTER_ES, CLUSTER_CES, state=state_of(ITEMS_V1)), dry_run=True)
