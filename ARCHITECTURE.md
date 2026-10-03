@@ -45,6 +45,7 @@ automático `prune: false`, `selfHeal: true`):
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
 | Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
+| Secretos desde 1Password | ClusterSecretStore `onepassword` + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h) | `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
 
 ## 5. Cómo se construye aquí
