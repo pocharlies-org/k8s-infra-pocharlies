@@ -78,6 +78,7 @@ jobs:
             tests/test_admin_keycloack_impersonation_grant_contract.py \
             tests/test_agentgateway_write_grant_daniel_contract.py \
             tests/test_dgx_messages_sso_contract.py \
+            tests/test_dgx_app_pagos_sso_contract.py \
             tests/test_agentgateway_token_smoke_contract.py
 
   # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
