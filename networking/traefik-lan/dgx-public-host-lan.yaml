@@ -67,8 +67,15 @@ spec:
     # SC-1316: la pagina /entregas del dashboard y sus assets propios
     # (/static/entregas*) entran en el control-set: su API (/api/company/entregas)
     # ya exigia sso-chain y la pagina sin ella quedaba abierta en LAN/tailnet.
+    # dgx.app.pagos.v1 (03-10-2026): las rutas de la app DGX (/api/app/pagos*,
+    # /api/app/push/token) entran en el control-set: el backend exige es_dani sobre
+    # X-Auth-Request-Email, que SOLO puede estampar oauth2-proxy (authResponseHeaders
+    # de sso-forward-auth); en el bypass de prioridad 300 la cabecera va vaciada por
+    # dgx-strip-identity-headers, asi que sin sso-chain la app no funciona y un
+    # forged de identidad tampoco. Las de maquina /api/pagos* (HMAC) se quedan en el
+    # bypass a proposito: llevan firma, no SSO.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
