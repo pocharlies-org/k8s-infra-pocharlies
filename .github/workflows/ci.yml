@@ -164,7 +164,7 @@ jobs:
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
 
-  shared-valkey-chatbot-contract:
+  shared-valkey-acl-contract:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
@@ -176,4 +176,4 @@ jobs:
       - name: Validate shared Valkey ACL reconciliation and activation gate
         run: |
           bash -n scripts/valkey/activate-shared-valkey-acl.sh
-          python3 -m unittest tests/test_shared_valkey_chatbot_contract.py
+          python3 -m unittest tests/test_shared_valkey_acl_contract.py
