@@ -10,7 +10,9 @@ each item's version is compared with the last run (ConfigMap STATE_CONFIGMAP);
 for each item that changed, `force-sync=<now>` is set on the ExternalSecrets
 that reference it, and on the ClusterExternalSecrets whose template does (ESO
 copies a CES's force-sync to its children and drops one set on a child). The
-first run, with no state, only records the baseline.
+first run, with no state, only records the baseline. State is saved after
+the patches on purpose: a run that dies halfway forces the same items again
+next time (one extra read each) instead of losing a rotation.
 
 Keys follow 1Password secret-reference syntax without the vault,
 `<item>/[section/]<field>`, and `dataFrom.extract.key` is the item: the item
