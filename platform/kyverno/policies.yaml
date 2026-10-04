@@ -299,6 +299,10 @@ spec:
 # refreshPolicy in git wins (that is the opt-out); generator-based
 # ExternalSecrets are left alone. How a rotated value reaches the cluster: see
 # platform/external-secrets/cluster-secret-store-onepassword.yaml.
+# Both 1Password stores (INFRA-511): Kyverno does not fix the order between this
+# policy and externalsecret-onepassword-to-connect, so an ExternalSecret gets
+# OnChange whether it is seen before or after the move to onepassword-connect;
+# the change detector forces both.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -310,7 +314,8 @@ metadata:
     policies.kyverno.io/title: ExternalSecret OnChange On The 1Password Store
     policies.kyverno.io/description: >
       Sets refreshPolicy OnChange on ExternalSecrets that read the onepassword
-      ClusterSecretStore and do not choose a refreshPolicy themselves.
+      or onepassword-connect ClusterSecretStore and do not choose a
+      refreshPolicy themselves.
 spec:
   admission: true
   background: true
@@ -333,8 +338,8 @@ spec:
       preconditions:
         all:
           - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
-            operator: Equals
-            value: onepassword
+            operator: AnyIn
+            value: [onepassword, onepassword-connect]
           - key: "{{ request.object.spec.refreshPolicy || '' }}"
             operator: Equals
             value: ""
@@ -355,8 +360,8 @@ spec:
       preconditions:
         all:
           - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
-            operator: Equals
-            value: onepassword
+            operator: AnyIn
+            value: [onepassword, onepassword-connect]
           - key: "{{ request.object.spec.refreshPolicy || '' }}"
             operator: Equals
             value: ""

@@ -54,3 +54,12 @@ scripts/rollback.sh tailscale ks5-cp-1
 
 This logs the node out via SSH; remove stale devices from the Tailscale admin
 console/API afterward if needed.
+
+## 1Password Connect (INFRA-511)
+
+The ExternalSecrets read 1Password through `onepassword-connect`, an in-cluster 1Password Connect whose image is in
+Harbor, and Harbor reads its own secrets (`harbor-core-keys`, `harbor-registry-creds`, `harbor-s3-credentials`…) through
+it. On a running cluster nothing breaks (the Secrets exist, the image is cached). On a full rebuild, start without the
+Kyverno policy `externalsecret-onepassword-to-connect` (the ExternalSecrets then read the `onepassword` SDK store, which
+spends the daily quota: one full read is about the whole day) or preload the Connect images, then recreate the two
+out-of-band Secrets (`op-credentials`, `onepassword-connect-token`; copies in the Private vault) and add the policy back.
