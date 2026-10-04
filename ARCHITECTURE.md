@@ -87,5 +87,7 @@ Nº de casos: **pendiente de medir**.
   `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
   reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect
   está en Harbor; ver `docs/disaster-recovery.md`.
+- El store `onepassword` va en la última wave (30) a propósito: con el cupo agotado queda `InvalidProviderConfig` y
+  bloquearía las waves siguientes; un recurso nuevo con wave > 30 lo rompe (`test_onepassword_store_wave_contract`).
 
 Última verificación contra el código: 2026-10-01 · 5d52ca2 (origin/main)
