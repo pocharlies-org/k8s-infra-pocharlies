@@ -1,6 +1,7 @@
 # Runbook — 1Password Connect (INFRA-511)
 
 Qué es Connect en este clúster, cómo se arranca sin git, qué hacer si cae y qué no tocar.
+Decisiones de fondo: ARCHITECTURE.md §8 y §4; este runbook no las repite.
 Las manifestaciones viven en `platform/onepassword-connect/` y el store en
 `platform/external-secrets/cluster-secret-store-onepassword-connect.yaml` — léanse antes de
 actuar; este runbook no las duplica.
@@ -77,13 +78,12 @@ fuera de banda de la tabla de arriba y volver a añadir la policy.
 
 ## Cómo leen los ExternalSecrets hoy (04-10)
 
-- ~260 de los 275 ES del clúster leen del store `onepassword-connect` (nota-sre-cupo.md §2).
+- 260 de los 276 ES del clúster leen del store `onepassword-connect` (`kubectl get externalsecret -A`, medido el 05-10; nota-sre-cupo.md §2 daba ~260 de 275 el 04-10).
 - Los ES escritos en forma SDK (`key: item/campo`) los traduce en admisión la ClusterPolicy
   Kyverno `externalsecret-onepassword-to-connect` a `key: item` + `property: campo`, store
   `onepassword-connect`, hasta que los ~30 repos se reescriban (INFRA-525). Los ES nuevos
   deben escribirse ya en forma Connect. Fuentes: ARCHITECTURE.md §4 y comentario del store.
-- Las PushSecret de Hermes (13 según la spec de INFRA-520; nota-architect-plan.md dice 12 —
-  sin recuento propio en esta sesión, `kubectl` no está en el mapa del writer) se quedan en el
+- Las PushSecret de Hermes (13, todas en el store `onepassword`: `kubectl get pushsecret -A`) se quedan en el
   store SDK `onepassword`: el proveedor Connect no implementa `SecretExists`, que necesitan con
   `updatePolicy: IfNotExists` (nota-architect-pr236.md, C2). El store SDK sigue vivo por ellas
   y gastan cupo: su refresco (24 h) más el `onepassword-change-detector`, que cada 4 h hace
