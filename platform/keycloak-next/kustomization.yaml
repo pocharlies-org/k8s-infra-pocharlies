@@ -22,6 +22,7 @@ resources:
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
   - agentgateway-chat-mcp-client.yaml
+  - jarvis-echo-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
@@ -65,6 +66,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-chat-mcp-client
+  - name: keycloak-jarvis-echo-client
+    files:
+      - jarvis-echo-client.sh=scripts/jarvis-echo-client.sh
+    options:
+      labels:
+        app.kubernetes.io/component: jarvis-echo-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh

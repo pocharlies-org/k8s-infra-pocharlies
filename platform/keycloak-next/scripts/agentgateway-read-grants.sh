@@ -29,6 +29,14 @@ umask 077
 # service-account-chat-agentgateway — its grant and client scope mapping are
 # owned by chat-agentgateway-client.sh (wave 23); this hook only asserts that
 # the extra holder is reviewed (see CHAT_READ_ROLE_NAMES below).
+#
+# INFRA-477 (2026-10-04): the holder ALLOWLIST of the shared route role
+# agentgateway-read:workspace widens to service-account-jarvis-echo (the Alexa
+# skill jarvis-alexa, read-only calendar access approved in
+# k8s-agentgateway-pocharlies#170) — its grant and client scope mapping are
+# owned by jarvis-echo-client.sh (wave 24); same rule as SC-699: this hook
+# only asserts the extra holder is reviewed, and never resolves the jarvis
+# client (a wave-20 hook must not depend on a wave-24 client existing).
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
@@ -55,6 +63,16 @@ OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agen
 CHAT_READ_ROLE_NAMES="${CHAT_READ_ROLE_NAMES:-agentgateway-read:studio}"
 EXPECTED_CHAT_READ_ROLE_NAMES="agentgateway-read:studio"
 CHAT_SA_USERNAME="service-account-chat-agentgateway"
+# INFRA-477 (2026-10-04): jarvis-echo is a reviewed holder of the shared route
+# role agentgateway-read:workspace so the Alexa skill jarvis-alexa can pass
+# the /workspace route gate (read-only calendar; security verdict in
+# k8s-agentgateway-pocharlies#170). This reconciler only widens the HOLDER
+# ALLOWLIST of that role: the grant and the client scope mapping are owned by
+# jarvis-echo-client.sh (sync-wave 24), and the jarvis client is deliberately
+# never resolved here (see the SC-699 precedent above).
+JARVIS_READ_ROLE_NAMES="${JARVIS_READ_ROLE_NAMES:-agentgateway-read:workspace}"
+EXPECTED_JARVIS_READ_ROLE_NAMES="agentgateway-read:workspace"
+JARVIS_SA_USERNAME="service-account-jarvis-echo"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -92,6 +110,8 @@ fail() {
   fail "OPENCLAW_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CHAT_READ_ROLE_NAMES}" = "${EXPECTED_CHAT_READ_ROLE_NAMES}" ] || \
   fail "CHAT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${JARVIS_READ_ROLE_NAMES}" = "${EXPECTED_JARVIS_READ_ROLE_NAMES}" ] || \
+  fail "JARVIS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -205,6 +225,11 @@ role_allowed_users() {
   if printf '%s\n' "${CHAT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${CHAT_SA_USERNAME}"
   fi
+  # INFRA-477: same rule for the jarvis-echo service account (granted by
+  # jarvis-echo-client.sh, wave 24) on agentgateway-read:workspace.
+  if printf '%s\n' "${JARVIS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${JARVIS_SA_USERNAME}"
+  fi
 }
 
 assert_role_exclusivity() {
@@ -213,8 +238,9 @@ assert_role_exclusivity() {
   # the allowed service accounts, never a group, never a human. The bound is
   # the widest reviewed holder set plus one — since SC-699 that is three
   # service accounts on agentgateway-read:studio (agentgateway-mcp, openclaw,
-  # chat-agentgateway), so max=4 is what makes a fourth, unauthorized holder
-  # visible.
+  # chat-agentgateway; agentgateway-read:workspace is two since INFRA-477:
+  # agentgateway-mcp, jarvis-echo), so max=4 is what makes an extra,
+  # unauthorized holder visible.
   users="$(kget "roles/${role}/users" -q first=0 -q max=4 \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/${role}/groups" -q first=0 -q max=4 \
