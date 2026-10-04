@@ -58,6 +58,7 @@ resources:
   - platform/reflector/rbac.yaml
   - platform/external-secrets/runtime-credentials.yaml
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
+  - platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml
   - platform/external-secrets/change-detector
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
