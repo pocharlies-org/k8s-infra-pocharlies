@@ -138,6 +138,43 @@ immutable `ALLOWED_SERVICE_ACCOUNTS` map (today the six chat pairs:
 until a dedicated client and a new map entry are reviewed together; the global
 `agentgateway-mcp` client is never granted these roles by this hook.
 
+## AgentGateway write fixture user (`qa-write-sin-vinculo@e-dani.com`, OWU-28-g)
+
+`agentgateway-write-fixture-user-job.yaml` (PostSync wave 25, same wave as the
+Daniel grant, after the write-role hook that owns the role) owns the reverse
+C2 fixture of OWU-28: the human test user
+`qa-write-sin-vinculo@e-dani.com` exists, is enabled, holds the realm role
+`agentgateway-write`, belongs to **no group**, and has **no entry** in
+`atlassian-identity-bindings` (ns `atlassian-mcp`) — that binding file is
+fail-closed by absence, so the negative is by construction and the repo
+needs no edit. It is the negative half of the C2 matrix: with the role and
+without an Atlassian link, `/chat-atlassian` reads but every write returns
+403 (never Daniel's token). Unlike the Daniel grant (which pins a subject
+and never creates users), this hook CREATES the user — the id is minted by
+Keycloak, so the hook resolves it by **exact username** — and re-applies the
+password on every sync from its 1Password item
+(`keycloak-next-qa-write-sin-vinculo` in vault `k8s-pocharlies`, fields
+`username` and `password`) through the ExternalSecret
+`agentgateway-write-fixture-user-credentials` (`refreshPolicy: OnChange`), so
+Keycloak never drifts from 1Password (the SC-1635/SC-1645 incident class).
+The password reaches `kcadm` only via the `KC_CLI_PASSWORD` environment of
+one call — never argv, stdout or a file. The exclusivity audit of
+`agentgateway-write-role.sh` tolerates exactly this second human holder (by
+exact username) besides Daniel; any third user or any group still fails
+closed, and the role rollback refuses to run while the fixture mapping
+exists (undo it first with
+`manual/agentgateway-write-fixture-user-rollback-job.yaml`, RUNBOOK section
+17). Owner QA; retire it when OWU-28 closes (rollback Job + `retirada-propuesta`
+in `PRINCIPALS.md`). Scripted login for QA: authorization code + PKCE S256
+through the public client `agentgateway-chat-mcp` (redirect
+`https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback`), no
+`directAccessGrants` — see RUNBOOK section 17.
+
+**Security condition (OWU-28 ruling, parallel to OWU-80 (b)):** this widens
+the human holder set of `agentgateway-write` beyond Daniel; `security`
+dictaminates before the merge (temporary, no groups, no Atlassian binding,
+retirable). The PR may open in parallel; the merge waits for its SEGURO.
+
 ## Chat identity (`chat-agentgateway`)
 
 `chat-agentgateway-client.yaml` reconciles the confidential client the chat

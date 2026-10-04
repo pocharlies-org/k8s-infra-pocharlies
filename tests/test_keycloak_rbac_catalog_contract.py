@@ -169,9 +169,13 @@ class RoleCatalogShapeTest(unittest.TestCase):
         # OWU-80 (2026-09-25): the reviewed holders of agentgateway-write are
         # the privileged service account plus exactly one human, pinned by
         # subject e51253a7-c137-4c6c-9fb9-af9cecd3b147 (me@e-dani.com) and
-        # owned by agentgateway-write-grant-daniel.sh.
+        # owned by agentgateway-write-grant-daniel.sh. OWU-28-g adds the
+        # second reviewed human: the QA fixture qa-write-sin-vinculo@e-dani.com
+        # (no groups, no Atlassian binding), owned by
+        # agentgateway-write-fixture-user.sh and retired with the epic.
         self.assertEqual(
-            catalog["agentgateway-write"]["grantees"], ["me@e-dani.com", mcp]
+            catalog["agentgateway-write"]["grantees"],
+            ["me@e-dani.com", "qa-write-sin-vinculo@e-dani.com", mcp],
         )
         # cto-office-send is untouchable (SC-320): catalogued as measured, active.
         self.assertEqual(catalog["cto-office-send"]["status"], "active")
@@ -381,11 +385,13 @@ class VerifyRoleCatalogTest(unittest.TestCase):
         realm["agentgateway-write"]["users"] = []
         code, lines = self.run_verify(realm)
         self.assertEqual(code, 1)
-        # OWU-80: agentgateway-write declares two reviewed grantees (the
-        # privileged service account and the pinned human me@e-dani.com);
-        # losing both is two drift lines, sorted by username.
+        # OWU-80 + OWU-28-g: agentgateway-write declares three reviewed
+        # grantees (the privileged service account, the pinned human
+        # me@e-dani.com and the QA fixture qa-write-sin-vinculo@e-dani.com);
+        # losing all of them is one drift line each, sorted by username.
         self.assertEqual(lines, [
             "DRIFT: me@e-dani.com declarado en agentgateway-write no la tiene concedida",
+            "DRIFT: qa-write-sin-vinculo@e-dani.com declarado en agentgateway-write no la tiene concedida",
             "DRIFT: service-account-agentgateway-mcp declarado en agentgateway-write no la tiene concedida",
         ])
 
