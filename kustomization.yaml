@@ -57,7 +57,9 @@ resources:
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
   - platform/external-secrets/runtime-credentials.yaml
+  - platform/onepassword-connect
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
+  - platform/external-secrets/cluster-secret-store-onepassword-connect.yaml
   - platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml
   - platform/external-secrets/change-detector
   - platform/velero/node-agent-config.yaml
