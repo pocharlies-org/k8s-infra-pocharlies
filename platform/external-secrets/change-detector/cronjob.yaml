@@ -84,7 +84,7 @@ spec:
               command: ["python3", "/opt/detector/detect.py"]
               env:
                 - { name: ITEMS_FILE, value: /work/items.json }
-                - { name: STORE_NAME, value: onepassword }
+                - { name: STORE_NAMES, value: "onepassword,onepassword-connect" }
                 - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
               resources:
                 requests: { cpu: 20m, memory: 64Mi }
