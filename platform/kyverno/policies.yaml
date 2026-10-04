@@ -303,13 +303,17 @@ spec:
 # policy and externalsecret-onepassword-to-connect, so an ExternalSecret gets
 # OnChange whether it is seen before or after the move to onepassword-connect;
 # the change detector forces both.
+# The rule that also patched EXISTING ExternalSecrets on every policy update
+# was removed in INFRA-512: applying the policy on 03-10 made it rewrite all
+# 214 ExternalSecrets at once and burned the daily 1Password quota.
+# Admission-only is the contract; tests/test_onepassword_onchange_policy_contract.py guards it.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: externalsecret-onepassword-onchange
   annotations:
-    # After the ClusterRoles below: Kyverno refuses a mutate-existing policy
-    # until its background controller already holds the RBAC to patch targets.
+    # After the ClusterRole below: the admission controller needs read RBAC on
+    # ExternalSecrets before the mutating webhook is registered.
     argocd.argoproj.io/sync-wave: "1"
     policies.kyverno.io/title: ExternalSecret OnChange On The 1Password Store
     policies.kyverno.io/description: >
@@ -348,34 +352,6 @@ spec:
             value: 0
       skipBackgroundRequests: true
       mutate:
-        patchStrategicMerge:
-          spec:
-            refreshPolicy: OnChange
-    # Same patch for the ExternalSecrets that already exist when the policy lands.
-    - name: onchange-existing
-      match:
-        any:
-          - resources:
-              kinds: [external-secrets.io/v1/ExternalSecret]
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
-            operator: AnyIn
-            value: [onepassword, onepassword-connect]
-          - key: "{{ request.object.spec.refreshPolicy || '' }}"
-            operator: Equals
-            value: ""
-          - key: "{{ length(request.object.spec.dataFrom[?sourceRef.generatorRef] || `[]`) }}"
-            operator: Equals
-            value: 0
-      skipBackgroundRequests: true
-      mutate:
-        mutateExistingOnPolicyUpdate: true
-        targets:
-          - apiVersion: external-secrets.io/v1
-            kind: ExternalSecret
-            namespace: "{{ request.object.metadata.namespace }}"
-            name: "{{ request.object.metadata.name }}"
         patchStrategicMerge:
           spec:
             refreshPolicy: OnChange
@@ -486,18 +462,6 @@ spec:
           spec:
             secretStoreRef:
               name: onepassword-connect
----
-# POLICY 6 needs the background controller to patch ExternalSecrets.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kyverno:background-controller:externalsecrets
-  labels:
-    rbac.kyverno.io/aggregate-to-background-controller: "true"
-rules:
-  - apiGroups: [external-secrets.io]
-    resources: [externalsecrets]
-    verbs: [get, list, watch, update, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

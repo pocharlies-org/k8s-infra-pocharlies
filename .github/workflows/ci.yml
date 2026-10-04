@@ -171,7 +171,7 @@ jobs:
       - name: Install YAML parser
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the 1Password Connect read path (INFRA-523)
-        run: python3 -m unittest tests/test_onepassword_connect_contract.py -v
+        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py -v
 
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
