@@ -662,3 +662,91 @@ the commit owning the reconciler Job, so the hook is gone before the next
 sync; the same revert retires the `ROLES.yaml` / `PRINCIPALS.md`
 declarations. Restore it afterwards by reverting that revert.
 
+
+## 17. Write fixture user (`qa-write-sin-vinculo@e-dani.com`, OWU-28-g)
+
+`agentgateway-write-fixture-user-job.yaml` (PostSync wave 25) owns the reverse
+C2 fixture: the human user `qa-write-sin-vinculo@e-dani.com` exists, enabled,
+with the realm role `agentgateway-write`, **no groups** and **no entry** in
+`atlassian-identity-bindings` (fail-closed by absence in the shim). Its
+password lives only in 1Password (vault `k8s-pocharlies`, item
+`keycloak-next-qa-write-sin-vinculo`, fields `username` and `password`) and is
+re-applied to Keycloak on every sync via the ExternalSecret
+`agentgateway-write-fixture-user-credentials` — so a manual password reset in
+Keycloak is drift and gets fixed by the next sync, not the other way round.
+The `agentgateway-write-role.sh` exclusivity audit tolerates exactly this
+second human (by exact username) besides Daniel; its role rollback refuses to
+run while the fixture mapping exists (section 7).
+
+Steady state after sync:
+
+```bash
+kubectl -n keycloak logs job/keycloak-agentgateway-write-fixture-user -c reconcile-write-fixture-user
+# {"realm":"edani","role":"agentgateway-write","username":"qa-write-sin-vinculo@e-dani.com","user_id":"<minted-by-keycloak>","present":true,"created":false,"changed":false}
+```
+
+### Scripted login for QA (C2 reverse, no browser)
+
+Authorization code + PKCE (S256) through the public client
+`agentgateway-chat-mcp` — no secret, no `directAccessGrants`, so the flow is
+the redirect dance: GET the auth URL (login form), POST the form with the
+credentials, read the `code` from the `Location` header WITHOUT following the
+redirect, then exchange at the token endpoint with the verifier:
+
+```bash
+BASE=https://auth-next.e-dani.com/realms/edani
+REDIR='https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback'
+# credentials: 1Password item keycloak-next-qa-write-sin-vinculo (vault
+# k8s-pocharlies, fields username and password). The fixture has NO required
+# actions, so the form is the plain password page.
+VERIFIER="$(openssl rand -hex 32)"
+CHALLENGE="$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+J="$(mktemp)"; ENC="$(printf '%s' "$REDIR" | sed 's|/|%2F|g; s|:|%3A|g')"
+PAGE=$(curl -s -c "$J" "${BASE}/protocol/openid-connect/auth?response_type=code&client_id=agentgateway-chat-mcp&redirect_uri=${ENC}&scope=openid&code_challenge=${CHALLENGE}&code_challenge_method=S256")
+ACTION=$(printf '%s' "$PAGE" | sed -n 's/.*<form[^>]*action="\([^"]*\)".*/\1/p' | head -n1)
+EXEC=$(printf '%s' "$PAGE" | sed -n 's/.*<input[^>]*name="execution"[^>]*value="\([^"]*\)".*/\1/p' | head -n1)
+LOC=$(curl -s -b "$J" -c "$J" -o /dev/null -D - "$ACTION" \
+  --data-urlencode "username=${USER}" --data-urlencode "password=${PASS}" \
+  --data-urlencode "execution=${EXEC}" --data-urlencode "authenticate=")
+CODE=$(printf '%s' "$LOC" | sed -n 's/^[Ll]ocation:.*[?&]code=\([^&]*\).*/\1/p' | tr -d '\r' | head -n1)
+curl -s "${BASE}/protocol/openid-connect/token" \
+  -d grant_type=authorization_code -d client_id=agentgateway-chat-mcp \
+  -d "code=${CODE}" -d "code_verifier=${VERIFIER}" --data-urlencode "redirect_uri=${REDIR}"
+```
+
+The access token must carry `realm_access.roles ∋ agentgateway-write`; its
+`sub` must NOT appear in `kubectl get cm -n atlassian-mcp
+atlassian-identity-bindings -o yaml`. `jira_create_issue` via
+`/chat-atlassian` then returns the shim's 403 (that is the point of the
+fixture); reads work.
+
+### Password rotation
+
+Edit the `password` field of the 1Password item, then force-sync ONLY this
+ExternalSecret (`argocd`/ESO `force-sync` per the store comment — never
+`rollout restart` ESO, never annotate the store: 1Password quota). The next
+PostSync (or an immediate Job re-run) applies it to Keycloak.
+
+### State rollback
+
+Apply the manual rollback Job (excluded from Kustomize). It removes ONLY the
+fixture's mapping of `agentgateway-write` and DISABLES the user; the role,
+the service-account grant and Daniel's grant stay. Do this BEFORE
+`manual/agentgateway-write-role-rollback-job.yaml` (section 7), which refuses
+to delete the role while the fixture mapping exists:
+
+```bash
+kubectl apply -f platform/keycloak-next/manual/agentgateway-write-fixture-user-rollback-job.yaml
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-write-fixture-user-rollback --timeout=300s
+kubectl -n keycloak logs job/keycloak-agentgateway-write-fixture-user-rollback -c rollback-write-fixture-user
+# {"realm":"edani","role":"agentgateway-write","username":"qa-write-sin-vinculo@e-dani.com","user_id":"<id>","present":false,"created":false,"changed":true}
+kubectl -n keycloak delete job keycloak-agentgateway-write-fixture-user-rollback
+```
+
+Rollback honesty: while `agentgateway-write-fixture-user-job.yaml` stays in
+Kustomize, the next PostSync re-creates/re-enables the user and re-applies the
+grant and password. To retire the fixture permanently (OWU-28 close), git
+revert the commit owning the reconciler Job, mark the `PRINCIPALS.md` entry
+`retirada-propuesta`, and delete the 1Password item; deleting the user from
+the realm itself remains a CTO decision.
