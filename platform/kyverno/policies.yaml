@@ -375,6 +375,113 @@ spec:
           spec:
             refreshPolicy: OnChange
 ---
+# POLICY 7 (INFRA-511): ExternalSecrets written for the onepasswordSDK store
+# are admitted as ExternalSecrets of the 1Password Connect store.
+#
+# The `onepassword` store spends the account's daily quota (1,000 requests
+# for every service account together) and one full re-read of the cluster
+# costs about that much; `onepassword-connect` reads from an in-cluster copy
+# of the same vault and costs nothing (see
+# platform/external-secrets/cluster-secret-store-onepassword-connect.yaml).
+# The two providers spell a reference differently:
+#   onepassword          key: <item>/<field>
+#   onepassword-connect  key: <item>   property: <field>
+# and those ExternalSecrets live in ~30 repositories. Until each repository
+# is rewritten to the Connect form, this policy does the rewrite at
+# admission: it splits every `<item>/<field>` key and points the
+# ExternalSecret at onepassword-connect. `dataFrom.extract.key: <item>` means
+# the same in both and is left alone (Connect adds an empty `notesPlain` key
+# to an extract; 28 of them on 04-10, all empty).
+#
+# ArgoCD ignores the rewritten fields (argocd/values.yaml in
+# k8s-gitops-pocharlies), so apps do not go OutOfSync. The price: a commit
+# that ONLY changes a remoteRef key or the store name of an ExternalSecret
+# still on the old form does not mark its app OutOfSync; rewrite that
+# ExternalSecret to the Connect form instead.
+#
+# failurePolicy Ignore on purpose: if Kyverno is down, the ExternalSecret is
+# admitted as written and keeps working against the onepassword store.
+# PushSecrets are not touched: the Connect provider does not implement
+# SecretExists, which updatePolicy IfNotExists needs.
+#
+# Existing ExternalSecrets are moved by touching them (any annotation change
+# is an UPDATE that passes through this webhook); there is no mutate-existing
+# rule, so the move can be done and checked in batches.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: externalsecret-onepassword-to-connect
+  annotations:
+    # Before the ExternalSecrets of this app (wave 0): with the old store out
+    # of quota they never turn healthy, and a later wave would never apply.
+    argocd.argoproj.io/sync-wave: "-1"
+    policies.kyverno.io/title: ExternalSecret From The 1Password SDK Store To Connect
+    policies.kyverno.io/description: >
+      Rewrites ExternalSecrets of the onepassword ClusterSecretStore
+      (key item/field) as ExternalSecrets of onepassword-connect
+      (key item, property field).
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: split-item-field
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
+            operator: Equals
+            value: onepassword
+          - key: "{{ request.object.spec.secretStoreRef.kind || '' }}"
+            operator: Equals
+            value: ClusterSecretStore
+      skipBackgroundRequests: true
+      mutate:
+        foreach:
+          - list: "request.object.spec.data || `[]`"
+            preconditions:
+              all:
+                - key: "{{ length(split(element.remoteRef.key, '/')) }}"
+                  operator: Equals
+                  value: 2
+                - key: "{{ element.remoteRef.property || '' }}"
+                  operator: Equals
+                  value: ""
+            patchesJson6902: |-
+              - op: replace
+                path: /spec/data/{{elementIndex}}/remoteRef/key
+                value: "{{ split(element.remoteRef.key, '/')[0] }}"
+              - op: add
+                path: /spec/data/{{elementIndex}}/remoteRef/property
+                value: "{{ split(element.remoteRef.key, '/')[1] }}"
+    - name: switch-store
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.secretStoreRef.name || '' }}"
+            operator: Equals
+            value: onepassword
+          - key: "{{ request.object.spec.secretStoreRef.kind || '' }}"
+            operator: Equals
+            value: ClusterSecretStore
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            secretStoreRef:
+              name: onepassword-connect
+---
 # POLICY 6 needs the background controller to patch ExternalSecrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

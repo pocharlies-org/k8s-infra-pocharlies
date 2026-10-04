@@ -1,0 +1,177 @@
+# 1Password Connect (INFRA-511): a local copy of the k8s-pocharlies vault that
+# ESO reads through the `onepassword-connect` ClusterSecretStore.
+#
+# Why it exists: the account is Families, 1,000 service-account requests per
+# 24h for the whole account, and one full re-read of the cluster's
+# ExternalSecrets costs about that much. Connect only spends quota on its own
+# initial sync (connect-sync); every read ESO makes after that is served from
+# the local cache and is unlimited.
+#
+# Manifests rendered from the official chart 1password/connect 2.4.1
+# (app 1.8.2) and kept as plain YAML, like the rest of this repo. Images are
+# the docker.io/1password/connect-{api,sync} 1.8.2 manifests copied with
+# `crane copy` into the Harbor mirror (Kyverno restrict-image-registries).
+#
+# Bootstrap secret, created out of band and NOT in git (it is what lets
+# Connect reach 1Password, so it cannot come from 1Password through ESO):
+#   ns onepassword-connect, Secret op-credentials, key 1password-credentials.json
+#   = the file printed by `op connect server create k8s-pocharlies-connect
+#   --vaults k8s-pocharlies`. A copy lives in the Private vault as the document
+#   "1Password Connect k8s-pocharlies-connect - credentials".
+# The ESO side (Connect access token) is described next to its store:
+# platform/external-secrets/cluster-secret-store-onepassword-connect.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: onepassword-connect
+  namespace: onepassword-connect
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: onepassword-connect
+spec:
+  type: ClusterIP
+  selector:
+    app: onepassword-connect
+  ports:
+    - port: 8080
+      name: connect-api
+    - port: 8081
+      name: connect-sync
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onepassword-connect
+  namespace: onepassword-connect
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: onepassword-connect
+spec:
+  replicas: 1
+  # A second replica would run its own connect-sync and its own initial
+  # fetch; one replica and a fast restart is the cheaper failure mode.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: onepassword-connect
+  template:
+    metadata:
+      labels:
+        app: onepassword-connect
+        app.kubernetes.io/name: onepassword-connect
+    spec:
+      # Same pool as the ESO controller that is its only client.
+      nodeSelector:
+        node-pool: ks5-nvme
+      securityContext:
+        fsGroup: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+        - name: credentials
+          secret:
+            secretName: op-credentials
+            items:
+              - key: 1password-credentials.json
+                path: 1password-credentials.json
+      containers:
+        - name: connect-api
+          image: harbor.lan.e-dani.com/homelab/onepassword-connect-api:1.8.2@sha256:e915c0c843972f02b0e7e2de502bda8bd4a092288b3f1866098a857bd715a281
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          env:
+            - name: OP_SESSION
+              value: /home/opuser/.op/1password-credentials.json
+            - name: OP_BUS_PORT
+              value: "11220"
+            - name: OP_BUS_PEERS
+              value: localhost:11221
+            - name: OP_HTTP_PORT
+              value: "8080"
+            - name: OP_LOG_LEVEL
+              value: info
+          ports:
+            - containerPort: 8080
+              name: connect-api
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /heartbeat
+              port: 8080
+            failureThreshold: 3
+            periodSeconds: 30
+            initialDelaySeconds: 15
+          volumeMounts:
+            - name: shared-data
+              mountPath: /home/opuser/.op/data
+            - name: credentials
+              mountPath: /home/opuser/.op/1password-credentials.json
+              subPath: 1password-credentials.json
+        - name: connect-sync
+          image: harbor.lan.e-dani.com/homelab/onepassword-connect-sync:1.8.2@sha256:6297ca6136c0f0fb096bc64c49e1bc8df2aab35282ebff8c7bb60745ef176d0d
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          env:
+            - name: OP_HTTP_PORT
+              value: "8081"
+            - name: OP_SESSION
+              value: /home/opuser/.op/1password-credentials.json
+            - name: OP_BUS_PORT
+              value: "11221"
+            - name: OP_BUS_PEERS
+              value: localhost:11220
+            - name: OP_LOG_LEVEL
+              value: info
+          ports:
+            - containerPort: 8081
+              name: connect-sync
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /heartbeat
+              port: 8081
+            failureThreshold: 3
+            periodSeconds: 30
+            initialDelaySeconds: 15
+          volumeMounts:
+            - name: shared-data
+              mountPath: /home/opuser/.op/data
+            - name: credentials
+              mountPath: /home/opuser/.op/1password-credentials.json
+              subPath: 1password-credentials.json
