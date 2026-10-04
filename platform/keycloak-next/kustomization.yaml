@@ -25,6 +25,7 @@ resources:
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
+  - agentgateway-write-fixture-user-job.yaml
   - agentgateway-token-smoke-job.yaml
   - keycloak-rbac-auditor-client.yaml
   - keycloak-role-drift-cron.yaml
@@ -83,6 +84,12 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: agentgateway-write-grant-daniel
+  - name: keycloak-agentgateway-write-fixture-user
+    files:
+      - agentgateway-write-fixture-user.sh=scripts/agentgateway-write-fixture-user.sh
+    options:
+      labels:
+        app.kubernetes.io/component: agentgateway-write-fixture-user
   - name: keycloak-agentgateway-token-smoke
     files:
       - agentgateway-token-smoke.sh=scripts/agentgateway-token-smoke.sh
