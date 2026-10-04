@@ -1,7 +1,9 @@
 # Longhorn zombie pods after a k3s restart ("no Pending workload pods")
 
-Tracked in INFRA-41. Diagnosis is closed (INFRA-73); this runbook is the
-operational answer until a fixed Longhorn release exists.
+Tracked in INFRA-41. Diagnosis is closed (INFRA-73). The fix is published in
+Longhorn v1.13.0 and the cluster is being bumped to it through INFRA-122; until
+that bump is deployed and verified, the operational answer below (recreate the
+pod) is what clears a stuck mount.
 
 ## Symptom
 
@@ -28,25 +30,53 @@ already running, so there is no Pending pod to find, the mount fails with "no
 Pending workload pods", and the retry loop never ends.
 
 Fix: https://github.com/longhorn/longhorn-manager/pull/5085, merged to
-`master` and the `v1.13.x` branch only.
+`master` and the `v1.13.x` branch. The backport to the 1.12 line is tracked in
+https://github.com/longhorn/longhorn/issues/13995 (milestone v1.12.2), which is
+**not published** as of 2026-10-05.
 
 ## Version that fixes it
 
-As of 2026-09-13 no published Longhorn release contains the fix:
+The fix ships in chart/image **v1.13.0** — the first published release that
+contains it:
 
-| version | status |
+| version | fix |
 | --- | --- |
-| v1.12.1 | latest published release — no fix |
-| v1.13.0 | planned 2026-09-23 — will contain the fix |
-| v1.11.4, v1.12.2 | backports pending — not published yet |
+| v1.11.2 | this cluster's current chart — no fix |
+| v1.11.3 | published — no fix (backport did not land in 1.11.x) |
+| v1.12.0, v1.12.1 | published (latest of the 1.12 line) — no fix |
+| v1.12.2 | not published; backport #13995 pending |
+| **v1.13.0** | **contains the fix** |
 
-This cluster runs chart 1.11.2. The GitOps surface is `infra/longhorn.yaml`
-(multi-source Application, chart pinned there) plus `infra/longhorn/values.yaml`
-in `k8s-gitops-pocharlies`, branch `deploy/prod`. There is **no configuration
-workaround** — recovery is operational (recreate the pod). Do not bump the
-chart until a version with the fix is published; bumping to v1.12.1 today
-changes nothing except risk. When v1.13.0 or a backport lands, the change is a
-PR raising `targetRevision` in `infra/longhorn.yaml` only.
+The GitOps surface is `infra/longhorn.yaml` (multi-source Application, chart
+pinned there) plus `infra/longhorn/values.yaml` in `k8s-gitops-pocharlies`,
+branch `deploy/prod`. There is **no configuration workaround** — until v1.13.0
+is deployed, recovery is operational (recreate the pod).
+
+### Upgrade path (INFRA-122)
+
+Longhorn only supports upgrading one minor version at a time and does **not**
+support downgrade — rolling back means restoring volumes from backup
+(`docs/runbook-longhorn-systembackup.md`). From 1.11.2 the mandatory route is
+therefore **1.11.2 → 1.12.1 → 1.13.0**, one PR per bump of `targetRevision` in
+`infra/longhorn.yaml`:
+
+1. **Pre-check before each bump**: read the upstream upgrade notes for the
+   target version and compare `infra/longhorn/values.yaml` against that chart's
+   defaults (`helm show values longhorn/longhorn --version <v>`) for renamed or
+   removed keys. Chart 1.13.0 requires Kubernetes `>=1.34` (the cluster runs
+   k3s v1.36 — fine).
+2. **Verify a backup before every bump** (`kubectl get backups.longhorn.io -n
+   longhorn-system`; the last one must be `Complete`).
+3. Merge only with all volumes Healthy, none Degraded, and the volumes' engines
+   upgraded to the current image (Longhorn's own EngineImage mechanism — e.g.
+   `defaultSettings.concurrentAutomaticEngineUpgradePerNodeLimit` > 0 in
+   `values.yaml`) before moving to the next minor.
+4. The ArgoCD app is `automated` + `selfHeal`: **merging is the upgrade**. A
+   volume left Degraded mid-route stops the path and escalates to the CTO —
+   do not continue to the next minor, and do not downgrade.
+
+If the symptom reappears on a node before v1.13.0 is running (or a k3s restart
+happens during the upgrade window), use the recovery below; it is unchanged.
 
 ## Recovery (operational)
 
