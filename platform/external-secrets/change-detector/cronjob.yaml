@@ -55,9 +55,11 @@ spec:
             - name: list-vault
               image: docker.io/1password/op:2.40.0@sha256:3835e4e0fa5eb0fd9c12672c6ae65530f00789663dca3ea39e5b02eb90cd1b54
               imagePullPolicy: IfNotPresent
-              # op refuses state dirs (config, SingleUserEnvironment) it does not own, and
-              # an emptyDir root is root-owned (group 65532 via fsGroup): create the
-              # dirs as this uid under /work so they are its own.
+              # op only accepts state dirs owned by the image's own user (opuser,
+              # uid 999): as any other uid it fails with "not owned by the current
+              # user" even on dirs it just created. Run this container as 999; the
+              # pod-wide 65532 stays for the python container, which only reads
+              # /work (world-readable files).
               command: ["/bin/sh", "-ec", "mkdir -p /work/home/.config /work/tmp && op item list --vault \"$VAULT\" --format json > /work/items.json"]
               env:
                 - { name: VAULT, value: k8s-pocharlies }
@@ -72,6 +74,8 @@ spec:
                 requests: { cpu: 20m, memory: 64Mi }
                 limits: { cpu: 500m, memory: 256Mi }
               securityContext:
+                runAsUser: 999
+                runAsGroup: 999
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
                 capabilities: { drop: ["ALL"] }
