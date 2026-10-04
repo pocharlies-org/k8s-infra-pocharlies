@@ -315,6 +315,12 @@ spec:
   admission: true
   background: true
   emitWarning: false
+  # Kyverno's defaulting webhook injects its defaults (Audit here, and
+  # skipBackgroundRequests: true on mutate rules) into the live object at
+  # admission time. ArgoCD cannot normalize webhook-injected fields, so they
+  # must be declared here exactly as the webhook writes them, or the app is
+  # OutOfSync forever (INFRA-481). Same pattern as every other policy above.
+  validationFailureAction: Audit
   webhookConfiguration:
     failurePolicy: Ignore
   rules:
@@ -335,6 +341,7 @@ spec:
           - key: "{{ length(request.object.spec.dataFrom[?sourceRef.generatorRef] || `[]`) }}"
             operator: Equals
             value: 0
+      skipBackgroundRequests: true
       mutate:
         patchStrategicMerge:
           spec:
@@ -356,6 +363,7 @@ spec:
           - key: "{{ length(request.object.spec.dataFrom[?sourceRef.generatorRef] || `[]`) }}"
             operator: Equals
             value: 0
+      skipBackgroundRequests: true
       mutate:
         mutateExistingOnPolicyUpdate: true
         targets:
