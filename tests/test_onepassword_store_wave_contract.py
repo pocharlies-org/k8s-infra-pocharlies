@@ -24,7 +24,7 @@ def _build(kustomization):
     docs = []
     for res in yaml.safe_load(kustomization.read_text()).get("resources", []):
         if "://" in res:
-            continue
+            raise AssertionError(f"resource remoto {res}: el test no puede medir sus waves")
         path = kustomization.parent / res
         if path.is_dir():
             docs += _build(path / "kustomization.yaml")
@@ -57,13 +57,22 @@ class OnePasswordStoreWaveContract(unittest.TestCase):
         self.assertEqual([o for o in otros if o[2] >= LAST], [])
 
     def test_los_otros_stores_no_van_en_la_ultima_wave(self):
-        for name in ("onepassword-connect", "kubernetes-cnpg", "control-nexus-pagos"):
-            path = STORES / f"cluster-secret-store-{name}.yaml"
-            if not path.exists():
-                continue
-            for d in yaml.safe_load_all(path.read_text()):
-                if d and d.get("kind") == "ClusterSecretStore":
-                    self.assertLess(_wave(d), LAST, name)
+        stores = {d["metadata"]["name"]: d for d in _build(ROOT / "kustomization.yaml")
+                  if d["kind"] == "ClusterSecretStore"}
+        # Estos dos viven en este repo: si faltan, el test falla (no se descartan en silencio).
+        for name in ("onepassword-connect", "kubernetes-control-nexus-pagos"):
+            self.assertIn(name, stores, f"el store {name} ya no está en el build de k8s-infra")
+        for name, doc in stores.items():
+            if name != "onepassword":
+                self.assertLess(_wave(doc), LAST, name)
+
+    def test_store_kubernetes_cnpg_no_esta_en_este_repo(self):
+        stores = [d["metadata"]["name"] for d in _build(ROOT / "kustomization.yaml")
+                  if d["kind"] == "ClusterSecretStore"]
+        if "kubernetes-cnpg" not in stores:
+            self.skipTest("kubernetes-cnpg no se define en k8s-infra (vive en otro repo): su wave no se puede medir aquí")
+        self.assertLess(_wave(next(d for d in _build(ROOT / "kustomization.yaml")
+                                   if d["metadata"].get("name") == "kubernetes-cnpg")), LAST)
 
 
 if __name__ == "__main__":
