@@ -255,6 +255,14 @@ class OpContainerStateDirTest(unittest.TestCase):
             self.assertRegex(c, r"mkdir -p [^\n]*/home/\.config[^\n]* && op item list")
             self.assertRegex(c, r"readOnlyRootFilesystem: true")
 
+    def test_op_runs_as_the_image_user(self):
+        """1password/op:2.40.0 runs as opuser (999); op rejects state dirs owned
+        by any other uid (reproduced with docker, DGX-506): the op container
+        must run as 999 even though the pod default is 65532."""
+        for c in self.op:
+            self.assertRegex(c, r"runAsUser: 999\n")
+            self.assertRegex(c, r"runAsGroup: 999\n")
+
     def test_no_container_writes_the_image_tmp(self):
         self.assertNotRegex((BASE / "cronjob.yaml").read_text(), r"(HOME|TMPDIR|XDG_CONFIG_HOME|OP_CONFIG_DIR), value: /tmp\b")
         self.assertNotRegex(self.volumes + "".join(self.op), r"mountPath: /tmp\b")
