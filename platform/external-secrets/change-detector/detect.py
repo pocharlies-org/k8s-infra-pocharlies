@@ -1,7 +1,8 @@
 """onepassword-change-detector (DGX-506).
 
 Every ExternalSecret on the onepassword ClusterSecretStore is refreshPolicy
-OnChange (DGX-505): ESO reads 1Password only when an ExternalSecret is created
+OnChange (DGX-505), and keeps it when Kyverno moves it to onepassword-connect
+(INFRA-511): ESO reads 1Password only when an ExternalSecret is created
 or changes. This job is how a value rotated in the 1Password app still reaches
 the cluster on its own, for 1-2 requests a run instead of one per reference.
 
@@ -29,7 +30,10 @@ import urllib.error
 import urllib.request
 
 ITEMS_FILE = os.environ.get("ITEMS_FILE", "/work/items.json")
-STORE = os.environ.get("STORE_NAME", "onepassword")
+# The stores whose ExternalSecrets are forced: the onepasswordSDK store and the
+# 1Password Connect store that Kyverno moves them to (INFRA-511). Both read the
+# same vault; `<item>/<field>` and `<item>` + property start with the same item.
+STORES = {s.strip() for s in os.environ.get("STORE_NAMES", "onepassword,onepassword-connect").split(",") if s.strip()}
 NS = os.environ.get("STATE_NAMESPACE", "external-secrets-operator")
 CM = os.environ.get("STATE_CONFIGMAP", "onepassword-change-detector-state")
 DRY_RUN = os.environ.get("DRY_RUN") == "1"
@@ -63,7 +67,7 @@ def referenced_items(spec):
 
 
 def on_store(spec):
-    return (spec.get("secretStoreRef") or {}).get("name") == STORE
+    return (spec.get("secretStoreRef") or {}).get("name") in STORES
 
 
 def force_sync(path, ts, label, forced):

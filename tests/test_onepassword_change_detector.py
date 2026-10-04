@@ -133,6 +133,16 @@ class ChangeDetectorTest(unittest.TestCase):
             f"{ESO}/namespaces/merchant/externalsecrets/merchant-secrets",
         ])
 
+    def test_connect_store_consumers_are_forced_too(self):
+        # INFRA-511: Kyverno moves ExternalSecrets to onepassword-connect, where
+        # the reference is `key: <item>` + property; they keep OnChange and
+        # still need the force-sync when their item changes.
+        connect = es("hermes", "hermes-connect", store="onepassword-connect", keys=["gsc-mcp"])
+        items = [dict(i, version=i["version"] + (1 if i["id"] == "bbb" else 0)) for i in ITEMS_V1]
+        api = self.run_detector(items, FakeAPI(CLUSTER_ES + [connect], CLUSTER_CES, state=state_of(ITEMS_V1)))
+        self.assertIn(f"{ESO}/namespaces/hermes/externalsecrets/hermes-connect", api.forced())
+        self.assertNotIn(f"{ESO}/namespaces/skirmshop/externalsecrets/pg", api.forced())
+
     def test_ces_template_is_forced_not_its_children(self):
         items = [dict(i, version=i["version"] + (1 if i["id"] == "aaa" else 0)) for i in ITEMS_V1]
         api = self.run_detector(items, FakeAPI(CLUSTER_ES, CLUSTER_CES, state=state_of(ITEMS_V1)))

@@ -19,7 +19,9 @@ automático `prune: false`, `selfHeal: true`):
 ## 2. Dependencias, en ambos sentidos
 
 - **Depende de** — `k8s-gitops-pocharlies` (registra las Applications y su CI reutilizable `reusable-ci.yml@96ec4d91…`),
-  charts upstream, Cloudflare/OVH (DNS y servidores KS-5), Tailscale, Vault/1Password (ExternalSecrets).
+  charts upstream, Cloudflare/OVH (DNS y servidores KS-5), Tailscale, Vault/1Password (ExternalSecrets), 1Password
+  Connect en el propio clúster (`platform/onepassword-connect`; secretos fuera de banda: `op-credentials` en el ns
+  `onepassword-connect` y `onepassword-connect-token` en `external-secrets-operator`; imagen en Harbor).
 - **Dependen de él** — prácticamente todo: cada host público/LAN nuevo necesita su IngressRoute aquí
   (`networking/traefik-edge/*-public.yaml`, `networking/traefik-lan/*-lan.yaml`; el DaemonSet del edge solo observa un
   allowlist de namespaces, por eso rutas como `langfuse-public.yaml` viven aquí); `k8s-adguard-pocharlies` (rewrites DNS
@@ -45,7 +47,7 @@ automático `prune: false`, `selfHeal: true`):
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
 | Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
-| Secretos desde 1Password | ClusterSecretStore `onepassword` + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h) | `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
+| Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
 
@@ -81,5 +83,9 @@ Nº de casos: **pendiente de medir**.
 - El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
+- ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
+  `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
+  reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect
+  está en Harbor; ver `docs/disaster-recovery.md`.
 
 Última verificación contra el código: 2026-10-01 · 5d52ca2 (origin/main)
