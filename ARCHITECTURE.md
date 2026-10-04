@@ -46,6 +46,7 @@ automático `prune: false`, `selfHeal: true`):
 | Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
 | Secretos desde 1Password | ClusterSecretStore `onepassword` + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h) | `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
+| Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
 
 ## 5. Cómo se construye aquí
