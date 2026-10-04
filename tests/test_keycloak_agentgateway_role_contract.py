@@ -6,6 +6,14 @@ of OWU-28-g live in test_agentgateway_write_fixture_user_contract.py."""
 import pathlib
 import unittest
 
+# ci.yml drives these files with `python3 -m unittest tests/<file>.py` from the
+# repo root: unittest puts only the root on sys.path (pytest does not), so the
+# sibling testlib module must be importable explicitly.
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
 from keycloak_hook_testlib import BASE, ROOT, WRITE_ROLE_FAKE_KCADM, make_token, run_hook
 
 SUBJECT = "e51253a7-c137-4c6c-9fb9-af9cecd3b147"

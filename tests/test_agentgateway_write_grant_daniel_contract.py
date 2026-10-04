@@ -15,6 +15,14 @@ import json
 import re
 import unittest
 
+# ci.yml drives these files with `python3 -m unittest tests/<file>.py` from the
+# repo root: unittest puts only the root on sys.path (pytest does not), so the
+# sibling testlib module must be importable explicitly.
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
 from keycloak_hook_testlib import (
     BASE,
     COMMON,
