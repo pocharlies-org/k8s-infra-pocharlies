@@ -33,14 +33,10 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
-
-progress() {
-  printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
-}
+# Mechanical helpers come from the shared reconcile library (INFRA-477); this
+# script keeps its own upsert_audience_mapper below, which overrides the
+# library one: this PUBLIC client also pins userinfo.token.claim=false.
+. "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 # Immutable identity of this reconciler: a PUBLIC PKCE browser client only.
 # It carries no secret and no service account; it exists so the gateway can
@@ -75,56 +71,6 @@ for uri in ${REDIRECT_URIS}; do
     *) fail "REDIRECT_URIS contains a non-exact or foreign URI: ${uri}" ;;
   esac
 done
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
-
-resolve_client_optional() {
-  rows="$(kget clients -q "clientId=${CLIENT_ID}" --fields id --format csv --noquotes | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate client ${CLIENT_ID}"
-  printf '%s' "${rows}"
-}
-
-require_client() {
-  uuid="$(resolve_client_optional)"
-  [ -n "${uuid}" ] || fail "client ${CLIENT_ID} is missing"
-  printf '%s' "${uuid}"
-}
-
-client_field() {
-  kget "clients/$1" --fields "$2" --format csv --noquotes | nonempty_lines
-}
-
-assert_client_boolean() {
-  actual="$(client_field "$1" "$2")"
-  [ "${actual}" = "$3" ] || fail "client field $2 expected $3"
-}
 
 redirect_uris_json() {
   # JSON array of the exact URIs, from the space-separated list.
@@ -167,23 +113,9 @@ upsert_client() {
   CLIENT_UUID="$(require_client)"
 }
 
-filter_mapper_id() {
-  expected="$1"
-  while IFS=, read -r mapper_id mapper_name; do
-    if [ "${mapper_name}" = "${expected}" ]; then
-      printf '%s\n' "${mapper_id}"
-    fi
-  done
-}
-
-mapper_uuid_optional() {
-  rows="$(kget "clients/${CLIENT_UUID}/protocol-mappers/models" \
-    --fields id,name --format csv --noquotes | \
-    filter_mapper_id "${MAPPER_NAME}" | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate mapper ${MAPPER_NAME}"
-  printf '%s' "${rows}"
-}
-
+# Overrides the library upsert_audience_mapper: this public browser client
+# also pins userinfo.token.claim=false (house pattern verified on
+# agentgateway-social-mcp), which the shared helper does not carry.
 upsert_audience_mapper() {
   mapper_uuid="$(mapper_uuid_optional)"
   endpoint="clients/${CLIENT_UUID}/protocol-mappers/models"
@@ -207,21 +139,12 @@ upsert_audience_mapper() {
     fail "failed to reconcile audience mapper"
 }
 
-role_exists() {
-  kget "roles/$1" --fields id >/dev/null 2>&1
-}
-
 verify_realm_roles() {
   # The realm role is owned by agentgateway-write-role.sh; a missing role
   # means that hook has not run for this commit, never a reason to create it.
   for role in ${REALM_SCOPE_ROLE_NAMES}; do
     role_exists "${role}" || fail "${role} is missing; the agentgateway-write-role hook owns it"
   done
-}
-
-role_scope_has_direct_role() {
-  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
 }
 
 ensure_realm_scope_mapping() {

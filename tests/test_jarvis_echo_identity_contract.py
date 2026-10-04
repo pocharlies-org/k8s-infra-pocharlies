@@ -5,6 +5,7 @@ import json, os, pathlib, shutil, subprocess, tempfile, textwrap, unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 SCRIPT = BASE / "scripts" / "jarvis-echo-client.sh"
+LIB = BASE / "scripts" / "keycloak-reconcile-lib.sh"
 
 # Stateful stand-in for kcadm.sh: JSON state across calls, a call journal, and
 # minted-token semantics measured live (INFRA-44): with fullScopeAllowed=true
@@ -194,7 +195,11 @@ class JarvisEchoIdentityContractTest(unittest.TestCase):
         self.assertIn("serviceAccountsEnabled=true", script)
         self.assertIn("standardFlowEnabled=false", script)
         self.assertIn("directAccessGrantsEnabled=false", script)
-        self.assertIn("oidc-audience-mapper", script)
+        # INFRA-477: the mechanical helpers (audience mapper upsert, mint,
+        # login) live in the shared reconcile library; the reconciler sources
+        # it and keeps only policy here.
+        self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script)
+        self.assertIn("oidc-audience-mapper", LIB.read_text())
         # The role is owned by the read-grants hook: never created or deleted
         # here, and the reconciler refuses to run without it.
         self.assertIn("the agentgateway-read-grants hook owns it", script)
@@ -204,7 +209,8 @@ class JarvisEchoIdentityContractTest(unittest.TestCase):
         # The secret is never written: neither branch of the upsert carries a
         # secret field, and the mint only reads it through the admin API.
         self.assertNotIn("-s secret=", script)
-        self.assertIn('"clients/${CLIENT_UUID}/client-secret"', script)
+        self.assertIn('client_secret_via_admin "${CLIENT_UUID}"', script)
+        self.assertIn('"clients/$1/client-secret"', LIB.read_text())
         self.assertIn("check_exact_token", script)
         self.assertIn("restored to true and confirmed", script)
         self.assertIn("manual intervention required", script)
@@ -388,6 +394,30 @@ class JarvisEchoIdentityContractTest(unittest.TestCase):
         self.assertIn("value: rollback", rollback)
         self.assertIn("activeDeadlineSeconds: 900", rollback)
         self.assertIn("automountServiceAccountToken: false", rollback)
+        # INFRA-477 consistency: the rollback job pins the URL like the sync job.
+        self.assertIn("KEYCLOAK_URL", rollback)
+
+    def test_reconcile_library_is_mounted_for_every_reconciler_that_sources_it(self):
+        # A sourced helper that is not in the ConfigMap would break the
+        # PostSync hook at runtime, so every entrypoint that loads the library
+        # must ship it in its own ConfigMap generator.
+        kustomization = (BASE / "kustomization.yaml").read_text()
+        for generator in (
+            "keycloak-agentgateway-domain-roles",
+            "keycloak-chat-agentgateway-client",
+            "keycloak-agentgateway-chat-mcp-client",
+            "keycloak-jarvis-echo-client",
+        ):
+            block = kustomization.split("name: " + generator, 1)[1].split("  - name:", 1)[0]
+            self.assertIn("keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh", block, generator)
+        for name in (
+            "agentgateway-domain-roles.sh",
+            "chat-agentgateway-client.sh",
+            "agentgateway-chat-mcp-client.sh",
+            "jarvis-echo-client.sh",
+        ):
+            script = (BASE / "scripts" / name).read_text()
+            self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script, name)
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_keycloak_kustomization_builds(self):
@@ -398,6 +428,9 @@ class JarvisEchoIdentityContractTest(unittest.TestCase):
             capture_output=True,
         )
         self.assertIn("keycloak-jarvis-echo-client", result.stdout)
+        # The library must survive into the built ConfigMaps, not just the
+        # generator list: four data keys (domain-roles, chat, chat-mcp, jarvis).
+        self.assertGreaterEqual(result.stdout.count("keycloak-reconcile-lib.sh: |"), 4)
 
 
 if __name__ == "__main__":

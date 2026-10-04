@@ -46,6 +46,7 @@ spec:
             - secretRef: { name: keycloak-bootstrap }
           env:
             - { name: MODE, value: rollback }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: CLIENT_ID, value: jarvis-echo }
             - { name: HOME, value: /tmp }
           securityContext:
