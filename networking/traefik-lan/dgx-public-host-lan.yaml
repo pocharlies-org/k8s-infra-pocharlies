@@ -51,7 +51,7 @@ spec:
     # por el bypass. Por encima del control set (400), que antes mandaba
     # /api/messages a la copia vieja del dashboard.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (PathPrefix(`/messages`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
