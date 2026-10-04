@@ -30,6 +30,10 @@ ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-grant-daniel-rollback-job.y
 
 SUBJECT = "e51253a7-c137-4c6c-9fb9-af9cecd3b147"
 USERNAME = "me@e-dani.com"
+# OWU-28 historia g: the second tolerated human holder of the role, the QA
+# fixture of the reverse C2 test (owned by
+# agentgateway-write-fixture-user.sh, pinned there by exact username).
+FIXTURE = "qa-write-sin-vinculo@e-dani.com"
 ROLE = "agentgateway-write"
 SA = "service-account-agentgateway-mcp"
 
@@ -362,7 +366,7 @@ class WriteGrantDanielStaticTest(unittest.TestCase):
     def test_catalog_and_principals_declare_the_grant(self):
         catalog = json.loads((BASE / "ROLES.yaml").read_text())
         entry = next(r for r in catalog["roles"] if r["name"] == ROLE)
-        self.assertEqual(entry["grantees"], sorted([USERNAME, SA]))
+        self.assertEqual(entry["grantees"], sorted([USERNAME, FIXTURE, SA]))
         self.assertIn("OWU-80", entry["origin"])
         self.assertIn("OWU-80", entry["privilege"]["denies"])
         principals_text = (BASE / "PRINCIPALS.md").read_text()
@@ -444,11 +448,11 @@ WRITE_ROLE_FAKE_KCADM = textwrap.dedent(
       get)
         res="$1"
         shift
-        fields=""; q=""
+        fields=""; q=""; exact=""
         prev=""
         for a in "$@"; do
           [ "$prev" = "--fields" ] && fields="$a"
-          case "$a" in clientId=*) q="${a#clientId=}";; max=*) q="list";; esac
+          case "$a" in clientId=*) q="${a#clientId=}";; max=*) q="list";; username=*) exact="yes";; esac
           prev="$a"
         done
         case "$res" in
@@ -485,12 +489,13 @@ WRITE_ROLE_FAKE_KCADM = textwrap.dedent(
             esac
             ;;
           roles/*/users)
+            printf 'service-account-agentgateway-mcp\\n'
             if fx intruder; then
-              printf 'service-account-agentgateway-mcp\\nintruder@e-dani.com\\n'
-            elif fx human_absent; then
-              printf 'service-account-agentgateway-mcp\\n'
-            else
-              printf 'service-account-agentgateway-mcp\\nme@e-dani.com\\n'
+              printf 'intruder@e-dani.com\\n'
+            elif fx fixture_present; then
+              printf 'qa-write-sin-vinculo@e-dani.com\\n'
+            elif ! fx human_absent; then
+              printf 'me@e-dani.com\\n'
             fi
             ;;
           roles/*/groups)
@@ -503,9 +508,15 @@ WRITE_ROLE_FAKE_KCADM = textwrap.dedent(
             esac
             ;;
           users)
+            if [ -n "$exact" ]; then
+              # exact-username search of the OWU-28-g fixture tolerance
+              if fx fixture_present; then printf 'fixture-id\\n'; fi
+              exit 0
+            fi
             if fx human_absent; then printf 'other-id\\n'
             elif fx intruder; then printf "$FAKE_SUBJECT\\nintruder-id\\nother-id\\n"
             else printf "$FAKE_SUBJECT\\nother-id\\n"; fi
+            if fx fixture_present; then printf 'fixture-id\\n'; fi
             ;;
           users/*/role-mappings/realm/composite)
             uid="${res#users/}"; uid="${uid%/role-mappings/realm/composite}"
@@ -515,6 +526,9 @@ WRITE_ROLE_FAKE_KCADM = textwrap.dedent(
               "$FAKE_SUBJECT")
                 if fx human_absent; then printf 'default-roles-edani\\n'
                 else printf 'agentgateway-write\\ndefault-roles-edani\\n'; fi ;;
+              fixture-id)
+                if fx fixture_present; then printf 'agentgateway-write\\ndefault-roles-edani\\n'
+                else printf 'default-roles-edani\\n'; fi ;;
               intruder-id) printf 'agentgateway-write\\n' ;;
               *) printf 'default-roles-edani\\n' ;;
             esac
@@ -526,6 +540,9 @@ WRITE_ROLE_FAKE_KCADM = textwrap.dedent(
               "$FAKE_SUBJECT")
                 if fx human_absent || fx intruder; then printf 'default-roles-edani\\n'
                 else printf 'agentgateway-write\\ndefault-roles-edani\\n'; fi ;;
+              fixture-id)
+                if fx fixture_present; then printf 'agentgateway-write\\ndefault-roles-edani\\n'
+                else printf 'default-roles-edani\\n'; fi ;;
               *) printf 'default-roles-edani\\n' ;;
             esac
             ;;
