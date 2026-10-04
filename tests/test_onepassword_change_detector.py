@@ -212,5 +212,43 @@ class CronJobManifestTest(unittest.TestCase):
         self.assertRegex(minute, r"^\d+$", "a fixed minute: at most one run per hour")
 
 
+class OpContainerStateDirTest(unittest.TestCase):
+    """Live failure: `op` as uid 65532 refused /tmp/.config/op and
+    /tmp/com.agilebits.op.SingleUserEnvironment ("not owned by the current
+    user"): the dirs came from a root-owned emptyDir. Every container that
+    runs `op` must keep HOME, config and TMPDIR under a writable emptyDir
+    mount and create those dirs itself, never under the image's /tmp."""
+
+    def setUp(self):
+        text = (BASE / "cronjob.yaml").read_text()
+        self.volumes = text.split("\n          volumes:\n", 1)[1]
+        containers = re.split(r"\n            - name: ", "\n" + text.split("\n          initContainers:\n", 1)[1])[1:]
+        self.op = [c for c in containers if re.search(r"\bop item\b", c)]
+
+    def test_there_is_an_op_container(self):
+        self.assertTrue(self.op)
+
+    def test_state_env_is_under_a_mounted_emptydir(self):
+        for c in self.op:
+            mount = re.search(r"\{ name: (\w+), mountPath: (/\w+) \}", c)
+            self.assertIsNotNone(mount, "op needs a writable volume mount")
+            name, path = mount.groups()
+            self.assertRegex(self.volumes, rf"- name: {name}\n\s+emptyDir:")
+            self.assertNotIn("readOnly", mount.group(0))
+            for var in ("HOME", "XDG_CONFIG_HOME", "OP_CONFIG_DIR", "TMPDIR"):
+                value = re.search(rf"name: {var}, value: (\S+) \}}", c)
+                self.assertIsNotNone(value, f"{var} must be set")
+                self.assertTrue(value.group(1).startswith(path + "/"), f"{var}={value.group(1)} not under {path}")
+
+    def test_op_creates_its_own_dirs_as_the_job_uid(self):
+        for c in self.op:
+            self.assertRegex(c, r"mkdir -p [^\n]*/home/\.config[^\n]* && op item list")
+            self.assertRegex(c, r"readOnlyRootFilesystem: true")
+
+    def test_no_container_writes_the_image_tmp(self):
+        self.assertNotRegex((BASE / "cronjob.yaml").read_text(), r"(HOME|TMPDIR|XDG_CONFIG_HOME|OP_CONFIG_DIR), value: /tmp\b")
+        self.assertNotRegex(self.volumes + "".join(self.op), r"mountPath: /tmp\b")
+
+
 if __name__ == "__main__":
     unittest.main()

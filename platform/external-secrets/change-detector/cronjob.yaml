@@ -55,10 +55,16 @@ spec:
             - name: list-vault
               image: docker.io/1password/op:2.40.0@sha256:3835e4e0fa5eb0fd9c12672c6ae65530f00789663dca3ea39e5b02eb90cd1b54
               imagePullPolicy: IfNotPresent
-              command: ["/bin/sh", "-ec", "op item list --vault \"$VAULT\" --format json > /work/items.json"]
+              # op refuses state dirs (config, SingleUserEnvironment) it does not own, and
+              # an emptyDir root is root-owned (group 65532 via fsGroup): create the
+              # dirs as this uid under /work so they are its own.
+              command: ["/bin/sh", "-ec", "mkdir -p /work/home/.config /work/tmp && op item list --vault \"$VAULT\" --format json > /work/items.json"]
               env:
                 - { name: VAULT, value: k8s-pocharlies }
-                - { name: HOME, value: /tmp }
+                - { name: HOME, value: /work/home }
+                - { name: XDG_CONFIG_HOME, value: /work/home/.config }
+                - { name: OP_CONFIG_DIR, value: /work/home/.config/op }
+                - { name: TMPDIR, value: /work/tmp }
                 - name: OP_SERVICE_ACCOUNT_TOKEN
                   valueFrom:
                     secretKeyRef: { name: onepassword-service-account, key: token }
@@ -71,7 +77,6 @@ spec:
                 capabilities: { drop: ["ALL"] }
               volumeMounts:
                 - { name: work, mountPath: /work }
-                - { name: tmp, mountPath: /tmp }
           containers:
             - name: force-sync
               image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
@@ -97,6 +102,4 @@ spec:
                 name: onepassword-change-detector
                 defaultMode: 0444
             - name: work
-              emptyDir: { sizeLimit: 16Mi }
-            - name: tmp
               emptyDir: { sizeLimit: 16Mi }
