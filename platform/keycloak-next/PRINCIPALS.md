@@ -13,7 +13,12 @@ Measured against the live realm on 2026-09-24: 9 users + 10 service accounts
 `claude-sessions-norol`, `-other`, `-test`, created by admin API outside this
 repo). INFRA-250 adds the 20th, `service-account-keycloak-rbac-auditor`,
 created by its own PostSync (`keycloak-rbac-auditor-client.yaml`) in the same
-sync that ships this entry.
+sync that ships this entry. INFRA-477 adds the 21st,
+`service-account-jarvis-echo`, the client the INFRA-411 session had created
+by hand on 2026-10-03 (the process error that made `keycloak-role-drift`
+fail): adopted, not recreated, by its own PostSync
+(`jarvis-echo-client.yaml`), so its service-account sub keeps matching the
+AgentGateway identity bindings approved in k8s-agentgateway-pocharlies#170.
 
 ## Rules
 
@@ -72,6 +77,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
+| `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
 | `service-account-synapse-draft-orchestrator` | sa | DevOps | activo | M2M de los borradores de Synapse; porta synapse-draft-m2m. |
@@ -319,6 +325,19 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Consumidor MCP de las métricas de la compañía; porta company-metrics-read.",
       "realm_roles": [
         "company-metrics-read",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-jarvis-echo",
+      "type": "sa",
+      "client": "jarvis-echo",
+      "owner": "DevOps",
+      "source": "INFRA-411 (skill jarvis-alexa; client creado a mano el 03-10 por la API de admin — cauce corregido en INFRA-477); veredicto de security en k8s-agentgateway-pocharlies#170 (identity-bindings del sub 1bcb6c47-0a01-4717-959d-9755e2c9ad36); adoptado por platform/keycloak-next/jarvis-echo-client.yaml",
+      "purpose": "Identidad M2M de la skill de Alexa jarvis-alexa (ns jarvis): lee el calendario de la Agenda del Echo Show con calendar_list_events por AgentGateway /workspace. Solo lectura: agentgateway-read:workspace; nunca agentgateway-write.",
+      "realm_roles": [
+        "agentgateway-read:workspace",
         "default-roles-edani"
       ],
       "status": "activo"

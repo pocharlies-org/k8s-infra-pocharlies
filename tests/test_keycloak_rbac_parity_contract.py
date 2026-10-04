@@ -22,6 +22,7 @@ DOMAIN_ROLES = SCRIPTS / "agentgateway-domain-roles.sh"
 MCP_SA = "service-account-agentgateway-mcp"
 OPENCLAW_SA = "service-account-openclaw-readonly-agentgateway"
 CHAT_SA = "service-account-chat-agentgateway"
+JARVIS_SA = "service-account-jarvis-echo"
 
 
 def shell_list(path, variable):
@@ -44,18 +45,23 @@ class RoleCatalogParityTest(unittest.TestCase):
         reads = shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")
         openclaw = shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")
         chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
+        jarvis = shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES")
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
+        self.assertTrue(set(jarvis) <= set(reads))
         owned = owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
             # SC-699: the chat grantee travels in the read-grants holder
             # allowlist (EXPECTED_CHAT_READ_ROLE_NAMES); the grant itself is
-            # owned by chat-agentgateway-client.sh.
+            # owned by chat-agentgateway-client.sh. INFRA-477: same rule for
+            # the jarvis-echo grantee (EXPECTED_JARVIS_READ_ROLE_NAMES), the
+            # grant owned by jarvis-echo-client.sh.
             expected = (
                 {MCP_SA}
                 | ({OPENCLAW_SA} if role in openclaw else set())
                 | ({CHAT_SA} if role in chat else set())
+                | ({JARVIS_SA} if role in jarvis else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -76,6 +82,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 21)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 11)
 
 

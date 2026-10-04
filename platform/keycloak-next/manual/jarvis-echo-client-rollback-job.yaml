@@ -1,0 +1,65 @@
+# Emergency rollback, deliberately excluded from kustomization.yaml. Deletes
+# the jarvis-echo client (and with it its service account and the reviewed
+# grant). The shared route role agentgateway-read:workspace is retained: it is
+# owned by agentgateway-read-grants-job.yaml, referenced by the AgentGateway
+# policy, and keeps its other reviewed holder (agentgateway-mcp). Run this
+# only together with removing the entry from PRINCIPALS.md and the grantees
+# from ROLES.yaml in the same PR (INFRA-219 rule).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-jarvis-echo-client-rollback
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: jarvis-echo-client-rollback
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: jarvis-echo-client-rollback
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector: { node-pool: ks5-nvme }
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: rollback-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          command: ["/bin/sh", "/opt/bootstrap/jarvis-echo-client.sh"]
+          envFrom:
+            - secretRef: { name: keycloak-bootstrap }
+          env:
+            - { name: MODE, value: rollback }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: CLIENT_ID, value: jarvis-echo }
+            - { name: HOME, value: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-jarvis-echo-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

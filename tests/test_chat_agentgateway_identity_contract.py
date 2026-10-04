@@ -12,6 +12,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 SCRIPT = BASE / "scripts" / "chat-agentgateway-client.sh"
+LIB = BASE / "scripts" / "keycloak-reconcile-lib.sh"
 
 # Minimal stateful stand-in for kcadm.sh. State lives in a JSON file so each
 # subprocess invocation sees what the previous one changed, and every call is
@@ -236,7 +237,10 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("standardFlowEnabled=false", script)
         self.assertIn("directAccessGrantsEnabled=false", script)
         self.assertIn("fullScopeAllowed=false", script)
-        self.assertIn("oidc-audience-mapper", script)
+        # INFRA-477: the mechanical helpers live in the shared reconcile
+        # library; this script sources it and keeps only the policy.
+        self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script)
+        self.assertIn("oidc-audience-mapper", LIB.read_text())
         self.assertIn('"clients/${CLIENT_UUID}/scope-mappings/realm"', script)
         self.assertIn("ensure_role_scope_mapping", script)
         self.assertIn('"roles/$1/users" -q first=0 -q max=2', script)

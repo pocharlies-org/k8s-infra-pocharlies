@@ -49,14 +49,11 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
-
-progress() {
-  printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
-}
+# Mechanical helpers (fail, progress, login, kget, client/mapper/SA lookups,
+# mint) live in the shared reconcile library; every policy — the reviewed
+# role set, the guards below, exclusivity and the audience mapper — stays in
+# this script, unchanged.
+. "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
 [ "${RECONCILE_CONTRACT_VERSION}" = "2" ] || fail "unsupported reconcile contract version"
@@ -76,56 +73,6 @@ case "${MODE}" in
   rollback) ;;
   *) fail "unsupported MODE=${MODE}" ;;
 esac
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
-
-resolve_client_optional() {
-  rows="$(kget clients -q "clientId=${CLIENT_ID}" --fields id --format csv --noquotes | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate client ${CLIENT_ID}"
-  printf '%s' "${rows}"
-}
-
-require_client() {
-  uuid="$(resolve_client_optional)"
-  [ -n "${uuid}" ] || fail "client ${CLIENT_ID} is missing"
-  printf '%s' "${uuid}"
-}
-
-client_field() {
-  kget "clients/$1" --fields "$2" --format csv --noquotes | nonempty_lines
-}
-
-assert_client_boolean() {
-  actual="$(client_field "$1" "$2")"
-  [ "${actual}" = "$3" ] || fail "client field $2 expected $3"
-}
 
 upsert_client() {
   uuid="$(resolve_client_optional)"
@@ -149,48 +96,6 @@ upsert_client() {
   CLIENT_UUID="$(require_client)"
 }
 
-filter_mapper_id() {
-  expected="$1"
-  while IFS=, read -r mapper_id mapper_name; do
-    if [ "${mapper_name}" = "${expected}" ]; then
-      printf '%s\n' "${mapper_id}"
-    fi
-  done
-}
-
-mapper_uuid_optional() {
-  mapper_name="$1"
-  rows="$(kget "clients/${CLIENT_UUID}/protocol-mappers/models" \
-    --fields id,name --format csv --noquotes | \
-    filter_mapper_id "${mapper_name}" | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate mapper ${mapper_name}"
-  printf '%s' "${rows}"
-}
-
-upsert_audience_mapper() {
-  mapper_name="${MAPPER_NAME}"
-  mapper_uuid="$(mapper_uuid_optional "${mapper_name}")"
-  endpoint="clients/${CLIENT_UUID}/protocol-mappers/models"
-  action=create
-  if [ -n "${mapper_uuid}" ]; then
-    endpoint="${endpoint}/${mapper_uuid}"
-    action=update
-  fi
-  "${KCADM}" "${action}" "${endpoint}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
-    -s "name=${mapper_name}" \
-    -s protocol=openid-connect \
-    -s protocolMapper=oidc-audience-mapper \
-    -s "config.\"included.custom.audience\"=${AGENTGATEWAY_AUDIENCE}" \
-    -s 'config."access.token.claim"=true' \
-    -s 'config."id.token.claim"=false' \
-    -s 'config."introspection.token.claim"=true' >/dev/null 2>&1 || \
-    fail "failed to reconcile audience mapper"
-}
-
-role_exists() {
-  kget "roles/$1" --fields id >/dev/null 2>&1
-}
-
 verify_role() {
   # Write-domain roles are owned by agentgateway-domain-roles.sh and the read
   # role by agentgateway-read-grants.sh; a missing role means that hook has
@@ -206,11 +111,6 @@ verify_roles() {
   done
 }
 
-role_scope_has_direct_role() {
-  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
-}
-
 ensure_role_scope_mapping() {
   for role in ${ROLE_NAMES}; do
     if ! role_scope_has_direct_role "${role}"; then
@@ -224,25 +124,6 @@ ensure_role_scope_mapping() {
     fi
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
   done
-}
-
-resolve_service_account() {
-  SERVICE_ACCOUNT_ID="$(kget "clients/${CLIENT_UUID}/service-account-user" \
-    --fields id --format csv --noquotes | nonempty_lines)"
-  SERVICE_ACCOUNT_USERNAME="$(kget "clients/${CLIENT_UUID}/service-account-user" \
-    --fields username --format csv --noquotes | nonempty_lines)"
-  [ -n "${SERVICE_ACCOUNT_ID}" ] || fail "service account id is empty"
-  [ "${SERVICE_ACCOUNT_USERNAME}" = "service-account-${CLIENT_ID}" ] || \
-    fail "unexpected service account username"
-}
-
-service_account_realm_roles() {
-  kget "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines
-}
-
-target_has_direct_role() {
-  service_account_realm_roles | grep -Fxq "$1"
 }
 
 assert_reviewed_write_roles() {
@@ -318,7 +199,7 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" directAccessGrantsEnabled false
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled true
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
-  [ -n "$(mapper_uuid_optional "${MAPPER_NAME}")" ] || fail "audience mapper missing"
+  [ -n "$(mapper_uuid_optional)" ] || fail "audience mapper missing"
   resolve_service_account
   for role in ${ROLE_NAMES}; do
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
@@ -333,26 +214,10 @@ verify_client() {
 }
 
 mint_claims() {
-  "${KCADM}" config credentials \
-    --config "${CLIENT_CONFIG}" \
-    --server "${KEYCLOAK_URL}" \
-    --realm "${REALM}" \
-    --client "${CLIENT_ID}" \
-    --secret "${CLIENT_SECRET}" >/dev/null 2>&1 || fail "client token mint failed"
-  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${CLIENT_CONFIG}" | head -n1)"
-  [ -n "${token}" ] || fail "access token is missing"
-  payload="$(printf '%s' "${token}" | cut -d. -f2)"
-  unset token
-  case $((${#payload} % 4)) in
-    0) ;;
-    2) payload="${payload}==" ;;
-    3) payload="${payload}=" ;;
-    *) fail "JWT payload has invalid base64url length" ;;
-  esac
-  claims="$(printf '%s' "${payload}" | tr '_-' '/+' | base64 -d 2>/dev/null)" || fail "JWT decode failed"
-  unset payload
-  rm -f "${CLIENT_CONFIG}"
-  printf '%s' "${claims}"
+  # The chat secret is pinned from 1Password by this Job's ExternalSecret and
+  # passed in CHAT_AGENTGATEWAY_CLIENT_SECRET (guard above); the mint itself
+  # is the library's, with the chat wording kept for the contract tests.
+  mint_claims_with_secret "${CLIENT_SECRET}" "client token mint failed"
 }
 
 verify_minted_claims() {
