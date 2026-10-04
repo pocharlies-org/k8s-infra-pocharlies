@@ -30,9 +30,11 @@ already running, so there is no Pending pod to find, the mount fails with "no
 Pending workload pods", and the retry loop never ends.
 
 Fix: https://github.com/longhorn/longhorn-manager/pull/5085, merged to
-`master` and the `v1.13.x` branch. The backport to the 1.12 line is tracked in
-https://github.com/longhorn/longhorn/issues/13995 (milestone v1.12.2), which is
-**not published** as of 2026-10-05.
+`master` and the `v1.13.x` branch. The backport to the 1.12 line is merged too
+— https://github.com/longhorn/longhorn-manager/pull/5225, into `v1.12.x` on
+2026-09-13, tracked in https://github.com/longhorn/longhorn/issues/13995
+(milestone v1.12.2) — but the v1.12.2 release that would ship it is **not
+published** as of 2026-10-05 (latest published: v1.13.0).
 
 ## Version that fixes it
 
@@ -44,7 +46,7 @@ contains it:
 | v1.11.2 | this cluster's current chart — no fix |
 | v1.11.3 | published — no fix (backport did not land in 1.11.x) |
 | v1.12.0, v1.12.1 | published (latest of the 1.12 line) — no fix |
-| v1.12.2 | not published; backport #13995 pending |
+| v1.12.2 | not published; the backport (longhorn-manager#5225) is merged to `v1.12.x` — only the release is missing |
 | **v1.13.0** | **contains the fix** |
 
 The GitOps surface is `infra/longhorn.yaml` (multi-source Application, chart
