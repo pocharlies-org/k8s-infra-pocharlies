@@ -11,42 +11,20 @@ The functional tests drive the real script against a fake kcadm through the
 shared harness in tests/keycloak_hook_testlib.py.
 """
 
-import json
-import re
-import unittest
+import json, re, sys, unittest
+from pathlib import Path
 
-# ci.yml drives these files with `python3 -m unittest tests/<file>.py` from the
-# repo root: unittest puts only the root on sys.path (pytest does not), so the
-# sibling testlib module must be importable explicitly.
-import pathlib
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from keycloak_hook_testlib import (
-    BASE,
-    COMMON,
-    DANIEL_FAKE_KCADM,
-    ROOT,
-    BootstrapSourceContractMixin,
-    SilentWriteContractMixin,
-    assert_job_hardened,
-    hook_code,
-    run_hook,
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # unittest from the repo root
+from keycloak_hook_testlib import (BASE, COMMON, DANIEL_FAKE_KCADM, FIXTURE, ROOT, ROLE,
+                                   SA, SUBJECT, BootstrapSourceContractMixin,
+                                   SilentWriteContractMixin, assert_job_hardened,
+                                   hook_code, run_hook)
 
 SCRIPT = BASE / "scripts" / "agentgateway-write-grant-daniel.sh"
 JOB = BASE / "agentgateway-write-grant-daniel-job.yaml"
 ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-grant-daniel-rollback-job.yaml"
 
-SUBJECT = "e51253a7-c137-4c6c-9fb9-af9cecd3b147"
 USERNAME = "me@e-dani.com"
-# OWU-28 historia g: the second tolerated human holder of the role, the QA
-# fixture of the reverse C2 test (owned by
-# agentgateway-write-fixture-user.sh, pinned there by exact username).
-FIXTURE = "qa-write-sin-vinculo@e-dani.com"
-ROLE = "agentgateway-write"
-SA = "service-account-agentgateway-mcp"
 
 
 class WriteGrantDanielFunctionalTest(SilentWriteContractMixin, unittest.TestCase):

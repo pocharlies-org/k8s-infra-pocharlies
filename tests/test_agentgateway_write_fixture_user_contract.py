@@ -22,39 +22,19 @@ Functional tests drive the real script against a fake kcadm through the
 shared harness in tests/keycloak_hook_testlib.py.
 """
 
-import json
-import re
-import unittest
+import json, re, sys, unittest
+from pathlib import Path
 
-# ci.yml drives these files with `python3 -m unittest tests/<file>.py` from the
-# repo root: unittest puts only the root on sys.path (pytest does not), so the
-# sibling testlib module must be importable explicitly.
-import pathlib
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-from keycloak_hook_testlib import (
-    BASE,
-    COMMON,
-    FIXTURE_FAKE_KCADM,
-    ROOT,
-    WRITE_ROLE_FAKE_KCADM,
-    BootstrapSourceContractMixin,
-    SilentWriteContractMixin,
-    assert_job_hardened,
-    hook_code,
-    make_token,
-    run_hook,
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # unittest from the repo root
+from keycloak_hook_testlib import (BASE, COMMON, FIXTURE, FIXTURE_FAKE_KCADM, ROOT, ROLE,
+                                   SA, WRITE_ROLE_FAKE_KCADM, BootstrapSourceContractMixin,
+                                   SilentWriteContractMixin, assert_job_hardened,
+                                   hook_code, make_token, run_hook)
 
 SCRIPT = BASE / "scripts" / "agentgateway-write-fixture-user.sh"
 JOB = BASE / "agentgateway-write-fixture-user-job.yaml"
 ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-fixture-user-rollback-job.yaml"
 
-FIXTURE = "qa-write-sin-vinculo@e-dani.com"
-ROLE = "agentgateway-write"
-SA = "service-account-agentgateway-mcp"
 ITEM = "keycloak-next-qa-write-sin-vinculo"
 ES_NAME = "agentgateway-write-fixture-user-credentials"
 

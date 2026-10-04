@@ -25,6 +25,13 @@ COMMON = BASE / "scripts" / "kc-admin-common.sh"
 # (SC-1215). Only these externals may be invoked.
 IMAGE_SAFE_EXTERNS = ("kcadm", "sed", "grep", "tr", "wc", "rm", "sleep")
 
+# Identity constants shared by the write-grant contract tests (pinned values,
+# never environment-switchable — the hooks themselves pin them too).
+SUBJECT = "e51253a7-c137-4c6c-9fb9-af9cecd3b147"  # Daniel's immutable user id
+FIXTURE = "qa-write-sin-vinculo@e-dani.com"  # OWU-28-g reverse C2 fixture
+ROLE = "agentgateway-write"
+SA = "service-account-agentgateway-mcp"
+
 # The Keycloak 26.6.2 image ships no awk/jq/python (SC-1215).
 BANNED_EXTERNS = ("awk", "jq ", "jq\n", "python3", "curl", "base64")
 
