@@ -147,6 +147,13 @@ kind: ConfigMap
 metadata:
   name: buildkitd-arm64-config
   namespace: buildkit
+  annotations:
+    # INFRA-477 (cola de SC-1666): unica funcion de esta anotacion = crear diff en el
+    # desired state para que ArgoCD lance una operacion y corra la oleada PostSync de la
+    # wave 24 (los 4 Jobs de Keycloak), que no corro porque la operacion anterior fallo
+    # antes de la fase PostSync (company-dreaming). Inocua: buildkitd solo se reinicia si
+    # cambia buildkitd.toml, no por anotaciones. Se puede quitar cuando se quiera.
+    sc1666.infra/postsync-relaunch: "1"
   labels:
     app: buildkitd
     arch: arm64
