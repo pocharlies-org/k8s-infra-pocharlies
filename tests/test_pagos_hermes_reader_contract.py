@@ -76,3 +76,17 @@ class PagosHermesReaderContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_sa_y_rbac_van_antes_que_el_store_en_las_oleadas_de_argocd():
+    """04-10-2026: el store en -4 y su SA/RBAC sin oleada dejaron k8s-infra parado en fcb3e512 (ArgoCD esperaba
+    un store sano que no podía estarlo sin su SA). La SA, el Role y el RoleBinding van en una oleada anterior."""
+    import yaml
+    from pathlib import Path
+    ruta = Path(__file__).resolve().parents[1] / "platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml"
+    docs = [d for d in yaml.safe_load_all(ruta.read_text()) if d]
+    ola = lambda d: int((d["metadata"].get("annotations") or {}).get("argocd.argoproj.io/sync-wave", "0"))  # noqa: E731
+    store = next(d for d in docs if d["kind"] == "ClusterSecretStore")
+    for kind in ("ServiceAccount", "Role", "RoleBinding"):
+        d = next(x for x in docs if x["kind"] == kind)
+        assert ola(d) < ola(store), f"{kind} en oleada {ola(d)} no va antes que el store ({ola(store)})"
