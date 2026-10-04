@@ -161,6 +161,15 @@ jobs:
       - name: Validate the 1Password change detector (DGX-506)
         run: python3 -m unittest tests/test_onepassword_change_detector.py -v
 
+  onepassword-connect-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the 1Password Connect read path (INFRA-523)
+        run: python3 -m unittest tests/test_onepassword_connect_contract.py -v
+
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
     steps:
