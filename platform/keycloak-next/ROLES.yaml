@@ -292,13 +292,14 @@
       "status": "active",
       "meaning": "Lectura de la ruta /workspace de AgentGateway (INFRA-23).",
       "grantees": [
-        "service-account-agentgateway-mcp"
+        "service-account-agentgateway-mcp",
+        "service-account-jarvis-echo"
       ],
       "privilege": {
         "allows": "Llamar a las tools de solo lectura de la ruta /workspace de AgentGateway.",
         "denies": "Cualquier tool de escritura de /workspace (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); el holder service-account-jarvis-echo se revisa en la allowlist de titulares de ese script y lo concede jarvis-echo-client.sh (PostSync jarvis-echo-client.yaml; INFRA-477)"
     },
     {
       "name": "agentgateway-write",
@@ -534,6 +535,7 @@
         "service-account-claude-sessions-test",
         "service-account-cloudblue",
         "service-account-company-metrics-agentgateway",
+        "service-account-jarvis-echo",
         "service-account-keycloak-rbac-auditor",
         "service-account-openclaw-readonly-agentgateway",
         "service-account-synapse-draft-orchestrator",
