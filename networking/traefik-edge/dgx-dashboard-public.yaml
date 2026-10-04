@@ -84,7 +84,7 @@ spec:
     # compartidos (/static/navbar.js, colors_and_type.css, vendor) siguen en el
     # dashboard: son los suyos y navbar.js llama a APIs del dashboard.
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (PathPrefix(`/messages`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      match: Host(`dgx.e-dani.com`) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
