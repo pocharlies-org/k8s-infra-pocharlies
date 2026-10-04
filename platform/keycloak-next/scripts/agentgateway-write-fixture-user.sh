@@ -51,15 +51,8 @@ KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-write-fixture-admin.config
 KCADM_OUT=/tmp/kcadm-write-fixture-reply.txt
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${KCADM_OUT}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${KCADM_OUT}"
+. "${0%/*}/kc-admin-common.sh"
 
 # The identity of this reconciler is fixed; it cannot be pointed at another
 # realm, role or user through the environment.
@@ -70,31 +63,6 @@ case "${MODE}" in
   ensure|audit|rollback) ;;
   *) fail "MODE must be ensure, audit, or rollback" ;;
 esac
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 resolve_user_id() {
   # Exact-username search (users?username=...&exact=true): GET users excludes

@@ -72,15 +72,8 @@ EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offer
 # a role added by an attacker.
 TOKEN_DEFAULT_ROLE_NAMES="default-roles-edani,offline_access,uma_authorization"
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
 [ "${CLIENT_ID}" = "agentgateway-mcp" ] || fail "CLIENT_ID is immutable"
 [ "${OPENCLAW_CLIENT_ID}" = "openclaw-readonly-agentgateway" ] || fail "OPENCLAW_CLIENT_ID is immutable"
@@ -97,33 +90,8 @@ case "${MODE}" in
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
 esac
 
-nonempty_lines() { sed '/^[[:space:]]*$/d'; }
-
-line_count() { nonempty_lines | wc -l | tr -d '[:space:]'; }
-
 comma_list_sorted() {
   tr ',' '\n' | sed '/^[[:space:]]*$/d' | sort | tr '\n' ',' | sed 's/,$//'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
 }
 
 resolve_client() {

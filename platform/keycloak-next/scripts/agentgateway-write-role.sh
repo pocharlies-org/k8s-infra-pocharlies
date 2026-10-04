@@ -34,50 +34,14 @@ KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-admin.config
 CLIENT_CONFIG=/tmp/kcadm-client.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
 [ "${CLIENT_ID}" = "agentgateway-mcp" ] || fail "CLIENT_ID is immutable for this reconciler"
 [ "${ROLE_NAME}" = "agentgateway-write" ] || fail "ROLE_NAME is immutable for this reconciler"
 [ "${HUMAN_GRANTEE_ID}" = "e51253a7-c137-4c6c-9fb9-af9cecd3b147" ] || fail "HUMAN_GRANTEE_ID is immutable for this reconciler"
 [ "${HUMAN_GRANTEE_USERNAME}" = "me@e-dani.com" ] || fail "HUMAN_GRANTEE_USERNAME is immutable for this reconciler"
 [ "${FIXTURE_GRANTEE_USERNAME}" = "qa-write-sin-vinculo@e-dani.com" ] || fail "FIXTURE_GRANTEE_USERNAME is immutable for this reconciler"
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 resolve_client_and_service_account() {
   client_rows="$(kget clients -q "clientId=${CLIENT_ID}" --fields id --format csv --noquotes | nonempty_lines)"

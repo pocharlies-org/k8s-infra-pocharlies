@@ -18,22 +18,28 @@ of one call), the no-groups / no-service-account assertions, the wave
 ordering (25 after the role hook's 20), the rollback scope (remove role +
 disable, never delete), the ES/Job/kustomization wiring and the catalog
 declarations (ROLES.yaml + PRINCIPALS.md) that keep the drift sweep green.
-Functional tests drive the real script against a fake kcadm; the exclusivity
-side reuses the harness of tests/test_agentgateway_write_grant_daniel_contract.py.
+Functional tests drive the real script against a fake kcadm through the
+shared harness in tests/keycloak_hook_testlib.py.
 """
 
 import json
-import os
-import pathlib
 import re
-import subprocess
-import tempfile
-import textwrap
 import unittest
 
+from keycloak_hook_testlib import (
+    BASE,
+    COMMON,
+    FIXTURE_FAKE_KCADM,
+    ROOT,
+    WRITE_ROLE_FAKE_KCADM,
+    BootstrapSourceContractMixin,
+    SilentWriteContractMixin,
+    assert_job_hardened,
+    hook_code,
+    make_token,
+    run_hook,
+)
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-BASE = ROOT / "platform" / "keycloak-next"
 SCRIPT = BASE / "scripts" / "agentgateway-write-fixture-user.sh"
 JOB = BASE / "agentgateway-write-fixture-user-job.yaml"
 ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-fixture-user-rollback-job.yaml"
@@ -44,186 +50,20 @@ SA = "service-account-agentgateway-mcp"
 ITEM = "keycloak-next-qa-write-sin-vinculo"
 ES_NAME = "agentgateway-write-fixture-user-credentials"
 
-# The reconciler runs inside the pinned Keycloak image, which ships no awk
-# (SC-1215). Only these externals may be invoked.
-IMAGE_SAFE_EXTERNS = ("kcadm", "sed", "grep", "tr", "wc", "rm", "sleep")
-
 # A sentinel stands in for the real password: it must never surface in the
 # fake kcadm journal (argv), stdout or stderr.
 PASSWORD = "Sentinel-Password-4f2e9a-DoNotLog"
 
-FAKE_KCADM = textwrap.dedent(
-    """\
-    #!/bin/sh
-    command="$1"
-    shift
-    state="$FAKE_STATE"
-    journal="$FAKE_JOURNAL"
-    printf '%s %s\\n' "$command" "$*" >>"$journal"
 
-    case "$command" in
-      config)
-        exit 0
-        ;;
-      get)
-        endpoint="$1"
-        shift
-        fields=""
-        exact=""
-        prev=""
-        for a in "$@"; do
-          [ "$prev" = "--fields" ] && fields="$a"
-          case "$a" in username=*) exact="yes";; esac
-          prev="$a"
-        done
-        case "$endpoint" in
-          users)
-            # exact-username resolution (the fixture id is minted, not pinned)
-            if [ -n "$exact" ]; then
-              if [ -f "$state/two-users" ]; then printf 'id-one\\nid-two\\n'; exit 0; fi
-              if [ -f "$state/user-exists" ]; then printf 'fixture-user-id\\n'; fi
-              exit 0
-            fi
-            exit 64
-            ;;
-          users/*/role-mappings/realm)
-            if [ -f "$state/user-roles" ]; then cat "$state/user-roles"; fi
-            ;;
-          users/*/groups)
-            if [ -f "$state/user-groups" ]; then cat "$state/user-groups"; fi
-            ;;
-          users/*)
-            case "$fields" in
-              id) printf '%s\\n' "${endpoint#users/}" ;;
-              username) printf '%s\\n' "$FAKE_USERNAME" ;;
-              enabled)
-                if [ -f "$state/user-disabled" ]; then printf 'false\\n'
-                else printf 'true\\n'; fi ;;
-              serviceAccountClientId)
-                if [ -f "$state/user-sa" ]; then printf 'some-client\\n'
-                else printf '\\n'; fi ;;
-              *) exit 63 ;;
-            esac
-            ;;
-          roles/*)
-            if [ -f "$state/role-missing" ]; then exit 1; fi
-            printf 'role-uuid\\n'
-            ;;
-          *)
-            exit 64
-            ;;
-        esac
-        exit 0
-        ;;
-      create)
-        # create users …: the fixture hook is the ONLY reconciler of this
-        # platform that creates users.
-        if [ "$1" != "users" ]; then exit 67; fi
-        if [ -f "$state/create-fail" ]; then
-          printf 'HTTP/1.1 400 Bad Request\\n'
-          printf 'Error: User exists with same username\\n'
-          exit 1
-        fi
-        touch "$state/user-exists"
-        exit 0
-        ;;
-      set-password)
-        # The password must arrive ONLY as the KC_CLI_PASSWORD environment
-        # (kcadm 26's default for --new-password): an argv leak or a missing
-        # environment fails here, loudly.
-        for a in "$@"; do
-          case "$a" in --new-password*|*"$FAKE_PASSWORD"*) exit 70 ;; esac
-        done
-        if [ -z "${KC_CLI_PASSWORD:-}" ]; then exit 71; fi
-        if [ "${KC_CLI_PASSWORD:-}" != "$FAKE_PASSWORD" ]; then exit 72; fi
-        touch "$state/password-applied"
-        exit 0
-        ;;
-      update)
-        for a in "$@"; do
-          case "$a" in
-            enabled=true) rm -f "$state/user-disabled" ;;
-            enabled=false) touch "$state/user-disabled" ;;
-          esac
-        done
-        exit 0
-        ;;
-      add-roles|remove-roles)
-        uid=""; rolename=""; prev=""
-        for a in "$@"; do
-          [ "$prev" = "--uid" ] && uid="$a"
-          [ "$prev" = "--rolename" ] && rolename="$a"
-          prev="$a"
-        done
-        [ "$uid" = "fixture-user-id" ] || exit 65
-        if [ "$command" = add-roles ]; then
-          if [ -f "$state/addroles-fail" ]; then
-            printf 'HTTP/1.1 400 Bad Request\\n'
-            printf 'Error: unknown role %s\\n' "$rolename"
-            exit 1
-          fi
-          if [ ! -f "$state/addroles-silent-noop" ]; then
-            touch "$state/user-roles"
-            printf '%s\\n' "$rolename" >> "$state/user-roles"
-          fi
-        else
-          if [ -f "$state/user-roles" ]; then
-            grep -Fxv "$rolename" "$state/user-roles" > "$state/user-roles.tmp" || true
-            mv "$state/user-roles.tmp" "$state/user-roles"
-          fi
-        fi
-        exit 0
-        ;;
-      *)
-        exit 66
-        ;;
-    esac
-    """
-)
+class WriteFixtureUserFunctionalTest(SilentWriteContractMixin, unittest.TestCase):
+    NOOP_FIXTURES = {"user-exists": "1", "addroles-silent-noop": "1"}
 
-
-def _code(script_text):
-    """Executable lines only (comments dropped): the comments name the very
-    binaries and flags the contract forbids, to explain why."""
-    return "\n".join(
-        line for line in script_text.splitlines() if not line.lstrip().startswith("#")
-    )
-
-
-class WriteFixtureUserFunctionalTest(unittest.TestCase):
     def run_reconciler(self, mode="ensure", fixtures=None, extra_env=None):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = pathlib.Path(tmp)
-            state = tmp_path / "state"
-            state.mkdir()
-            journal = tmp_path / "journal"
-            journal.touch()
-            fake_kcadm = tmp_path / "kcadm.sh"
-            fake_kcadm.write_text(FAKE_KCADM)
-            fake_kcadm.chmod(0o755)
-            for name, content in (fixtures or {}).items():
-                (state / name).write_text(content)
-            env = os.environ.copy()
-            env.update(
-                {
-                    "MODE": mode,
-                    "KCADM": str(fake_kcadm),
-                    "KC_BOOTSTRAP_ADMIN_USERNAME": "test-admin",
-                    "KC_BOOTSTRAP_ADMIN_PASSWORD": "not-a-real-secret",
-                    "FIXTURE_PASSWORD": PASSWORD,
-                    "FAKE_STATE": str(state),
-                    "FAKE_JOURNAL": str(journal),
-                    "FAKE_USERNAME": FIXTURE,
-                    "FAKE_PASSWORD": PASSWORD,
-                }
-            )
-            if extra_env:
-                env.update(extra_env)
-            result = subprocess.run(
-                ["/bin/sh", str(SCRIPT)], capture_output=True, text=True, env=env
-            )
-            state_files = {p.name: p.read_text() for p in sorted(state.iterdir())}
-            return result, journal.read_text(), state_files
+        env = {"FIXTURE_PASSWORD": PASSWORD, "FAKE_USERNAME": FIXTURE,
+               "FAKE_PASSWORD": PASSWORD}
+        env.update(extra_env or {})
+        return run_hook(SCRIPT, FIXTURE_FAKE_KCADM, mode=mode, fixtures=fixtures,
+                        extra_env=env)
 
     # ---- ensure -------------------------------------------------------
 
@@ -313,6 +153,7 @@ class WriteFixtureUserFunctionalTest(unittest.TestCase):
         self.assertNotIn("add-roles", journal)
 
     def test_ensure_surfaces_server_reply_on_create_failure(self):
+        # (the add-roles failure path is covered by SilentWriteContractMixin)
         result, _, _ = self.run_reconciler("ensure", fixtures={"create-fail": "1"})
         self.assertNotEqual(0, result.returncode)
         self.assertIn("server replied", result.stderr)
@@ -324,15 +165,6 @@ class WriteFixtureUserFunctionalTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("does not resolve", result.stderr)
         self.assertNotIn("create users", journal)
-
-    def test_ensure_post_assertion_fails_when_the_write_silently_noops(self):
-        # SC-1215 lesson: kcadm can swallow server answers.
-        result, _, state = self.run_reconciler(
-            "ensure", fixtures={"user-exists": "1", "addroles-silent-noop": "1"}
-        )
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("post-ensure assertion failed", result.stderr)
-        self.assertNotIn(ROLE, state.get("user-roles", ""))
 
     # ---- audit / rollback ---------------------------------------------
 
@@ -388,7 +220,8 @@ class WriteFixtureUserFunctionalTest(unittest.TestCase):
         self.assertIn("MODE must be ensure, audit, or rollback", result.stderr)
 
 
-class WriteFixtureUserStaticTest(unittest.TestCase):
+class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase):
+    SCRIPT = SCRIPT
     def test_script_pins_the_reviewed_identity(self):
         script = SCRIPT.read_text()
         self.assertIn('REALM="${REALM:-edani}"', script)
@@ -396,14 +229,8 @@ class WriteFixtureUserStaticTest(unittest.TestCase):
         self.assertIn(f'USERNAME="${{USERNAME:-{FIXTURE}}}"', script)
         self.assertIn(f'[ "${{USERNAME}}" = "{FIXTURE}" ]', script)
 
-    def test_script_only_invokes_image_safe_externals(self):
-        # The Keycloak 26.6.2 image ships no awk/jq/python (SC-1215).
-        code = _code(SCRIPT.read_text())
-        for banned in ("awk", "jq ", "jq\n", "python3", "curl", "base64"):
-            self.assertNotIn(banned, code, f"{banned} is not available in the pinned image")
-
     def test_password_reaches_kcadm_only_via_the_environment(self):
-        code = _code(SCRIPT.read_text())
+        code = hook_code(SCRIPT, COMMON)
         self.assertIn('KC_CLI_PASSWORD="${FIXTURE_PASSWORD}"', code)
         # Never argv, never a JSON attribute, never echoed.
         self.assertNotIn("--new-password", code)
@@ -413,7 +240,7 @@ class WriteFixtureUserStaticTest(unittest.TestCase):
         self.assertNotIn("set -x", code)
 
     def test_script_creates_users_but_never_deletes_anything(self):
-        code = _code(SCRIPT.read_text())
+        code = hook_code(SCRIPT, COMMON)
         self.assertIn('"${KCADM}" create users', code)
         self.assertIn('"${KCADM}" set-password', code)
         self.assertIn('"${KCADM}" add-roles', code)
@@ -424,15 +251,7 @@ class WriteFixtureUserStaticTest(unittest.TestCase):
 
     def test_job_is_postsync_wave25_nonroot_pinned_and_tokenless(self):
         manifest = JOB.read_text()
-        self.assertIn("argocd.argoproj.io/hook: PostSync", manifest)
-        self.assertIn('argocd.argoproj.io/sync-wave: "25"', manifest)
-        self.assertIn("activeDeadlineSeconds: 900", manifest)
-        self.assertIn("automountServiceAccountToken: false", manifest)
-        self.assertIn("runAsNonRoot: true", manifest)
-        self.assertIn("readOnlyRootFilesystem: true", manifest)
-        self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
-        self.assertIn("name: keycloak-bootstrap", manifest)
-        self.assertIn("value: edani", manifest)
+        assert_job_hardened(self, manifest)
         self.assertIn(f"value: {ROLE}", manifest)
         self.assertIn(f"value: {FIXTURE}", manifest)
         self.assertIn("name: FIXTURE_PASSWORD", manifest)
@@ -462,6 +281,7 @@ class WriteFixtureUserStaticTest(unittest.TestCase):
         self.assertIn("agentgateway-write-fixture-user-job.yaml", kustomization)
         self.assertIn("scripts/agentgateway-write-fixture-user.sh", kustomization)
         self.assertIn("keycloak-agentgateway-write-fixture-user", kustomization)
+        self.assertIn("kc-admin-common.sh=scripts/kc-admin-common.sh", kustomization)
         self.assertNotIn(
             "manual/agentgateway-write-fixture-user-rollback-job.yaml", kustomization
         )
@@ -508,6 +328,76 @@ class WriteFixtureUserStaticTest(unittest.TestCase):
             "sh -n platform/keycloak-next/scripts/agentgateway-write-fixture-user.sh", ci
         )
         self.assertIn("tests/test_agentgateway_write_fixture_user_contract.py", ci)
+
+
+class WriteRoleHookToleratesFixtureUserTest(unittest.TestCase):
+    """OWU-28 historia g, security condition 3: the exclusivity audit of the
+    SC-44 hook tolerates EXACTLY two human holders — Daniel by subject and
+    the QA fixture by exact username — and a third user still fails closed.
+    The role rollback refuses to run while the fixture mapping exists."""
+
+    def run_write_role(self, mode, fixtures=None):
+        result, journal, _ = run_hook(
+            BASE / "scripts" / "agentgateway-write-role.sh",
+            WRITE_ROLE_FAKE_KCADM,
+            mode=mode,
+            flags=fixtures,
+            extra_env={
+                "FAKE_SUBJECT": "e51253a7-c137-4c6c-9fb9-af9cecd3b147",
+                "FAKE_MCP_TOKEN": make_token(
+                    [ROLE, "default-roles-edani"], "agentgateway-mcp"
+                ),
+            },
+        )
+        return result, journal
+
+    def test_ensure_passes_with_the_fixture_present(self):
+        # Both tolerated humans hold the role: the audit passes, mutating
+        # nothing (the service account already holds it).
+        result, journal = self.run_write_role("ensure", fixtures=["fixture_present"])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"present":true', result.stdout)
+        self.assertNotIn("add-roles", journal)
+
+    def test_ensure_still_fails_on_a_third_user(self):
+        # Daniel and the fixture are tolerated; a third holder is not.
+        result, _ = self.run_write_role(
+            "ensure", fixtures=["fixture_present", "intruder"]
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unauthorized user", result.stderr)
+
+    def test_role_rollback_refuses_while_the_fixture_holds(self):
+        # Daniel's grant absent (his refusal message must not mask this one):
+        # the fixture mapping alone must stop the role delete.
+        result, journal = self.run_write_role(
+            "rollback", fixtures=["human_absent", "fixture_present"]
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(
+            "agentgateway-write-fixture-user-rollback-job.yaml first", result.stderr
+        )
+        # Refused BEFORE any mutation.
+        self.assertNotIn("remove-roles", journal)
+        self.assertNotIn("delete", journal)
+
+    def test_fixture_tolerance_is_pinned_not_environment_switchable(self):
+        script = (BASE / "scripts" / "agentgateway-write-role.sh").read_text()
+        self.assertIn(
+            f'FIXTURE_GRANTEE_USERNAME="${{FIXTURE_GRANTEE_USERNAME:-{FIXTURE}}}"',
+            script,
+        )
+        self.assertIn(
+            f'[ "${{FIXTURE_GRANTEE_USERNAME}}" = "{FIXTURE}" ]', script
+        )
+        # Tolerance by exact username in the direct audit; by resolved id in
+        # the effective audit (the fixture id is minted, not pinned).
+        self.assertIn('[ "${username}" = "${FIXTURE_GRANTEE_USERNAME}" ]', script)
+        self.assertIn("fixture_grantee_id", script)
+        self.assertIn("fixture_holds_direct_role", script)
+        self.assertIn(
+            "agentgateway-write-fixture-user-rollback-job.yaml first", script
+        )
 
 
 if __name__ == "__main__":

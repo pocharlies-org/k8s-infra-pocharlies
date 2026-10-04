@@ -35,15 +35,7 @@ USER_EMAILS="${USER_EMAILS:-daniel.ibanez@alphalinkcrossfit.com}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-skirmbooks-sso-admin.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+. "${0%/*}/kc-admin-common.sh"
 
 # Nada de esto es renomeable en caliente: oauth2-proxy-skirmbooks-config fija los
 # nombres de grupo y el redirect, y cambiarlos aqui sin cambiarlos alli deja a
@@ -56,27 +48,6 @@ case "${MODE}" in
   ensure|audit) ;;
   *) fail "unsupported MODE=${MODE}" ;;
 esac
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 # --- grupos ---------------------------------------------------------------
 # GET /groups no admite ?path=, asi que se lista y se casa el path exacto. El

@@ -66,6 +66,7 @@ jobs:
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-grant-daniel.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-fixture-user.sh
+          sh -n platform/keycloak-next/scripts/kc-admin-common.sh
           sh -n platform/keycloak-next/scripts/dgx-messages-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-token-smoke.sh
           python3 -m unittest \

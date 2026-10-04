@@ -43,15 +43,8 @@ ADMIN_CONFIG=/tmp/kcadm-mcp-token-ttl-admin.config
 CLIENT_DOC=/tmp/kcadm-mcp-token-ttl-client.json
 CLIENT_DOC_NEW=/tmp/kcadm-mcp-token-ttl-client.new.json
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_DOC}" "${CLIENT_DOC_NEW}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${CLIENT_DOC} ${CLIENT_DOC_NEW}"
+. "${0%/*}/kc-admin-common.sh"
 
 progress() {
   printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
@@ -64,33 +57,6 @@ case "${MODE}" in
   ensure|audit) ;;
   *) fail "MODE must be ensure or audit" ;;
 esac
-
-nonempty_lines() { sed '/^[[:space:]]*$/d'; }
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 client_field() {
   kget "clients/$1" --fields "$2" --format csv --noquotes | nonempty_lines

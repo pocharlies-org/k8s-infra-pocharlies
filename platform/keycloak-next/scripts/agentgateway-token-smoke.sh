@@ -47,25 +47,14 @@ GATEWAY_ROLE_PREFIX=agentgateway-
 ADMIN_CONFIG=/tmp/kcadm-token-smoke-admin.config
 CLIENT_CONFIG=/tmp/kcadm-token-smoke-client.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
 [ "${MINTED_CLIENT_IDS}" = "chat-agentgateway company-metrics-agentgateway" ] || \
   fail "MINTED_CLIENT_IDS is immutable (architecture ruling C-5)"
 [ "${NEGATIVE_CLIENT_ID}" = "cloudblue" ] || fail "NEGATIVE_CLIENT_ID is immutable"
 [ "${CONFIG_CLIENT_IDS}" = "agentgateway-mcp openclaw-readonly-agentgateway agentgateway-social-mcp" ] || \
   fail "CONFIG_CLIENT_IDS is immutable"
-
-nonempty_lines() { sed '/^[[:space:]]*$/d'; }
-
-line_count() { nonempty_lines | wc -l | tr -d '[:space:]'; }
 
 sorted_comma() { nonempty_lines | sort | tr '\n' ',' | sed 's/,$//'; }
 
@@ -84,25 +73,9 @@ gateway_count() {
   tr ',' '\n' | grep -c "^${GATEWAY_ROLE_PREFIX}" || true
 }
 
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if KC_CLI_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD}" "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
+# Kept local on purpose (overrides kc-admin-common.sh): this hook keeps the
+# admin password out of argv (SC-1215), via the KC_CLI_PASSWORD environment.
+login_admin() { login_admin_env; }
 
 resolve_client() {
   # $1 = clientId. stdout: "uuid fullScopeAllowed publicClient". The

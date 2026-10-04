@@ -21,41 +21,12 @@ EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentga
 ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway}"
 EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway"
 
-cleanup() { rm -f "${ADMIN_CONFIG}"; }
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+. "${0%/*}/kc-admin-common.sh"
 
 [ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \
   fail "ROLE_NAMES is immutable; update the reviewed reconciler and AgentGateway matrix together"
 [ "${ALLOWED_SERVICE_ACCOUNTS}" = "${EXPECTED_ALLOWED_SERVICE_ACCOUNTS}" ] || \
   fail "ALLOWED_SERVICE_ACCOUNTS is immutable; review the dedicated client reconciler and this allowlist together"
-
-nonempty_lines() { sed '/^[[:space:]]*$/d'; }
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 role_exists() {
   role="$1"

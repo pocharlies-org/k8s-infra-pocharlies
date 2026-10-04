@@ -33,84 +33,100 @@ configMapGenerator:
   - name: keycloak-agentgateway-write-role
     files:
       - agentgateway-write-role.sh=scripts/agentgateway-write-role.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
   - name: keycloak-openclaw-readonly-clients
     files:
       - openclaw-readonly-clients.sh=scripts/openclaw-readonly-clients.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
   - name: keycloak-synapse-sre-client
     files:
       - synapse-sre-client.sh=scripts/synapse-sre-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
   - name: keycloak-agentgateway-domain-roles
     files:
       - agentgateway-domain-roles.sh=scripts/agentgateway-domain-roles.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-domain-roles
   - name: keycloak-chat-agentgateway-client
     files:
       - chat-agentgateway-client.sh=scripts/chat-agentgateway-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
   - name: keycloak-agentgateway-read-grants
     files:
       - agentgateway-read-grants.sh=scripts/agentgateway-read-grants.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-read-grants
   - name: keycloak-agentgateway-social-mcp-client
     files:
       - agentgateway-social-mcp-client.sh=scripts/agentgateway-social-mcp-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-social-mcp-client
   - name: keycloak-agentgateway-chat-mcp-client
     files:
       - agentgateway-chat-mcp-client.sh=scripts/agentgateway-chat-mcp-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-chat-mcp-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-mcp-token-ttl
   - name: keycloak-admin-keycloack-impersonation-grant
     files:
       - admin-keycloack-impersonation-grant.sh=scripts/admin-keycloack-impersonation-grant.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: admin-keycloack-impersonation-grant
   - name: keycloak-agentgateway-write-grant-daniel
     files:
       - agentgateway-write-grant-daniel.sh=scripts/agentgateway-write-grant-daniel.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-write-grant-daniel
   - name: keycloak-agentgateway-write-fixture-user
     files:
       - agentgateway-write-fixture-user.sh=scripts/agentgateway-write-fixture-user.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-write-fixture-user
   - name: keycloak-agentgateway-token-smoke
     files:
       - agentgateway-token-smoke.sh=scripts/agentgateway-token-smoke.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-token-smoke
   - name: keycloak-skirmbooks-sso
     files:
       - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: skirmbooks-sso
   - name: keycloak-dgx-messages-client
     files:
       - dgx-messages-client.sh=scripts/dgx-messages-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: dgx-messages-client
   - name: keycloak-rbac-auditor-client
     files:
       - keycloak-rbac-auditor-client.sh=scripts/keycloak-rbac-auditor-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
         app.kubernetes.io/component: keycloak-rbac-auditor-client

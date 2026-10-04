@@ -17,6 +17,10 @@ redirects here for old bookmarks.
   - `sso-errors`
   - `sso-chain`
 - Apps with native OIDC should use Keycloak directly.
+- The PostSync reconciler scripts in `scripts/` share one bootstrap
+  (`scripts/kc-admin-common.sh`: admin login with retries, `kget`,
+  `nonempty_lines`, cleanup trap). Hooks source it via
+  `. "${0%/*}/kc-admin-common.sh"`; change it only there, never in a hook.
 - Traefik Edge must watch the `keycloak` namespace. This is configured in
   `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`.
 
