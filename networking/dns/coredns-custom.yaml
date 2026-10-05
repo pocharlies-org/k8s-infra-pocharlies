@@ -17,8 +17,12 @@ data:
         fallthrough in-addr.arpa ip6.arpa
       }
       hosts {
-        100.83.56.98 dgx.e-dani.com
-        100.83.56.98 s3.e-dani.com
+        # Split-horizon for e-dani.com points at traefik-lan over the LAN
+        # (metallb 192.168.50.240), which terminates TLS for *.e-dani.com.
+        # The old pin to the x86 tailnet IP (100.83.56.98) broke TLS: only
+        # tailscaled listens on that :443 (INFRA-588).
+        192.168.50.240 dgx.e-dani.com
+        192.168.50.240 s3.e-dani.com
         ttl 60
         fallthrough
       }
