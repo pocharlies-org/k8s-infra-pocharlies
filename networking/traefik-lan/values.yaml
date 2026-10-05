@@ -97,12 +97,32 @@ metrics:
 # Allow some resilience. 512Mi was the ceiling it lived against (01-10: 511Mi
 # used, GC burning 4 cores, liveness timeouts and a restart loop that took the
 # whole *.lan.e-dani.com down, Harbor included).
+# SC-1390: cpu request 100m left the /ping handler queued behind agentgateway-mcp
+# traffic on a saturated ubuntu node (load ~11, peaks of 8 cores in GC storms),
+# so the 2s liveness timeout fired and each Exit-137 restart dropped every LAN
+# probe behind the VIP. 500m gives the pod a real CPU floor; the probes are
+# relaxed to ride out GC pauses instead of killing the pod.
 resources:
   requests:
-    cpu: 100m
+    cpu: 500m
     memory: 256Mi
   limits:
     memory: 1Gi
+
+# Chart 40.2.0 renders these verbatim; the path stays /ping on the traefik
+# (8080) port via deployment.livenessPath/readinessPath defaults.
+livenessProbe:
+  failureThreshold: 5
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
 
 nodeSelector:
   kubernetes.io/hostname: ubuntu
