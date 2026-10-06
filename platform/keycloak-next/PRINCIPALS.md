@@ -19,6 +19,10 @@ by hand on 2026-10-03 (the process error that made `keycloak-role-drift`
 fail): adopted, not recreated, by its own PostSync
 (`jarvis-echo-client.yaml`), so its service-account sub keeps matching the
 AgentGateway identity bindings approved in k8s-agentgateway-pocharlies#170.
+INFRA-598 adds the 22nd, `qa-sso-test`, a QA SSO test user the qa profile had
+created by hand on the realm (the process error that made `keycloak-role-drift`
+fail with two drifts about it); adopted, not recreated, by declaring it here and
+in `/edani-operators` so criterion C3 of INFRA-556 is verifiable.
 
 ## Rules
 
@@ -69,6 +73,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `pocharlies@gmail.com` | humano | Dani (operador) | activo | Cuenta Google de administración de la plataforma (Plataforma Admin); grupos edani-admins y company-operator. |
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
+| `qa-sso-test` | humano | QA | activo | Usuario de prueba SSO para QA en el grupo /edani-operators; verifica el cruce de sso-chain de whatsapp.e-dani.com/qr (INFRA-556 C3, INFRA-598). |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 21 lecturas agentgateway-read:* y agentgateway-write. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
@@ -192,6 +197,18 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       ],
       "status": "retirada-propuesta",
       "retirement_reason": "Fixture de SC-479 / SC-665 (Done). Ningún criterio de INFRA-219 ni otra épica abierta lo usa (la prueba de drift de C5 usa qa-con-rol). Decisión del CTO; mientras no se decida sigue activo en el realm."
+    },
+    {
+      "username": "qa-sso-test",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "INFRA-598: usuario de prueba SSO creado a mano (fuera de GitOps) para QA; adoptado al declararse aquí y en /edani-operators para verificar C3 de INFRA-556",
+      "purpose": "Usuario de prueba SSO para QA: autenticado en el grupo /edani-operators, verifica que un usuario con rol cruza la cadena sso-chain de whatsapp.e-dani.com/qr (INFRA-556 C3).",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo"
     },
     {
       "username": "uriel",
