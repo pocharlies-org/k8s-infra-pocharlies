@@ -102,12 +102,16 @@ metrics:
 # so the 2s liveness timeout fired and each Exit-137 restart dropped every LAN
 # probe behind the VIP. 500m gives the pod a real CPU floor; the probes are
 # relaxed to ride out GC pauses instead of killing the pod.
+# SC-1390 (round 2, 06-10): with the probes fixed, the remaining Exit-137s are
+# plain memory cgroup OOM kills — traefik hit anon-rss 1021MB against the 1Gi
+# limit (kernel log 06-10 14:35). Real working set exceeds 1Gi, so the limit
+# goes to 2Gi; the chart derives GOMEMLIMIT automatically (90% -> 1843MiB).
 resources:
   requests:
     cpu: 500m
     memory: 256Mi
   limits:
-    memory: 1Gi
+    memory: 2Gi
 
 # Chart 40.2.0 renders these verbatim; the path stays /ping on the traefik
 # (8080) port via deployment.livenessPath/readinessPath defaults.
