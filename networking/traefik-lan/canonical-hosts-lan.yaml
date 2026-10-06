@@ -60,12 +60,19 @@ spec:
         - {name: litellm, namespace: litellm, port: 4000}
 
     # Brain and internal dashboards.
+    # INFRA-614 (INFRA-600): strip client-supplied identity headers — the brain
+    # API trusts X-Email unconditionally (src/auth.py). Same cross-ns pattern
+    # as dgx-strip-identity-headers in dgx-dashboard-public.yaml.
     - kind: Rule
       match: Host(`brain-k8s.e-dani.com`)
+      middlewares:
+        - {name: brain-strip-identity-headers, namespace: skirmshop-brain-prod}
       services:
         - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
     - kind: Rule
       match: Host(`brain-ingest-k8s.e-dani.com`)
+      middlewares:
+        - {name: brain-strip-identity-headers, namespace: skirmshop-brain-prod}
       services:
         - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
     - kind: Rule
