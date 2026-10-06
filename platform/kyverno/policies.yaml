@@ -463,6 +463,136 @@ spec:
             secretStoreRef:
               name: onepassword-connect
 ---
+# POLICY 8 (DGX-626, epic DGX-619 P5b): the Alibaba Token Plan credentials are
+# read in ONE namespace, `litellm`.
+#
+# The plan is a shared quota with two accounts (1Password items
+# `alibaba-model-studio` and `alibaba-model-studio-2`). Every consumer reaches
+# it through the plan-gateway (ns litellm), which draws the account by weight
+# and keeps the ledger. A key read anywhere else is a service that uses the
+# plan "a piñón" and bypasses that split (DGX-619). The CI guard of DGX-625
+# stops it in the repositories it is wired to; this policy closes the same door
+# in the cluster, for any ExternalSecret of any repository.
+#
+# What it denies, outside ns litellm: an ExternalSecret that reads an item
+# whose name starts with `alibaba-model-studio` (case-insensitive), spelled
+#   data[].remoteRef.key                   `alibaba-model-studio/password`
+#                                           (onepassword form, rewritten to the
+#                                           Connect form by POLICY 7 before this
+#                                           one validates; both spellings start
+#                                           with the item name) or
+#                                           `alibaba-model-studio` + property
+#   dataFrom[].extract.key                 the whole item
+#   dataFrom[].find.name.regexp            a regexp that matches either item
+#                                           (tested against the two item names)
+#                                           or that spells the prefix out
+# The `litellm` namespace is excluded, so `litellm/litellm-alibaba` and
+# `litellm/litellm-alibaba-2` keep working.
+#
+# What it does NOT see: a Secret created by hand (`kubectl create secret`, as
+# `galan-chat-alibaba` was) or a Secret from another provider. It closes
+# ExternalSecrets, not raw Secrets.
+#
+# failurePolicy Ignore on purpose, like POLICY 6 and 7: if Kyverno is down the
+# ExternalSecret is admitted instead of every ExternalSecret update of the
+# cluster failing with it. Admission only (background: false): nothing existing
+# is re-evaluated or rewritten, and the reports controller never scans it.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: externalsecret-alibaba-plan-only-litellm
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/title: Alibaba Token Plan ExternalSecrets Only In Namespace litellm
+    policies.kyverno.io/category: Secrets
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: ExternalSecret
+    policies.kyverno.io/description: >
+      Denies ExternalSecrets outside the litellm namespace that read the
+      1Password items alibaba-model-studio* (Alibaba Token Plan keys), in the
+      onepassword (item/field) and onepassword-connect (item + property)
+      spellings and through dataFrom extract or find. Epic DGX-619.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Enforce
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: deny-alibaba-plan-data-key
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              namespaces: [litellm]
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-619: the Alibaba Token Plan keys (1Password items
+          alibaba-model-studio*) may only be read in namespace litellm.
+          Call the plan-gateway (service plan-gateway.litellm) instead of
+          keeping a key of your own.
+        deny:
+          conditions:
+            any:
+              - key: "{{ length((request.object.spec.data || `[]`)[?starts_with(to_lower(remoteRef.key || ''), 'alibaba-model-studio')]) }}"
+                operator: GreaterThan
+                value: 0
+    - name: deny-alibaba-plan-datafrom-extract
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              namespaces: [litellm]
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-619: the Alibaba Token Plan keys (1Password items
+          alibaba-model-studio*) may only be read in namespace litellm.
+          Call the plan-gateway (service plan-gateway.litellm) instead of
+          keeping a key of your own.
+        deny:
+          conditions:
+            any:
+              - key: "{{ length((request.object.spec.dataFrom || `[]`)[?starts_with(to_lower(extract.key || ''), 'alibaba-model-studio')]) }}"
+                operator: GreaterThan
+                value: 0
+    - name: deny-alibaba-plan-datafrom-find
+      match:
+        any:
+          - resources:
+              kinds: [external-secrets.io/v1/ExternalSecret]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              namespaces: [litellm]
+      skipBackgroundRequests: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-619: the Alibaba Token Plan keys (1Password items
+          alibaba-model-studio*) may only be read in namespace litellm.
+          Call the plan-gateway (service plan-gateway.litellm) instead of
+          keeping a key of your own.
+        deny:
+          conditions:
+            any:
+              - key: "{{ length((request.object.spec.dataFrom || `[]`)[?find.name.regexp && (regex_match(find.name.regexp, 'alibaba-model-studio') || regex_match(find.name.regexp, 'alibaba-model-studio-2') || contains(to_lower(find.name.regexp), 'alibaba-model-studio'))]) }}"
+                operator: GreaterThan
+                value: 0
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

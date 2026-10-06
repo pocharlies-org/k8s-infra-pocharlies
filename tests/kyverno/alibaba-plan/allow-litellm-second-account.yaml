@@ -1,0 +1,19 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: t-connect-2
+  namespace: litellm
+  labels:
+    dgx-626-test: 'true'
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: t-connect-2
+  data:
+  - secretKey: ALIBABA_API_KEY
+    remoteRef:
+      key: alibaba-model-studio-2
+      property: password

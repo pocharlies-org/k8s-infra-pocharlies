@@ -1,0 +1,23 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: t-second
+  namespace: dgx626-test
+  labels:
+    dgx-626-test: 'true'
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: t-second
+  data:
+  - secretKey: OTHER_KEY
+    remoteRef:
+      key: other-item
+      property: password
+  - secretKey: ALIBABA_API_KEY
+    remoteRef:
+      key: alibaba-model-studio
+      property: password
