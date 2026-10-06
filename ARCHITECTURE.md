@@ -47,7 +47,7 @@ automático `prune: false`, `selfHeal: true`):
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
 | Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
-| Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
+| Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae. Kyverno `externalsecret-alibaba-plan-only-litellm` (POLICY 8, Enforce, DGX-619/626) deniega al admitir todo ExternalSecret fuera del ns `litellm` cuyo `remoteRef.key`, `dataFrom.extract.key` o `dataFrom.find.name.regexp` apunte a `alibaba-model-studio*`; las claves del Token Plan de Alibaba solo se leen allí, el resto va por el plan-gateway. No ve Secrets creados a mano | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
 
@@ -92,5 +92,8 @@ Nº de casos: **pendiente de medir**.
   `onepassword`: el proveedor Connect no implementa SecretExists, que exige updatePolicy IfNotExists; por eso el
   store SDK sigue vivo y gasta cupo. Credenciales de arranque fuera de banda, sin ES; rotación en la sesión semanal.
   Runbook: `docs/runbook-1password-connect.md`.
+- Un ExternalSecret fuera de `litellm` con un ítem `alibaba-model-studio*` se rechaza al aplicar (mensaje DGX-619;
+  POLICY 8). Usa el plan-gateway. `failurePolicy: Ignore`: si Kyverno cae, se admite. Sin medir: un ítem referido por
+  UUID en vez de por título y `find.tags`/`find.path` no están cubiertos.
 
-Última verificación contra el código: 2026-10-05 · 13d99ff (origin/main)
+Última verificación contra el código: 2026-10-06 · f412475 (origin/main)
