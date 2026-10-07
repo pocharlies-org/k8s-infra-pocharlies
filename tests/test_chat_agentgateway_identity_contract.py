@@ -233,6 +233,11 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn('CLIENT_SECRET="${CHAT_AGENTGATEWAY_CLIENT_SECRET:-}"', script)
         self.assertIn("unsupported immutable client", script)
         self.assertIn("ROLE_NAMES is immutable", script)
+        # SC-2029: the reviewed extra holders of write:social/:workspace (the
+        # four general Hermes secretarias of INFRA-494) are an immutable
+        # constant here, in parity with the domain-roles allowlist.
+        self.assertIn("REVIEWED_EXTRA_HOLDERS is immutable", script)
+        self.assertIn('EXPECTED_REVIEWED_EXTRA_HOLDERS="agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"', script)
         self.assertIn("serviceAccountsEnabled=true", script)
         self.assertIn("standardFlowEnabled=false", script)
         self.assertIn("directAccessGrantsEnabled=false", script)
@@ -243,7 +248,10 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("oidc-audience-mapper", LIB.read_text())
         self.assertIn('"clients/${CLIENT_UUID}/scope-mappings/realm"', script)
         self.assertIn("ensure_role_scope_mapping", script)
-        self.assertIn('"roles/$1/users" -q first=0 -q max=2', script)
+        # SC-2029: the users bound is the reviewed-holder count plus two (the
+        # reviewed set widened beyond the single service account); groups
+        # stay bounded at two because zero are allowed.
+        self.assertIn('"roles/$1/users" -q first=0 -q max="${bound}"', script)
         self.assertIn('"roles/$1/groups" -q first=0 -q max=2', script)
         self.assertIn("assert_reviewed_write_roles", script)
         self.assertIn("verify_minted_claims", script)
@@ -306,6 +314,33 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         self.assertIn("agentgateway-write:media has an unauthorized user", result.stderr)
         self.assertFalse(any(c.startswith("add-roles") for c in calls))
 
+    def test_ensure_tolerates_the_reviewed_secretaria_holders(self):
+        # SC-2029: the four general Hermes secretaria service accounts
+        # (INFRA-494, epic INFRA-479) are reviewed extra holders of
+        # write:social and write:workspace. Their grants are owned by the
+        # devops identity process in k8s-openclaw-qwen36-pocharlies and by
+        # the holder matrix of agentgateway-domain-roles.sh (SC-2005); they
+        # must not abort the chat hook and must not be re-granted here.
+        humans = [
+            {"username": "service-account-hermes-secretaria" + suffix,
+             "roles": ["agentgateway-write:social", "agentgateway-write:workspace"]}
+            for suffix in ("", "-casa", "-dani", "-leila")
+        ]
+        result, calls, _ = _run("ensure", _state(client=_existing_client(), humans=humans))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(any(c.startswith("add-roles") for c in calls))
+
+    def test_ensure_fails_when_an_unreviewed_principal_holds_the_social_role(self):
+        # SC-2029: tolerating the reviewed secretarias must not open the role
+        # to anyone else — any other extra holder still fails, before any
+        # mutation.
+        humans = [{"username": "service-account-somebody-else",
+                   "roles": ["agentgateway-write:social"]}]
+        result, calls, _ = _run("ensure", _state(client=_existing_client(), humans=humans))
+        self.assertEqual(1, result.returncode)
+        self.assertIn("agentgateway-write:social has an unauthorized user", result.stderr)
+        self.assertFalse(any(c.startswith("add-roles") for c in calls))
+
     def test_shared_read_role_tolerates_other_holders(self):
         # SC-699: agentgateway-read:studio is shared — agentgateway-mcp and
         # openclaw hold it too, and its holder allowlist is owned by
@@ -355,6 +390,28 @@ class ChatAgentGatewayIdentityContractTest(unittest.TestCase):
         for role in REVIEWED_ROLES:
             self.assertIn(role, state["roles"])
         self.assertEqual({}, state["clients"])
+
+    def test_rollback_tolerates_the_reviewed_secretaria_holders(self):
+        # SC-2029: deleting the chat client removes only its own service
+        # account; the reviewed extra holders of write:social/:workspace
+        # (INFRA-494 secretarias) stay and must not fail the rollback.
+        humans = [
+            {"username": "service-account-hermes-secretaria" + suffix,
+             "roles": ["agentgateway-write:social", "agentgateway-write:workspace"]}
+            for suffix in ("", "-casa", "-dani", "-leila")
+        ]
+        result, _, state = _run("rollback", _state(client=_existing_client(), humans=humans),
+                                {"CHAT_AGENTGATEWAY_CLIENT_SECRET": ""})
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"client_present":false,"roles_retained":true', result.stdout)
+
+    def test_rollback_fails_on_an_unreviewed_holder_left_behind(self):
+        humans = [{"username": "service-account-somebody-else",
+                   "roles": ["agentgateway-write:social"]}]
+        result, _, _ = _run("rollback", _state(client=_existing_client(), humans=humans),
+                            {"CHAT_AGENTGATEWAY_CLIENT_SECRET": ""})
+        self.assertEqual(1, result.returncode)
+        self.assertIn("agentgateway-write:social still has an unreviewed mapping", result.stderr)
 
     def test_immutable_client_roles_and_secret_are_enforced_before_any_call(self):
         result, calls, _ = _run("ensure", _state(), {"CLIENT_ID": "chat-agentgateway-2"})
