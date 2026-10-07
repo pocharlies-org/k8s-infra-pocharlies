@@ -109,6 +109,19 @@ class RoleCatalogParityTest(unittest.TestCase):
                                     "hermes-secretaria-dani", "hermes-secretaria-leila"))]),
             8)
 
+    def test_chat_extra_holders_parity_with_domain_roles(self):
+        # SC-2029: the chat hook's exclusivity guard tolerates, on
+        # write:social/:workspace, exactly the reviewed holders of the
+        # domain-roles allowlist that are not its own service account — one
+        # source of truth, no silent drift between the two guards.
+        chat = SCRIPTS / "chat-agentgateway-client.sh"
+        extra = set(shell_list(chat, "EXPECTED_REVIEWED_EXTRA_HOLDERS"))
+        domain = {
+            pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
+            if not pair.endswith("=service-account-chat-agentgateway")
+        }
+        self.assertEqual(extra, domain)
+
 
 if __name__ == "__main__":
     unittest.main()

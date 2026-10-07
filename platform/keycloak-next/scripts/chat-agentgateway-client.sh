@@ -37,6 +37,17 @@ CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"
 # Space-separated and ORDER-INSENSITIVE for the guard below; keep it sorted.
 ROLE_NAMES="${ROLE_NAMES:-agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"
 EXPECTED_ROLE_NAMES="agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"
+# SC-2029 (2026-10-07): the four general Hermes secretaria service accounts
+# (INFRA-494, epic INFRA-479: per-profile secretaria identities that write
+# social and workspace through AgentGateway) are reviewed EXTRA holders of
+# agentgateway-write:social and agentgateway-write:workspace. Their grants
+# are created by the devops identity process in k8s-openclaw-qwen36-pocharlies
+# and their holder matrix is owned by agentgateway-domain-roles.sh (widened
+# by SC-2005); this hook tolerates exactly these pairs and nothing else.
+# tests/test_keycloak_rbac_parity_contract.py keeps this list equal to the
+# non-chat pairs of that allowlist — one source of truth.
+REVIEWED_EXTRA_HOLDERS="${REVIEWED_EXTRA_HOLDERS:-agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila}"
+EXPECTED_REVIEWED_EXTRA_HOLDERS="agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"
@@ -59,6 +70,8 @@ trap cleanup EXIT HUP INT TERM
 [ "${RECONCILE_CONTRACT_VERSION}" = "2" ] || fail "unsupported reconcile contract version"
 [ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \
   fail "ROLE_NAMES is immutable; review this reconciler, the domain-role allowlist and the gateway CEL together"
+[ "${REVIEWED_EXTRA_HOLDERS}" = "${EXPECTED_REVIEWED_EXTRA_HOLDERS}" ] || \
+  fail "REVIEWED_EXTRA_HOLDERS is immutable; review this reconciler, the domain-role allowlist and the gateway CEL together"
 case "${CLIENT_ID}" in
   chat-agentgateway)
     CLIENT_SECRET="${CHAT_AGENTGATEWAY_CLIENT_SECRET:-}"
@@ -149,16 +162,26 @@ assert_reviewed_write_roles() {
 }
 
 assert_exclusive_role_mapping() {
-  # Bounded role-member endpoints: at most one user (our service account) and
-  # zero groups are allowed, so fetching two rows detects every violation.
-  users="$(kget "roles/$1/users" -q first=0 -q max=2 \
+  # Bounded role-member endpoints: only the reviewed holders of this role —
+  # our service account plus, since SC-2029, the extra holders declared for
+  # it in REVIEWED_EXTRA_HOLDERS — and zero groups are allowed, so fetching
+  # the reviewed count plus two rows detects every violation.
+  reviewed="${SERVICE_ACCOUNT_USERNAME}"
+  for pair in $(printf '%s' "${REVIEWED_EXTRA_HOLDERS}" | tr ',' ' '); do
+    [ "${pair%%=*}" = "$1" ] && reviewed="${reviewed} ${pair#*=}"
+  done
+  bound=$(( $(printf '%s\n' ${reviewed} | wc -l) + 2 ))
+  users="$(kget "roles/$1/users" -q first=0 -q max="${bound}" \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/$1/groups" -q first=0 -q max=2 \
     --fields path --format csv --noquotes | nonempty_lines)"
   [ -z "${groups}" ] || fail "$1 is mapped to a group"
   if [ -n "${users}" ]; then
     while IFS= read -r username; do
-      [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || fail "$1 has an unauthorized user"
+      case " ${reviewed} " in
+        *" ${username} "*) ;;
+        *) fail "$1 has an unauthorized user" ;;
+      esac
     done <<EOF
 ${users}
 EOF
@@ -245,17 +268,31 @@ rollback_identity() {
       fail "failed to delete ${CLIENT_ID}"
   fi
   [ -z "$(resolve_client_optional)" ] || fail "client ${CLIENT_ID} remains after rollback"
-  # Write-family roles only: deleting the client removes its service account,
-  # the only reviewed holder of each write domain. The shared read role stays
-  # in the realm WITH its other reviewed holders (agentgateway-mcp, openclaw)
-  # — asserting emptiness there would fail by design.
+  # Write-family roles only: deleting the client removes its service account.
+  # The shared read role stays in the realm WITH its other reviewed holders
+  # (agentgateway-mcp, openclaw) — asserting emptiness there would fail by
+  # design. Since SC-2029 the same is true, one level down, for the write
+  # roles with reviewed extra holders (the INFRA-494 secretarias on
+  # write:social/:workspace): after our deletion only those reviewed extras
+  # may remain, never a stranger and never a group.
   for role in ${ROLE_NAMES}; do
     case "${role}" in
       agentgateway-write*)
         if role_exists "${role}"; then
           users="$(kget "roles/${role}/users" --fields username --format csv --noquotes | nonempty_lines)"
           groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
-          [ -z "${users}${groups}" ] || fail "${role} still has mappings after client deletion"
+          [ -z "${groups}" ] || fail "${role} still has group mappings after client deletion"
+          if [ -n "${users}" ]; then
+            while IFS= read -r username; do
+              found=0
+              for pair in $(printf '%s' "${REVIEWED_EXTRA_HOLDERS}" | tr ',' ' '); do
+                [ "${pair}" = "${role}=${username}" ] && found=1
+              done
+              [ "${found}" = "1" ] || fail "${role} still has an unreviewed mapping after client deletion"
+            done <<EOF
+${users}
+EOF
+          fi
         fi ;;
     esac
   done
