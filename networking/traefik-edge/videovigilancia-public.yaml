@@ -1,0 +1,61 @@
+# videovigilancia.e-dani.com (propuesta comercial de Centinela, INFRA-675): sitio
+# estático en el namespace videovigilancia, servido por nginx. Su código, imagen
+# y manifiestos viven en pocharlies-org/k8s-videovigilancia-pocharlies.
+#
+# Sin autenticación a propósito (decisión del ticket): quien tenga el enlace lo
+# abre. La web no se indexa: `X-Robots-Tag: noindex, nofollow` lo pone el nginx
+# del sitio (no un Middleware de aquí), así hay una sola fuente de las cabeceras.
+#
+# DNS: no hay registro que crear. El comodín manual `*.e-dani.com` (DNS-only,
+# apunta al edge) ya resuelve este nombre y el TLS lo cubre `wildcard-public-tls`
+# del TLSStore `default`. `exclude: "true"` evita que external-dns publique un
+# registro propio, igual que `edge-chat-public` y `web-public`.
+#
+# Por qué ExternalName y no el namespace en `traefik-edge/values.yaml`: el
+# DaemonSet del edge solo vigila su propio namespace (un `name: x / namespace: y`
+# directo falla con «namespace is not within watched namespaces»), y añadir uno a
+# `providers.kubernetesCRD.namespaces` exige sincronizar a mano la Application
+# `traefik-edge` (MANUAL-SYNC a propósito) y reinicia los pods del edge. El
+# Service ExternalName DENTRO de traefik-edge apunta al FQDN del servicio real;
+# `allowExternalNameServices: true` ya está en el provider.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-videovigilancia-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-videovigilancia-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: videovigilancia.videovigilancia.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-videovigilancia-public
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-videovigilancia-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`videovigilancia.e-dani.com`)
+      services:
+        - name: edge-videovigilancia-public
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
