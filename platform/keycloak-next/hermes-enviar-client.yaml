@@ -1,0 +1,110 @@
+# Dedicated confidential client of the Hermes `enviar` plugin (INFRA-676, P4b
+# of INFRA-480): the only identity that may send or delete a Gmail draft
+# through AgentGateway /workspace. Its service account reads the route with the
+# shared agentgateway-read:workspace and holds agentgateway-write:workspace-envio,
+# the role the gateway CEL requires for gmail_send, gmail_forward,
+# gmail_send_draft and gmail_delete_draft (k8s-agentgateway-pocharlies#186).
+# It never holds the bare agentgateway-write nor any other write domain.
+#
+# Declared here, by GitOps, and not created by hand or by a one-shot script:
+# that is the process error behind INFRA-477 (jarvis-echo) and SC-2005 (five
+# secretaria clients adopted after the fact), and it would leave the client
+# weaker than the house standard (no fullScopeAllowed=false, no exact scope, no
+# verified token). Security approved the identity as "confidential client with
+# only these two roles" in INFRA-640 (a); this hook is how that is enforced.
+#
+# The hook never touches the client secret: Keycloak generates it on creation,
+# and a devops step after the sync writes it to the 1Password item
+# hermes-kc-enviar (RUNBOOK section 13). That is also why there is no
+# ExternalSecret in this file and no secret reference that could block the sync.
+#
+# Ordering: agentgateway-write:workspace-envio is created, and its single
+# holder reviewed, by agentgateway-domain-roles.sh (sync-wave 19);
+# agentgateway-read:workspace and the holder allowlist that reviews
+# service-account-hermes-enviar on it are owned by agentgateway-read-grants.sh
+# (sync-wave 20). This hook only verifies both roles, creates/updates the
+# client, maps the two roles into the client role scope, grants them to the
+# service account, converges fullScopeAllowed=false and verifies the minted
+# token: audience mcp.lan.e-dani.com (without it the gateway answers 401
+# InvalidAudience) and exactly the two reviewed realm roles.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-hermes-enviar-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: hermes-enviar-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the domain-roles (19) and read-grants (20) hooks that own both
+    # roles; same wave as jarvis-echo and the token TTL job, which reconcile
+    # other clients and share no state with this one.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # ~25 sequential kcadm calls (each starts a JVM) plus one token mint. Same
+  # 1800 s budget as the jarvis-echo and chat client hooks, whose measured
+  # steady state (701 s with six roles) is the heavier case.
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: hermes-enviar-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hermes-enviar-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: hermes-enviar }
+            - { name: READ_ROLE_NAME, value: agentgateway-read:workspace }
+            - { name: WRITE_ROLE_NAME, value: agentgateway-write:workspace-envio }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hermes-enviar-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

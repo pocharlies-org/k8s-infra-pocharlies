@@ -29,6 +29,15 @@ plus the five service accounts of the Hermes secretaria profiles
 and `qa-sso-test` (INFRA-561), all created outside this repo and
 adopted here without being recreated.
 
+INFRA-676 (P4b of INFRA-480) adds the 31st, `service-account-hermes-enviar`,
+the client of the Hermes `enviar` plugin — the only identity that sends or
+deletes Gmail drafts through AgentGateway. Unlike the entries above it is NOT
+adopted: its PostSync (`hermes-enviar-client.yaml`) creates it in the same sync
+that ships this entry, so until the PostSync hooks of that sync finish the
+catalog names a principal (and two roles) the realm does not have yet, and the
+`keycloak-role-drift` runs that fall in that window report it. It clears on the
+first run after the hooks, with no action.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -90,6 +99,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
+| `service-account-hermes-enviar` | sa | DevOps | activo | Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail (agentgateway-write:workspace-envio) por /workspace, más agentgateway-read:workspace para llegar a la ruta; nunca agentgateway-write ni otro dominio (INFRA-676). |
 | `service-account-hermes-secretaria` | sa | DevOps | activo | Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-dani` | sa | DevOps | activo | Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
@@ -392,6 +402,20 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Consumidor MCP de las métricas de la compañía; porta company-metrics-read.",
       "realm_roles": [
         "company-metrics-read",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-enviar",
+      "type": "sa",
+      "client": "hermes-enviar",
+      "owner": "DevOps",
+      "source": "INFRA-676 (P4b de INFRA-480, historia hermana de INFRA-642); veredicto de security INFRA-640 (a): client confidencial con solo estos dos roles; k8s-agentgateway-pocharlies#186 (reglas del gateway); creado por platform/keycloak-next/hermes-enviar-client.yaml, nunca a mano; el secreto en 1Password `hermes-kc-enviar` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); el binding por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml es INFRA-677",
+      "purpose": "Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail por /workspace con agentgateway-write:workspace-envio (gmail_send, gmail_forward, gmail_send_draft, gmail_delete_draft), más agentgateway-read:workspace para llegar a la ruta. Nunca el agentgateway-write pelado ni otro dominio.",
+      "realm_roles": [
+        "agentgateway-read:workspace",
+        "agentgateway-write:workspace-envio",
         "default-roles-edani"
       ],
       "status": "activo"

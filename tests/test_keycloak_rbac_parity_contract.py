@@ -23,6 +23,7 @@ MCP_SA = "service-account-agentgateway-mcp"
 OPENCLAW_SA = "service-account-openclaw-readonly-agentgateway"
 CHAT_SA = "service-account-chat-agentgateway"
 JARVIS_SA = "service-account-jarvis-echo"
+ENVIAR_SA = "service-account-hermes-enviar"
 SECRETARIA_SAS = [
     "service-account-hermes-secretaria",
     "service-account-hermes-secretaria-casa",
@@ -54,13 +55,15 @@ class RoleCatalogParityTest(unittest.TestCase):
         openclaw = shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")
         chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
         jarvis = shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES")
-        secretaria = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
+        enviar = shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES")
+        secretaria =shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
         secretaria_skirmshop = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")
         probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
-        owned = owned_by(self.catalog, READ_GRANTS)
+        self.assertTrue(set(enviar) <= set(reads))
+        owned =owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
             # SC-699: the chat grantee travels in the read-grants holder
@@ -73,6 +76,10 @@ class RoleCatalogParityTest(unittest.TestCase):
                 | ({OPENCLAW_SA} if role in openclaw else set())
                 | ({CHAT_SA} if role in chat else set())
                 | ({JARVIS_SA} if role in jarvis else set())
+                # INFRA-676: same rule for the hermes-enviar grantee
+                # (EXPECTED_ENVIAR_READ_ROLE_NAMES), the grant owned by
+                # hermes-enviar-client.sh.
+                | ({ENVIAR_SA} if role in enviar else set())
                 # SC-2005: reviewed holders granted outside this reconciler
                 # (INFRA-494 secretarias, SC-1834 probe).
                 | (set(SECRETARIA_SAS) if role in secretaria else set())
@@ -99,10 +106,11 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 3)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 5)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
-        self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 11)
+        self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 14)
         self.assertEqual(
             len([pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
                  if pair.endswith(("hermes-secretaria", "hermes-secretaria-casa",
@@ -114,13 +122,25 @@ class RoleCatalogParityTest(unittest.TestCase):
         # write:social/:workspace, exactly the reviewed holders of the
         # domain-roles allowlist that are not its own service account — one
         # source of truth, no silent drift between the two guards.
+        # INFRA-676: "its own" roles means the ones the chat hook guards
+        # (its ROLE_NAMES). A holder of a role the chat hook never inspects
+        # (workspace-envio, held by hermes-enviar) is not its business, and
+        # copying that pair there would be dead config.
         chat = SCRIPTS / "chat-agentgateway-client.sh"
         extra = set(shell_list(chat, "EXPECTED_REVIEWED_EXTRA_HOLDERS"))
+        chat_roles = set(re.search(r'^EXPECTED_ROLE_NAMES="([^"]*)"$',
+                                   chat.read_text(encoding="utf-8"), re.MULTILINE).group(1).split())
         domain = {
             pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
             if not pair.endswith("=service-account-chat-agentgateway")
+            and pair.partition("=")[0] in chat_roles
         }
         self.assertEqual(extra, domain)
+        guarded_elsewhere = {
+            pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
+            if pair.partition("=")[0] not in chat_roles
+        }
+        self.assertEqual({"agentgateway-write:workspace-envio=service-account-hermes-enviar"}, guarded_elsewhere)
 
 
 if __name__ == "__main__":

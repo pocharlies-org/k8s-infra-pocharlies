@@ -33,6 +33,10 @@ CHAT_SHARED_ROLES = ["agentgateway-read:studio"]
 # jarvis-echo-client.sh; this hook only widens the allowlist).
 JARVIS_SA = "service-account-jarvis-echo"
 JARVIS_SHARED_ROLES = ["agentgateway-read:workspace"]
+# INFRA-676 (2026-10-07): service-account-hermes-enviar is a reviewed holder of
+# the same shared route role (granted by hermes-enviar-client.sh; this hook
+# only widens the allowlist).
+ENVIAR_SA = "service-account-hermes-enviar"
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): agentgateway-mcp with
 # fullScopeAllowed=true carries the reviewed 22 PLUS the flattened composites
@@ -384,6 +388,12 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         # INFRA-477: the jarvis holder allowlist is its own reviewed constant.
         self.assertIn("JARVIS_READ_ROLE_NAMES is immutable", script)
         self.assertIn("service-account-jarvis-echo", script)
+        # INFRA-676: so is the hermes-enviar holder allowlist, and the holder
+        # listing is bounded by the widest reviewed set (eight) plus one.
+        self.assertIn("ENVIAR_READ_ROLE_NAMES is immutable", script)
+        self.assertIn("service-account-hermes-enviar", script)
+        self.assertIn("-q first=0 -q max=9", script)
+        self.assertNotIn("-q max=8", script)
         self.assertIn("group role-mapping is forbidden (SC-44 C6)", script)
         # INFRA-45: fullScopeAllowed=false is part of the owned matrix.
         self.assertIn("must keep fullScopeAllowed=false", script)
@@ -506,6 +516,32 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("mapped to an unauthorized user service-account-jarvis-echo", result.stderr)
+
+    def test_enviar_holder_on_the_workspace_role_passes(self):
+        # INFRA-676: service-account-hermes-enviar is a reviewed holder of
+        # agentgateway-read:workspace (granted by hermes-enviar-client.sh).
+        # The exclusivity assertion must accept it, next to the jarvis holder,
+        # without this hook ever resolving the hermes-enviar client.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:workspace|{ENVIAR_SA}\n")
+                handle.write(f"agentgateway-read:workspace|{JARVIS_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_enviar_holder_on_any_other_read_role_fails_closed(self):
+        # The allowlist entry is EXACTLY agentgateway-read:workspace: the same
+        # service account on any other read route is drift or an attack.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{ENVIAR_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user service-account-hermes-enviar", result.stderr)
 
     def test_unauthorized_token_roles_fail_closed(self):
         # A minted agentgateway-mcp token missing agentgateway-write (the 21
