@@ -76,6 +76,21 @@ Nº de casos: **pendiente de medir**.
   host nuevo extremo a extremo (`curl -I https://<host>` por edge y por LAN) y `kubectl get applications -n argocd`;
   Synced ≠ funcionando. Pendiente de ejecutar.
 
+### Sync por olas y salud de los CronJob (DGX-626)
+
+- `k8s-infra` sincroniza por olas (`argocd.argoproj.io/sync-wave`): la operación solo pasa a la ola siguiente si los recursos
+  de las anteriores están sanos. Un CronJob cuyo último Job falla deja la operación `Failed` y **bloquea cualquier cambio de
+  una ola posterior**. Caso: la ClusterPolicy `externalsecret-alibaba-plan-only-litellm` (DGX-626) quedó atrapada en la ola 1
+  por el detector `keycloak/keycloak-role-drift` de la ola 0.
+- El detector falla **a propósito** cuando hay drift: su fallo es su función, y la visibilidad va por la alarma
+  `K8sCronJobFailed` (topic Crons), no por ArgoCD.
+- Arreglo del patrón: health global `resource.customizations.health.batch_CronJob` → `Healthy` en el `argocd-cm`
+  (pocharlies-org/k8s-gitops-pocharlies#515, pendiente del sync de la app `argocd`). Nota del architect:
+  `nota-architect-health-detector.md` en DGX-626; el drift que lo disparó, en SC-2005.
+- ArgoCD **no reintenta solo** un sync `Failed` del mismo SHA (7bc9dff: Failed a las 08:26, detector verde a las 08:30, sin
+  repetición). Tras sanar la causa se re-dispara con un commit nuevo en `main` (este cambio es el ejemplo), nunca con
+  `argocd app sync` a mano.
+
 ## 8. Decisiones y trampas
 
 - `README`/`docs/architecture.md` aún dicen k3s v1.32.5 y «ubuntu único control-plane»: el cluster real tiene `ks5-cp-1/2/3`
@@ -96,4 +111,4 @@ Nº de casos: **pendiente de medir**.
   POLICY 8). Usa el plan-gateway. `failurePolicy: Ignore`: si Kyverno cae, se admite. Sin medir: un ítem referido por
   UUID en vez de por título y `find.tags`/`find.path` no están cubiertos.
 
-Última verificación contra el código: 2026-10-06 · f412475 (origin/main)
+Última verificación contra el código: 2026-10-07 · 7bc9dff (origin/main)
