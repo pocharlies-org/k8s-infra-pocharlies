@@ -23,6 +23,14 @@ MCP_SA = "service-account-agentgateway-mcp"
 OPENCLAW_SA = "service-account-openclaw-readonly-agentgateway"
 CHAT_SA = "service-account-chat-agentgateway"
 JARVIS_SA = "service-account-jarvis-echo"
+SECRETARIA_SAS = [
+    "service-account-hermes-secretaria",
+    "service-account-hermes-secretaria-casa",
+    "service-account-hermes-secretaria-dani",
+    "service-account-hermes-secretaria-leila",
+]
+SECRETARIA_SKIRMSHOP_SA = "service-account-hermes-secretaria-skirmshop"
+PROBE_SA = "service-account-atlassian-mcp-probe"
 
 
 def shell_list(path, variable):
@@ -46,6 +54,9 @@ class RoleCatalogParityTest(unittest.TestCase):
         openclaw = shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")
         chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
         jarvis = shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES")
+        secretaria = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
+        secretaria_skirmshop = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")
+        probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
@@ -62,6 +73,11 @@ class RoleCatalogParityTest(unittest.TestCase):
                 | ({OPENCLAW_SA} if role in openclaw else set())
                 | ({CHAT_SA} if role in chat else set())
                 | ({JARVIS_SA} if role in jarvis else set())
+                # SC-2005: reviewed holders granted outside this reconciler
+                # (INFRA-494 secretarias, SC-1834 probe).
+                | (set(SECRETARIA_SAS) if role in secretaria else set())
+                | ({SECRETARIA_SKIRMSHOP_SA} if role in secretaria_skirmshop else set())
+                | ({PROBE_SA} if role in probe else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -83,7 +99,15 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 3)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 5)
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
         self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 11)
+        self.assertEqual(
+            len([pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
+                 if pair.endswith(("hermes-secretaria", "hermes-secretaria-casa",
+                                    "hermes-secretaria-dani", "hermes-secretaria-leila"))]),
+            8)
 
 
 if __name__ == "__main__":

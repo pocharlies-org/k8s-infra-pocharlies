@@ -18,8 +18,15 @@ EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentga
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
 # that single grant. Any other user, any group and any other service account
 # still fails the reconcile.
-ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway}"
-EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway"
+#
+# SC-2005 (2026-10-07): the allowlist widens to the four general Hermes
+# secretaria service accounts (INFRA-494, epic INFRA-479: per-profile
+# secretaria identities that write social and workspace through
+# AgentGateway; the grants are owned by the devops creation process in
+# k8s-openclaw-qwen36-pocharlies, never by this hook). Same rule as the
+# chat pairs above: this hook only tolerates the reviewed holders.
+ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila}"
+EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"
 
 cleanup() { rm -f "${ADMIN_CONFIG}"; }
 trap cleanup EXIT HUP INT TERM
@@ -61,7 +68,7 @@ assert_bounded_noncomposite() {
   if [ -n "${users}" ]; then
     [ -n "${allowed}" ] || fail "${role} is assigned to a user; dedicated-client rollout is not ready"
     while IFS= read -r username; do
-      [ "${username}" = "${allowed}" ] || \
+      printf '%s\n' "${allowed}" | grep -Fxq "${username}" || \
         fail "${role} is assigned to an unauthorized user; only ${allowed} may hold it"
       granted=$((granted + 1))
     done <<EOF
