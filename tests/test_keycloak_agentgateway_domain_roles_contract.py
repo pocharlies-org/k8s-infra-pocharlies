@@ -23,7 +23,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn("ROLE_NAMES is immutable", script)
         self.assertIn("ALLOWED_SERVICE_ACCOUNTS is immutable", script)
         self.assertIn(
-            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar"',
+            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop"',
             script,
         )
         self.assertIn('roles/${role}/users', script)
@@ -135,33 +135,21 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             self.assertEqual(1, result.returncode, role)
             self.assertIn(f"agentgateway-write:{role} is assigned to", result.stderr)
 
-    def test_workspace_borrador_is_inert_nobody_may_hold_it_yet(self):
-        # INFRA-676 / security INFRA-640 condition 2: created without a holder.
-        # The grant to secretaria-skirmshop is a later, separate change that
-        # waits for the narrowing of :workspace to reach the gateway.
-        script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
-        self.assertNotIn("agentgateway-write:workspace-borrador=", script)
-        for holder in ("service-account-hermes-secretaria-skirmshop", "service-account-hermes-enviar",
-                       "service-account-chat-agentgateway"):
+    def test_workspace_borrador_is_held_by_exactly_secretaria_skirmshop(self):
+        # INFRA-676 / security INFRA-640 condition 2: the draft-only role has one
+        # reviewed holder, added after the narrowing of :workspace propagated.
+        result, _ = self._run_reconciler({
+            "roles/agentgateway-write:workspace-borrador/users": "service-account-hermes-secretaria-skirmshop",
+        })
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"human_assigned":false,"service_account_grants":1', result.stdout)
+        for holder in ("service-account-hermes-enviar", "service-account-chat-agentgateway",
+                       "service-account-hermes-secretaria", "service-account-hermes-secretaria-dani"):
             result, _ = self._run_reconciler({
                 "roles/agentgateway-write:workspace-borrador/users": holder,
             })
             self.assertEqual(1, result.returncode, holder)
-            self.assertIn(
-                "agentgateway-write:workspace-borrador is assigned to a user; dedicated-client rollout is not ready",
-                result.stderr)
-
-    def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
-        # INFRA-249: created without grantees; any holder, even the reviewed chat
-        # identity, fails the reconcile, so the three dgx-control write tools
-        # stay fail-closed until a dedicated client and map entry are reviewed.
-        script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
-        self.assertNotIn("agentgateway-write:dgx-control=", script)
-        result, _ = self._run_reconciler({
-            "roles/agentgateway-write:dgx-control/users": "service-account-chat-agentgateway",
-        })
-        self.assertEqual(1, result.returncode)
-        self.assertIn("agentgateway-write:dgx-control is assigned to a user; dedicated-client rollout is not ready", result.stderr)
+            self.assertIn("agentgateway-write:workspace-borrador is assigned to an unauthorized user", result.stderr)
 
     def test_reconciler_tolerates_only_the_reviewed_chat_service_account(self):
         # Contract v2: the chat identity is reviewed on six domains, so the hook
@@ -220,7 +208,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn('capabilities: { drop: ["ALL"] }', manifest)
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("app.kubernetes.io/component: agentgateway-domain-roles", manifest)
-        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar", manifest)
+        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop", manifest)
         self.assertNotIn("0.0.0.0/0", manifest)
 
     def test_kustomize_owns_job_and_script(self):

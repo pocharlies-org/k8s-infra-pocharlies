@@ -670,9 +670,10 @@ Gmail drafts through AgentGateway `/workspace`. Its service account holds
 exactly two realm roles, `agentgateway-read:workspace` (owned by the read-grants
 hook, whose holder allowlist reviews it) and `agentgateway-write:workspace-envio`
 (created by the domain-roles hook, wave 19, which fails the sync if anyone else
-holds it). `agentgateway-write:workspace-borrador` is created in the same hook
-but **inert**: nobody may hold it until the grant to `secretaria-skirmshop` is
-reviewed. The client has no interactive flow and no redirect URI,
+holds it). `agentgateway-write:workspace-borrador` is created in the same hook;
+its only reviewed holder is `secretaria-skirmshop` (draft-only, granted by the
+secretaria identity process once the gateway narrowing of `:workspace` has
+propagated). The client has no interactive flow and no redirect URI,
 `fullScopeAllowed=false`, the `aud-mcp` audience mapper (`mcp.lan.e-dani.com`;
 without it the gateway answers 401 InvalidAudience) and the hook ends by
 minting a token and requiring exactly the two roles and the audience, and

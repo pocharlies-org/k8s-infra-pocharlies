@@ -137,8 +137,9 @@ immutable `ALLOWED_SERVICE_ACCOUNTS` map: the six chat pairs (`:media`,
 `=service-account-chat-agentgateway`), the eight pairs of the four general
 Hermes secretaria profiles on `:social` and `:workspace` (SC-2005), and, since
 INFRA-676, `:workspace-envio=service-account-hermes-enviar`.
-`:workspace-borrador` joined inert with it: no allowlist entry until its grant
-to `secretaria-skirmshop` is reviewed. Every other domain role stays unassigned
+`:workspace-borrador=service-account-hermes-secretaria-skirmshop` (the
+draft-only role, granted by the secretaria identity process) followed once the
+gateway narrowing of `:workspace` had propagated. Every other domain role stays unassigned
 until a dedicated client and a new map entry are reviewed together; the global
 `agentgateway-mcp` client is never granted these roles by this hook.
 
