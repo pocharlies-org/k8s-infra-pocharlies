@@ -11,7 +11,9 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **42 rutas, 72 gates**.
+  Hoy: **42 rutas, 72 gates** en esta matriz. El config vivo trae 77: la
+  diferencia son rutas y tools que la matriz aún no recoge (el verificador las
+  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676).
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
   Ninguno se retira desde aquí.
 

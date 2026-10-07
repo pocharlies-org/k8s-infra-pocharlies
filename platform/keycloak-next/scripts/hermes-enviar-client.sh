@@ -28,7 +28,7 @@ umask 077
 # AFTER the sync reads it through the admin API and writes it to the
 # 1Password item hermes-kc-enviar (field client_secret), from where the
 # ExternalSecret hermes-kc-secretarias carries it to Hermes (RUNBOOK section
-# 13). The token-mint verification reads the current secret through the admin
+# 17). The token-mint verification reads the current secret through the admin
 # API (GET, never rotated) and never prints it.
 #
 # fullScopeAllowed=false is the owned steady state (INFRA-45 pattern; the
@@ -170,16 +170,7 @@ EOF
 ensure_role_scope_mapping() {
   assert_scope_within
   for role in ${REVIEWED_ROLES}; do
-    if ! role_scope_has_direct_role "${role}"; then
-      role_id="$(kget "roles/${role}" --fields id --format csv --noquotes | nonempty_lines)"
-      [ -n "${role_id}" ] || fail "${role} id is empty"
-      role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "${role}")"
-      "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
-        --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
-        fail "failed to map ${role} into the client role scope"
-      unset role_body role_id
-    fi
-    role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
+    ensure_role_in_client_scope "${role}"
   done
 }
 

@@ -8,7 +8,7 @@ tests/test_jarvis_echo_identity_contract.py: the reconciler runs against a
 stateful stand-in for kcadm, and the catalog files (ROLES.yaml, PRINCIPALS.md)
 are checked by name, so the client cannot land without its catalog entries.
 """
-import importlib.util, json, os, pathlib, shutil, subprocess, sys, tempfile, textwrap, unittest
+import functools, importlib.util, pathlib, shutil, subprocess, sys, unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -17,8 +17,11 @@ SCRIPT = BASE / "scripts" / "hermes-enviar-client.sh"
 LIB = BASE / "scripts" / "keycloak-reconcile-lib.sh"
 SCRIPTS = BASE / "scripts"
 
+# The CI calls `python3 -m unittest tests/test_x.py` by path, so tests/ is not on sys.path.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(SCRIPTS))
 import kc_rbac  # noqa: E402
+from kcadm_fake import run_reconciler  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location("verify_principals", SCRIPTS / "verify-principals.py")
 verify_principals = importlib.util.module_from_spec(_spec)
@@ -30,161 +33,10 @@ BORRADOR_ROLE = "agentgateway-write:workspace-borrador"
 REVIEWED_ROLES = [READ_ROLE, WRITE_ROLE]
 SA_USERNAME = "service-account-hermes-enviar"
 
-# Stateful stand-in for kcadm.sh: JSON state across calls, a call journal, and
-# minted-token semantics measured live (INFRA-44): with fullScopeAllowed=true
-# every realm role of the service account travels; with the flag off only the
-# roles present in the client's realm scope mappings do.
-# FAKE_FORCE_BAD_OFF_TOKEN empties the flag-off token (an off-matrix token);
-# FAKE_TOKEN_EXTRA_ROLES appends roles to every minted token (an attacker's
-# or a drifted grant). The fake knows exactly one client (hermes-enviar) and
-# only the endpoints the reconciler calls; role holders are derived from the
-# service account's grants plus the `users`/`groups` the state seeds per role.
-FAKE_KCADM = textwrap.dedent('''\
-    #!/usr/bin/env python3
-    import base64, json, os, sys
-
-    argv = sys.argv[1:]
-    with open(os.environ["FAKE_KCADM_LOG"], "a") as log:
-        log.write(" ".join(argv) + "\\n")
-    state_path = os.environ["FAKE_KC_STATE"]
-    with open(state_path) as fh:
-        state = json.load(fh)
-
-    def save():
-        with open(state_path, "w") as fh:
-            json.dump(state, fh)
-
-    def after(name):
-        return argv[argv.index(name) + 1] if name in argv else None
-
-    def repeated(name):
-        return [argv[i + 1] for i, a in enumerate(argv) if a == name and i + 1 < len(argv)]
-
-    def emit(rows, fields):
-        for row in rows:
-            print(",".join(str(row.get(f, "")) for f in fields))
-
-    client = state.get("clients", {}).get("hermes-enviar")
-    verb = argv[0]
-
-    if verb == "config" and after("--realm") == "master":
-        sys.exit(0)
-
-    if verb == "config":
-        if client is None or client["secret"] != after("--secret"):
-            sys.exit(1)
-        roles = list(client.get("sa_roles", []))
-        if client.get("fullScopeAllowed") == "false":
-            roles = [] if os.environ.get("FAKE_FORCE_BAD_OFF_TOKEN") else [
-                r for r in roles if r in client.get("scope_roles", [])]
-        roles += [r for r in os.environ.get("FAKE_TOKEN_EXTRA_ROLES", "").split(",") if r]
-        aud = ["account"] + [m["audience"] for m in client.get("mappers", {}).values()]
-        claims = {"azp": "hermes-enviar", "aud": aud, "realm_access": {"roles": roles}}
-        # Compact JSON, like a real Keycloak JWT payload (no space after commas).
-        payload = base64.urlsafe_b64encode(
-            json.dumps(claims, separators=(",", ":")).encode()).decode().rstrip("=")
-        with open(after("--config"), "w") as fh:
-            json.dump({"token": "hdr." + payload + ".sig"}, fh)
-        sys.exit(0)
-
-    if verb == "add-roles":
-        client.setdefault("sa_roles", []).append(after("--rolename"))
-        save(); sys.exit(0)
-
-    target = argv[1] if len(argv) > 1 else ""
-    fields = (after("--fields") or "").split(",")
-    settings = dict(a.split("=", 1) for a in repeated("-s") if "=" in a)
-
-    if verb == "get":
-        if target == "clients":
-            wanted = [q.split("=", 1)[1] for q in repeated("-q") if q.startswith("clientId=")]
-            if "hermes-enviar" in wanted and client is not None:
-                emit([{"id": "uuid-hermes-enviar"}], fields)
-            sys.exit(0)
-        if target == "clients/uuid-hermes-enviar":
-            emit([client], fields); sys.exit(0)
-        if target == "clients/uuid-hermes-enviar/client-secret":
-            emit([{"value": client["secret"]}], fields); sys.exit(0)
-        if target == "clients/uuid-hermes-enviar/protocol-mappers/models":
-            emit([{"id": mid, "name": m["name"]} for mid, m in client.get("mappers", {}).items()], fields)
-            sys.exit(0)
-        if target == "clients/uuid-hermes-enviar/scope-mappings/realm":
-            emit([{"name": r} for r in client.get("scope_roles", [])], fields); sys.exit(0)
-        if target == "clients/uuid-hermes-enviar/service-account-user":
-            emit([{"id": "sa-hermes-enviar", "username": "service-account-hermes-enviar"}], fields); sys.exit(0)
-        if target.startswith("roles/") and target.endswith("/users"):
-            name = target[len("roles/"):-len("/users")]
-            role = state["roles"].get(name)
-            if role is None:
-                sys.exit(1)
-            holders = list(role.get("users", []))
-            if client is not None and name in client.get("sa_roles", []):
-                holders.append("service-account-hermes-enviar")
-            emit([{"username": u} for u in holders], fields); sys.exit(0)
-        if target.startswith("roles/") and target.endswith("/groups"):
-            name = target[len("roles/"):-len("/groups")]
-            role = state["roles"].get(name)
-            if role is None:
-                sys.exit(1)
-            emit([{"path": g} for g in role.get("groups", [])], fields); sys.exit(0)
-        if target.startswith("roles/"):
-            role = state["roles"].get(target[len("roles/"):])
-            if role is None:
-                sys.exit(1)
-            emit([{"id": role["id"], "composite": str(role["composite"]).lower()}], fields)
-            sys.exit(0)
-        if target == "users/sa-hermes-enviar/role-mappings/realm":
-            emit([{"name": r} for r in client.get("sa_roles", [])], fields); sys.exit(0)
-        sys.exit(99)
-
-    if verb == "create" and target == "clients":
-        state["clients"]["hermes-enviar"] = dict(
-            settings, sa_roles=[], scope_roles=[], mappers={}, secret="generated-hermes-enviar")
-        save(); sys.exit(0)
-    if verb == "update" and target == "clients/uuid-hermes-enviar":
-        state["clients"]["hermes-enviar"].update(settings); save(); sys.exit(0)
-    if verb in ("create", "update") and target.startswith("clients/uuid-hermes-enviar/protocol-mappers/models"):
-        c = state["clients"]["hermes-enviar"]
-        mid = target.rsplit("/", 1)[-1] if verb == "update" else "mapper-" + settings["name"]
-        c.setdefault("mappers", {})[mid] = {
-            "name": settings["name"], "audience": settings.get('config."included.custom.audience"', "")}
-        save(); sys.exit(0)
-    if verb == "create" and target == "clients/uuid-hermes-enviar/scope-mappings/realm":
-        state["clients"]["hermes-enviar"].setdefault("scope_roles", []).extend(
-            entry["name"] for entry in json.loads(after("-b")))
-        save(); sys.exit(0)
-    if verb == "delete" and target == "clients/uuid-hermes-enviar":
-        state["clients"].pop("hermes-enviar", None); save(); sys.exit(0)
-    sys.exit(99)
-''')
-
-
-def _run(mode, state, env_overrides=None):
-    with tempfile.TemporaryDirectory() as tmp:
-        root = pathlib.Path(tmp)
-        paths = {
-            "script": root / "kcadm.sh",
-            "log": root / "kcadm.log",
-            "state": root / "state.json",
-        }
-        paths["script"].write_text(FAKE_KCADM)
-        paths["script"].chmod(0o755)
-        paths["log"].write_text("")
-        paths["state"].write_text(json.dumps(state))
-        environ = dict(os.environ)
-        environ["KCADM"] = str(paths["script"])
-        environ["FAKE_KCADM_LOG"] = str(paths["log"])
-        environ["FAKE_KC_STATE"] = str(paths["state"])
-        environ["KC_BOOTSTRAP_ADMIN_USERNAME"] = "test-admin"
-        environ["KC_BOOTSTRAP_ADMIN_PASSWORD"] = "test-password"
-        environ["MODE"] = mode
-        if env_overrides:
-            environ.update(env_overrides)
-        proc = subprocess.run(["/bin/sh", str(SCRIPT)], capture_output=True,
-                              text=True, env=environ)
-        journal = paths["log"].read_text().splitlines()
-        final = json.loads(paths["state"].read_text())
-        return proc, journal, final
+# The stateful kcadm stand-in (fake state, call journal, minted-token semantics measured
+# live in INFRA-44, FAKE_FORCE_BAD_OFF_TOKEN / FAKE_TOKEN_EXTRA_ROLES) is shared with the
+# jarvis-echo test: tests/kcadm_fake.py.
+_run = functools.partial(run_reconciler, SCRIPT, "hermes-enviar")
 
 
 def _state(read_present=True, write_present=True, client=None, write_users=(), write_groups=()):
@@ -237,6 +89,11 @@ class HermesEnviarReconcilerTest(unittest.TestCase):
         # shared reconcile library; this file keeps only policy.
         self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script)
         self.assertIn("oidc-audience-mapper", LIB.read_text())
+        # Mapping a role into the client scope is a library helper, not a copy
+        # in the reconciler (the `duplicados` standard of the org).
+        self.assertIn("ensure_role_in_client_scope()", LIB.read_text())
+        self.assertIn('ensure_role_in_client_scope "${role}"', script)
+        self.assertNotIn("scope-mappings/realm", script.replace('kget "clients/${CLIENT_UUID}/scope-mappings/realm"', ""))
         # Both roles are owned by other hooks: never created or deleted here,
         # and the reconciler refuses to run without them.
         self.assertIn("the agentgateway-read-grants hook owns it", script)

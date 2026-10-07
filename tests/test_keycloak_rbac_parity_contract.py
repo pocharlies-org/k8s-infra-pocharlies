@@ -34,11 +34,11 @@ SECRETARIA_SKIRMSHOP_SA = "service-account-hermes-secretaria-skirmshop"
 PROBE_SA = "service-account-atlassian-mcp-probe"
 
 
-def shell_list(path, variable):
+def shell_list(path, variable, sep=","):
     match = re.search(rf'^{variable}="([^"]*)"$', path.read_text(encoding="utf-8"), re.MULTILINE)
     if not match:
         raise AssertionError(f"{variable} not found in {path.name}")
-    return [item for item in match.group(1).split(",") if item]
+    return [item for item in match.group(1).split(sep) if item]
 
 
 def owned_by(catalog, script):
@@ -56,14 +56,14 @@ class RoleCatalogParityTest(unittest.TestCase):
         chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
         jarvis = shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES")
         enviar = shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES")
-        secretaria =shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
+        secretaria = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
         secretaria_skirmshop = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")
         probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
         self.assertTrue(set(enviar) <= set(reads))
-        owned =owned_by(self.catalog, READ_GRANTS)
+        owned = owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
             # SC-699: the chat grantee travels in the read-grants holder
@@ -128,8 +128,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         # copying that pair there would be dead config.
         chat = SCRIPTS / "chat-agentgateway-client.sh"
         extra = set(shell_list(chat, "EXPECTED_REVIEWED_EXTRA_HOLDERS"))
-        chat_roles = set(re.search(r'^EXPECTED_ROLE_NAMES="([^"]*)"$',
-                                   chat.read_text(encoding="utf-8"), re.MULTILINE).group(1).split())
+        chat_roles = set(shell_list(chat, "EXPECTED_ROLE_NAMES", sep=" "))
         domain = {
             pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
             if not pair.endswith("=service-account-chat-agentgateway")

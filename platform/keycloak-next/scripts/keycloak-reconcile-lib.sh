@@ -4,7 +4,8 @@
 #
 # NOT a standalone script: it is sourced with `.` by
 #   agentgateway-domain-roles.sh, chat-agentgateway-client.sh,
-#   agentgateway-chat-mcp-client.sh and jarvis-echo-client.sh,
+#   agentgateway-chat-mcp-client.sh, jarvis-echo-client.sh and
+#   hermes-enviar-client.sh,
 # which mount it in their ConfigMap next to the entrypoint. Every helper
 # resolves its configuration (KCADM, ADMIN_CONFIG, CLIENT_CONFIG, KEYCLOAK_URL,
 # REALM, CLIENT_ID, CLIENT_UUID, MAPPER_NAME, AGENTGATEWAY_AUDIENCE) at CALL
@@ -137,6 +138,25 @@ upsert_audience_mapper() {
 role_scope_has_direct_role() {
   kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
     --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
+}
+
+# Map ONE realm role into the client role scope, created only when absent and
+# re-read after to fail loud. $1 = role name. With fullScopeAllowed=false,
+# Keycloak 26 emits in the token only the realm roles that are BOTH in this
+# client's realm scope mapping AND actually held by the user; the mapping
+# itself grants nothing to anyone. Which roles belong in the scope (and the
+# check that nothing else does) is policy and stays in the reconciler.
+ensure_role_in_client_scope() {
+  if ! role_scope_has_direct_role "$1"; then
+    role_id="$(kget "roles/$1" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "$1 id is empty"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "$1")"
+    "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to map $1 into the client role scope"
+    unset role_body role_id
+  fi
+  role_scope_has_direct_role "$1" || fail "client role scope is missing $1"
 }
 
 # The service account Keycloak derives from a confidential client; its id and
