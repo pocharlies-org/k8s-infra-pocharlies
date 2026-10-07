@@ -104,7 +104,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-dani` | sa | DevOps | activo | Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-leila` | sa | DevOps | activo | Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
-| `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, skirmshop-plugins, brain, workspace); sin ninguna escritura. |
+| `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar. |
 | `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
@@ -494,13 +494,14 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "hermes-secretaria-skirmshop",
       "owner": "DevOps",
       "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-skirmshop de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-skirmshop` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
-      "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, skirmshop-plugins, brain, workspace); sin ninguna escritura.",
+      "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar.",
       "realm_roles": [
         "agentgateway-read:brain",
         "agentgateway-read:picqer",
         "agentgateway-read:shopify",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:workspace",
+        "agentgateway-write:workspace-borrador",
         "default-roles-edani"
       ],
       "status": "activo"
