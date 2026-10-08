@@ -502,13 +502,15 @@
     {
       "name": "agentgateway-write:workspace-borrador",
       "status": "active",
-      "meaning": "Creación y edición de borradores de Gmail por la ruta /workspace de AgentGateway: gmail_create_draft y gmail_update_draft (INFRA-642 / INFRA-676, P4 de INFRA-480). Alta inerte: sin titulares hasta que se conceda al perfil secretaria-skirmshop, que security (INFRA-640, condición 2) solo permite cuando el estrechamiento de :workspace ya se ha propagado al gateway.",
-      "grantees": [],
+      "meaning": "Creación y edición de borradores de Gmail por la ruta /workspace de AgentGateway: gmail_create_draft y gmail_update_draft (INFRA-642 / INFRA-676, P4 de INFRA-480). Un único titular revisado: el perfil secretaria-skirmshop, que solo redacta borradores.",
+      "grantees": [
+        "service-account-hermes-secretaria-skirmshop"
+      ],
       "privilege": {
-        "allows": "Las tools gmail_create_draft y gmail_update_draft del dominio workspace, con GATEWAY_WRITE activo en la ruta; hoy nadie lo tiene.",
+        "allows": "Las tools gmail_create_draft y gmail_update_draft del dominio workspace, con GATEWAY_WRITE activo en la ruta.",
         "denies": "Enviar, reenviar o borrar borradores (agentgateway-write:workspace-envio), el resto de escrituras de workspace, las de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por agentgateway-read:workspace."
       },
-      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; INFRA-676)"
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; INFRA-676); el titular service-account-hermes-secretaria-skirmshop lo concede el proceso de identidades de secretaria de k8s-openclaw-qwen36-pocharlies (INFRA-494), no este hook"
     },
     {
       "name": "agentgateway-write:workspace-envio",

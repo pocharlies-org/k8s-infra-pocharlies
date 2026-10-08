@@ -670,9 +670,10 @@ Gmail drafts through AgentGateway `/workspace`. Its service account holds
 exactly two realm roles, `agentgateway-read:workspace` (owned by the read-grants
 hook, whose holder allowlist reviews it) and `agentgateway-write:workspace-envio`
 (created by the domain-roles hook, wave 19, which fails the sync if anyone else
-holds it). `agentgateway-write:workspace-borrador` is created in the same hook
-but **inert**: nobody may hold it until the grant to `secretaria-skirmshop` is
-reviewed. The client has no interactive flow and no redirect URI,
+holds it). `agentgateway-write:workspace-borrador` is created in the same hook;
+its only reviewed holder is `secretaria-skirmshop` (draft-only, granted by the
+secretaria identity process once the gateway narrowing of `:workspace` has
+propagated). The client has no interactive flow and no redirect URI,
 `fullScopeAllowed=false`, the `aud-mcp` audience mapper (`mcp.lan.e-dani.com`;
 without it the gateway answers 401 InvalidAudience) and the hook ends by
 minting a token and requiring exactly the two roles and the audience, and
@@ -686,7 +687,14 @@ must be a full Argo CD sync (hooks are skipped on a selective resource sync).
 Expect at most a few transient `keycloak-role-drift` `DRIFT:` runs between the
 sync start and wave 24 completing (the catalog names two roles and a principal
 the realm does not have yet); it must be green again on the first run after
-the hooks.
+the hooks. Merging the `secretaria-skirmshop` pair of `workspace-borrador`
+opens a second, longer window: from that sync until the INFRA-494 process
+grants the role, `keycloak-role-drift` gives `DRIFT:` every 15 minutes (the
+catalog names a holder the realm does not have yet) and `K8sCronJobFailed`
+alerts Telegram. Grant the role right after the domain-roles hook has synced
+(wave 19) and the next run clears it. The order cannot be reversed: granting
+before the merge fails that hook (`assigned to a user; dedicated-client rollout
+is not ready`).
 
 ```bash
 kubectl -n keycloak logs job/keycloak-hermes-enviar-client -c reconcile-client

@@ -120,8 +120,10 @@ Nº de casos: **pendiente de medir**.
   roles `agentgateway-write:workspace-envio` y `:workspace-borrador` los crea `platform/keycloak-next` por hooks
   PostSync (`hermes-enviar-client.yaml` en la ola 24, `agentgateway-domain-roles` en la 19), nunca a mano. El hook no
   gestiona el secreto: se siembra en 1Password `hermes-kc-enviar` tras el primer sync (RUNBOOK 17) y tiene que estar
-  antes del chart de Hermes. `workspace-borrador` nace sin titular: su concesión a `secretaria-skirmshop` va aparte,
-  cuando el estrechamiento de `:workspace` (k8s-agentgateway-pocharlies#186) esté propagado. En el primer sync,
+  antes del chart de Hermes. `workspace-borrador` tiene un único titular revisado, `secretaria-skirmshop` (solo redacta borradores; nunca
+  envía). El hook solo lo tolera; la concesión en el realm la hace el proceso de identidades de secretaria (INFRA-494).
+  Entre el merge y la concesión `keycloak-role-drift` da `DRIFT:` (el catálogo declara un titular que el realm aún no
+  tiene). En el primer sync,
   `keycloak-role-drift` puede dar `DRIFT:` hasta que acaban los hooks; se limpia solo.
 - longhorn-single (1 réplica, Delete, sin dataLocality) existe solo a mano en el clúster, no está en git y no se usa: no
   garantiza en qué nodo cae la réplica. Para un volumen local de un nodo, longhorn-strict-local.

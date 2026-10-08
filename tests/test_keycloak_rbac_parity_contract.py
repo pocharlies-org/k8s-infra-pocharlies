@@ -139,7 +139,10 @@ class RoleCatalogParityTest(unittest.TestCase):
             pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
             if pair.partition("=")[0] not in chat_roles
         }
-        self.assertEqual({"agentgateway-write:workspace-envio=service-account-hermes-enviar"}, guarded_elsewhere)
+        self.assertEqual({
+            "agentgateway-write:workspace-envio=service-account-hermes-enviar",
+            "agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop",
+        }, guarded_elsewhere)
 
 
 if __name__ == "__main__":

@@ -361,6 +361,7 @@ class HermesEnviarCatalogContractTest(unittest.TestCase):
         self.assertTrue(envio["origin"].startswith("agentgateway-domain-roles.sh"), envio["origin"])
         borrador = self.catalog[BORRADOR_ROLE]
         self.assertEqual("active", borrador["status"])
+        self.assertEqual(["service-account-hermes-secretaria-skirmshop"], borrador["grantees"])
         self.assertTrue(borrador["origin"].startswith("agentgateway-domain-roles.sh"), borrador["origin"])
         self.assertIn(SA_USERNAME, self.catalog[READ_ROLE]["grantees"])
         self.assertIn(SA_USERNAME, self.catalog["default-roles-edani"]["grantees"])
@@ -386,11 +387,12 @@ class HermesEnviarCatalogContractTest(unittest.TestCase):
             self.assertIn(WRITE_ROLE, text)
             self.assertIn(BORRADOR_ROLE, text)
             self.assertIn(pair, text)
-        # The draft role is created inert in this PR: nobody may hold it yet
-        # (security INFRA-640 condition 2: the narrowing of :workspace must
-        # reach the gateway before any holder gets a write role).
-        self.assertNotIn(f"{BORRADOR_ROLE}=", script)
-        self.assertNotIn(f"{BORRADOR_ROLE}=", job)
+        # The draft role has exactly one reviewed holder, secretaria-skirmshop
+        # (added after k8s-agentgateway-pocharlies#186 propagated: security
+        # INFRA-640 condition 2). hermes-enviar never gets it.
+        for text in (script, job):
+            self.assertIn(f"{BORRADOR_ROLE}=service-account-hermes-secretaria-skirmshop", text)
+            self.assertNotIn(f"{BORRADOR_ROLE}=service-account-hermes-enviar", text)
 
     def test_read_grants_hook_reviews_the_new_holder_of_the_shared_read_role(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
