@@ -114,16 +114,17 @@ cambia su spec/etiquetas/anotaciones, nunca por reloj.
   esperas a la siguiente pasada.
 
 **Techo.** El store `onepassword-connect` (Connect en clúster) no gasta cupo; el
-store viejo `onepassword` (SDK) sí, contra los 1.000 requests/día de la cuenta —
-una relectura completa de todos sus ES equivale al día entero. Por eso **nunca**
-`rollout restart` de ESO ni anotar el ClusterSecretStore para recoger un valor:
-soltarían el cache del provider y relecturarían todos los ES de golpe.
+store viejo `onepassword` (SDK) sí, contra los 1.000 requests/día de la cuenta,
+y hoy solo lo usan las PushSecret de Hermes y los pocos ES Periodic. Por eso
+**nunca** `rollout restart` de ESO ni anotar el ClusterSecretStore para recoger
+un valor: con OnChange no relee nada, solo `force-sync` entrega el valor.
 
 ## Qué NO hacer
 
 - **Rotar credenciales en el día.** La rotación espera la sesión semanal (SC-1790).
-- **Reiniciar ESO o hacer `force-sync` masivo sin medir.** Con los ES ya en Connect es gratis;
-  con cualquier ES que aún conserve forma SDK, cada relectura va al proveedor y gasta cupo —
+- **Reiniciar ESO o anotar el ClusterSecretStore para recoger un valor** (ver «Cómo recoger un
+  secreto nuevo o rotado»), **ni hacer `force-sync` masivo sin medir.** Con los ES ya en Connect es
+  gratis; con cualquier ES que aún conserve forma SDK, cada relectura va al proveedor y gasta cupo —
   una lectura completa ≈ el día entero (`connect.yaml`).
 - **Devolver `mutateExistingOnPolicyUpdate: true` a una policy que toque ES**, o resucitar la
   regla `onchange-existing`: fue la causa de la tormenta del 03-10 (275–535 UpdateRequests por
