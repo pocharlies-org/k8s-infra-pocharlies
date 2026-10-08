@@ -38,6 +38,12 @@ ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-fixture-user-rollback-job.y
 ITEM = "keycloak-next-qa-write-sin-vinculo"
 ES_NAME = "agentgateway-write-fixture-user-credentials"
 
+# OWU-76: the profile names that keep the scripted PKCE login off "Update
+# Account Information" (Keycloak 26's default profile requires both for role
+# "user"). Fixed values, pinned by the hook, not secret.
+FIRST_NAME = "QA"
+LAST_NAME = "Fixture"
+
 # A sentinel stands in for the real password: it must never surface in the
 # fake kcadm journal (argv), stdout or stderr.
 PASSWORD = "Sentinel-Password-4f2e9a-DoNotLog"
@@ -71,19 +77,62 @@ class WriteFixtureUserFunctionalTest(SilentWriteContractMixin, unittest.TestCase
             journal.rindex("role-mappings/realm"), journal.index("add-roles")
         )
 
-    def test_ensure_is_idempotent_but_still_reapplies_the_password(self):
-        # SC-1635/SC-1645: the password is re-applied on every sync so
-        # Keycloak cannot drift from 1Password; creation and the grant are
-        # skipped when already present.
+    def test_ensure_sets_the_profile_names_when_creating_the_user(self):
+        # OWU-76: a user without firstName/lastName is sent to Update Account
+        # Information at login. The names are part of the create itself.
+        result, journal, state = self.run_reconciler("ensure")
+        self.assertEqual(0, result.returncode, result.stderr)
+        create_line = next(l for l in journal.splitlines() if l.startswith("create users"))
+        self.assertIn(f"firstName={FIRST_NAME}", create_line)
+        self.assertIn(f"lastName={LAST_NAME}", create_line)
+        self.assertIn("requiredActions=[]", create_line)
+        self.assertEqual(FIRST_NAME + "\n", state.get("user-firstname"))
+        self.assertEqual(LAST_NAME + "\n", state.get("user-lastname"))
+
+    def test_ensure_sets_missing_profile_names_on_an_existing_user(self):
+        # The drift the live fixture showed: the user exists without names.
         result, journal, state = self.run_reconciler(
             "ensure",
             fixtures={"user-exists": "1", "user-roles": ROLE + "\n"},
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"changed":true', result.stdout)
+        self.assertNotIn("create users", journal)
+        update_line = next(l for l in journal.splitlines() if l.startswith("update users/"))
+        self.assertIn(f"firstName={FIRST_NAME}", update_line)
+        self.assertIn(f"lastName={LAST_NAME}", update_line)
+        self.assertEqual(FIRST_NAME + "\n", state.get("user-firstname"))
+        self.assertEqual(LAST_NAME + "\n", state.get("user-lastname"))
+
+    def test_ensure_fails_when_the_profile_names_do_not_stick(self):
+        # SC-1215: a 0-exit update that wrote nothing is caught by the
+        # post-update read, before the password or the role is touched.
+        result, journal, _ = self.run_reconciler(
+            "ensure",
+            fixtures={"user-exists": "1", "user-roles": ROLE + "\n",
+                      "profile-silent-noop": "1"},
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("post-update assertion failed", result.stderr)
+        self.assertNotIn("set-password", journal)
+
+    def test_ensure_is_idempotent_but_still_reapplies_the_password(self):
+        # SC-1635/SC-1645: the password is re-applied on every sync so
+        # Keycloak cannot drift from 1Password; creation and the grant are
+        # skipped when already present, and so is the profile write when the
+        # names already match.
+        result, journal, state = self.run_reconciler(
+            "ensure",
+            fixtures={"user-exists": "1", "user-roles": ROLE + "\n",
+                      "user-firstname": FIRST_NAME + "\n",
+                      "user-lastname": LAST_NAME + "\n"},
         )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn('"created":false', result.stdout)
         self.assertIn('"changed":false', result.stdout)
         self.assertNotIn("create users", journal)
         self.assertNotIn("add-roles", journal)
+        self.assertNotIn("firstName=", journal)
         self.assertIn("set-password", journal)
         self.assertIn("password-applied", state)
 
@@ -158,7 +207,10 @@ class WriteFixtureUserFunctionalTest(SilentWriteContractMixin, unittest.TestCase
 
     def test_audit_passes_when_present_and_fails_when_absent(self):
         ok, _, _ = self.run_reconciler(
-            "audit", fixtures={"user-exists": "1", "user-roles": ROLE + "\n"}
+            "audit",
+            fixtures={"user-exists": "1", "user-roles": ROLE + "\n",
+                      "user-firstname": FIRST_NAME + "\n",
+                      "user-lastname": LAST_NAME + "\n"},
         )
         self.assertEqual(0, ok.returncode, ok.stderr)
         self.assertIn('"present":true', ok.stdout)
@@ -167,6 +219,19 @@ class WriteFixtureUserFunctionalTest(SilentWriteContractMixin, unittest.TestCase
         self.assertIn("audit:", bad.stderr)
         self.assertNotIn("create users", journal)
         self.assertNotIn("add-roles", journal)
+
+    def test_audit_fails_when_a_profile_name_is_empty(self):
+        # OWU-76: the audit proves the login has no profile page to hit. An
+        # empty lastName is a failure even when everything else is in place.
+        result, journal, _ = self.run_reconciler(
+            "audit",
+            fixtures={"user-exists": "1", "user-roles": ROLE + "\n",
+                      "user-firstname": FIRST_NAME + "\n", "user-lastname": ""},
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("audit:", result.stderr)
+        self.assertIn("no lastName", result.stderr)
+        self.assertNotIn("update users", journal)
 
     def test_rollback_removes_the_role_and_disables_without_deleting(self):
         result, journal, state = self.run_reconciler(
@@ -216,6 +281,17 @@ class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase
         self.assertIn(f'ROLE_NAME="${{ROLE_NAME:-{ROLE}}}"', script)
         self.assertIn(f'USERNAME="${{USERNAME:-{FIXTURE}}}"', script)
         self.assertIn(f'[ "${{USERNAME}}" = "{FIXTURE}" ]', script)
+
+    def test_profile_names_are_fixed_and_requiredactions_stays_empty(self):
+        # OWU-76: the names are pinned constants (no environment override), not
+        # secret, and the create still carries requiredActions=[].
+        code = hook_code(SCRIPT, COMMON)
+        self.assertIn(f'PROFILE_FIRST_NAME="{FIRST_NAME}"', code)
+        self.assertIn(f'PROFILE_LAST_NAME="{LAST_NAME}"', code)
+        self.assertNotIn("PROFILE_FIRST_NAME=\"${", code)
+        self.assertNotIn("PROFILE_LAST_NAME=\"${", code)
+        self.assertIn("'requiredActions=[]'", code)
+        self.assertNotIn("requiredActions=[\"", code)
 
     def test_password_reaches_kcadm_only_via_the_environment(self):
         code = hook_code(SCRIPT, COMMON)

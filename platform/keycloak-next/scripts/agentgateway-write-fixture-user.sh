@@ -23,10 +23,14 @@ umask 077
 # REQUIRES the role to already exist and fails loud otherwise.
 #
 # MODE ensure is idempotent and drift-fixing: it creates the user only when
-# missing, re-enables it if disabled, RE-APPLIES the password on every sync
-# (the SC-1635/SC-1645 incident class was exactly a Keycloak-vs-1Password
-# password drift), and grants the role only when missing, with a post-write
-# read as the real assertion (SC-1215: kcadm can swallow server answers).
+# missing, re-enables it if disabled, SETS firstName/lastName when they differ
+# from the fixed profile names below (Keycloak 26's default user profile
+# requires both for the "user" role; without them the scripted PKCE login is
+# sent to "Update Account Information" and cannot finish), RE-APPLIES the
+# password on every sync (the SC-1635/SC-1645 incident class was exactly a
+# Keycloak-vs-1Password password drift), and grants the role only when
+# missing, with a post-write read as the real assertion (SC-1215: kcadm can
+# swallow server answers).
 # MODE audit checks the facts without mutating (the password cannot be read
 # back over the API — its application is the ensure path's job). MODE
 # rollback removes the role mapping and DISABLES the user; it never deletes
@@ -47,6 +51,10 @@ KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
 REALM="${REALM:-edani}"
 ROLE_NAME="${ROLE_NAME:-agentgateway-write}"
 USERNAME="${USERNAME:-qa-write-sin-vinculo@e-dani.com}"
+# The profile names of the fixture: fixed, not secret, not switchable through
+# the environment. They only have to be non-empty for the login to pass.
+PROFILE_FIRST_NAME="QA"
+PROFILE_LAST_NAME="Fixture"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-write-fixture-admin.config
 KCADM_OUT=/tmp/kcadm-write-fixture-reply.txt
@@ -110,13 +118,42 @@ user_has_direct_role() {
 create_user() {
   # requiredActions=[] so the scripted PKCE login of the fixture never trips
   # UPDATE_PASSWORD / VERIFY_EMAIL prompts; emailVerified=true for the same
-  # reason. The reply is captured, never printed.
+  # reason; the profile names keep it off UPDATE_PROFILE. The reply is
+  # captured, never printed.
   if ! "${KCADM}" create users --config "${ADMIN_CONFIG}" -r "${REALM}" \
     -s "username=${USERNAME}" -s "email=${USERNAME}" \
     -s enabled=true -s emailVerified=true -s 'requiredActions=[]' \
+    -s "firstName=${PROFILE_FIRST_NAME}" -s "lastName=${PROFILE_LAST_NAME}" \
     > "${KCADM_OUT}" 2>&1; then
     fail "failed to create ${USERNAME}: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
   fi
+}
+
+profile_names_match() {
+  [ "$(user_field firstName)" = "${PROFILE_FIRST_NAME}" ] && \
+    [ "$(user_field lastName)" = "${PROFILE_LAST_NAME}" ]
+}
+
+apply_profile_names() {
+  # Called by ensure only when the names differ, so a sync that finds them
+  # set writes nothing. The post-write read is the assertion (SC-1215).
+  if ! "${KCADM}" update "users/${FIXTURE_USER_ID}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+    -s "firstName=${PROFILE_FIRST_NAME}" -s "lastName=${PROFILE_LAST_NAME}" \
+    > "${KCADM_OUT}" 2>&1; then
+    fail "failed to set the profile names of ${USERNAME}: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
+  fi
+  profile_names_match || \
+    fail "post-update assertion failed: ${USERNAME} does not carry firstName=${PROFILE_FIRST_NAME} and lastName=${PROFILE_LAST_NAME}"
+}
+
+assert_profile_names_present() {
+  # Audit reads presence only: a name Keycloak does not hold (empty, or the
+  # null token of kcadm) sends the login to Update Account Information.
+  for field in firstName lastName; do
+    case "$(user_field "${field}")" in
+      ""|null) fail "audit: ${USERNAME} has no ${field}: the login would stop at Update Account Information" ;;
+    esac
+  done
 }
 
 apply_password() {
@@ -173,6 +210,10 @@ case "${MODE}" in
         fail "post-update assertion failed: ${USERNAME} is still disabled after re-enable"
       changed=true
     fi
+    if ! profile_names_match; then
+      apply_profile_names
+      changed=true
+    fi
     apply_password
     if ! user_has_direct_role; then
       if ! "${KCADM}" add-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
@@ -191,6 +232,7 @@ case "${MODE}" in
     assert_fixture_is_human_and_unaffiliated
     [ "$(user_field enabled)" = "true" ] || \
       fail "audit: ${USERNAME} is disabled"
+    assert_profile_names_present
     assert_role_exists
     user_has_direct_role || \
       fail "audit: ${USERNAME} is missing the direct mapping of ${ROLE_NAME}"

@@ -308,6 +308,12 @@ _FIXTURE_GET = """\
               serviceAccountClientId)
                 if [ -f "$state/user-sa" ]; then printf 'some-client\\n'
                 else printf '\\n'; fi ;;
+              firstName)
+                if [ -f "$state/user-firstname" ]; then cat "$state/user-firstname"
+                else printf '\\n'; fi ;;
+              lastName)
+                if [ -f "$state/user-lastname" ]; then cat "$state/user-lastname"
+                else printf '\\n'; fi ;;
               *) exit 63 ;;
             esac
             ;;
@@ -324,6 +330,12 @@ _FIXTURE_WRITE_CASES = """\
           exit 1
         fi
         touch "$state/user-exists"
+        for a in "$@"; do
+          case "$a" in
+            firstName=*) printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
+            lastName=*) printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
+          esac
+        done
         exit 0
         ;;
       set-password)
@@ -339,10 +351,16 @@ _FIXTURE_WRITE_CASES = """\
         exit 0
         ;;
       update)
+        # profile-silent-noop: the server answers 0 and writes nothing, so the
+        # post-update read must catch it (SC-1215).
         for a in "$@"; do
           case "$a" in
             enabled=true) rm -f "$state/user-disabled" ;;
             enabled=false) touch "$state/user-disabled" ;;
+            firstName=*)
+              [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
+            lastName=*)
+              [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
           esac
         done
         exit 0
