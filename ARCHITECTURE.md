@@ -51,13 +51,17 @@ automático `prune: false`, `selfHeal: true`):
 | Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae. Kyverno `externalsecret-alibaba-plan-only-litellm` (POLICY 8, Enforce, DGX-619/626) deniega al admitir todo ExternalSecret fuera del ns `litellm` cuyo `remoteRef.key`, `dataFrom.extract.key` o `dataFrom.find.name.regexp` apunte a `alibaba-model-studio*`; las claves del Token Plan de Alibaba solo se leen allí, el resto va por el plan-gateway. No ve Secrets creados a mano | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
+| Volumen local de un nodo (1 réplica, strict-local, reclaim Delete, WaitForFirstConsumer) | StorageClass longhorn-strict-local | kubernetes/storage/longhorn-strict-local.yaml (listada en kustomization.yaml raíz y en kubernetes/storage/kustomization.yaml) | Frigate (frigate-config y frigate-media en ubuntu, INFRA-701). Sus PVC llevan argocd.argoproj.io/sync-options: Prune=false,Delete=false: borrar el PVC destruye el dato |
 
 ## 5. Cómo se construye aquí
 
 Host nuevo = IngressRoute en `networking/traefik-{edge,lan}/` + línea en `kustomization.yaml` + rewrite en AdGuard + (edge)
 `wildcard-cert`/TLS store. **Un cambio de naturaleza destructiva** (KS-5, OVH reinstall) exige las confirmaciones
 explícitas del README (`CONFIRM_OVH_REINSTALL=…`) y `docs/runbook.md`. `docs/architecture.md` describe el estado
-objetivo KS-5; el estado actual lo manda el cluster.
+objetivo KS-5; el estado actual lo manda el cluster. StorageClass nueva = fichero en kubernetes/storage/ + línea en el
+kustomization.yaml raíz. El kustomization.yaml de kubernetes/storage/ no lo consume ninguna Application (solo
+scripts/verify_sauvage_longhorn.sh): un fichero que solo esté ahí no llega al clúster. Ejemplo: longhorn-prod-nvme.yaml
+(longhorn-prod-nvme y longhorn-dev) no está en el raíz.
 
 ## 6. Tests y validaciones
 
@@ -119,5 +123,7 @@ Nº de casos: **pendiente de medir**.
   antes del chart de Hermes. `workspace-borrador` nace sin titular: su concesión a `secretaria-skirmshop` va aparte,
   cuando el estrechamiento de `:workspace` (k8s-agentgateway-pocharlies#186) esté propagado. En el primer sync,
   `keycloak-role-drift` puede dar `DRIFT:` hasta que acaban los hooks; se limpia solo.
+- longhorn-single (1 réplica, Delete, sin dataLocality) existe solo a mano en el clúster, no está en git y no se usa: no
+  garantiza en qué nodo cae la réplica. Para un volumen local de un nodo, longhorn-strict-local.
 
-Última verificación contra el código: 2026-10-07 · 7bc9dff (origin/main)
+Última verificación contra el código: 2026-10-08 · e5fe657 (origin/main)
