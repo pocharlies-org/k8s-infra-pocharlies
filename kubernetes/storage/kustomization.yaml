@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - longhorn-prod-nvme.yaml
   - longhorn-openclaw-encrypted.yaml
+  - longhorn-strict-local.yaml

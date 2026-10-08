@@ -53,6 +53,7 @@ resources:
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
   - storage/longhorn/metrics-and-alerts.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
+  - kubernetes/storage/longhorn-strict-local.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml

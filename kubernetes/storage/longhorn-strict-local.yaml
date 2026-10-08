@@ -1,0 +1,29 @@
+# Volume local de un nodo: 1 réplica, siempre en el nodo donde corre el pod, y se
+# borra con el PVC (INFRA-709, plan de INFRA-701, D1 del architect). Lo usan los
+# datos que no se replican a propósito (clips y base de Frigate en `ubuntu`).
+#
+# `WaitForFirstConsumer`, a diferencia de las demás clases del repo (`Immediate`):
+# con `Immediate` Longhorn crea la réplica strict-local en un nodo antes de que el
+# pod se programe, y el volumen solo se acopla al nodo de su réplica. Con WFFC
+# decide el `nodeSelector` del workload. Sin `nodeSelector` ni `diskSelector`:
+# no depende de etiquetas de nodo ni de disco.
+#
+# `reclaimPolicy: Delete`: borrar el PVC destruye el dato. Los PVC que usen esta
+# clase llevan `argocd.argoproj.io/sync-options: Prune=false,Delete=false`.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-strict-local
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: ext4
+  dataLocality: strict-local
+  replicaAutoBalance: ignored
