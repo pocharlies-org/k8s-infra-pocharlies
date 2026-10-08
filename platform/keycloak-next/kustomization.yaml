@@ -84,6 +84,7 @@ configMapGenerator:
   - name: keycloak-jarvis-echo-client
     files:
       - jarvis-echo-client.sh=scripts/jarvis-echo-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
       - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:
       labels:
@@ -91,6 +92,7 @@ configMapGenerator:
   - name: keycloak-hermes-enviar-client
     files:
       - hermes-enviar-client.sh=scripts/hermes-enviar-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
       - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:
       labels:

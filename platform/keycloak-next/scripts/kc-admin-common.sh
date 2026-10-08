@@ -3,6 +3,8 @@
 # trap, fail(), nonempty_lines(), line_count(), login_admin() and kget().
 # Sourced, never executed. (Extracted from the 16 hook scripts by OWU-28-g;
 # the copies were byte-identical — keep it that way: change it here only.)
+# keycloak-reconcile-lib.sh (INFRA-477) builds on these helpers: source this
+# file first, the library after it, and never copy these functions into either.
 #
 # The sourcing script must define BEFORE sourcing:
 #   KCADM, KEYCLOAK_URL, REALM, ADMIN_CONFIG

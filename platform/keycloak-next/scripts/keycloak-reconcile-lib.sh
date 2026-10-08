@@ -14,51 +14,15 @@
 # wording and the fullScopeAllowed flip order stay in each reconciler.
 #
 # This file must never execute anything at source time — definitions only.
-
-# Uniform error channel: one line on stderr, exit 1.
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+#
+# The bootstrap (cleanup trap, fail, nonempty_lines, line_count, login_admin,
+# kget) is NOT defined here: it is kc-admin-common.sh, sourced FIRST by every
+# script that sources this file. The helpers below call it.
 
 # Machine-readable progress line for the Job log; CLIENT_ID is the sourcing
 # reconciler's own identity.
 progress() {
   printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
-}
-
-# kcadm csv output pads blank lines; strip them before counting or grepping.
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-# Number of nonempty lines on stdin.
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-# Retry the master-realm bootstrap login up to 30 x 5s: right after a sync
-# Keycloak may still be rolling and the hook must not die on that alone.
-login_admin() {
-  login_attempt=1
-  while [ "${login_attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    login_attempt=$((login_attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-# kcadm get against the admin config, in the reconciler's realm.
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
 }
 
 # Client uuid by CLIENT_ID, or empty when absent (never fatal).

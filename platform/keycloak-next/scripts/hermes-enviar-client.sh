@@ -58,14 +58,14 @@ KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-hermes-enviar-admin.config
 CLIENT_CONFIG=/tmp/kcadm-hermes-enviar-client.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
+# The bootstrap (cleanup trap, fail, login_admin, kget) is kc-admin-common.sh.
+# CLIENT_CONFIG holds a bearer token, so the shared trap must remove it too.
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
-# Pure helpers (fail, progress, login_admin, kget, client/mapper/SA lookups,
-# mint, token_realm_roles) come from the shared reconcile library; policy —
-# the guards below, the reviewed roles, the scope bounds — stays here.
+# Pure helpers (progress, client/mapper/SA lookups, mint, token_realm_roles)
+# come from the shared reconcile library; policy — the guards below, the
+# reviewed roles, the scope bounds — stays here.
 . "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${CLIENT_ID}" = "hermes-enviar" ] || fail "unsupported immutable client"
