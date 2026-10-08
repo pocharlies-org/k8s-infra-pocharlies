@@ -1,0 +1,4 @@
+Antes: `https://whatsapp.e-dani.com` y `https://whatsapp-pro.e-dani.com` resuelven por AdGuard a traefik-lan (192.168.50.240) y el catch-all no pide login: `/status` y `/api/v1/*` responden a cualquier dispositivo de la LAN o del tailnet.
+Ahora: el catch-all de cada host lleva `sso-chain` (302 a Keycloak); solo `ClientIP(10.42.0.0/16)` (pods, sauvage, blackbox, x86) sigue sin middleware. `/api/public` (deny) y `/qr` (SSO) igual que antes.
+Quien tiene que moverse: ningun cliente conocido. Los 173 POST/7 dias son del adaptador de synapse en sauvage (pods, exentos); sre lo confirma antes del merge. Un cliente de la LAN que firme contra el host canonico debe usar el Service interno `whatsapp-connector.whatsapp-mcp:3001` (o `whatsapp-connector-professional`).
+Decision: `nota-security-f2-f3-telegram.md` §9 (adjunto 21149 de SKIRM-99), historia SKIRM-116. Revertir = revertir el commit; ArgoCD reaplica sin reinicios.

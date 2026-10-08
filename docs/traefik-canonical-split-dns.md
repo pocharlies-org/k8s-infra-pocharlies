@@ -69,6 +69,11 @@ LAN routes retain the behavior of their legacy owner, including existing
 trusted-network bypasses. Retired endpoints have no compatibility route when
 their request semantics are unsafe to redirect.
 
+Exception (SKIRM-116): `whatsapp.e-dani.com` and `whatsapp-pro.e-dani.com` ask
+for `sso-chain` on LAN and tailnet. Only pods (`ClientIP(10.42.0.0/16)`: the
+synapse adapter on sauvage, blackbox, the x86) skip it. `/qr` and `/api/public`
+keep their middleware and outrank both rules through explicit priorities.
+
 ## Ownership
 
 - `networking/traefik-lan/canonical-hosts-lan.yaml`: added canonical LAN
