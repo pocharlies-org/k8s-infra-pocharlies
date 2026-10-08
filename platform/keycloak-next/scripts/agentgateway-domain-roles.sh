@@ -41,12 +41,11 @@ EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentga
 ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop}"
 EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop"
 
-cleanup() { rm -f "${ADMIN_CONFIG}"; }
-trap cleanup EXIT HUP INT TERM
+. "${0%/*}/kc-admin-common.sh"
 
-# Mechanical helpers (fail, login_admin, kget, nonempty_lines) come from the
-# shared reconcile library (INFRA-477); the reviewed role family, the
-# service-account allowlist and the bounded-holder check stay right here.
+# The bootstrap comes from kc-admin-common.sh; the reconcile library (INFRA-477)
+# adds the lookup helpers. The reviewed role family, the service-account
+# allowlist and the bounded-holder check stay right here.
 . "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \

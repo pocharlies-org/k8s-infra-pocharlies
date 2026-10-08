@@ -288,6 +288,46 @@ class JarvisEchoIdentityContractTest(unittest.TestCase):
             script = (BASE / "scripts" / name).read_text()
             self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script, name)
 
+    def test_one_bootstrap_sourced_before_the_library(self):
+        # OWU-76 (architect, PR 231): the bootstrap (cleanup trap, fail,
+        # nonempty_lines, line_count, login_admin, kget) lives only in
+        # kc-admin-common.sh. Every reconciler that loads the library mounts
+        # that file in its own ConfigMap and sources it first; the library
+        # defines none of it, so the two can never drift apart again.
+        kustomization = (BASE / "kustomization.yaml").read_text()
+        library = LIB.read_text()
+        for bootstrap_fn in ("fail()", "nonempty_lines()", "line_count()", "login_admin()", "kget()"):
+            self.assertNotIn(bootstrap_fn, library)
+        for generator in (
+            "keycloak-agentgateway-domain-roles",
+            "keycloak-chat-agentgateway-client",
+            "keycloak-agentgateway-chat-mcp-client",
+            "keycloak-jarvis-echo-client",
+        ):
+            block = kustomization.split("name: " + generator, 1)[1].split("  - name:", 1)[0]
+            self.assertIn("kc-admin-common.sh=scripts/kc-admin-common.sh", block, generator)
+        for name in (
+            "agentgateway-domain-roles.sh",
+            "chat-agentgateway-client.sh",
+            "agentgateway-chat-mcp-client.sh",
+            "jarvis-echo-client.sh",
+        ):
+            script = (BASE / "scripts" / name).read_text()
+            self.assertIn('. "${0%/*}/kc-admin-common.sh"', script, name)
+            self.assertLess(
+                script.index('. "${0%/*}/kc-admin-common.sh"'),
+                script.index('. "$(dirname "$0")/keycloak-reconcile-lib.sh"'),
+                name,
+            )
+
+    def test_jarvis_hands_its_client_config_to_the_shared_trap(self):
+        # The bearer token lives in CLIENT_CONFIG: the shared EXIT trap must
+        # remove it, and the hook keeps no cleanup trap of its own.
+        script = (BASE / "scripts" / "jarvis-echo-client.sh").read_text()
+        self.assertIn('KCADM_TMP_FILES="${CLIENT_CONFIG}"', script)
+        self.assertNotIn("cleanup() {", script)
+        self.assertNotIn("trap cleanup", script)
+
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_keycloak_kustomization_builds(self):
         result = subprocess.run(

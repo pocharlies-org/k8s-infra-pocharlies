@@ -337,6 +337,19 @@ class HermesEnviarManifestContractTest(unittest.TestCase):
         kustomization = (BASE / "kustomization.yaml").read_text()
         block = kustomization.split("name: keycloak-hermes-enviar-client", 1)[1].split("  - name:", 1)[0]
         self.assertIn("keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh", block)
+        # OWU-76: the shared bootstrap ships with it, is sourced first, and
+        # carries the bearer-token file into the shared EXIT trap.
+        self.assertIn("kc-admin-common.sh=scripts/kc-admin-common.sh", block)
+        script = (BASE / "scripts" / "hermes-enviar-client.sh").read_text()
+        self.assertLess(
+            script.index('. "${0%/*}/kc-admin-common.sh"'),
+            script.index('. "$(dirname "$0")/keycloak-reconcile-lib.sh"'),
+        )
+        self.assertIn('KCADM_TMP_FILES="${CLIENT_CONFIG}"', script)
+        self.assertNotIn("cleanup() {", script)
+        self.assertNotIn("trap cleanup", script)
+        for bootstrap_fn in ("fail()", "nonempty_lines()", "line_count()", "login_admin()", "kget()"):
+            self.assertNotIn(bootstrap_fn, LIB.read_text())
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_keycloak_kustomization_builds(self):

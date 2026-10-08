@@ -15,7 +15,7 @@
 #
 # The hook never touches the client secret: Keycloak generates it on creation,
 # and a devops step after the sync writes it to the 1Password item
-# hermes-kc-enviar (RUNBOOK section 17). That is also why there is no
+# hermes-kc-enviar (RUNBOOK section 18). That is also why there is no
 # ExternalSecret in this file and no secret reference that could block the sync.
 #
 # Ordering: agentgateway-write:workspace-envio is created, and its single

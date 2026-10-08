@@ -28,14 +28,12 @@ RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-agentgateway-chat-admin.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
+. "${0%/*}/kc-admin-common.sh"
 
-# Mechanical helpers come from the shared reconcile library (INFRA-477); this
-# script keeps its own upsert_audience_mapper below, which overrides the
-# library one: this PUBLIC client also pins userinfo.token.claim=false.
+# The bootstrap comes from kc-admin-common.sh and the mechanical helpers from
+# the shared reconcile library (INFRA-477); this script keeps its own
+# upsert_audience_mapper below, which overrides the library one: this PUBLIC
+# client also pins userinfo.token.claim=false.
 . "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 # Immutable identity of this reconciler: a PUBLIC PKCE browser client only.

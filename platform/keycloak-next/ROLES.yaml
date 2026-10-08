@@ -326,13 +326,14 @@
       "meaning": "Write global de AgentGateway: habilita las tools MCP de escritura con puerta explícita.",
       "grantees": [
         "me@e-dani.com",
+        "qa-write-sin-vinculo@e-dani.com",
         "service-account-agentgateway-mcp"
       ],
       "privilege": {
         "allows": "Tools de escritura gated por GATEWAY_WRITE en las rutas que aceptan el write global (plano admin, p. ej. /skirmshop-plugins-admin). Desde OWU-80 también alcanzables por el humano fijado por subject desde /chat-atlassian.",
-        "denies": "No da lectura por sí solo (cada ruta exige su agentgateway-read:<ruta>) ni administración de Keycloak; nunca a grupos ni a humanos distintos del único concesionario humano fijado por OWU-80 (me@e-dani.com, sub e51253a7-c137-4c6c-9fb9-af9cecd3b147), cuyo grant está condicionado a la guarda ProForma de OWU-77 desplegada en prod (veredicto de security de OWU-28, condición (b))."
+        "denies": "No da lectura por sí solo (cada ruta exige su agentgateway-read:<ruta>) ni administración de Keycloak; nunca a grupos ni a humanos distintos de los dos concesionarios revisados: Daniel, fijado por OWU-80 (me@e-dani.com, sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, cuyo grant está condicionado a la guarda ProForma de OWU-77 desplegada en prod — veredicto de security de OWU-28, condición (b)), y el fixture de QA de OWU-28-g (qa-write-sin-vinculo@e-dani.com, sin grupos ni vínculo Atlassian, retirable con su rollback manual y retirada al cerrar la épica)."
       },
-      "origin": "agentgateway-write-role.sh (PostSync agentgateway-write-role-job.yaml; SC-44); el grant humano me@e-dani.com por agentgateway-write-grant-daniel.sh (PostSync agentgateway-write-grant-daniel-job.yaml; OWU-80)"
+      "origin": "agentgateway-write-role.sh (PostSync agentgateway-write-role-job.yaml; SC-44); el grant humano me@e-dani.com por agentgateway-write-grant-daniel.sh (PostSync agentgateway-write-grant-daniel-job.yaml; OWU-80); el fixture qa-write-sin-vinculo@e-dani.com por agentgateway-write-fixture-user.sh (PostSync agentgateway-write-fixture-user-job.yaml; OWU-28-g)"
     },
     {
       "name": "agentgateway-write:claude-sessions",
@@ -583,6 +584,7 @@
         "qa-con-rol@e-dani.com",
         "qa-sin-rol@e-dani.com",
         "qa-sso-test",
+        "qa-write-sin-vinculo@e-dani.com",
         "service-account-agentgateway-mcp",
         "service-account-atlassian-mcp-probe",
         "service-account-chat-agentgateway",

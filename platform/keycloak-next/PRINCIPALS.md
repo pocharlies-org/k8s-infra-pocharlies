@@ -88,6 +88,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `pocharlies@gmail.com` | humano | Dani (operador) | activo | Cuenta Google de administración de la plataforma (Plataforma Admin); grupos edani-admins y company-operator. |
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
+| `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
@@ -232,6 +233,19 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       ],
       "status": "retirada-propuesta",
       "retirement_reason": "Fixture de SC-479 / SC-665 (Done). Ningún criterio de INFRA-219 ni otra épica abierta lo usa (la prueba de drift de C5 usa qa-con-rol). Decisión del CTO; mientras no se decida sigue activo en el realm."
+    },
+    {
+      "username": "qa-write-sin-vinculo@e-dani.com",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "OWU-28 / historia g (fixture C2 reverso; plan del architect nota-architect-plan.md)",
+      "purpose": "Fixture C2 reverso de OWU-28 (write sin vínculo Atlassian): usuario de prueba con agentgateway-write, sin grupos ni entrada en atlassian-identity-bindings; login scriptado PKCE por /chat-atlassian con el cliente público agentgateway-chat-mcp. Alta, contraseña y retirada por GitOps (agentgateway-write-fixture-user.sh).",
+      "realm_roles": [
+        "agentgateway-write",
+        "default-roles-edani"
+      ],
+      "status": "activo"
     },
     {
       "username": "qa-sso-test",

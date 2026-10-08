@@ -8,14 +8,19 @@ umask 077
 # nota-security-owu28.md) extends the reviewed holder set with EXACTLY ONE
 # human: Daniel, pinned by his immutable subject
 # HUMAN_GRANTEE_ID=e51253a7-c137-4c6c-9fb9-af9cecd3b147 (username
-# HUMAN_GRANTEE_USERNAME=me@e-dani.com). The human mapping itself is owned by
-# agentgateway-write-grant-daniel.sh (PostSync wave 25); this hook only stops
-# failing on that one holder. Every other user, every group and every other
-# service account still fail closed here, and the human grantee is tolerated
-# whether or not it is present yet (the grant hook runs later in the same
-# sync, so ensure must not require it). The rollback path is stricter: it
-# refuses to delete the role while the human grant exists — the grant's own
-# manual rollback must run first.
+# HUMAN_GRANTEE_USERNAME=me@e-dani.com). OWU-28 historia g adds the second
+# tolerated human: the QA fixture FIXTURE_GRANTEE_USERNAME=
+# qa-write-sin-vinculo@e-dani.com, pinned by EXACT username (its id is
+# minted by Keycloak when agentgateway-write-fixture-user.sh creates it),
+# owner QA, no groups, no Atlassian binding, retired with the epic. The two
+# mappings themselves are owned by agentgateway-write-grant-daniel.sh and
+# agentgateway-write-fixture-user.sh (PostSync wave 25); this hook only stops
+# failing on those two holders. Every other user, every group and every other
+# service account still fail closed here, and a tolerated grantee is
+# tolerated whether or not it is present yet (the grant hooks run later in
+# the same sync, so ensure must not require them). The rollback path is
+# stricter: it refuses to delete the role while either grant exists — each
+# grant's own manual rollback must run first.
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
@@ -24,53 +29,19 @@ CLIENT_ID="${CLIENT_ID:-agentgateway-mcp}"
 ROLE_NAME="${ROLE_NAME:-agentgateway-write}"
 HUMAN_GRANTEE_ID="${HUMAN_GRANTEE_ID:-e51253a7-c137-4c6c-9fb9-af9cecd3b147}"
 HUMAN_GRANTEE_USERNAME="${HUMAN_GRANTEE_USERNAME:-me@e-dani.com}"
+FIXTURE_GRANTEE_USERNAME="${FIXTURE_GRANTEE_USERNAME:-qa-write-sin-vinculo@e-dani.com}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-admin.config
 CLIENT_CONFIG=/tmp/kcadm-client.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
 [ "${CLIENT_ID}" = "agentgateway-mcp" ] || fail "CLIENT_ID is immutable for this reconciler"
 [ "${ROLE_NAME}" = "agentgateway-write" ] || fail "ROLE_NAME is immutable for this reconciler"
 [ "${HUMAN_GRANTEE_ID}" = "e51253a7-c137-4c6c-9fb9-af9cecd3b147" ] || fail "HUMAN_GRANTEE_ID is immutable for this reconciler"
 [ "${HUMAN_GRANTEE_USERNAME}" = "me@e-dani.com" ] || fail "HUMAN_GRANTEE_USERNAME is immutable for this reconciler"
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
+[ "${FIXTURE_GRANTEE_USERNAME}" = "qa-write-sin-vinculo@e-dani.com" ] || fail "FIXTURE_GRANTEE_USERNAME is immutable for this reconciler"
 
 resolve_client_and_service_account() {
   client_rows="$(kget clients -q "clientId=${CLIENT_ID}" --fields id --format csv --noquotes | nonempty_lines)"
@@ -117,6 +88,23 @@ human_grantee_holds_json() {
   fi
 }
 
+fixture_grantee_id() {
+  # OWU-28 historia g: the fixture user is pinned by EXACT username (its id
+  # is minted by Keycloak when agentgateway-write-fixture-user.sh creates
+  # it). GET users excludes service accounts; exact=true rules out substring
+  # matches. An absent fixture resolves to the empty string and is simply
+  # not tolerated by id (a tolerated grantee may be absent).
+  kget users -q "username=${FIXTURE_GRANTEE_USERNAME}" -q exact=true \
+    --fields id --format csv --noquotes 2>/dev/null | nonempty_lines | sed -n '1p'
+}
+
+fixture_holds_direct_role() {
+  fixture_id="$(fixture_grantee_id)"
+  [ -n "${fixture_id}" ] || return 1
+  kget "users/${fixture_id}/role-mappings/realm" \
+    --fields name --format csv --noquotes 2>/dev/null | nonempty_lines | grep -Fxq "${ROLE_NAME}"
+}
+
 assert_exclusive_role_mapping() {
   # expected_count is the expectation for the SERVICE-ACCOUNT axis: 1 = the
   # privileged service account must be a direct holder (the pinned human
@@ -130,6 +118,7 @@ assert_exclusive_role_mapping() {
     while IFS= read -r username; do
       [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || \
         [ "${username}" = "${HUMAN_GRANTEE_USERNAME}" ] || \
+        [ "${username}" = "${FIXTURE_GRANTEE_USERNAME}" ] || \
         fail "${ROLE_NAME} is mapped to an unauthorized user; refusing to continue"
     done <<EOF
 ${users}
@@ -167,12 +156,15 @@ assert_effective_role_exclusivity() {
   # `GET users` excludes service-account users. Any effective mapping here is
   # therefore a human/operator grant, including grants inherited via groups or
   # composite roles. OWU-80 tolerates exactly the pinned human grantee (by
-  # subject id); every other regular user still fails closed.
+  # subject id) and OWU-28-g the QA fixture (its id resolved here by exact
+  # username); every other regular user still fails closed.
+  fixture_grantee_id_here="$(fixture_grantee_id)"
   regular_user_ids="$(kget users -q max=1000 --fields id --format csv --noquotes | nonempty_lines)"
   if [ -n "${regular_user_ids}" ]; then
     while IFS= read -r user_id; do
       if user_has_effective_role "${user_id}"; then
         [ "${user_id}" = "${HUMAN_GRANTEE_ID}" ] || \
+          { [ -n "${fixture_grantee_id_here}" ] && [ "${user_id}" = "${fixture_grantee_id_here}" ]; } || \
           fail "${ROLE_NAME} is effective for a non-service user; refusing to continue"
       fi
     done <<EOF
@@ -308,12 +300,15 @@ case "${MODE}" in
     fi
     assert_exclusive_role_mapping 1
     target_has_direct_role || fail "target service account is missing ${ROLE_NAME}"
-    # OWU-80: the role delete below cascades every holder's mapping, the
-    # pinned human's included. Refuse BEFORE any mutation while the human
-    # grant exists: run manual/agentgateway-write-grant-daniel-rollback-job.yaml
-    # first so each rollback undoes exactly its own fact.
+    # OWU-80/OWU-28-g: the role delete below cascades every holder's
+    # mapping, the two tolerated humans' included. Refuse BEFORE any
+    # mutation while either grant exists: run each grant's own manual
+    # rollback first so each rollback undoes exactly its own fact.
     if human_holds_direct_role; then
       fail "${ROLE_NAME} is still granted to the pinned human grantee ${HUMAN_GRANTEE_USERNAME}: run manual/agentgateway-write-grant-daniel-rollback-job.yaml first"
+    fi
+    if fixture_holds_direct_role; then
+      fail "${ROLE_NAME} is still granted to the fixture user ${FIXTURE_GRANTEE_USERNAME}: run manual/agentgateway-write-fixture-user-rollback-job.yaml first"
     fi
     "${KCADM}" remove-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
       --uid "${SERVICE_ACCOUNT_ID}" --rolename "${ROLE_NAME}" >/dev/null 2>&1 || \

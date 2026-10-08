@@ -55,15 +55,13 @@ KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-chat-agentgateway-admin.config
 CLIENT_CONFIG=/tmp/kcadm-chat-agentgateway-client.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}" "${CLIENT_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
+KCADM_TMP_FILES="${CLIENT_CONFIG}"
+. "${0%/*}/kc-admin-common.sh"
 
-# Mechanical helpers (fail, progress, login, kget, client/mapper/SA lookups,
-# mint) live in the shared reconcile library; every policy — the reviewed
-# role set, the guards below, exclusivity and the audience mapper — stays in
-# this script, unchanged.
+# The bootstrap (trap, fail, login_admin, kget) is kc-admin-common.sh; the
+# reconcile library (INFRA-477) adds progress and the lookup, mint and audience
+# helpers. Every policy — the reviewed role set, the guards below, exclusivity
+# and the audience mapper — stays in this script, unchanged.
 . "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
