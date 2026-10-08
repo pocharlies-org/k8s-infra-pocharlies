@@ -151,6 +151,18 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             self.assertEqual(1, result.returncode, holder)
             self.assertIn("agentgateway-write:workspace-borrador is assigned to an unauthorized user", result.stderr)
 
+    def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
+        # INFRA-249: created without grantees; any holder, even the reviewed chat
+        # identity, fails the reconcile, so the three dgx-control write tools
+        # stay fail-closed until a dedicated client and map entry are reviewed.
+        script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
+        self.assertNotIn("agentgateway-write:dgx-control=", script)
+        result, _ = self._run_reconciler({
+            "roles/agentgateway-write:dgx-control/users": "service-account-chat-agentgateway",
+        })
+        self.assertEqual(1, result.returncode)
+        self.assertIn("agentgateway-write:dgx-control is assigned to a user; dedicated-client rollout is not ready", result.stderr)
+
     def test_reconciler_tolerates_only_the_reviewed_chat_service_account(self):
         # Contract v2: the chat identity is reviewed on six domains, so the hook
         # tolerates its grant on each of them and counts one per role.

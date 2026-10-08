@@ -687,7 +687,14 @@ must be a full Argo CD sync (hooks are skipped on a selective resource sync).
 Expect at most a few transient `keycloak-role-drift` `DRIFT:` runs between the
 sync start and wave 24 completing (the catalog names two roles and a principal
 the realm does not have yet); it must be green again on the first run after
-the hooks.
+the hooks. Merging the `secretaria-skirmshop` pair of `workspace-borrador`
+opens a second, longer window: from that sync until the INFRA-494 process
+grants the role, `keycloak-role-drift` gives `DRIFT:` every 15 minutes (the
+catalog names a holder the realm does not have yet) and `K8sCronJobFailed`
+alerts Telegram. Grant the role right after the domain-roles hook has synced
+(wave 19) and the next run clears it. The order cannot be reversed: granting
+before the merge fails that hook (`assigned to a user; dedicated-client rollout
+is not ready`).
 
 ```bash
 kubectl -n keycloak logs job/keycloak-hermes-enviar-client -c reconcile-client
