@@ -57,9 +57,12 @@ jobs:
           REQUIRE_IMAGE_CONTRACT: "1"
         run: |
           sh -n platform/keycloak-next/scripts/agentgateway-write-role.sh
+          sh -n platform/keycloak-next/scripts/keycloak-reconcile-lib.sh
           sh -n platform/keycloak-next/scripts/openclaw-readonly-clients.sh
           sh -n platform/keycloak-next/scripts/agentgateway-domain-roles.sh
           sh -n platform/keycloak-next/scripts/chat-agentgateway-client.sh
+          sh -n platform/keycloak-next/scripts/jarvis-echo-client.sh
+          sh -n platform/keycloak-next/scripts/hermes-enviar-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
@@ -74,6 +77,8 @@ jobs:
             tests/test_openclaw_readonly_identity_contract.py \
             tests/test_keycloak_agentgateway_domain_roles_contract.py \
             tests/test_chat_agentgateway_identity_contract.py \
+            tests/test_jarvis_echo_identity_contract.py \
+            tests/test_hermes_enviar_identity_contract.py \
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \
@@ -158,8 +163,25 @@ jobs:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the 1Password change detector (DGX-506)
-        run: python3 -m unittest tests/test_onepassword_change_detector.py -v
+        run: python3 -m unittest tests/test_onepassword_change_detector.py tests/test_onepassword_quota_floor_contract.py -v
+
+  onepassword-connect-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the 1Password Connect read path (INFRA-523)
+        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py tests/test_alibaba_plan_policy_contract.py -v
 
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
@@ -181,3 +203,15 @@ jobs:
         run: |
           bash -n scripts/valkey/activate-shared-valkey-acl.sh
           python3 -m unittest tests/test_shared_valkey_acl_contract.py
+
+  longhorn-strict-local-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the longhorn-strict-local StorageClass (INFRA-709)
+        run: python3 -m unittest tests/test_longhorn_strict_local_contract.py -v

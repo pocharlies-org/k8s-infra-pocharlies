@@ -37,6 +37,17 @@ CLIENT_ID="${CLIENT_ID:-chat-agentgateway}"
 # Space-separated and ORDER-INSENSITIVE for the guard below; keep it sorted.
 ROLE_NAMES="${ROLE_NAMES:-agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace}"
 EXPECTED_ROLE_NAMES="agentgateway-read:studio agentgateway-write:gsc agentgateway-write:hermes agentgateway-write:media agentgateway-write:social agentgateway-write:synapse agentgateway-write:workspace"
+# SC-2029 (2026-10-07): the four general Hermes secretaria service accounts
+# (INFRA-494, epic INFRA-479: per-profile secretaria identities that write
+# social and workspace through AgentGateway) are reviewed EXTRA holders of
+# agentgateway-write:social and agentgateway-write:workspace. Their grants
+# are created by the devops identity process in k8s-openclaw-qwen36-pocharlies
+# and their holder matrix is owned by agentgateway-domain-roles.sh (widened
+# by SC-2005); this hook tolerates exactly these pairs and nothing else.
+# tests/test_keycloak_rbac_parity_contract.py keeps this list equal to the
+# non-chat pairs of that allowlist — one source of truth.
+REVIEWED_EXTRA_HOLDERS="${REVIEWED_EXTRA_HOLDERS:-agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila}"
+EXPECTED_REVIEWED_EXTRA_HOLDERS="agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-2}"
@@ -47,14 +58,18 @@ CLIENT_CONFIG=/tmp/kcadm-chat-agentgateway-client.config
 KCADM_TMP_FILES="${CLIENT_CONFIG}"
 . "${0%/*}/kc-admin-common.sh"
 
-progress() {
-  printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
-}
+# The bootstrap (trap, fail, login_admin, kget) is kc-admin-common.sh; the
+# reconcile library (INFRA-477) adds progress and the lookup, mint and audience
+# helpers. Every policy — the reviewed role set, the guards below, exclusivity
+# and the audience mapper — stays in this script, unchanged.
+. "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${FORBIDDEN_REALM_ROLE}" = "agentgateway-write" ] || fail "FORBIDDEN_REALM_ROLE is immutable"
 [ "${RECONCILE_CONTRACT_VERSION}" = "2" ] || fail "unsupported reconcile contract version"
 [ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \
   fail "ROLE_NAMES is immutable; review this reconciler, the domain-role allowlist and the gateway CEL together"
+[ "${REVIEWED_EXTRA_HOLDERS}" = "${EXPECTED_REVIEWED_EXTRA_HOLDERS}" ] || \
+  fail "REVIEWED_EXTRA_HOLDERS is immutable; review this reconciler, the domain-role allowlist and the gateway CEL together"
 case "${CLIENT_ID}" in
   chat-agentgateway)
     CLIENT_SECRET="${CHAT_AGENTGATEWAY_CLIENT_SECRET:-}"
@@ -69,27 +84,6 @@ case "${MODE}" in
   rollback) ;;
   *) fail "unsupported MODE=${MODE}" ;;
 esac
-
-resolve_client_optional() {
-  rows="$(kget clients -q "clientId=${CLIENT_ID}" --fields id --format csv --noquotes | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate client ${CLIENT_ID}"
-  printf '%s' "${rows}"
-}
-
-require_client() {
-  uuid="$(resolve_client_optional)"
-  [ -n "${uuid}" ] || fail "client ${CLIENT_ID} is missing"
-  printf '%s' "${uuid}"
-}
-
-client_field() {
-  kget "clients/$1" --fields "$2" --format csv --noquotes | nonempty_lines
-}
-
-assert_client_boolean() {
-  actual="$(client_field "$1" "$2")"
-  [ "${actual}" = "$3" ] || fail "client field $2 expected $3"
-}
 
 upsert_client() {
   uuid="$(resolve_client_optional)"
@@ -113,48 +107,6 @@ upsert_client() {
   CLIENT_UUID="$(require_client)"
 }
 
-filter_mapper_id() {
-  expected="$1"
-  while IFS=, read -r mapper_id mapper_name; do
-    if [ "${mapper_name}" = "${expected}" ]; then
-      printf '%s\n' "${mapper_id}"
-    fi
-  done
-}
-
-mapper_uuid_optional() {
-  mapper_name="$1"
-  rows="$(kget "clients/${CLIENT_UUID}/protocol-mappers/models" \
-    --fields id,name --format csv --noquotes | \
-    filter_mapper_id "${mapper_name}" | nonempty_lines)"
-  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate mapper ${mapper_name}"
-  printf '%s' "${rows}"
-}
-
-upsert_audience_mapper() {
-  mapper_name="${MAPPER_NAME}"
-  mapper_uuid="$(mapper_uuid_optional "${mapper_name}")"
-  endpoint="clients/${CLIENT_UUID}/protocol-mappers/models"
-  action=create
-  if [ -n "${mapper_uuid}" ]; then
-    endpoint="${endpoint}/${mapper_uuid}"
-    action=update
-  fi
-  "${KCADM}" "${action}" "${endpoint}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
-    -s "name=${mapper_name}" \
-    -s protocol=openid-connect \
-    -s protocolMapper=oidc-audience-mapper \
-    -s "config.\"included.custom.audience\"=${AGENTGATEWAY_AUDIENCE}" \
-    -s 'config."access.token.claim"=true' \
-    -s 'config."id.token.claim"=false' \
-    -s 'config."introspection.token.claim"=true' >/dev/null 2>&1 || \
-    fail "failed to reconcile audience mapper"
-}
-
-role_exists() {
-  kget "roles/$1" --fields id >/dev/null 2>&1
-}
-
 verify_role() {
   # Write-domain roles are owned by agentgateway-domain-roles.sh and the read
   # role by agentgateway-read-grants.sh; a missing role means that hook has
@@ -170,11 +122,6 @@ verify_roles() {
   done
 }
 
-role_scope_has_direct_role() {
-  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
-}
-
 ensure_role_scope_mapping() {
   for role in ${ROLE_NAMES}; do
     if ! role_scope_has_direct_role "${role}"; then
@@ -188,25 +135,6 @@ ensure_role_scope_mapping() {
     fi
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
   done
-}
-
-resolve_service_account() {
-  SERVICE_ACCOUNT_ID="$(kget "clients/${CLIENT_UUID}/service-account-user" \
-    --fields id --format csv --noquotes | nonempty_lines)"
-  SERVICE_ACCOUNT_USERNAME="$(kget "clients/${CLIENT_UUID}/service-account-user" \
-    --fields username --format csv --noquotes | nonempty_lines)"
-  [ -n "${SERVICE_ACCOUNT_ID}" ] || fail "service account id is empty"
-  [ "${SERVICE_ACCOUNT_USERNAME}" = "service-account-${CLIENT_ID}" ] || \
-    fail "unexpected service account username"
-}
-
-service_account_realm_roles() {
-  kget "users/${SERVICE_ACCOUNT_ID}/role-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines
-}
-
-target_has_direct_role() {
-  service_account_realm_roles | grep -Fxq "$1"
 }
 
 assert_reviewed_write_roles() {
@@ -232,16 +160,26 @@ assert_reviewed_write_roles() {
 }
 
 assert_exclusive_role_mapping() {
-  # Bounded role-member endpoints: at most one user (our service account) and
-  # zero groups are allowed, so fetching two rows detects every violation.
-  users="$(kget "roles/$1/users" -q first=0 -q max=2 \
+  # Bounded role-member endpoints: only the reviewed holders of this role —
+  # our service account plus, since SC-2029, the extra holders declared for
+  # it in REVIEWED_EXTRA_HOLDERS — and zero groups are allowed, so fetching
+  # the reviewed count plus two rows detects every violation.
+  reviewed="${SERVICE_ACCOUNT_USERNAME}"
+  for pair in $(printf '%s' "${REVIEWED_EXTRA_HOLDERS}" | tr ',' ' '); do
+    [ "${pair%%=*}" = "$1" ] && reviewed="${reviewed} ${pair#*=}"
+  done
+  bound=$(( $(printf '%s\n' ${reviewed} | wc -l) + 2 ))
+  users="$(kget "roles/$1/users" -q first=0 -q max="${bound}" \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/$1/groups" -q first=0 -q max=2 \
     --fields path --format csv --noquotes | nonempty_lines)"
   [ -z "${groups}" ] || fail "$1 is mapped to a group"
   if [ -n "${users}" ]; then
     while IFS= read -r username; do
-      [ "${username}" = "${SERVICE_ACCOUNT_USERNAME}" ] || fail "$1 has an unauthorized user"
+      case " ${reviewed} " in
+        *" ${username} "*) ;;
+        *) fail "$1 has an unauthorized user" ;;
+      esac
     done <<EOF
 ${users}
 EOF
@@ -282,7 +220,7 @@ verify_client() {
   assert_client_boolean "${CLIENT_UUID}" directAccessGrantsEnabled false
   assert_client_boolean "${CLIENT_UUID}" serviceAccountsEnabled true
   assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
-  [ -n "$(mapper_uuid_optional "${MAPPER_NAME}")" ] || fail "audience mapper missing"
+  [ -n "$(mapper_uuid_optional)" ] || fail "audience mapper missing"
   resolve_service_account
   for role in ${ROLE_NAMES}; do
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
@@ -297,26 +235,10 @@ verify_client() {
 }
 
 mint_claims() {
-  "${KCADM}" config credentials \
-    --config "${CLIENT_CONFIG}" \
-    --server "${KEYCLOAK_URL}" \
-    --realm "${REALM}" \
-    --client "${CLIENT_ID}" \
-    --secret "${CLIENT_SECRET}" >/dev/null 2>&1 || fail "client token mint failed"
-  token="$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${CLIENT_CONFIG}" | head -n1)"
-  [ -n "${token}" ] || fail "access token is missing"
-  payload="$(printf '%s' "${token}" | cut -d. -f2)"
-  unset token
-  case $((${#payload} % 4)) in
-    0) ;;
-    2) payload="${payload}==" ;;
-    3) payload="${payload}=" ;;
-    *) fail "JWT payload has invalid base64url length" ;;
-  esac
-  claims="$(printf '%s' "${payload}" | tr '_-' '/+' | base64 -d 2>/dev/null)" || fail "JWT decode failed"
-  unset payload
-  rm -f "${CLIENT_CONFIG}"
-  printf '%s' "${claims}"
+  # The chat secret is pinned from 1Password by this Job's ExternalSecret and
+  # passed in CHAT_AGENTGATEWAY_CLIENT_SECRET (guard above); the mint itself
+  # is the library's, with the chat wording kept for the contract tests.
+  mint_claims_with_secret "${CLIENT_SECRET}" "client token mint failed"
 }
 
 verify_minted_claims() {
@@ -344,17 +266,31 @@ rollback_identity() {
       fail "failed to delete ${CLIENT_ID}"
   fi
   [ -z "$(resolve_client_optional)" ] || fail "client ${CLIENT_ID} remains after rollback"
-  # Write-family roles only: deleting the client removes its service account,
-  # the only reviewed holder of each write domain. The shared read role stays
-  # in the realm WITH its other reviewed holders (agentgateway-mcp, openclaw)
-  # — asserting emptiness there would fail by design.
+  # Write-family roles only: deleting the client removes its service account.
+  # The shared read role stays in the realm WITH its other reviewed holders
+  # (agentgateway-mcp, openclaw) — asserting emptiness there would fail by
+  # design. Since SC-2029 the same is true, one level down, for the write
+  # roles with reviewed extra holders (the INFRA-494 secretarias on
+  # write:social/:workspace): after our deletion only those reviewed extras
+  # may remain, never a stranger and never a group.
   for role in ${ROLE_NAMES}; do
     case "${role}" in
       agentgateway-write*)
         if role_exists "${role}"; then
           users="$(kget "roles/${role}/users" --fields username --format csv --noquotes | nonempty_lines)"
           groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
-          [ -z "${users}${groups}" ] || fail "${role} still has mappings after client deletion"
+          [ -z "${groups}" ] || fail "${role} still has group mappings after client deletion"
+          if [ -n "${users}" ]; then
+            while IFS= read -r username; do
+              found=0
+              for pair in $(printf '%s' "${REVIEWED_EXTRA_HOLDERS}" | tr ',' ' '); do
+                [ "${pair}" = "${role}=${username}" ] && found=1
+              done
+              [ "${found}" = "1" ] || fail "${role} still has an unreviewed mapping after client deletion"
+            done <<EOF
+${users}
+EOF
+          fi
         fi ;;
     esac
   done

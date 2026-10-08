@@ -184,3 +184,33 @@ def test_external_dns_honors_canonical_route_exclusions():
     assert values["annotationFilter"] == (
         "external-dns.alpha.kubernetes.io/exclude notin (true)"
     )
+
+
+def test_whatsapp_lan_hosts_ask_sso_except_pods_and_keep_qr_and_public_deny_on_top():
+    # SKIRM-116: pods (10.42.0.0/16) reach the connector without SSO, everyone
+    # else on the LAN/tailnet gets Keycloak. Explicit priorities, because the
+    # rule-length default would rank the ClientIP rule above /qr.
+    route = ingress(
+        "networking/traefik-lan/canonical-hosts-lan.yaml",
+        "canonical-hosts-lan",
+    )
+    for host in ("whatsapp.e-dani.com", "whatsapp-pro.e-dani.com"):
+        rules = {
+            rule["match"]: rule
+            for rule in route["spec"]["routes"]
+            if f"Host(`{host}`)" in rule["match"]
+        }
+        pods = rules[f"Host(`{host}`) && ClientIP(`10.42.0.0/16`)"]
+        rest = rules[f"Host(`{host}`)"]
+        qr = rules[f"Host(`{host}`) && PathPrefix(`/qr`)"]
+        public = rules[f"Host(`{host}`) && PathPrefix(`/api/public`)"]
+
+        assert "middlewares" not in pods
+        assert [m["name"] for m in rest["middlewares"]] == ["sso-chain"]
+        assert [m["name"] for m in qr["middlewares"]] == ["sso-chain"]
+        assert [m["name"] for m in public["middlewares"]] == [
+            "connector-public-api-deny"
+        ]
+        assert qr["priority"] > pods["priority"] > rest["priority"]
+        assert public["priority"] > pods["priority"]
+        assert pods["services"] == rest["services"] == qr["services"]

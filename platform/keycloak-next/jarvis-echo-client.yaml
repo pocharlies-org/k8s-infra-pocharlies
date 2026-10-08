@@ -1,0 +1,103 @@
+# Dedicated confidential client for the Alexa skill jarvis-alexa (ns jarvis):
+# its service account reads the Echo Show's Agenda calendar through AgentGateway
+# /workspace with the single shared route role agentgateway-read:workspace
+# (never agentgateway-write). INFRA-477 declares it here after the INFRA-411
+# session created it by hand through the admin API on 2026-10-03 — the process
+# error that made keycloak-role-drift fail every 15 min. Security approved the
+# identity in k8s-agentgateway-pocharlies#170 (identity-bindings for sub
+# 1bcb6c47-0a01-4717-959d-9755e2c9ad36).
+#
+# The hook ADOPTS the existing client idempotently (stable service-account
+# sub) and never touches its secret: the secret is not in 1Password yet and
+# will reach the cluster through an ExternalSecret in k8s-jarvis, never from
+# here. That is also why there is no ExternalSecret in this file — unlike
+# chat-agentgateway-client.yaml, this PostSync has no secretKeyRef that could
+# block the sync while the 1Password quota is exhausted.
+#
+# Ordering: the role agentgateway-read:workspace and the holder allowlist that
+# reviews service-account-jarvis-echo on it are owned by
+# agentgateway-read-grants.sh (sync-wave 20), which runs first. This hook only
+# verifies the role, creates/adopts the client, maps the role into the client
+# role scope, grants it to the service account, converges
+# fullScopeAllowed=false and verifies the minted token.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-jarvis-echo-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: jarvis-echo-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the role and its holder
+    # allowlist; same wave as the token TTL job, which reconciles a different
+    # client (agentgateway-mcp) and shares no state with this one.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # ~20 sequential kcadm calls (each starts a JVM) plus up to four token mints
+  # on the adoption path (pre-flip, post-flip, and on the abort path the
+  # restore confirmation). Same 1800 s budget as the chat client hook, whose
+  # measured steady state (701 s with six roles) is the heavier case.
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: jarvis-echo-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/jarvis-echo-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: jarvis-echo }
+            - { name: READ_ROLE_NAME, value: agentgateway-read:workspace }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-jarvis-echo-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

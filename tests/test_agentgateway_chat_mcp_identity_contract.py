@@ -4,6 +4,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
+LIB = BASE / "scripts" / "keycloak-reconcile-lib.sh"
 
 
 class AgentGatewayChatMcpIdentityContractTest(unittest.TestCase):
@@ -74,7 +75,11 @@ class AgentGatewayChatMcpIdentityContractTest(unittest.TestCase):
         )
         self.assertIn('EXPECTED_REALM_SCOPE_ROLE_NAMES="agentgateway-write"', script)
         self.assertIn("REALM_SCOPE_ROLE_NAMES is immutable", script)
-        self.assertIn('kget "clients/${CLIENT_UUID}/scope-mappings/realm"', script)
+        # INFRA-477: the scope-mapping READ helper is the shared library's
+        # (role_scope_has_direct_role); the create call and this client's own
+        # userinfo-pinned mapper stay in the script.
+        self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script)
+        self.assertIn('kget "clients/${CLIENT_UUID}/scope-mappings/realm"', LIB.read_text())
         self.assertIn('create "clients/${CLIENT_UUID}/scope-mappings/realm"', script)
         # fail-loud on both the post-create re-read and the post-ensure/audit
         # verification, and never create the role itself: it belongs to

@@ -22,6 +22,8 @@ resources:
   - agentgateway-read-grants-job.yaml
   - agentgateway-social-mcp-client.yaml
   - agentgateway-chat-mcp-client.yaml
+  - jarvis-echo-client.yaml
+  - hermes-enviar-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
@@ -46,6 +48,9 @@ configMapGenerator:
     files:
       - agentgateway-domain-roles.sh=scripts/agentgateway-domain-roles.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      # INFRA-477: shared pure helpers; the entrypoint sources it with
+      # `. "$(dirname "$0")/keycloak-reconcile-lib.sh"` from this volume.
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-domain-roles
@@ -53,6 +58,7 @@ configMapGenerator:
     files:
       - chat-agentgateway-client.sh=scripts/chat-agentgateway-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
   - name: keycloak-agentgateway-read-grants
     files:
       - agentgateway-read-grants.sh=scripts/agentgateway-read-grants.sh
@@ -71,9 +77,24 @@ configMapGenerator:
     files:
       - agentgateway-chat-mcp-client.sh=scripts/agentgateway-chat-mcp-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-chat-mcp-client
+  - name: keycloak-jarvis-echo-client
+    files:
+      - jarvis-echo-client.sh=scripts/jarvis-echo-client.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: jarvis-echo-client
+  - name: keycloak-hermes-enviar-client
+    files:
+      - hermes-enviar-client.sh=scripts/hermes-enviar-client.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: hermes-enviar-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh

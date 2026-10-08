@@ -53,11 +53,14 @@ resources:
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
   - storage/longhorn/metrics-and-alerts.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
+  - kubernetes/storage/longhorn-strict-local.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
   - platform/external-secrets/runtime-credentials.yaml
+  - platform/onepassword-connect
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
+  - platform/external-secrets/cluster-secret-store-onepassword-connect.yaml
   - platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml
   - platform/external-secrets/change-detector
   - platform/velero/node-agent-config.yaml
@@ -70,6 +73,7 @@ resources:
   - storage/minio/synapse-email-attachments.yaml
   - storage/minio/dgx-studio-identity.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
+  - networking/traefik-edge/videovigilancia-public.yaml
   - buildkit
   - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml

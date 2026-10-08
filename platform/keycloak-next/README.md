@@ -132,13 +132,18 @@ and the AgentGateway CEL policy. Do not sync this hook independently while the
 shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
-`agentgateway-domain-roles-job.yaml` creates the twelve reviewed domain roles
+`agentgateway-domain-roles-job.yaml` creates the fourteen reviewed domain roles
 without assigning them (`agentgateway-write:dgx-control` joined inert in
 INFRA-249: no allowlist entry, so its three gated tools stay denied). The hook fails if one is composite, mapped to a group,
-or held by any user other than the single reviewed service account in its
-immutable `ALLOWED_SERVICE_ACCOUNTS` map (today the six chat pairs:
-`:media`, `:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
-`=service-account-chat-agentgateway`). Every other domain role stays unassigned
+or held by any user other than the reviewed service accounts in its
+immutable `ALLOWED_SERVICE_ACCOUNTS` map: the six chat pairs (`:media`,
+`:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
+`=service-account-chat-agentgateway`), the eight pairs of the four general
+Hermes secretaria profiles on `:social` and `:workspace` (SC-2005), and, since
+INFRA-676, `:workspace-envio=service-account-hermes-enviar` and
+`:workspace-borrador=service-account-hermes-secretaria-skirmshop` (draft-only
+role, granted by the secretaria identity process after the `:workspace`
+narrowing propagated). Every other domain role stays unassigned
 until a dedicated client and a new map entry are reviewed together; the global
 `agentgateway-mcp` client is never granted these roles by this hook.
 
@@ -178,6 +183,16 @@ through the public client `agentgateway-chat-mcp` (redirect
 the human holder set of `agentgateway-write` beyond Daniel; `security`
 dictaminates before the merge (temporary, no groups, no Atlassian binding,
 retirable). The PR may open in parallel; the merge waits for its SEGURO.
+
+## Hermes `enviar` identity (`hermes-enviar`)
+
+`hermes-enviar-client.yaml` (PostSync, wave 24) reconciles the confidential
+client of the Hermes `enviar` plugin: service account only, no redirect URI,
+`fullScopeAllowed=false`, the `aud-mcp` audience mapper and exactly two realm
+roles, `agentgateway-read:workspace` and `agentgateway-write:workspace-envio`
+(the permission to send or delete Gmail drafts, held by nobody else). It never
+manages the client secret; `RUNBOOK.md` section 18 covers the order of the
+change, seeding the secret into 1Password and rollback.
 
 ## Chat identity (`chat-agentgateway`)
 

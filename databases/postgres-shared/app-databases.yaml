@@ -367,3 +367,19 @@ spec:
   ensure: present
   cluster:
     name: postgres-shared
+---
+# SC-1743: base del CRM propio (repo company-crm; dueño rol company_crm).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: company-crm
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: company_crm
+  owner: company_crm
+  ensure: present
+  cluster:
+    name: postgres-shared

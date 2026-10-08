@@ -291,6 +291,17 @@ spec:
         passwordSecret:
           name: opencode-archive-db-credentials
         comment: "SC-546 exportador de archivo/poda de sesiones opencode (timer x86 opencode-archive-prune, repo x86-host-runtime-pocharlies); dueño de agent_transcripts"
+      # SC-1743: rol del CRM propio (base company_crm, dueño de su esquema).
+      # La contraseña la posee 1Password (item `company-crm`); CNPG la
+      # reconcilia desde company-crm-db-credentials (ExternalSecret en
+      # app-credentials.yaml), que debe estar materializado ANTES de aplicar
+      # este spec.
+      - name: company_crm
+        ensure: present
+        login: true
+        passwordSecret:
+          name: company-crm-db-credentials
+        comment: "CRM propio de la compañía (repo pocharlies-org/company-crm); dueño de la base company_crm"
 
   backup:
     # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta

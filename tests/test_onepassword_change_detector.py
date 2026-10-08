@@ -133,6 +133,16 @@ class ChangeDetectorTest(unittest.TestCase):
             f"{ESO}/namespaces/merchant/externalsecrets/merchant-secrets",
         ])
 
+    def test_connect_store_consumers_are_forced_too(self):
+        # INFRA-511: Kyverno moves ExternalSecrets to onepassword-connect, where
+        # the reference is `key: <item>` + property; they keep OnChange and
+        # still need the force-sync when their item changes.
+        connect = es("hermes", "hermes-connect", store="onepassword-connect", keys=["gsc-mcp"])
+        items = [dict(i, version=i["version"] + (1 if i["id"] == "bbb" else 0)) for i in ITEMS_V1]
+        api = self.run_detector(items, FakeAPI(CLUSTER_ES + [connect], CLUSTER_CES, state=state_of(ITEMS_V1)))
+        self.assertIn(f"{ESO}/namespaces/hermes/externalsecrets/hermes-connect", api.forced())
+        self.assertNotIn(f"{ESO}/namespaces/skirmshop/externalsecrets/pg", api.forced())
+
     def test_ces_template_is_forced_not_its_children(self):
         items = [dict(i, version=i["version"] + (1 if i["id"] == "aaa" else 0)) for i in ITEMS_V1]
         api = self.run_detector(items, FakeAPI(CLUSTER_ES, CLUSTER_CES, state=state_of(ITEMS_V1)))
@@ -210,6 +220,52 @@ class CronJobManifestTest(unittest.TestCase):
         schedule = re.search(r'schedule: "([^"]+)"', self.manifest).group(1)
         minute = schedule.split()[0]
         self.assertRegex(minute, r"^\d+$", "a fixed minute: at most one run per hour")
+
+
+class OpContainerStateDirTest(unittest.TestCase):
+    """Live failure: `op` as uid 65532 refused /tmp/.config/op and
+    /tmp/com.agilebits.op.SingleUserEnvironment ("not owned by the current
+    user"): the dirs came from a root-owned emptyDir. Every container that
+    runs `op` must keep HOME, config and TMPDIR under a writable emptyDir
+    mount and create those dirs itself, never under the image's /tmp."""
+
+    def setUp(self):
+        text = (BASE / "cronjob.yaml").read_text()
+        self.volumes = text.split("\n          volumes:\n", 1)[1]
+        containers = re.split(r"\n            - name: ", "\n" + text.split("\n          initContainers:\n", 1)[1])[1:]
+        self.op = [c for c in containers if re.search(r"\bop item\b", c)]
+
+    def test_there_is_an_op_container(self):
+        self.assertTrue(self.op)
+
+    def test_state_env_is_under_a_mounted_emptydir(self):
+        for c in self.op:
+            mount = re.search(r"\{ name: (\w+), mountPath: (/\w+) \}", c)
+            self.assertIsNotNone(mount, "op needs a writable volume mount")
+            name, path = mount.groups()
+            self.assertRegex(self.volumes, rf"- name: {name}\n\s+emptyDir:")
+            self.assertNotIn("readOnly", mount.group(0))
+            for var in ("HOME", "XDG_CONFIG_HOME", "OP_CONFIG_DIR", "TMPDIR"):
+                value = re.search(rf"name: {var}, value: (\S+) \}}", c)
+                self.assertIsNotNone(value, f"{var} must be set")
+                self.assertTrue(value.group(1).startswith(path + "/"), f"{var}={value.group(1)} not under {path}")
+
+    def test_op_creates_its_own_dirs_as_the_job_uid(self):
+        for c in self.op:
+            self.assertRegex(c, r"mkdir -p [^\n]*/home/\.config[^\n]* && op item list")
+            self.assertRegex(c, r"readOnlyRootFilesystem: true")
+
+    def test_op_runs_as_the_image_user(self):
+        """1password/op:2.40.0 runs as opuser (999); op rejects state dirs owned
+        by any other uid (reproduced with docker, DGX-506): the op container
+        must run as 999 even though the pod default is 65532."""
+        for c in self.op:
+            self.assertRegex(c, r"runAsUser: 999\n")
+            self.assertRegex(c, r"runAsGroup: 999\n")
+
+    def test_no_container_writes_the_image_tmp(self):
+        self.assertNotRegex((BASE / "cronjob.yaml").read_text(), r"(HOME|TMPDIR|XDG_CONFIG_HOME|OP_CONFIG_DIR), value: /tmp\b")
+        self.assertNotRegex(self.volumes + "".join(self.op), r"mountPath: /tmp\b")
 
 
 if __name__ == "__main__":

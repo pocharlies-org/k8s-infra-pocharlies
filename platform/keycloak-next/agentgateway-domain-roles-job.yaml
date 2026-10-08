@@ -47,11 +47,11 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - name: ROLE_NAMES
-              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control
+              value: agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador
             # Reviewed together with chat-agentgateway-client.yaml (sync-wave 23):
             # the only service account allowed to hold a domain role.
             - name: ALLOWED_SERVICE_ACCOUNTS
-              value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway
+              value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop
             - { name: HOME, value: /tmp }
           resources:
             requests: { cpu: 50m, memory: 128Mi }

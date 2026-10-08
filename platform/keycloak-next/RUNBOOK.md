@@ -750,3 +750,70 @@ grant and password. To retire the fixture permanently (OWU-28 close), git
 revert the commit owning the reconciler Job, mark the `PRINCIPALS.md` entry
 `retirada-propuesta`, and delete the 1Password item; deleting the user from
 the realm itself remains a CTO decision.
+
+## 18. Hermes `enviar` identity (`hermes-enviar`, INFRA-676)
+
+`hermes-enviar-client.yaml` (PostSync, sync-wave 24) reconciles the confidential
+client of the Hermes `enviar` plugin, the only identity that sends or deletes
+Gmail drafts through AgentGateway `/workspace`. Its service account holds
+exactly two realm roles, `agentgateway-read:workspace` (owned by the read-grants
+hook, whose holder allowlist reviews it) and `agentgateway-write:workspace-envio`
+(created by the domain-roles hook, wave 19, which fails the sync if anyone else
+holds it). `agentgateway-write:workspace-borrador` is created in the same hook;
+its only reviewed holder is `secretaria-skirmshop` (draft-only, granted by the
+secretaria identity process once the gateway narrowing of `:workspace` has
+propagated). The client has no interactive flow and no redirect URI,
+`fullScopeAllowed=false`, the `aud-mcp` audience mapper (`mcp.lan.e-dani.com`;
+without it the gateway answers 401 InvalidAudience) and the hook ends by
+minting a token and requiring exactly the two roles and the audience, and
+rejecting the bare `agentgateway-write`.
+
+**Order (fixed by the architect):** k8s-agentgateway-pocharlies#186 (the
+gateway rules that need these roles) merged and propagated → this change →
+INFRA-677 (the `hermes-enviar` identity binding in the gateway) →
+k8s-openclaw-qwen36-pocharlies#564 (plugin and chart). The first reconciliation
+must be a full Argo CD sync (hooks are skipped on a selective resource sync).
+Expect at most a few transient `keycloak-role-drift` `DRIFT:` runs between the
+sync start and wave 24 completing (the catalog names two roles and a principal
+the realm does not have yet); it must be green again on the first run after
+the hooks. Merging the `secretaria-skirmshop` pair of `workspace-borrador`
+opens a second, longer window: from that sync until the INFRA-494 process
+grants the role, `keycloak-role-drift` gives `DRIFT:` every 15 minutes (the
+catalog names a holder the realm does not have yet) and `K8sCronJobFailed`
+alerts Telegram. Grant the role right after the domain-roles hook has synced
+(wave 19) and the next run clears it. The order cannot be reversed: granting
+before the merge fails that hook (`assigned to a user; dedicated-client rollout
+is not ready`).
+
+```bash
+kubectl -n keycloak logs job/keycloak-hermes-enviar-client -c reconcile-client
+# {"client_id":"hermes-enviar","realm_roles":"agentgateway-read:workspace agentgateway-write:workspace-envio","present":true,"fullscope_allowed":false,"token_verified":true}
+```
+
+### Seeding the client secret (after the first sync)
+
+The hook never touches the secret: Keycloak generates it when the client is
+created, and the hook only reads it (GET, never rotating) to mint the
+verification token. Once the client exists, a devops step copies it to the
+1Password item `hermes-kc-enviar`, field `client_secret`, in the vault of the
+five `hermes-kc-secretaria*` items (Connect form: item title + field), from
+where the ExternalSecret `hermes-kc-secretarias` (k8s-openclaw-qwen36-pocharlies,
+added by #564) carries it to Hermes. Rules for the step: read
+`clients/<uuid>/client-secret` through the admin API as the `keycloak-admin`
+skill describes (netrc `0600`, never argv), write it straight into a `0600`
+template for `op item create --template`, delete the template, and never echo
+the value, set `-x` or paste it into a ticket or a transcript. Do it **before**
+#564 merges, so its ExternalSecret finds the item on its first reconcile. A
+later rotation is a `rotacion-semanal` item, not an on-the-spot job.
+
+### State rollback
+
+Apply `manual/hermes-enviar-client-rollback-job.yaml` (excluded from Kustomize).
+It deletes only the client (and with it the service account and both grants);
+both roles stay, owned by their hooks. Verify
+`"client_present":false,"roles_retained":true`, remove the Job, and, in the same
+PR that stops the reconciler, drop the `ROLES.yaml` grantees and the
+`PRINCIPALS.md` entry. While `hermes-enviar-client.yaml` stays in Kustomize the
+next PostSync recreates the client with a NEW secret, so also retire the
+1Password item through the weekly rotation session.
+
