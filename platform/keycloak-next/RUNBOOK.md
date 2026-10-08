@@ -698,7 +698,8 @@ BASE=https://auth-next.e-dani.com/realms/edani
 REDIR='https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback'
 # credentials: 1Password item keycloak-next-qa-write-sin-vinculo (vault
 # k8s-pocharlies, fields username and password). The fixture has NO required
-# actions, so the form is the plain password page.
+# actions and carries firstName/lastName (the hook sets them, OWU-76), so the
+# form is the plain password page and no profile page follows it.
 VERIFIER="$(openssl rand -hex 32)"
 CHALLENGE="$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
 J="$(mktemp)"; ENC="$(printf '%s' "$REDIR" | sed 's|/|%2F|g; s|:|%3A|g')"
