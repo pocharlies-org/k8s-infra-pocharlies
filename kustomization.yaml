@@ -61,6 +61,7 @@ resources:
   - platform/external-secrets/cluster-secret-store-onepassword.yaml
   - platform/external-secrets/cluster-secret-store-onepassword-connect.yaml
   - platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml
+  - platform/external-secrets/cluster-secret-store-control-nexus-alarma.yaml
   - platform/external-secrets/change-detector
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
