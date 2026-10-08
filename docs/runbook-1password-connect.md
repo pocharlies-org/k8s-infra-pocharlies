@@ -94,6 +94,31 @@ fuera de banda de la tabla de arriba y volver a añadir la policy.
   la regla `onchange-existing`; mientras tanto cada resync de Kyverno regenera UpdateRequests
   (nota-sre-cupo.md §4). El arreglo propuesto es de devops/tech-lead, no de este runbook.
 
+## Cómo recoger un secreto nuevo o rotado
+
+La regla única vive en el comentario de
+`platform/external-secrets/cluster-secret-store-onepassword.yaml`; aquí solo los
+dos caminos operativos. Todo ExternalSecret va en `refreshPolicy: OnChange`
+(Kyverno `externalsecret-onepassword-onchange`): ESO lee al crear el ES y cuando
+cambia su spec/etiquetas/anotaciones, nunca por reloj.
+
+- **Secreto nuevo** → se crea el ExternalSecret y lee al crearse. Escríbelo ya en
+  forma Connect (`key: item` + `property: field`); los ES en git aún en forma SDK
+  (`key: item/campo`) los readmite Kyverno `externalsecret-onepassword-to-connect`
+  hasta INFRA-525.
+- **Secreto rotado** → fuerza la relectura de ESE ES (una sola lectura):
+  `kubectl annotate externalsecret <es> -n <ns> force-sync=$(date +%s) --overwrite`.
+  Si el ES es hijo de un ClusterExternalSecret, anota el CES, no los hijos. El
+  detector (`onepassword-change-detector`, CronJob `23 */4 * * *`, 1 `ItemsList`
+  por pasada) ya anota los ES/CES cuyo item cambió: no hace falta nada manual si
+  esperas a la siguiente pasada.
+
+**Techo.** El store `onepassword-connect` (Connect en clúster) no gasta cupo; el
+store viejo `onepassword` (SDK) sí, contra los 1.000 requests/día de la cuenta —
+una relectura completa de todos sus ES equivale al día entero. Por eso **nunca**
+`rollout restart` de ESO ni anotar el ClusterSecretStore para recoger un valor:
+soltarían el cache del provider y relecturarían todos los ES de golpe.
+
 ## Qué NO hacer
 
 - **Rotar credenciales en el día.** La rotación espera la sesión semanal (SC-1790).
