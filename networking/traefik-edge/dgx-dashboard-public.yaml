@@ -105,8 +105,10 @@ spec:
     # publico real cubre ya la regla 100, que es sso-chain sin lista.
     # dgx.app.alarma.v1 (DGX-674, security C1): /api/app/alarma* entra igual que pagos;
     # /api/alarma* (HMAC V2) NO: desde LAN cae en la 200 y desde fuera en la 100.
+    # dgx.panel.hermes.v1 (SC-2175, security): /api/hermes-panel* entra igual (el backend exige
+    # X-Auth-Request-Email y exige_sso da 401 sin ella; en la 200 la cabecera va vaciada).
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`))
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers

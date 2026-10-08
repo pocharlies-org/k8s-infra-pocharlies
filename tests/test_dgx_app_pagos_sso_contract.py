@@ -24,8 +24,9 @@ ROUTING = ROOT / "platform" / "keycloak-next" / "routing.yaml"
 
 # DGX-674 (security C1): /api/app/alarma* (SSO + lista de emails en el backend) entra igual que
 # pagos; /api/alarma* es la ruta de maquina (HMAC V2) y NO entra, como /api/pagos*.
+# SC-2175 (security): /api/hermes-panel* (dgx.panel.hermes.v1) entra igual: su backend da 401 sin la cabecera.
 APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/push`)",
-                "PathPrefix(`/api/app/alarma`)")
+                "PathPrefix(`/api/app/alarma`)", "PathPrefix(`/api/hermes-panel`)")
 
 
 def _docs(path):
@@ -71,8 +72,9 @@ class PagosSSOContract(unittest.TestCase):
                     continue
                 for route in doc["spec"]["routes"]:
                     if route.get("priority", 0) > 400:
-                        self.assertNotIn("/api/app", route["match"],
-                                         f"{name}@{route.get('priority')} would shadow the control set")
+                        for prefix in ("/api/app", "/api/hermes-panel"):
+                            self.assertNotIn(prefix, route["match"],
+                                             f"{name}@{route.get('priority')} would shadow the control set")
 
     def test_edge_publico_cae_en_sso_chain(self):
         """Un caller sin IP LAN/tailnet/cluster que entre por dgx.e-dani.com cae en la regla
