@@ -16,14 +16,14 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
             "social", "workspace", "gsc", "offers", "sauvage", "hermes",
-            "dgx-control",
+            "dgx-control", "workspace-envio", "workspace-borrador",
         }
         for domain in expected:
             self.assertIn(f"agentgateway-write:{domain}", script)
         self.assertIn("ROLE_NAMES is immutable", script)
         self.assertIn("ALLOWED_SERVICE_ACCOUNTS is immutable", script)
         self.assertIn(
-            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"',
+            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar"',
             script,
         )
         self.assertIn('roles/${role}/users', script)
@@ -92,20 +92,64 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             )
             return result, log.read_text().splitlines()
 
-    def test_reconciler_creates_exactly_twelve_roles_without_assigning_them(self):
+    def test_reconciler_creates_exactly_fourteen_roles_without_assigning_them(self):
         result, calls = self._run_reconciler()
         self.assertEqual(0, result.returncode, result.stderr)
         creations = [call for call in calls if call.startswith("create roles ")]
-        self.assertEqual(12, len(creations))
+        self.assertEqual(14, len(creations))
         self.assertTrue(any("-s name=agentgateway-write:dgx-control " in call for call in creations))
-        self.assertIn('"roles":12,"created":12,"human_assigned":false,"service_account_grants":0', result.stdout)
+        # INFRA-676: the two Gmail send/draft roles are created like the rest.
+        self.assertTrue(any("-s name=agentgateway-write:workspace-envio " in call for call in creations))
+        self.assertTrue(any("-s name=agentgateway-write:workspace-borrador " in call for call in creations))
+        self.assertIn('"roles":14,"created":14,"human_assigned":false,"service_account_grants":0', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
 
     def test_reconciler_is_idempotent_when_the_roles_exist(self):
         result, calls = self._run_reconciler(existing=True)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse(any(call.startswith("create roles ") for call in calls))
-        self.assertIn('"roles":12,"created":0,"human_assigned":false,"service_account_grants":0', result.stdout)
+        self.assertIn('"roles":14,"created":0,"human_assigned":false,"service_account_grants":0', result.stdout)
+
+    def test_workspace_envio_is_held_by_exactly_hermes_enviar(self):
+        # INFRA-676: the permission to send mail has ONE reviewed holder, the
+        # dedicated hermes-enviar client. The chat identity, a secretaria, a
+        # human or a second holder next to it all fail the reconcile.
+        result, _ = self._run_reconciler({
+            "roles/agentgateway-write:workspace-envio/users": "service-account-hermes-enviar",
+        })
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"human_assigned":false,"service_account_grants":1', result.stdout)
+        for holders in ("service-account-chat-agentgateway", "service-account-hermes-secretaria",
+                        "service-account-hermes-secretaria-skirmshop", "me@e-dani.com",
+                        "service-account-hermes-enviar\\nme@e-dani.com"):
+            result, _ = self._run_reconciler({"roles/agentgateway-write:workspace-envio/users": holders})
+            self.assertEqual(1, result.returncode, holders)
+            self.assertIn("agentgateway-write:workspace-envio is assigned to an unauthorized user", result.stderr)
+
+    def test_hermes_enviar_does_not_hold_any_other_domain_role(self):
+        # The allowlist is per role, not per client.
+        for role in ("workspace", "workspace-borrador", "social", "media"):
+            result, _ = self._run_reconciler({
+                f"roles/agentgateway-write:{role}/users": "service-account-hermes-enviar",
+            })
+            self.assertEqual(1, result.returncode, role)
+            self.assertIn(f"agentgateway-write:{role} is assigned to", result.stderr)
+
+    def test_workspace_borrador_is_inert_nobody_may_hold_it_yet(self):
+        # INFRA-676 / security INFRA-640 condition 2: created without a holder.
+        # The grant to secretaria-skirmshop is a later, separate change that
+        # waits for the narrowing of :workspace to reach the gateway.
+        script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
+        self.assertNotIn("agentgateway-write:workspace-borrador=", script)
+        for holder in ("service-account-hermes-secretaria-skirmshop", "service-account-hermes-enviar",
+                       "service-account-chat-agentgateway"):
+            result, _ = self._run_reconciler({
+                "roles/agentgateway-write:workspace-borrador/users": holder,
+            })
+            self.assertEqual(1, result.returncode, holder)
+            self.assertIn(
+                "agentgateway-write:workspace-borrador is assigned to a user; dedicated-client rollout is not ready",
+                result.stderr)
 
     def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
         # INFRA-249: created without grantees; any holder, even the reviewed chat
@@ -176,7 +220,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn('capabilities: { drop: ["ALL"] }', manifest)
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("app.kubernetes.io/component: agentgateway-domain-roles", manifest)
-        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila", manifest)
+        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar", manifest)
         self.assertNotIn("0.0.0.0/0", manifest)
 
     def test_kustomize_owns_job_and_script(self):

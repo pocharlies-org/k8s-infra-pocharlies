@@ -62,6 +62,7 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-domain-roles.sh
           sh -n platform/keycloak-next/scripts/chat-agentgateway-client.sh
           sh -n platform/keycloak-next/scripts/jarvis-echo-client.sh
+          sh -n platform/keycloak-next/scripts/hermes-enviar-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
@@ -75,6 +76,7 @@ jobs:
             tests/test_keycloak_agentgateway_domain_roles_contract.py \
             tests/test_chat_agentgateway_identity_contract.py \
             tests/test_jarvis_echo_identity_contract.py \
+            tests/test_hermes_enviar_identity_contract.py \
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \
