@@ -5,6 +5,22 @@ Longhorn v1.13.0 and the cluster is being bumped to it through INFRA-122; until
 that bump is deployed and verified, the operational answer below (recreate the
 pod) is what clears a stuck mount.
 
+## CONGELACION (decision VP 18-09-2026)
+
+Prohibido reiniciar k3s/kubelet en `ks5-cp-1`, `ks5-cp-2` y `ks5-cp-3` hasta
+que el fix de longhorn/longhorn#13723 esté aplicado por GitOps (bump del chart
+longhorn que lo incluya) y verificado con el pod de prueba: mismo pod y UID
+tras el reinicio, sin bucle de `MountVolume.SetUp`. Esta congelación prevalece
+sobre el procedimiento de reproducción de más abajo.
+
+Única excepción: un reinicio inevitable (p. ej. un parche de seguridad), en
+ventana acordada, con la recuperación preparada (este runbook) y aviso previo
+al VP.
+
+La congelación se levanta solo con el criterio 3 de la épica medido
+(verificación con el pod de prueba). Referencias: épica INFRA-122, adjunto
+`nota-cto-congelacion-ks5.md`, etiqueta `parked-hasta-2026-09-23`.
+
 ## Symptom
 
 After a k3s restart on a KS5 node, workloads that mount Longhorn volumes get
