@@ -104,7 +104,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `social` | `/social` | `agentgateway-read:social` | `agentgateway-write` (13), `agentgateway-write:social` (13) |
 | `chat-tts` | `/chat-tts` | — | `agentgateway-write` (2), `agentgateway-write:media` (2) |
 | `hermes` | `/hermes` | — | `agentgateway-write` (2), `agentgateway-write:hermes` (2) |
-| `browser` | `/browser` | — | `agentgateway-write` (38) |
+| `browser` | `/browser` | — | `agentgateway-write` (40), `agentgateway-write:browser-navegacion` (27) |
 | `tts` | `/tts` | — | `agentgateway-write` (2), `agentgateway-write:media` (2) |
 | `weight` | `/weight` | `agentgateway-read:weight` | — |
 | `chat-dgx-control` | `/chat-dgx-control` | — | `agentgateway-write:dgx-control` (3) |
@@ -300,7 +300,8 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/browser",
       "require": [],
       "tools": {
-        "agentgateway-write": ["browser_click", "browser_close_tab", "browser_drag", "browser_drop", "browser_evaluate", "browser_fill_form", "browser_fill_secret", "browser_find", "browser_get_attribute", "browser_get_console_logs", "browser_get_html", "browser_get_text", "browser_go_back", "browser_go_forward", "browser_highlight", "browser_hover", "browser_iframe_click", "browser_iframe_eval", "browser_is_visible", "browser_list_connections", "browser_list_tabs", "browser_navigate", "browser_network_request", "browser_network_requests", "browser_new_tab", "browser_pdf", "browser_press_key", "browser_reload", "browser_resize_viewport", "browser_screenshot", "browser_select_option", "browser_snapshot", "browser_state", "browser_switch_tab", "browser_type", "browser_upload_file", "browser_wait", "browser_wait_for_element"]
+        "agentgateway-write": ["browser_click", "browser_close_tab", "browser_drag", "browser_drop", "browser_evaluate", "browser_fill_form", "browser_fill_secret", "browser_find", "browser_get_attribute", "browser_get_console_logs", "browser_get_html", "browser_get_text", "browser_go_back", "browser_go_forward", "browser_highlight", "browser_hover", "browser_iframe_click", "browser_iframe_eval", "browser_is_visible", "browser_list_connections", "browser_list_tabs", "browser_navigate", "browser_network_request", "browser_network_requests", "browser_new_tab", "browser_passkey", "browser_pdf", "browser_press_key", "browser_reload", "browser_resize_viewport", "browser_screenshot", "browser_select_option", "browser_send_to_back", "browser_snapshot", "browser_state", "browser_switch_tab", "browser_type", "browser_upload_file", "browser_wait", "browser_wait_for_element"],
+        "agentgateway-write:browser-navegacion": ["browser_click", "browser_close_tab", "browser_drag", "browser_find", "browser_get_attribute", "browser_get_html", "browser_get_text", "browser_go_back", "browser_go_forward", "browser_highlight", "browser_hover", "browser_is_visible", "browser_list_tabs", "browser_navigate", "browser_new_tab", "browser_press_key", "browser_reload", "browser_resize_viewport", "browser_screenshot", "browser_select_option", "browser_send_to_back", "browser_snapshot", "browser_state", "browser_switch_tab", "browser_type", "browser_wait", "browser_wait_for_element"]
       }
     },
     {
