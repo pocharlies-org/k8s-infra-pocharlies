@@ -1,0 +1,198 @@
+# DGX-729 (09-10-2026, security): prueba de borde X-Edge-Proof para el dashboard.
+# El backend (repo dgx-infra, services/dashboard/edge_proof.py) solo se fía de
+# x-auth-request-email (es_dani, alarma, pantallas seguras) si la petición trae esta
+# cabecera: un pod del clúster que llegue recto al Service ya no puede suplantar a Dani
+# ante /api/app/* (pagos = dinero, medido en DGX-674/DGX-729).
+#
+# El secreto NO va hardcodeado en el YAML (hallazgo del juez de PR: el valor en claro se
+# lee en el repo y en los logs de Git). Patrón de la casa para middlewares con secreto
+# (firecrawl-edge-auth, basicAuth de static-edge.yaml): un servicio mínimo que responde
+# 200 con la cabecera y Traefik la copia vía forwardAuth.authResponseHeaders. El valor
+# llega por env desde el Secret, y el Secret desde la SecureNote dgx-edge-proof (campo
+# proof) del vault k8s-pocharlies vía Connect — el MISMO valor que lee el backend
+# (ExternalSecret dgx-dashboard-edge-proof en dgx-infra); rotar = Task rotacion-semanal,
+# force-sync de los ExternalSecrets, nada que tocar aquí.
+#
+# Sobrevive al strip: dgx-strip-identity-headers solo vacía las 7 de identidad, nunca
+# X-Edge-Proof. La gema EDGE vive en networking/traefik-edge/dgx-edge-proof.yaml.
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dgx-edge-proof
+  namespace: traefik-lan
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: dgx-edge-proof
+spec:
+  refreshPolicy: OnChange
+  refreshInterval: 24h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: onepassword-connect
+  target:
+    name: dgx-edge-proof
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: proof
+      remoteRef:
+        key: dgx-edge-proof
+        property: proof
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dgx-edge-proof
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: dgx-edge-proof
+data:
+  proof.py: |
+    import os
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    proof = os.environ["EDGE_PROOF"]
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self._answer()
+
+        def do_POST(self):
+            self._answer()
+
+        def do_PUT(self):
+            self._answer()
+
+        def do_PATCH(self):
+            self._answer()
+
+        def do_DELETE(self):
+            self._answer()
+
+        def do_HEAD(self):
+            self._answer()
+
+        def do_OPTIONS(self):
+            self._answer()
+
+        def _answer(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length:
+                self.rfile.read(length)  # body del forwardAuth, leido y descartado
+            self.send_response(200)
+            if not self.path.startswith("/health"):
+                # forwardAuth.authResponseHeaders copia esta cabecera al request del backend
+                self.send_header("X-Edge-Proof", proof)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, fmt, *args):
+            return
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dgx-edge-proof
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: dgx-edge-proof
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dgx-edge-proof
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dgx-edge-proof
+    spec:
+      # la gema del traefik-lan vive en el x86, como el propio Traefik LAN
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu
+      containers:
+        - name: proof
+          image: docker.io/library/python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/proof.py"]
+          env:
+            - name: EDGE_PROOF
+              valueFrom:
+                secretKeyRef:
+                  name: dgx-edge-proof
+                  key: proof
+          ports:
+            - { name: http, containerPort: 8080 }
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 96Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: app, mountPath: /app, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: app
+          configMap:
+            name: dgx-edge-proof
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dgx-edge-proof
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: dgx-edge-proof
+spec:
+  selector:
+    app.kubernetes.io/name: dgx-edge-proof
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dgx-edge-proof
+  namespace: traefik-lan
+spec:
+  forwardAuth:
+    address: http://dgx-edge-proof.traefik-lan.svc.cluster.local:8080/
+    authResponseHeaders:
+      - X-Edge-Proof
+---
+# Solo Traefik (pods del propio ns) puede preguntar la prueba: si la policy faltara, un pod
+# cualquiera del clúster leería X-Edge-Proof en la respuesta y volvería a poder forjarla.
+# En traefik-edge esto ya lo da traefik-edge-default-deny-ingress + allow-same-namespace.
+# Sin sondas A PROPOSITO: con default-deny sin ipBlock el kubelet no alcanzaría el pod y no
+# pasaría readiness; el servicio es un bucle sin estado y si cae, forwardAuth da 502 ruidoso.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dgx-edge-proof-allow-traefik-only
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: dgx-edge-proof
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dgx-edge-proof
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
