@@ -75,6 +75,22 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # INFRA-732 (P6a-2): /api/interno/* son rutas internas del dashboard que solo
+    # debe alcanzar el forwardAuth interno de Traefik, por el Service del clúster
+    # (control-nexus/dgx-dashboard-ui), nunca por una IngressRoute. Sin esta regla
+    # caían en el bypass (200) o en la pública (100) y llegaban al backend. Prioridad
+    # 500: por encima de /messages (450) y del control set (400), y por delante de las
+    # de 200/400 (C1). Un solo prefijo cubre las rutas internas futuras: no una regla
+    # por ruta (No construir). No se reenvía al backend: se responde 404 en el borde
+    # desde edge-static-server, que devuelve 404 para cualquier Host no incluido en su
+    # allowlist de ficheros (dgx.e-dani.com no lo está); el 404 es del borde, no del
+    # backend (D2). Referencia a un servicio ya desplegado, no un servicio nuevo.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && PathPrefix(`/api/interno`)
+      priority: 500
+      services:
+        - name: edge-static-server
+          port: 8080
     # Consola de mensajería (página, assets propios, API y SSE
     # /api/messages/stream) → dgx-messages, para TODO origen y siempre tras
     # sso-chain: la identidad X-Auth-Request-User la estampa el forwardAuth

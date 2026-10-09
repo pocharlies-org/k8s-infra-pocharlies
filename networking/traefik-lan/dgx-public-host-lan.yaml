@@ -44,6 +44,24 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # INFRA-732 (P6a-2): /api/interno/* son rutas internas del dashboard que solo debe
+    # alcanzar el forwardAuth interno de Traefik, por el Service del clúster
+    # (control-nexus/dgx-dashboard-ui), nunca por una IngressRoute. Sin esta regla caían
+    # en el bypass LAN (300) o en la pública (100) y llegaban al backend. Prioridad 500:
+    # por encima de /messages (450) y del control set (400), y por delante de las de
+    # 200/400 (C1). Un solo prefijo cubre las rutas internas futuras: no una regla por
+    # ruta (No construir). No se reenvía al backend: se responde 404 en el borde desde
+    # edge-static-server (ns traefik-edge, referenciado cross-namespace como hacen ya las
+    # rutas de este fichero con control-nexus/messages/keycloak), que devuelve 404 para
+    # cualquier Host no incluido en su allowlist de ficheros (dgx.e-dani.com y
+    # dgx.lan.e-dani.com no lo están). El 404 es del borde, no del backend (D2).
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && PathPrefix(`/api/interno`)
+      priority: 500
+      services:
+        - name: edge-static-server
+          namespace: traefik-edge
+          port: 8080
     # Consola de mensajería → dgx-messages (ns messages), gemela de la ruta 450
     # del edge (networking/traefik-edge/dgx-dashboard-public.yaml): página,
     # assets propios, API y SSE, siempre tras sso-chain y con las cabeceras de
