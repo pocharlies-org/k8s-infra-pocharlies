@@ -50,6 +50,8 @@ spec:
           namespace: traefik-lan
         - name: jarvis-public-hud-shell
           namespace: jarvis
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -62,6 +64,8 @@ spec:
       # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
       middlewares:
         - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: dgx-edge-proof
           namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
