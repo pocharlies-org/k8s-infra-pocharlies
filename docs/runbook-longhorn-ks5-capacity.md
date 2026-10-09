@@ -94,6 +94,32 @@ not raise the logical ceiling again without a fresh requested-vs-actual
 capacity report and a restore drill. During the controlled wave, require each
 OpenClaw replica to land on a different KS5 node.
 
+### Allowlist checkpoint — 2026-10-06 (INFRA-610)
+
+The 2026-05 smoke-test allowlist is gone (all seven volumes deleted). The
+current allowlist covers three orphaned 2 GiB restore-drill volumes from the
+`opencode-restore-test` namespaces (created 2026-08-18): `pvc-0bad5aa4`,
+`pvc-bafac363`, `pvc-ec836794`. `pvc-436b923a` (`rt-src`) is deliberately not
+listed: it carries a backup reference (`backup-7a489a86cc874b9d`) and the
+backup guard aborts on it; it needs manual review. At audit time each
+candidate was detached, had no PV/PVC, no attachment tickets, and three
+stopped replicas spread across `ubuntu` and two KS5 nodes.
+
+### Placement checkpoint — 2026-10-06 (INFRA-610)
+
+Replica scheduling on KS5 also depends on instance-manager readiness: the
+scheduler silently excludes a node whose instance manager is not ready. After
+the v1.13.0 chart bump (INFRA-166, 2026-10-06 06:41 UTC) the new v1.13.0
+instance-manager pods on `ks5-cp-2` and `ks5-cp-3` cannot schedule
+(`OutOfcpu`: request 960m, node requests already ~7.3/8.0 CPU), so those two
+nodes were excluded from replica placement even though `ks5-cp-3`'s disk was
+schedulable. The only disk-schedulable nodes left (`ubuntu`, `ks5-cp-1`) were
+both in DiskPressure, which is how `pvc-b2eb8d3f` failed with
+`disks are unavailable: no disks found on node ubuntu; no disks found on node
+ks5-cp-1`. Fixing placement belongs to the Longhorn upgrade (INFRA-122):
+free CPU requests on the KS5 nodes or lower the instance-manager CPU request;
+do not treat a clean disk as sufficient while its instance manager is stuck.
+
 ### Capacity checkpoint — 2026-08-02
 
 The three KS5 disks reported 416.406, 468.066 and 494.141 GiB physically free,
