@@ -73,14 +73,22 @@ spec:
       middlewares: *generic-sso
       services:
         - {name: ha-dashboard, namespace: ha-dashboard, port: 80}
+    # INFRA-614 (INFRA-600): sso-forward-auth injects X-Auth-Request-Email,
+    # NOT X-Email, so a forged X-Email passed the SSO gate untouched and the
+    # brain API (src/auth.py) trusted it — any SSO user could impersonate
+    # another. Strip runs first; sso-chain re-adds its own headers after.
     - kind: Rule
       match: Host(`brain-k8s.e-dani.com`)
-      middlewares: *generic-sso
+      middlewares:
+        - {name: brain-strip-identity-headers, namespace: skirmshop-brain-prod}
+        - {name: sso-chain, namespace: keycloak}
       services:
         - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
     - kind: Rule
       match: Host(`brain-ingest-k8s.e-dani.com`)
-      middlewares: *generic-sso
+      middlewares:
+        - {name: brain-strip-identity-headers, namespace: skirmshop-brain-prod}
+        - {name: sso-chain, namespace: keycloak}
       services:
         - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
 

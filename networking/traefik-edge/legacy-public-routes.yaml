@@ -287,6 +287,11 @@ spec:
   routes:
   - kind: Rule
     match: Host(`brain.e-dani.com`)
+    # INFRA-614 (INFRA-600): src/auth.py trusts an inbound X-Email
+    # unconditionally; strip client-supplied identity headers before the
+    # backend. X-API-Key / Bearer auth is untouched.
+    middlewares:
+    - {name: brain-strip-identity-headers, namespace: skirmshop-brain-prod}
     services:
     - name: skirmshop-brain
       namespace: skirmshop-brain-prod
