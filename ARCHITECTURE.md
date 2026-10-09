@@ -128,7 +128,8 @@ Nº de casos: **pendiente de medir**.
   `keycloak-role-drift` puede dar `DRIFT:` hasta que acaban los hooks; se limpia solo.
 - Navegador de las secretarias (SC-2238): `agentgateway-write:browser-navegacion` (27 tools de `/browser`, regla en
   k8s-agentgateway-pocharlies#191) y sus cinco titulares `service-account-hermes-secretaria*` están declarados en
-  `ROLES.yaml`, `PRINCIPALS.md` y `ROUTE-ROLES.md`. El rol NO está en `ROLE_NAMES` del hook `agentgateway-domain-roles`: se
+  `ROLES.yaml`, `PRINCIPALS.md` y `ROUTE-ROLES.md`; `tests/test_keycloak_rbac_browser_navegacion_contract.py` fija que
+  las tres copias de la lista son el mismo conjunto de 27 (corte de Security, sin las 13 sensibles). El rol NO está en `ROLE_NAMES` del hook `agentgateway-domain-roles`: se
   crea y se concede en el realm a mano (API admin, sin composites ni el rol pelado, admin events enlazados al ticket), y
   hasta entonces `keycloak-role-drift` da `DRIFT:` (rol catalogado que el realm aún no tiene). Orden: este catálogo se
   fusiona ANTES de crear/conceder el rol, y la concesión sigue de inmediato para cerrar la ventana.
