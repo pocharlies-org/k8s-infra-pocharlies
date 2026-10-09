@@ -126,6 +126,14 @@ Nº de casos: **pendiente de medir**.
   Entre el merge y la concesión `keycloak-role-drift` da `DRIFT:` (el catálogo declara un titular que el realm aún no
   tiene). En el primer sync,
   `keycloak-role-drift` puede dar `DRIFT:` hasta que acaban los hooks; se limpia solo.
+- Navegador de las secretarias (SC-2238): `agentgateway-write:browser-navegacion` (27 tools de `/browser`, regla en
+  k8s-agentgateway-pocharlies#191) y sus cuatro titulares (`service-account-hermes-secretaria`, `-dani`, `-leila` y `-casa`; el de `-skirmshop` queda fuera por
+  veredicto de Security, DGX-760 comentario 30717: lectura de negocio, INFRA-492) están declarados en
+  `ROLES.yaml`, `PRINCIPALS.md` y `ROUTE-ROLES.md`; `tests/test_keycloak_rbac_browser_navegacion_contract.py` fija que
+  las dos copias de la lista son el mismo conjunto de 27 (corte de Security, sin las 13 sensibles). El rol NO está en `ROLE_NAMES` del hook `agentgateway-domain-roles`: se
+  crea y se concede en el realm a mano (API admin, sin composites ni el rol pelado, admin events enlazados al ticket), y
+  hasta entonces `keycloak-role-drift` da `DRIFT:` (rol catalogado que el realm aún no tiene). Orden: este catálogo se
+  fusiona ANTES de crear/conceder el rol, y la concesión sigue de inmediato para cerrar la ventana.
 - longhorn-single (1 réplica, Delete, sin dataLocality) existe solo a mano en el clúster, no está en git y no se usa: no
   garantiza en qué nodo cae la réplica. Para un volumen local de un nodo, longhorn-strict-local.
 
