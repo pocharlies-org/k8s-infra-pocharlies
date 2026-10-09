@@ -18,7 +18,9 @@ import kc_rbac  # noqa: E402
 
 ROLE = "agentgateway-write:browser-navegacion"
 BARE = "agentgateway-write"
-HOLDERS = {f"service-account-hermes-secretaria{suffix}" for suffix in ("", "-dani", "-leila", "-casa", "-skirmshop")}
+# Security (SC-2238, DGX-760 comment 30717): four profiles. -skirmshop reads business data (INFRA-492) and stays out.
+HOLDERS = {f"service-account-hermes-secretaria{suffix}" for suffix in ("", "-dani", "-leila", "-casa")}
+SKIRMSHOP = "service-account-hermes-secretaria-skirmshop"
 
 # Security's verdict (SC-2238): what moving around and looking at a page needs.
 NAVIGATION = {f"browser_{name}" for name in (
@@ -82,10 +84,11 @@ class BrowserNavegacionCatalogTest(unittest.TestCase):
         self.assertIn(f"`{BARE}` (40)", row)
         self.assertIn(f"`{ROLE}` (27)", row)
 
-    def test_only_the_five_secretaria_profiles_hold_it_and_none_with_the_bare_role(self):
+    def test_only_four_secretaria_profiles_hold_it_and_none_with_the_bare_role(self):
         held = {p["username"] for p in self.principals if ROLE in p["realm_roles"]}
         self.assertEqual(held, HOLDERS)
         self.assertEqual(set(self.entry["grantees"]), HOLDERS)
+        self.assertNotIn(SKIRMSHOP, held | set(self.entry["grantees"]), "Security left secretaria-skirmshop out")
         for principal in self.principals:
             if principal["username"] in HOLDERS:
                 self.assertNotIn(BARE, principal["realm_roles"], principal["username"])

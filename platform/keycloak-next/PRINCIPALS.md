@@ -519,7 +519,6 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:shopify",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:workspace",
-        "agentgateway-write:browser-navegacion",
         "agentgateway-write:workspace-borrador",
         "default-roles-edani"
       ],
