@@ -33,24 +33,7 @@ spec:
       X-Auth-Request-Preferred-Username: ""
       X-Forwarded-User: ""
       X-Forwarded-Email: ""
----
-# DGX-729 (09-10-2026, security): prueba de borde. El backend del dashboard solo se fía de
-# x-auth-request-email (es_dani, alarma, pantallas seguras) si la petición trae esta cabecera,
-# así que un pod del clúster que llegue recto al Service ya no puede suplantar a Dani ante
-# /api/app/* (pagos = dinero). El MISMO valor está en 1Password (SecureNote dgx-edge-proof,
-# campo proof) y llega al backend vía ExternalSecret (dgx-dashboard-edge-proof, repo dgx-infra):
-# el CRD Middleware/headers no admite valueFrom, por eso aquí va estático (repo privado).
-# Rotar = tocar los dos sitios la misma semana (Task rotacion-semanal). Sobrevive al strip:
-# dgx-strip-identity-headers solo vacía las 7 de identidad, nunca esta.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: dgx-edge-proof
-  namespace: traefik-lan
-spec:
-  headers:
-    customRequestHeaders:
-      X-Edge-Proof: "e9e436764d2508534a271ae7fd331496b28ba1fbddff21b6abc83a463d2f8cda"
+      X-Forwarded-Groups: ""
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
