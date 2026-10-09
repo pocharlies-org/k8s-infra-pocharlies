@@ -2,7 +2,7 @@
   "schema": "keycloak-role-catalog/v1",
   "realm": "edani",
   "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); composites = roles de realm exactos que contiene un rol compuesto (ausente = ninguno); client_composites = objeto clientId → lista exacta de roles de cliente que contiene (ausente = ninguno); client_uuids = objeto clientId → id interno del cliente, exactamente los clientIds que usa algún client_composites (los compuestos solo traen el id interno y así se traducen sin GET clients, que exige view-clients); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
-  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync)",
+  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync); SC-2238 (2026-10-09) declara el rol agentgateway-write:browser-navegacion y sus cinco titulares (service-account-hermes-secretaria*) ANTES de crearlo y concederlo en el realm: hasta la concesión, keycloak-role-drift da DRIFT a propósito",
   "client_uuids": {
     "account": "5402c4f9-25fc-4a60-8027-2ff55fae0677"
   },
@@ -334,6 +334,23 @@
         "denies": "No da lectura por sí solo (cada ruta exige su agentgateway-read:<ruta>) ni administración de Keycloak; nunca a grupos ni a humanos distintos de los dos concesionarios revisados: Daniel, fijado por OWU-80 (me@e-dani.com, sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, cuyo grant está condicionado a la guarda ProForma de OWU-77 desplegada en prod — veredicto de security de OWU-28, condición (b)), y el fixture de QA de OWU-28-g (qa-write-sin-vinculo@e-dani.com, sin grupos ni vínculo Atlassian, retirable con su rollback manual y retirada al cerrar la épica)."
       },
       "origin": "agentgateway-write-role.sh (PostSync agentgateway-write-role-job.yaml; SC-44); el grant humano me@e-dani.com por agentgateway-write-grant-daniel.sh (PostSync agentgateway-write-grant-daniel-job.yaml; OWU-80); el fixture qa-write-sin-vinculo@e-dani.com por agentgateway-write-fixture-user.sh (PostSync agentgateway-write-fixture-user-job.yaml; OWU-28-g)"
+    },
+    {
+      "name": "agentgateway-write:browser-navegacion",
+      "status": "active",
+      "meaning": "Navegación del Chrome pareado por la ruta /browser de AgentGateway (SC-2238): las 27 tools de moverse y mirar (navigate, back/forward/reload, state, find, snapshot, click, type, hover, drag, select_option, press_key, wait, wait_for_element, is_visible, get_text, get_html, get_attribute, screenshot, resize_viewport, tabs, highlight). Para los cinco perfiles de secretarias de Hermes, que no pueden llevar el agentgateway-write pelado (SC-1584, condición 13).",
+      "grantees": [
+        "service-account-hermes-secretaria",
+        "service-account-hermes-secretaria-casa",
+        "service-account-hermes-secretaria-dani",
+        "service-account-hermes-secretaria-leila",
+        "service-account-hermes-secretaria-skirmshop"
+      ],
+      "privilege": {
+        "allows": "Las 27 tools de navegación de /browser, con GATEWAY_WRITE activo en la ruta.",
+        "denies": "Lo sensible, que sigue solo con el rol pelado (veredicto de Security, SC-2238): browser_fill_secret, browser_passkey, browser_evaluate, browser_iframe_eval, browser_iframe_click, browser_upload_file, browser_drop, browser_fill_form, browser_network_request(s), browser_pdf, browser_get_console_logs y browser_list_connections; también browser_run_code_unsafe (fuera para todos), las escrituras de otros dominios y el write global."
+      },
+      "origin": "Concesión manual por la API admin de Keycloak (admin events enlazados a SC-2238), sin composites y sin el pelado; el rol no está en ROLE_NAMES de agentgateway-domain-roles.sh. Regla del gateway: k8s-agentgateway-pocharlies#191 (SC-2238)."
     },
     {
       "name": "agentgateway-write:claude-sessions",
