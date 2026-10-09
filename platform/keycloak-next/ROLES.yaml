@@ -338,7 +338,7 @@
     {
       "name": "agentgateway-write:browser-navegacion",
       "status": "active",
-      "meaning": "Navegación del Chrome pareado por la ruta /browser de AgentGateway (SC-2238): las 27 tools de moverse y mirar (navigate, back/forward/reload, state, find, snapshot, click, type, hover, drag, select_option, press_key, wait, wait_for_element, is_visible, get_text, get_html, get_attribute, screenshot, resize_viewport, tabs, highlight). Para los cinco perfiles de secretarias de Hermes, que no pueden llevar el agentgateway-write pelado (SC-1584, condición 13).",
+      "meaning": "Navegación del Chrome pareado por la ruta /browser de AgentGateway (SC-2238): las 27 tools de moverse y mirar: browser_navigate, browser_go_back, browser_go_forward, browser_reload, browser_state, browser_find, browser_snapshot, browser_click, browser_type, browser_hover, browser_drag, browser_select_option, browser_press_key, browser_wait, browser_wait_for_element, browser_is_visible, browser_get_text, browser_get_html, browser_get_attribute, browser_screenshot, browser_resize_viewport, browser_list_tabs, browser_new_tab, browser_switch_tab, browser_send_to_back, browser_close_tab, browser_highlight. Para los cinco perfiles de secretarias de Hermes, que no pueden llevar el agentgateway-write pelado (SC-1584, condición 13).",
       "grantees": [
         "service-account-hermes-secretaria",
         "service-account-hermes-secretaria-casa",
@@ -347,7 +347,7 @@
         "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
-        "allows": "Las 27 tools de navegación de /browser, con GATEWAY_WRITE activo en la ruta.",
+        "allows": "Las 27 tools de navegación de /browser enumeradas en meaning (las mismas que ROUTE-ROLES.md y la regla de k8s-agentgateway-pocharlies), con GATEWAY_WRITE activo en la ruta.",
         "denies": "Lo sensible, que sigue solo con el rol pelado (veredicto de Security, SC-2238): browser_fill_secret, browser_passkey, browser_evaluate, browser_iframe_eval, browser_iframe_click, browser_upload_file, browser_drop, browser_fill_form, browser_network_request(s), browser_pdf, browser_get_console_logs y browser_list_connections; también browser_run_code_unsafe (fuera para todos), las escrituras de otros dominios y el write global."
       },
       "origin": "Concesión manual por la API admin de Keycloak (admin events enlazados a SC-2238), sin composites y sin el pelado; el rol no está en ROLE_NAMES de agentgateway-domain-roles.sh. Regla del gateway: k8s-agentgateway-pocharlies#191 (SC-2238)."
