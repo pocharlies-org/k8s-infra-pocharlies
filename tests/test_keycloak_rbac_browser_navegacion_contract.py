@@ -67,10 +67,10 @@ class BrowserNavegacionCatalogTest(unittest.TestCase):
 
     def test_bounded_is_inside_the_bare_list_of_browser_and_apart_from_the_sensitive(self):
         self.assertEqual(len(self.bare), len(set(self.bare)), "a tool repeated in the bare list")
-        self.assertEqual(len(self.bare), 40)
+        # Set, not length: a new /browser tool fails by name until Security files it as navigation or sensitive.
+        self.assertEqual(set(self.bare), NAVIGATION | SENSITIVE)
         self.assertEqual(set(self.bounded) - set(self.bare), set(), "the bounded role gates a tool the bare one does not")
         self.assertEqual(set(self.bounded) & SENSITIVE, set(), "a sensitive tool slipped into the bounded role")
-        self.assertLessEqual(SENSITIVE, set(self.bare), "the sensitive ones must stay gated by the bare role")
 
     def test_run_code_unsafe_is_in_neither_list(self):
         self.assertNotIn(UNSAFE, self.bounded)
@@ -91,6 +91,8 @@ class BrowserNavegacionCatalogTest(unittest.TestCase):
                 self.assertNotIn(BARE, principal["realm_roles"], principal["username"])
         self.assertEqual([n for n, e in self.catalog.items() if ROLE in e.get("composites", [])], [],
                          "a composite would hand the role to someone else")
+        for field in ("composites", "client_composites"):
+            self.assertNotIn(field, self.entry, "the role must not drag the bare role or anything else along")
 
 
 if __name__ == "__main__":
