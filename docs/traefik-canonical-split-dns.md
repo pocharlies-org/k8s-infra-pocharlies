@@ -82,7 +82,7 @@ keep their middleware and outrank both rules through explicit priorities.
   and machine routes, excluded from per-host ExternalDNS publication.
 - `networking/dns/coredns-custom.yaml`: pins `x86.taile0ad27.ts.net` to `100.83.56.98` in
   its own `taile0ad27.ts.net:53` server block, for the `ExternalName` Services that
-  point at the x86 (oficinas, opencode, jira-epic-trigger, blog-drafts). The pin must
+  point at the x86 (oficinas, opencode, jira-epic-trigger, blog-drafts, paseo). The pin must
   not live in the `e-dani.com:53` block: CoreDNS only selects a server block that
   matches the queried suffix. This keeps those routes declarative across restores
   without Argo-excluded endpoint resources. (The OpenChamber routes that first used
