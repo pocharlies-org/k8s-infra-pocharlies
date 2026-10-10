@@ -147,6 +147,19 @@ jobs:
       - name: Validate private service exposure boundaries
         run: python3 -m unittest tests/test_private_service_exposure_contract.py
 
+  # INFRA-826: PVC local-path (WaitForFirstConsumer) de un builder apagado, pre-enlazado.
+  buildkit-pvc-prebind-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate buildkit local-path PVC pre-bind
+        run: python3 -m unittest tests/test_buildkit_pvc_prebind_contract.py
+
   sauvage-bot-contract:
     runs-on: arc-k8s
     steps:

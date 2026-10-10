@@ -163,6 +163,13 @@ metadata:
   labels:
     app: buildkitd
     arch: arm64-dgx3
+  annotations:
+    # INFRA-826: local-path es WaitForFirstConsumer; creado con el Deployment a 0
+    # réplicas (60b1394) el PVC no se enlazó nunca, ArgoCD esperó a su salud
+    # (Progressing) y la sync no terminó: no entró la revisión que lo encendía.
+    # Con el nodo ya elegido el provisioner crea el volumen sin consumidor. Debe
+    # coincidir con el nodeSelector del Deployment (tests/test_buildkit_pvc_prebind_contract.py).
+    volume.kubernetes.io/selected-node: dgx3
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: local-path
