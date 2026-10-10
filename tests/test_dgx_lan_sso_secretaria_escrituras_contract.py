@@ -1,7 +1,8 @@
 """DGX-809: qué ruta del backend del panel exige sesión cuando se llega desde LAN, tailnet o un pod.
 
-Security H-2 (DGX-799): POST /api/activity/power, /api/activity/claude/refresh, /api/llm/uncensored
-y /api/litellm/opencode/reload llegaban al backend sin sesión por el bypass de ClientIP.
+Security H-2 (DGX-799): POST /api/activity/power, /api/llm/uncensored y /api/litellm/opencode/reload
+llegaban al backend sin sesión por el bypass de ClientIP. POST /api/activity/claude/refresh se queda
+abierto (F1 de security sobre la PR #277: lo llama sin sesión la extensión vscode-claude-cuenta del x86).
 Security S1 (DGX-800): /api/secretaria entera y la página /despacho-secretaria igual, salvo
 POST /api/secretaria/despacho[/<perfil>]/escalar (máquina a máquina con HMAC V2).
 
@@ -36,8 +37,8 @@ RUTAS = (
 DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
-ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/activity/claude/refresh",
-                                     "/api/llm/uncensored", "/api/litellm/opencode/reload")]
+ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
+                                     "/api/litellm/opencode/reload")]
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
     ("GET", "/api/secretaria/despacho/temas"),
@@ -60,8 +61,8 @@ SECRETARIA = [
 ESCALAR = [("POST", "/api/secretaria/despacho/escalar")] + [
     ("POST", f"/api/secretaria/despacho/{perfil}/escalar") for perfil in PERFILES]
 
-# Lecturas que la app y la web usan sin sesión desde casa y que DGX-809 no toca: los GET de las
-# cuatro escrituras (A4, A9, A10 de nota-security-escrituras-app.md) y las rutas abiertas de
+# Lo que se usa sin sesión desde casa y DGX-809 no toca: los GET de las escrituras (A4, A9, A10 de
+# nota-security-escrituras-app.md), POST /api/activity/claude/refresh (F1) y las rutas abiertas de
 # services/dashboard/tests/fixtures/app_endpoints.json de dgx-infra (master 8f0605ec). Las del
 # fixture que ya iban tras SSO (/api/company, /api/claude-sessions, /api/messages…) no están.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
@@ -75,7 +76,8 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/models", "/api/llm/company", "/api/llm/hold-preguntas", "/api/llm/live",
     "/api/llm/refusal-rates", "/api/llm/refusal-rates/series", "/api/llm/series", "/api/llm/sessions",
     "/api/pages", "/api/service-health", "/api/studio/gallery",
-)] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x")]  # máquina con HMAC: siguen abiertas
+)] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
+      ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 
 def _casa(rule, host, ip, method, path):

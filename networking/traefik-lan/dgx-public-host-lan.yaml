@@ -113,13 +113,14 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
-    # DGX-809 (security H-2 de DGX-799): las cuatro escrituras sin identidad del backend
-    # (POST /api/activity/power, /api/activity/claude/refresh, /api/llm/uncensored y
-    # /api/litellm/opencode/reload) entran igual, solo con POST: sus GET siguen abiertos.
+    # DGX-809 (security H-2 de DGX-799): tres escrituras sin identidad del backend
+    # (POST /api/activity/power, /api/llm/uncensored y /api/litellm/opencode/reload)
+    # entran igual, solo con POST: sus GET siguen abiertos. POST /api/activity/claude/refresh
+    # se queda abierto (F1 de security: lo llama sin sesión la extensión vscode-claude-cuenta).
     # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
     # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/activity/claude/refresh`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
@@ -172,7 +173,7 @@ spec:
   routes:
     # SC-1192: sister host of the same backend — same control set, same SSO.
     # DGX-809: lo mismo que arriba (400: /api/secretaria menos /escalar y /despacho-secretaria;
-    # 350: las cuatro escrituras por POST).
+    # 350: las tres escrituras por POST).
     - kind: Rule
       match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
       priority: 400
@@ -186,7 +187,7 @@ spec:
           namespace: control-nexus
           port: 80
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/activity/claude/refresh`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
