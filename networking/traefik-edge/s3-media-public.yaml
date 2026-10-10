@@ -28,8 +28,12 @@ spec:
     # SC-1316: la pagina /entregas del dashboard y sus assets propios van
     # tambien por sso-chain para LAN/tailnet/cluster (C3): sin esto, la lista
     # queda abierta mientras su API (/api/company/entregas) exige login.
+    # DGX-809 (security S1 de DGX-800): /api/secretaria entera (conversaciones de los cuatro perfiles,
+    # Leila incluida, y las Acciones ACC) y la pagina /despacho-secretaria entran en el control-set: sin
+    # sesion las leia, creaba o borraba cualquiera de la LAN, la tailnet o un pod. Fuera queda solo
+    # POST /api/secretaria/despacho[/<perfil>]/escalar (maquina a maquina, HMAC V2 propio): cae en el bypass.
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
@@ -40,10 +44,13 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # DGX-809 (security H-2 de DGX-799): las cuatro escrituras sin identidad del backend
+    # (POST /api/activity/power, /api/activity/claude/refresh, /api/llm/uncensored y
+    # /api/litellm/opencode/reload) entran igual, solo con POST: sus GET siguen abiertos.
     # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
     # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/activity/claude/refresh`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
