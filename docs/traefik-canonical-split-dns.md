@@ -80,14 +80,13 @@ keep their middleware and outrank both rules through explicit priorities.
   routes where the service owner did not already provide one.
 - `networking/traefik-edge/canonical-hosts-public.yaml`: canonical public UI
   and machine routes, excluded from per-host ExternalDNS publication.
-- `networking/traefik-{lan,edge}/openchamber-*.yaml`: the stable route uses
-  new `ExternalName` Services pointing to `x86.taile0ad27.ts.net:3000`.
-  `networking/dns/coredns-custom.yaml` pins that name to `100.83.56.98` in
-  its own `taile0ad27.ts.net:53` server block. The pin must not live in the
-  `e-dani.com:53` block: CoreDNS only selects a server block that matches the
-  queried suffix. This makes the route declarative across restores without
-  Argo-excluded endpoint resources. The old selectorless Services and
-  EndpointSlices are pruned by exact name after the new routes have converged.
+- `networking/dns/coredns-custom.yaml`: pins `x86.taile0ad27.ts.net` to `100.83.56.98` in
+  its own `taile0ad27.ts.net:53` server block, for the `ExternalName` Services that
+  point at the x86 (oficinas, opencode, jira-epic-trigger, blog-drafts). The pin must
+  not live in the `e-dani.com:53` block: CoreDNS only selects a server block that
+  matches the queried suffix. This keeps those routes declarative across restores
+  without Argo-excluded endpoint resources. (The OpenChamber routes that first used
+  it were retired in INFRA-824.)
 - `k8s-adguard-pocharlies/k8s/adguard.yaml`: reconciles the canonical local
   rewrites into the persistent AdGuard configuration.
 - `k8s-litellm-pocharlies/k8s/manifest.yaml`: leaves the old `.lan` alias

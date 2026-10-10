@@ -8,21 +8,9 @@
 # the backend with no middlewares, so a tailnet/cluster caller could forge the
 # X-Auth-Request-* identity headers the backend trusts. H1 strips the 7 identity
 # headers on every route (before sso-chain where present); H2 puts the approved
-# control set behind sso-chain with higher-priority routes. The /openchamber
-# redirect (prio 300) is untouched; the new coverage sits above it in priority.
+# control set behind sso-chain with higher-priority routes.
 # dgx-strip-identity-headers is defined once per Traefik instance — this copy
 # serves traefik-edge; the twin lives in networking/traefik-lan/.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-openchamber
-  namespace: traefik-edge
-spec:
-  redirectRegex:
-    regex: '^https?://dgx\.e-dani\.com/openchamber/?(.*)'
-    replacement: 'https://chamber.e-dani.com/${1}'
-    permanent: false
----
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -145,18 +133,6 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    - kind: Rule
-      match: Host(`dgx.e-dani.com`) && PathPrefix(`/openchamber`)
-      priority: 300
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-edge
-        - name: redirect-openchamber
-          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
