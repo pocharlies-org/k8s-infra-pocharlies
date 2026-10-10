@@ -1,0 +1,191 @@
+# DGX-787 P2: builder arm64 temporal en dgx3 para la imagen vllm-glm53-kindling
+# (k8s-ai-pocharlies, images/glm53-kindling + .github/workflows/build-glm53-image.yml).
+#
+# Copia de buildkitd-arm64.yaml (misma imagen por digest, rootless, seccomp,
+# GC 40GB, secreto harbor-push) con tres diferencias:
+#   - fijado a dgx3 (no a gx10-ec3d: allí comparte nodo con el residente y tiene
+#     16Gi / 2 CPU, y la compilación de FlashKDA/CUTLASS no cabe);
+#   - requests 32Gi / limits 64Gi y 8-10 CPU, sin GPU (el smoke GPU es un Job aparte);
+#   - `replicas: 0`: NADIE lo enciende desde esta PR. La sesión lo pone a 1 con una
+#     PR de una línea cuando dgx3 está libre (gpu-arbiter-state leído antes, DGX-781
+#     fuera de dgx3) y a 0 de nuevo al acabar el build; el PVC se retira en otra PR.
+#
+# Labels propios (arch: arm64-dgx3): el Service `buildkitd-arm64` selecciona
+# app=buildkitd + arch=arm64 y no debe repartir builds hacia este pod.
+# Los runners arc-k8s ya llegan al :1234 del ns buildkit (networking/arc-runners).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd-arm64-dgx3
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64-dgx3
+spec:
+  replicas: 0
+  # La caché es un PVC local-path (RWO) del nodo -> Recreate evita dos pods
+  # peleando por el mismo volumen en un rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+      arch: arm64-dgx3
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+        arch: arm64-dgx3
+      annotations:
+        # Sin inyección del agente de Vault: el webhook pone allowPrivilegeEscalation
+        # a false en TODOS los contenedores y rompe rootlesskit.
+        vault.hashicorp.com/agent-inject: "false"
+    spec:
+      # dgx3 lleva dedicated=llm:NoSchedule: se tolera de forma explícita.
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: llm
+          effect: NoSchedule
+      automountServiceAccountToken: false
+      # seccomp Unconfined a nivel de pod: rootlesskit lo necesita para montar el
+      # user namespace (el override del contenedor solo no basta: k3s/runc aplica
+      # el perfil del pod antes de mezclar el securityContext del contenedor).
+      securityContext:
+        seccompProfile:
+          type: Unconfined
+      containers:
+        - name: buildkitd
+          image: docker.io/moby/buildkit:v0.31.0-rootless@sha256:e335bfb48eec12110318aced51f75161f01e765dd13e6041c0f4600b7c93507f
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --oci-worker-no-process-sandbox
+            # GC explícito con techo de 40GB, como buildkitd-arm64 (el PVC local-path
+            # no tiene cuota y la política por defecto se calcularía sobre todo el disco).
+            - --config
+            - /etc/buildkit/buildkitd.toml
+          readinessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            # Un RPC del worker puede tardar mientras NVCC satura las CPU; matar
+            # buildkitd aborta el build remoto activo. La liveness solo comprueba
+            # el TCP; la readiness conserva la comprobación fuerte del worker.
+            tcpSocket:
+              port: buildkit
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          securityContext:
+            # buildkit rootless necesita SETUID+SETGID para newuidmap/newgidmap; no es
+            # privileged (Kyverno solo bloquea privileged:true). allowPrivilegeEscalation
+            # true es obligatorio: con false el kernel quita las caps ambient+inheritable
+            # en exec() y newuidmap no puede usar su bit setuid.
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - SETUID
+                - SETGID
+          resources:
+            # La memoria de dgx3 es unificada con la GPU (~121 GiB asignables): 64Gi
+            # de techo dejan margen al residente y al tercer rango de qwen38. El
+            # paralelismo de nvcc se acota con MAX_JOBS en el workflow de la imagen;
+            # los 8-10 CPU se ajustan con la primera medida.
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              cpu: "10"
+              memory: 64Gi
+          ports:
+            - name: buildkit
+              containerPort: 1234
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+            - name: harbor-push
+              mountPath: /home/user/.docker
+              readOnly: true
+            - name: config
+              mountPath: /etc/buildkit
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: buildkitd-arm64-dgx3-config
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkitd-arm64-dgx3-cache
+        - name: harbor-push
+          secret:
+            secretName: harbor-push
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-arm64-dgx3-config
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64-dgx3
+data:
+  buildkitd.toml: |
+    [worker.oci]
+      gc = true
+      [[worker.oci.gcpolicy]]
+        all = true
+        maxUsedSpace = "40GB"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-arm64-dgx3-cache
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64-dgx3
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      # local-path no aplica cuota: el techo real es el GC de 40GB de arriba.
+      storage: 60Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd-arm64-dgx3
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: arm64-dgx3
+spec:
+  type: ClusterIP
+  selector:
+    app: buildkitd
+    arch: arm64-dgx3
+  ports:
+    - name: buildkit
+      port: 1234
+      targetPort: 1234
+      protocol: TCP
