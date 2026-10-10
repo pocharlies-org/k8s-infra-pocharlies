@@ -1,0 +1,62 @@
+---
+# Paseo (sustituye a OpenChamber, INFRA-824/825): el daemon `paseo.service` del x86 escucha en
+# 100.83.56.98:6767 y ya admite el Host paseo.e-dani.com. Cloudflare -> traefik-edge -> x86:6767.
+#
+# El daemon ejecuta agentes con shell en el x86: desde fuera SIEMPRE sso-chain. Solo LAN/tailnet/pods
+# (las mismas ClientIP que tenia chamber.e-dani.com) entran directo. El WebSocket (/ws) va por la misma
+# regla del host: Traefik pasa el Upgrade sin configuracion y, al secuestrar la conexion, Go quita el
+# readTimeout de 60 s del entrypoint, asi que no corta la sesion.
+#
+# ExternalName al x86 por el pin de CoreDNS (networking/dns/coredns-custom.yaml), como oficinas-public.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: paseo-edge-x86
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: paseo-edge-x86
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: x86.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 6767
+      targetPort: 6767
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-paseo-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: paseo.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`paseo.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 200
+      services:
+        - name: paseo-edge-x86
+          namespace: traefik-edge
+          port: 6767
+    - kind: Rule
+      match: Host(`paseo.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: paseo-edge-x86
+          namespace: traefik-edge
+          port: 6767
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
