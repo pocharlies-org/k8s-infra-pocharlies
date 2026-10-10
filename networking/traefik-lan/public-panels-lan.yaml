@@ -21,10 +21,26 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # DGX-809 (security H-2 de DGX-799 y S1 de DGX-800): la 300 de este host sirve el mismo backend que
+    # dgx.lan, así que lo que allí va tras sso-chain por DGX-809 también va aquí; si no, este host sería
+    # la puerta abierta: /api/secretaria (menos POST …/escalar, máquina con HMAC V2), /despacho-secretaria
+    # y las cuatro escrituras sin identidad, solo por POST. El HUD no usa ninguna.
+    - kind: Rule
+      priority: 350
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || ((Path(`/api/activity/power`) || Path(`/api/activity/claude/refresh`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`)))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      # Sin SSO en este host: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
+      # Sin SSO en este host salvo la 350 de arriba: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
       # dgx.lan; si no, cualquiera de la LAN/tailnet se haría pasar por Dani ante `es_dani` del dashboard
       # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
       middlewares:

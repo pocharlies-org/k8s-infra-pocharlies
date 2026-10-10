@@ -57,14 +57,16 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
-    hud, catchall = route["spec"]["routes"]
-    assert hud["priority"] == 400 and catchall["priority"] == 300
+    hud, sso, catchall = route["spec"]["routes"]
+    assert (hud["priority"], sso["priority"], catchall["priority"]) == (400, 350, 300)
     assert "ingressClassName" not in route["spec"]
     strip = {"name": "dgx-strip-identity-headers", "namespace": "traefik-lan"}
     # sin SSO en jarvis: la identidad nunca llega del cliente (es_dani del dashboard; security 03-10-2026)
     assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}]
     assert catchall["middlewares"] == [strip]
-    assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, catchall))
+    # salvo lo que DGX-809 pone tras sso-chain (detalle en test_dgx_lan_sso_secretaria_escrituras_contract.py)
+    assert sso["middlewares"] == [strip, {"name": "sso-chain", "namespace": "keycloak"}]
+    assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, sso, catchall))
 
 
 def test_no_route_serves_or_points_at_openchamber():
