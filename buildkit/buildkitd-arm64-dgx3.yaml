@@ -6,9 +6,9 @@
 #   - fijado a dgx3 (no a gx10-ec3d: allí comparte nodo con el residente y tiene
 #     16Gi / 2 CPU, y la compilación de FlashKDA/CUTLASS no cabe);
 #   - requests 32Gi / limits 64Gi y 8-10 CPU, sin GPU (el smoke GPU es un Job aparte);
-#   - `replicas: 1` TEMPORAL (DGX-796): encendido para el build de la imagen con dgx3
-#     libre (lab apagado, tercer rango de TP=3 retirado). Vuelve a 0 con otra PR de
-#     una línea al acabar el build; el PVC se retira en otra PR.
+#   - `replicas: 0` (DGX-796): se encendió con #274 para el build de la imagen GLM
+#     (sha256:5b79d9ac…) y se apagó al acabarlo (rama DGX-796-builder-down). El PVC
+#     de caché se queda.
 #
 # Labels propios (arch: arm64-dgx3): el Service `buildkitd-arm64` selecciona
 # app=buildkitd + arch=arm64 y no debe repartir builds hacia este pod.
@@ -22,7 +22,7 @@ metadata:
     app: buildkitd
     arch: arm64-dgx3
 spec:
-  replicas: 1
+  replicas: 0
   # La caché es un PVC local-path (RWO) del nodo -> Recreate evita dos pods
   # peleando por el mismo volumen en un rollout.
   strategy:
