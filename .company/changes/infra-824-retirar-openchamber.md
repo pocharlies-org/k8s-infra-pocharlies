@@ -1,0 +1,4 @@
+Antes: `chamber.e-dani.com`, `chamber-beta.e-dani.com` y `chamber.lan.e-dani.com` tenian IngressRoute (edge y LAN) hacia el x86:3000/3001, y `dgx.e-dani.com/openchamber` redirigia a `chamber.e-dani.com`.
+Ahora: ninguna ruta del repo sirve esos hosts ni el redirect; desaparecen sus Services ExternalName (`openchamber-edge-x86`, `openchamber-beta-edge-host`, `openchamber-lan-x86`), el ServersTransport `openchamber-lan-transport` y el Middleware `redirect-openchamber`. El pin CoreDNS de `x86.taile0ad27.ts.net` se queda: lo usan oficinas, opencode, blog-drafts y jira-epic-trigger.
+Quien tiene que moverse: nadie conocido; OpenChamber se retiro el 10-10-2026 y lo sustituye Paseo (x86 100.83.56.98:6767). Aparte, fuera de este repo: el rewrite de `chamber*` en k8s-adguard-pocharlies.
+Decision: INFRA-824 (`00-spec.md`, Dani 10-10-2026). `k8s-infra` tiene `prune: false`: tras el merge los nueve objetos siguen vivos hasta que alguien los borre por nombre.

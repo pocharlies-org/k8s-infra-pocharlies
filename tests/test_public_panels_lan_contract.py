@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -66,38 +67,24 @@ def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identi
     assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, catchall))
 
 
-def test_openchamber_accepts_public_split_host_without_removing_fallback():
-    route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-openchamber-public-host")
-    trusted, fallback = route["spec"]["routes"]
-    assert "ingressClassName" not in route["spec"]
-    assert "Host(`chamber.e-dani.com`)" in trusted["match"]
-    assert all(cidr in trusted["match"] for cidr in TRUSTED)
-    assert "middlewares" not in trusted
-    assert fallback["middlewares"] == [{"name": "sso-chain", "namespace": "keycloak"}]
-    assert all(
-        rule["services"] == [{"name": "openchamber-lan-x86", "port": 3000, "serversTransport": "openchamber-lan-transport"}]
-        for rule in (trusted, fallback)
-    )
-    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+def test_no_route_serves_or_points_at_openchamber():
+    # INFRA-824: OpenChamber se retiro el 10-10-2026 (lo sustituye Paseo). Ninguna ruta sirve sus
+    # hosts (chamber, chamber-beta, chamber.lan) ni el redirect /openchamber, y ninguna apunta a un
+    # Service, middleware o ServersTransport `openchamber*` que ya no existe.
+    assert "openchamber" not in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+    for path in sorted((ROOT / "networking").rglob("*.yaml")):
+        for item in documents(path.relative_to(ROOT)):
+            if not isinstance(item, dict) or item.get("kind") != "IngressRoute":
+                continue
+            for rule in item["spec"]["routes"]:
+                assert not re.search(r"Host\(`chamber[.-]|/openchamber", rule["match"]), (path, rule["match"])
+                refs = [*rule.get("services", []), *rule.get("middlewares", [])]
+                assert not any(
+                    "openchamber" in ref[key] for ref in refs for key in ("name", "serversTransport") if key in ref
+                ), (path, item["metadata"]["name"])
 
 
-def test_openchamber_lan_backend_uses_the_pinned_x86_externalname():
-    resources = documents("networking/traefik-lan/openchamber-lan.yaml")
-    service = next(item for item in resources if item.get("kind") == "Service")
-    assert service["metadata"]["name"] == "openchamber-lan-x86"
-    assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
-
-
-def test_openchamber_edge_backend_uses_the_pinned_x86_externalname():
-    resources = documents("networking/traefik-edge/openchamber-public.yaml")
-    service = next(item for item in resources if item.get("kind") == "Service")
-    assert service["metadata"]["name"] == "openchamber-edge-x86"
-    assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
-
-
-def test_coredns_pins_the_openchamber_externalname_to_x86():
+def test_coredns_pins_the_x86_tailnet_name():
     config = next(
         item for item in documents("networking/dns/coredns-custom.yaml")
         if item.get("kind") == "ConfigMap" and item["metadata"]["name"] == "coredns-custom"
