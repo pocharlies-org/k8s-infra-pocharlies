@@ -6,9 +6,10 @@
 #   - fijado a dgx3 (no a gx10-ec3d: allí comparte nodo con el residente y tiene
 #     16Gi / 2 CPU, y la compilación de FlashKDA/CUTLASS no cabe);
 #   - requests 32Gi / limits 64Gi y 8-10 CPU, sin GPU (el smoke GPU es un Job aparte);
-#   - `replicas: 0` (DGX-796): se encendió con #274 para el build de la imagen GLM
-#     (sha256:5b79d9ac…) y se apagó al acabarlo (rama DGX-796-builder-down). El PVC
-#     de caché se queda.
+#   - `replicas: 0` (DGX-815): se encendió con #279 para construir la imagen nccl-ring
+#     (k8s-ai-pocharlies, .github/workflows/build-nccl-ring-image.yml, sha256:79db26e7…)
+#     y se apagó al acabarla (rama DGX-815-builder-dgx3-off), como #278 de DGX-796.
+#     El PVC de caché se queda.
 #
 # Labels propios (arch: arm64-dgx3): el Service `buildkitd-arm64` selecciona
 # app=buildkitd + arch=arm64 y no debe repartir builds hacia este pod.

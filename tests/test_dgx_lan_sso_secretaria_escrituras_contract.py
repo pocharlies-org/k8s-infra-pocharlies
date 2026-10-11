@@ -58,6 +58,10 @@ SECRETARIA = [
     ("DELETE", f"/api/secretaria/despacho/{perfil}/temas/sid-1"),
     ("POST", f"/api/secretaria/despacho/{perfil}/adjuntos"),
 )]
+# INFRA-832 (#280): POST block/unblock de background-consumers tras SSO en las tres IngressRoute que
+# tocó (dgx en LAN y edge, s3 en LAN); su GET sigue abierto. Aquí para que un merge no las pierda.
+INFRA_832 = ("lan-dgx-dashboard-public-host", "lan-dgx-s3-media-public-host", "edge-dgx-dashboard-public")
+BACKGROUND_CONSUMERS = [("POST", f"/api/litellm/background-consumers/aurora-rca/{a}") for a in ("block", "unblock")]
 ESCALAR = [("POST", "/api/secretaria/despacho/escalar")] + [
     ("POST", f"/api/secretaria/despacho/{perfil}/escalar") for perfil in PERFILES]
 
@@ -76,6 +80,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/models", "/api/llm/company", "/api/llm/hold-preguntas", "/api/llm/live",
     "/api/llm/refusal-rates", "/api/llm/refusal-rates/series", "/api/llm/series", "/api/llm/sessions",
     "/api/pages", "/api/service-health", "/api/studio/gallery",
+    "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
@@ -109,8 +114,10 @@ def _gana(rutas, host, ip, method, path):
 
 
 class SecretariaYEscriturasTrasSSO(unittest.TestCase):
-    def _cada_peticion(self, peticiones, ips=DE_CASA):
+    def _cada_peticion(self, peticiones, ips=DE_CASA, solo=None):
         for fichero, nombre, hosts, ns in RUTAS:
+            if solo and nombre not in solo:
+                continue
             rutas = _rutas(fichero, nombre)
             for host in hosts:
                 for ip in ips:
@@ -122,7 +129,8 @@ class SecretariaYEscriturasTrasSSO(unittest.TestCase):
         return [(m["name"], m.get("namespace", "")) for m in (ruta or {}).get("middlewares", [])]
 
     def test_escrituras_y_secretaria_exigen_sesion_desde_casa(self):
-        for caso, ruta, ns in self._cada_peticion(ESCRITURAS + SECRETARIA):
+        for caso, ruta, ns in [*self._cada_peticion(ESCRITURAS + SECRETARIA),
+                               *self._cada_peticion(BACKGROUND_CONSUMERS, solo=INFRA_832)]:
             with self.subTest(caso):
                 self.assertIsNotNone(ruta, caso)
                 self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak")],
@@ -144,7 +152,7 @@ class SecretariaYEscriturasTrasSSO(unittest.TestCase):
             if "traefik-edge" not in fichero:
                 continue
             rutas = _rutas(fichero, nombre)
-            for method, path in ESCRITURAS + SECRETARIA + ESCALAR + LECTURAS_ABIERTAS:
+            for method, path in ESCRITURAS + BACKGROUND_CONSUMERS + SECRETARIA + ESCALAR + LECTURAS_ABIERTAS:
                 with self.subTest(f"{nombre} {method} {path}"):
                     ruta = _gana(rutas, hosts[0], "203.0.113.9", method, path)
                     self.assertEqual(ruta.get("priority"), 100)
