@@ -109,6 +109,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -127,6 +129,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -141,6 +145,8 @@ spec:
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-lan
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -153,6 +159,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -182,6 +190,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -194,6 +204,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -203,6 +215,8 @@ spec:
       priority: 300
       middlewares:
         - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: dgx-edge-proof
           namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
@@ -216,6 +230,8 @@ spec:
           namespace: traefik-lan
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus

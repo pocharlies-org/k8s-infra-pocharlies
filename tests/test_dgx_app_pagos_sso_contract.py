@@ -53,9 +53,12 @@ class PagosSSOContract(unittest.TestCase):
         self.assertNotIn("Path(`/api/pagos`)", match)
         self.assertNotIn("PathPrefix(`/api/alarma`)", match)
         self.assertNotIn("Path(`/api/alarma`)", match)
+        # DGX-729: la prueba de borde va al final de la cadena; el strip solo vacía las
+        # 7 de identidad, nunca X-Edge-Proof, así que el proof sobrevive al strip.
         chain = [(m["name"], m.get("namespace", "")) for m in route["middlewares"]]
-        self.assertEqual(chain, [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak")],
-                         f"{name}@{priority}: strip first, then sso-chain")
+        self.assertEqual(chain, [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"),
+                                 ("dgx-edge-proof", ns)],
+                         f"{name}@{priority}: strip first, then sso-chain, then edge-proof")
 
     def test_lan_400_protege_app_pagos_push_y_alarma(self):
         self._assert_protected(_docs(LAN), "lan-dgx-dashboard-public-host", 400, "traefik-lan")

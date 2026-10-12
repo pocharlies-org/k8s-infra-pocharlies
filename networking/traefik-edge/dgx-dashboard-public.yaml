@@ -123,6 +123,8 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -141,6 +143,8 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -150,6 +154,8 @@ spec:
       priority: 200
       middlewares:
         - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: dgx-edge-proof
           namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
@@ -163,6 +169,8 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus

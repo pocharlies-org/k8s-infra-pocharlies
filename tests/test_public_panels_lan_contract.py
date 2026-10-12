@@ -61,11 +61,14 @@ def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identi
     assert (hud["priority"], sso["priority"], catchall["priority"]) == (400, 350, 300)
     assert "ingressClassName" not in route["spec"]
     strip = {"name": "dgx-strip-identity-headers", "namespace": "traefik-lan"}
+    proof = {"name": "dgx-edge-proof", "namespace": "traefik-lan"}
     # sin SSO en jarvis: la identidad nunca llega del cliente (es_dani del dashboard; security 03-10-2026)
-    assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}]
-    assert catchall["middlewares"] == [strip]
+    # DGX-729: además la prueba de borde, para que el backend no se fíe de una x-auth-request-email
+    # forjada por un pod que llame al Service sin pasar por Traefik.
+    assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}, proof]
+    assert catchall["middlewares"] == [strip, proof]
     # salvo lo que DGX-809 pone tras sso-chain (detalle en test_dgx_lan_sso_secretaria_escrituras_contract.py)
-    assert sso["middlewares"] == [strip, {"name": "sso-chain", "namespace": "keycloak"}]
+    assert sso["middlewares"] == [strip, {"name": "sso-chain", "namespace": "keycloak"}, proof]
     assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, sso, catchall))
 
 

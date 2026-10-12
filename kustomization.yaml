@@ -10,6 +10,7 @@ resources:
   - networking/traefik-lan/tls-store.yaml
   - networking/traefik-lan/harbor-registry-direct.yaml
   - networking/traefik-lan/lan-app-routes.yaml
+  - networking/traefik-lan/dgx-edge-proof.yaml
   - networking/traefik-lan/dgx-public-host-lan.yaml
   - networking/traefik-lan/openclaw-lan.yaml
   - networking/traefik-lan/opencode-lan.yaml
@@ -33,6 +34,7 @@ resources:
   - networking/traefik-edge/synapse-brain-feedback-handler.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/static-edge.yaml
+  - networking/traefik-edge/dgx-edge-proof.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
   - networking/traefik-edge/company-viewer-public.yaml
   - networking/traefik-edge/opencode-public.yaml

@@ -10,6 +10,7 @@ El test no busca cadenas: evalúa las reglas de Traefik v3 de cada IngressRoute 
 con bypass (dgx y s3 en LAN y edge, y jarvis en LAN) para una petición concreta, elige la de más
 prioridad que casa, como Traefik, y mira su cadena de middlewares. Así cubre el método, la negación
 de /escalar y que las lecturas que la app usa sin sesión siguen cayendo en el bypass.
+Toda cadena acaba en dgx-edge-proof (DGX-729): la prueba de borde va en cada ruta al dashboard.
 """
 import ipaddress
 import pathlib
@@ -133,18 +134,19 @@ class SecretariaYEscriturasTrasSSO(unittest.TestCase):
                                *self._cada_peticion(BACKGROUND_CONSUMERS, solo=INFRA_832)]:
             with self.subTest(caso):
                 self.assertIsNotNone(ruta, caso)
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak")],
-                                 f"{caso}: primero se vacía la identidad, luego sso-chain")
+                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"),
+                                                      ("dgx-edge-proof", ns)],
+                                 f"{caso}: primero se vacía la identidad, luego sso-chain y al final la prueba de borde")
 
     def test_escalar_de_maquina_cae_en_el_bypass(self):
         for caso, ruta, ns in self._cada_peticion(ESCALAR):
             with self.subTest(caso):
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns)], caso)
+                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)], caso)
 
     def test_lecturas_de_la_app_sin_sesion_siguen_abiertas(self):
         for caso, ruta, ns in self._cada_peticion(LECTURAS_ABIERTAS):
             with self.subTest(caso):
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns)], caso)
+                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)], caso)
 
     def test_desde_fuera_todo_sigue_tras_sso(self):
         """Por el edge, desde una IP pública, todo va a la regla 100 (sso-chain), /escalar incluida."""
