@@ -15,6 +15,14 @@
 #
 # Sobrevive al strip: dgx-strip-identity-headers solo vacía las 7 de identidad, nunca
 # X-Edge-Proof. La gema LAN vive en networking/traefik-lan/dgx-edge-proof.yaml.
+#
+# EDGE = DaemonSet en hostNetwork escuchando SOLO en 127.0.0.1:19931 (DGX-729, 12-10).
+# traefik-edge es un DaemonSet hostNetwork en los 4 nodos ingress=true (sauvage, ks5-cp-1/2/3):
+# un pod normal tras default-deny + allow-same-namespace no lo alcanza (el origen es la IP del
+# nodo, no un pod del ns) y abrirlo por ipBlock (10.42.0.0/16, como firecrawl-edge-auth) se lo
+# daría a cualquier pod del clúster, que leería la prueba en la respuesta. Por loopback cada
+# Traefik pregunta a SU nodo y ningún pod llega (bind a 127.0.0.1; kube-proxy descarta lo que
+# llega a 127.0.0.0/8 desde fuera de lo). Sin Service y sin NetworkPolicy que mantener.
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -22,7 +30,7 @@ metadata:
   name: dgx-edge-proof
   namespace: traefik-edge
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "-2"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
@@ -46,6 +54,9 @@ kind: ConfigMap
 metadata:
   name: dgx-edge-proof
   namespace: traefik-edge
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 data:
@@ -92,17 +103,20 @@ data:
         def log_message(self, fmt, *args):
             return
 
-    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+    # solo loopback: lo pide el Traefik del mismo nodo (hostNetwork); un pod no llega aqui
+    ThreadingHTTPServer(("127.0.0.1", 19931), Handler).serve_forever()
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: dgx-edge-proof
   namespace: traefik-edge
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: dgx-edge-proof
@@ -111,13 +125,21 @@ spec:
       labels:
         app.kubernetes.io/name: dgx-edge-proof
     spec:
+      # los mismos nodos y tolerancias que el DaemonSet traefik-edge (values.yaml de este ns)
+      hostNetwork: true
       nodeSelector:
-        role: edge
-        topology: remote
+        ingress: "true"
       tolerations:
         - key: role
           operator: Equal
           value: edge
+          effect: NoSchedule
+        - key: pocharlies.io/pool
+          operator: Equal
+          value: bulk
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
           effect: NoSchedule
       containers:
         - name: proof
@@ -130,8 +152,6 @@ spec:
                 secretKeyRef:
                   name: dgx-edge-proof
                   key: proof
-          ports:
-            - { name: http, containerPort: 8080 }
           resources:
             requests:
               cpu: 10m
@@ -156,26 +176,16 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: dgx-edge-proof
-  namespace: traefik-edge
-  labels:
-    app.kubernetes.io/name: dgx-edge-proof
-spec:
-  selector:
-    app.kubernetes.io/name: dgx-edge-proof
-  ports:
-    - { name: http, port: 8080, targetPort: 8080 }
----
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: dgx-edge-proof
   namespace: traefik-edge
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   forwardAuth:
-    address: http://dgx-edge-proof.traefik-edge.svc.cluster.local:8080/
+    address: http://127.0.0.1:19931/
     authResponseHeaders:
       - X-Edge-Proof

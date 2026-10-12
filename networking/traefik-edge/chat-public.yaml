@@ -27,7 +27,7 @@
 # Service de otra namespace: un `name: chat / namespace: chat` directo en la
 # IngressRoute falla en vivo con `failed to get service chat/chat: namespace is
 # not within watched namespaces`. El patrón probado en este edge (langfuse-web-ext,
-# minio-s3-ext, sauvage-bot-ext, openchamber-edge-x86) es un Service de tipo
+# minio-s3-ext, sauvage-bot-ext, oficinas-edge-ext) es un Service de tipo
 # ExternalName DENTRO de la ns traefik-edge apuntando al FQDN del servicio real;
 # la IngressRoute referencia ese Service (misma ns, sin namespace). El provider
 # lo permite vía `allowExternalNameServices: true`.

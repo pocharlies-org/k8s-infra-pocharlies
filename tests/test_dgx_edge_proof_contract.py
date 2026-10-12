@@ -10,8 +10,12 @@ env desde un ExternalSecret Connect a la SecureNote dgx-edge-proof (campo proof)
 k8s-pocharlies — el MISMO valor que lee el backend (dgx-dashboard-edge-proof, repo dgx-infra).
 
 Este test fija:
-  * el middleware forwardAuth existe UNA VEZ por instancia y apunta al servicio de su ns, con
-    authResponseHeaders [X-Edge-Proof];
+  * los dos manifiestos están en kustomization.yaml (sin ellos ArgoCD no crea el middleware y
+    las 19 rutas que lo nombran caen todas);
+  * el middleware forwardAuth existe UNA VEZ por instancia, con authResponseHeaders
+    [X-Edge-Proof]: en LAN apunta al Service de su ns; en EDGE (traefik-edge es hostNetwork en
+    4 nodos) a 127.0.0.1:19931, un DaemonSet hostNetwork en los mismos nodos que solo escucha
+    en loopback;
   * el secreto no aparece en claro en ningún YAML del repo;
   * el servicio gemelo: Deployment + Service + ExternalSecret Connect (key=dgx-edge-proof,
     property=proof) por ns, env desde secretKeyRef dgx-edge-proof/proof;
@@ -56,7 +60,9 @@ class DgxEdgeProofContract(unittest.TestCase):
             self.assertEqual(len(mws), 1, f"{ns}: dgx-edge-proof definido una sola vez")
             self.assertEqual(mws[0]["metadata"]["namespace"], ns)
             fa = mws[0]["spec"]["forwardAuth"]
-            self.assertEqual(fa["address"], f"http://dgx-edge-proof.{ns}.svc.cluster.local:8080/")
+            esperado = ("http://127.0.0.1:19931/" if ns == "traefik-edge"
+                        else f"http://dgx-edge-proof.{ns}.svc.cluster.local:8080/")
+            self.assertEqual(fa["address"], esperado)
             self.assertEqual(fa["authResponseHeaders"], ["X-Edge-Proof"])
 
     def test_el_secreto_no_aparece_en_el_repo(self):
@@ -70,15 +76,22 @@ class DgxEdgeProofContract(unittest.TestCase):
             self.assertIsNone(re.search(r"[0-9a-f]{64}", text),
                               f"{path.name}: parece un secreto de 32 bytes en claro")
 
+    def test_los_dos_manifiestos_se_despliegan(self):
+        recursos = yaml.safe_load((ROOT / "kustomization.yaml").read_text())["resources"]
+        for path in TWINS.values():
+            self.assertIn(str(path.relative_to(ROOT)), recursos)
+
     def test_servicio_gemelo_con_secret_desde_1password(self):
         for ns, path in TWINS.items():
             docs = _docs(path)
-            dep = _by_kind(docs, "Deployment", "dgx-edge-proof")
-            self.assertEqual(len(dep), 1, f"{ns}: Deployment dgx-edge-proof")
+            kind = "DaemonSet" if ns == "traefik-edge" else "Deployment"
+            dep = _by_kind(docs, kind, "dgx-edge-proof")
+            self.assertEqual(len(dep), 1, f"{ns}: {kind} dgx-edge-proof")
             env = {e["name"]: e for e in dep[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
             ref = env["EDGE_PROOF"]["valueFrom"]["secretKeyRef"]
             self.assertEqual((ref["name"], ref["key"]), ("dgx-edge-proof", "proof"))
-            self.assertEqual(len(_by_kind(docs, "Service", "dgx-edge-proof")), 1, f"{ns}: Service")
+            servicios = 0 if ns == "traefik-edge" else 1
+            self.assertEqual(len(_by_kind(docs, "Service", "dgx-edge-proof")), servicios, f"{ns}: Service")
             es = _by_kind(docs, "ExternalSecret", "dgx-edge-proof")
             self.assertEqual(len(es), 1, f"{ns}: ExternalSecret")
             spec = es[0]["spec"]
@@ -114,12 +127,21 @@ class DgxEdgeProofContract(unittest.TestCase):
 
     def test_la_prueba_solo_la_pide_traefik(self):
         """El servicio que publica el proof no puede ser alcanzable desde cualquier pod (leerlo
-        por la respuesta equivale a forjarlo). En traefik-edge lo cubre default-deny +
-        allow-same-namespace; en traefik-lan (sin default-deny) hace falta una policy propia."""
+        por la respuesta equivale a forjarlo). En traefik-edge (Traefik en hostNetwork) solo
+        escucha en el loopback del nodo, en los mismos nodos y con las mismas tolerancias que el
+        DaemonSet de Traefik; en traefik-lan (Traefik es un pod) una policy de su propio ns."""
         edge = _docs(TWINS["traefik-edge"])
-        self.assertTrue(any(d.get("kind") == "NetworkPolicy" and
-                            d["metadata"]["name"] == "traefik-edge-allow-same-namespace"
-                            for d in _docs(ROOT / "networking" / "traefik-edge" / "networkpolicy.yaml")))
+        ds = _by_kind(edge, "DaemonSet", "dgx-edge-proof")[0]["spec"]["template"]["spec"]
+        values = yaml.safe_load((ROOT / "networking" / "traefik-edge" / "values.yaml").read_text())
+        self.assertIs(ds["hostNetwork"], True)
+        self.assertIs(values["hostNetwork"], True)
+        self.assertEqual(ds["nodeSelector"], values["nodeSelector"])
+        clave = lambda t: (t["key"], t.get("operator"), t.get("value"), t.get("effect"))
+        self.assertTrue({clave(t) for t in values["tolerations"]} <= {clave(t) for t in ds["tolerations"]},
+                        "el proof tiene que estar en cada nodo donde corre traefik-edge")
+        script = _by_kind(edge, "ConfigMap", "dgx-edge-proof")[0]["data"]["proof.py"]
+        self.assertIn('ThreadingHTTPServer(("127.0.0.1", 19931)', script)
+        self.assertNotIn("0.0.0.0", script)
         lan_pols = [d for d in _docs(TWINS["traefik-lan"]) if d.get("kind") == "NetworkPolicy"]
         self.assertEqual([d["metadata"]["name"] for d in lan_pols], ["dgx-edge-proof-allow-traefik-only"])
         pol = lan_pols[0]["spec"]

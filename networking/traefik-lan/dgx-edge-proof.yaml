@@ -22,7 +22,7 @@ metadata:
   name: dgx-edge-proof
   namespace: traefik-lan
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "-2"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
@@ -46,6 +46,9 @@ kind: ConfigMap
 metadata:
   name: dgx-edge-proof
   namespace: traefik-lan
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 data:
@@ -99,6 +102,9 @@ kind: Deployment
 metadata:
   name: dgx-edge-proof
   namespace: traefik-lan
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
@@ -156,6 +162,9 @@ kind: Service
 metadata:
   name: dgx-edge-proof
   namespace: traefik-lan
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
@@ -169,6 +178,9 @@ kind: Middleware
 metadata:
   name: dgx-edge-proof
   namespace: traefik-lan
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   forwardAuth:
     address: http://dgx-edge-proof.traefik-lan.svc.cluster.local:8080/
@@ -177,7 +189,7 @@ spec:
 ---
 # Solo Traefik (pods del propio ns) puede preguntar la prueba: si la policy faltara, un pod
 # cualquiera del clúster leería X-Edge-Proof en la respuesta y volvería a poder forjarla.
-# En traefik-edge esto ya lo da traefik-edge-default-deny-ingress + allow-same-namespace.
+# En traefik-edge (Traefik en hostNetwork) el proof solo escucha en el loopback de cada nodo.
 # Sin sondas A PROPOSITO: con default-deny sin ipBlock el kubelet no alcanzaría el pod y no
 # pasaría readiness; el servicio es un bucle sin estado y si cae, forwardAuth da 502 ruidoso.
 apiVersion: networking.k8s.io/v1
@@ -185,6 +197,9 @@ kind: NetworkPolicy
 metadata:
   name: dgx-edge-proof-allow-traefik-only
   namespace: traefik-lan
+  annotations:
+    # antes que las rutas (ola 0): el forwardAuth ya responde cuando una ruta lo pide
+    argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/name: dgx-edge-proof
 spec:
