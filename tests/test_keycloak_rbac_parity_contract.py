@@ -108,7 +108,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 3)
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 5)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 6)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
         self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 14)
         self.assertEqual(
