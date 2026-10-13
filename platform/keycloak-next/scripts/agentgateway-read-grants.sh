@@ -86,8 +86,10 @@ JARVIS_SA_USERNAME="service-account-jarvis-echo"
 SECRETARIA_READ_ROLE_NAMES="${SECRETARIA_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:social,agentgateway-read:workspace}"
 EXPECTED_SECRETARIA_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:social,agentgateway-read:workspace"
 SECRETARIA_SA_USERNAMES="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-hermes-secretaria-dani,service-account-hermes-secretaria-leila"
-SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
-EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
+# DGX-854: + agentgateway-read:shopify-admin, only for product_stock_status (real stock and preorder/factory order);
+# the Hermes fine server list of secretaria-skirmshop exposes no other tool of that route.
+SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
+EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
 SECRETARIA_SKIRMSHOP_SA_USERNAME="service-account-hermes-secretaria-skirmshop"
 PROBE_READ_ROLE_NAMES="${PROBE_READ_ROLE_NAMES:-agentgateway-read:atlassian}"
 EXPECTED_PROBE_READ_ROLE_NAMES="agentgateway-read:atlassian"

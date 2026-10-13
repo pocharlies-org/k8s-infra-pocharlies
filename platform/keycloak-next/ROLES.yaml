@@ -163,9 +163,10 @@
     {
       "name": "agentgateway-read:shopify-admin",
       "status": "active",
-      "meaning": "Lectura de la ruta /shopify-admin de AgentGateway (INFRA-23).",
+      "meaning": "Lectura de la ruta /shopify-admin de AgentGateway (INFRA-23). DGX-854: la secretaria de la tienda la tiene para product_stock_status (stock real y preorder/factory order); su lista fina de Hermes no expone otra tool de la ruta.",
       "grantees": [
-        "service-account-agentgateway-mcp"
+        "service-account-agentgateway-mcp",
+        "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a las tools de solo lectura de la ruta /shopify-admin de AgentGateway.",
