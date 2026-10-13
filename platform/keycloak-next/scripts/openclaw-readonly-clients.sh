@@ -15,11 +15,12 @@ OPERATOR_EMAIL="${OPERATOR_EMAIL:-info@e-dani.com}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 FORBIDDEN_REALM_ROLE="${FORBIDDEN_REALM_ROLE:-agentgateway-write}"
 REQUIRED_REALM_ROLE="${REQUIRED_REALM_ROLE:-cto-office-send}"
-# INFRA-44 (INFRA-23 H2): the six read roles this client's service account
-# carries are owned by agentgateway-read-grants.sh (which maps both the grants
+# INFRA-44 (INFRA-23 H2): the seven read roles this client's service account
+# carries (plaud added by INFRA-380, same holders as gsc) are owned by
+# agentgateway-read-grants.sh (which maps both the grants
 # and this client's role scope). This reconciler only asserts they arrive in
 # the minted token; it never creates or maps them.
-EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
+EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-openclaw-readonly-admin.config
 CLIENT_CONFIG=/tmp/kcadm-openclaw-readonly-client.config
@@ -342,9 +343,11 @@ verify_minted_claims() {
   realm_roles="$(printf '%s' "${claims}" | sed -n 's/.*"realm_access"[[:space:]]*:[[:space:]]*{[^}]*"roles"[[:space:]]*:[[:space:]]*\(\[[^]]*\]\).*/\1/p' | tr -d '[]"' | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
   [ -n "${realm_roles}" ] || fail "minted read-only token has no realm_access roles claim"
   # Measured 2026-09-12 (INFRA-44): this client has fullScopeAllowed=false and a
-  # realm scope-mapping of exactly the reviewed seven, so the realm defaults
+  # realm scope-mapping of exactly the reviewed set (seven then, eight since
+  # INFRA-380), so the realm defaults
   # (default-roles-edani, offline_access, uma_authorization) are filtered out of
-  # its tokens. The expected set below is the measured exact 7; if a future
+  # its tokens. The expected set below is the measured exact 8 (base + 7 reads);
+  # if a future
   # change flips fullScopeAllowed or widens the scope-mapping, the defaults
   # start travelling and this comparison must fail closed until re-reviewed.
   expected_roles="$(printf '%s\n%s\n' "${REQUIRED_REALM_ROLE}" "${EXPECTED_READ_ROLES}" | tr ',' '\n' | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//')"
