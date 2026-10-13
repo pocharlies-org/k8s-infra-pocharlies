@@ -102,8 +102,8 @@ class RoleCatalogParityTest(unittest.TestCase):
 
     def test_extractor_reads_the_reviewed_constants(self):
         # Guard against a silent parse: the matrices are non-trivial today.
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 21)
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 22)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 7)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])

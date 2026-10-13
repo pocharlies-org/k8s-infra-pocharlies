@@ -11,7 +11,10 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **42 rutas, 72 gates** en esta matriz. El config vivo trae 77: la
+  Hoy: **43 rutas, 73 gates** en esta matriz (la fila `plaud` se declara por
+  delante del config vivo —INFRA-380, pendiente del merge de
+  k8s-agentgateway-pocharlies#197—; el verificador la señala hasta que la ruta
+  despliegue). El config vivo trae 77: la
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
   señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676).
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
@@ -116,6 +119,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `chat-workspace` | `/chat-workspace` | — | `agentgateway-write` (17), `agentgateway-write:workspace` (13), `agentgateway-write:workspace-borrador` (2), `agentgateway-write:workspace-envio` (4) |
 | `chat-gsc` | `/chat-gsc` | — | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
 | `gsc` | `/gsc` | `agentgateway-read:gsc` | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
+| `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
 | `offers` | `/offers` | — | `agentgateway-write` (3), `agentgateway-write:offers` (3) |
 | `cto-office` | `/cto-office` | `cto-office-send` | `cto-office-send` (2) |
@@ -131,7 +135,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 ```json
 {
   "schema": "agentgateway-route-roles/v1",
-  "measured": "2026-09-24, ConfigMap agentgateway/agentgateway-config resourceVersion 234195236",
+  "measured": "2026-09-24, ConfigMap agentgateway/agentgateway-config resourceVersion 234195236; la ruta plaud declarada el 2026-10-13 por delante del config vivo (INFRA-380)",
   "routes": [
     {
       "route": "sauvage-admin",
@@ -401,6 +405,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
         "agentgateway-write": ["submit_sitemap"],
         "agentgateway-write:gsc": ["submit_sitemap"]
       }
+    },
+    {
+      "route": "plaud",
+      "path": "/plaud",
+      "require": ["agentgateway-read:plaud"],
+      "tools": {}
     },
     {
       "route": "merchant",

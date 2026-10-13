@@ -92,7 +92,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 21 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -289,7 +289,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 21 lecturas agentgateway-read:* y agentgateway-write.",
+      "purpose": "Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write.",
       "realm_roles": [
         "agentgateway-read:analytics",
         "agentgateway-read:atlassian",
@@ -300,6 +300,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:merchant",
         "agentgateway-read:offers",
         "agentgateway-read:picqer",
+        "agentgateway-read:plaud",
         "agentgateway-read:shopify",
         "agentgateway-read:shopify-admin",
         "agentgateway-read:skirmshop-plugins",
@@ -560,6 +561,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "realm_roles": [
         "agentgateway-read:gsc",
         "agentgateway-read:offers",
+        "agentgateway-read:plaud",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:studio",
         "agentgateway-read:synapse",
