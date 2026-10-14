@@ -10,8 +10,15 @@ data:
       errors
       # This more-specific e-dani.com server block wins over the root block.
       # Rewrite Harbor here, then resolve the service through Kubernetes while
-      # preserving the original hostname in the answer for TLS/SNI.
+      # preserving the original hostname in the answer for TLS/SNI.  Both Harbor
+      # names must be rewritten: without the public one the query falls through
+      # to forward and the answer depends on the resolver of the node hosting
+      # the CoreDNS replica that replies -- the cp replicas answer Cloudflare,
+      # whose proxy caps request bodies and kills big image layers with 413/502
+      # (SC-2443).  A ClusterIP rewrite also works from the OVH control planes,
+      # which cannot reach the metallb LAN address.
       rewrite name exact harbor.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact harbor.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa
