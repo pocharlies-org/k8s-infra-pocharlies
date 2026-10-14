@@ -104,6 +104,11 @@ Nº de casos: **pendiente de medir**.
 - El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
+- `harbor.e-dani.com` y `harbor.lan.e-dani.com` se reescriben al ClusterIP de `traefik-lan` en
+  `networking/dns/coredns-custom.yaml` (SC-2443). Sin la fijación del nombre público la consulta cae en `forward` y
+  responde el resolver del nodo que hospeda la réplica de CoreDNS que contesta: las de los cp de OVH devuelven
+  Cloudflare, cuyo proxy corta los cuerpos de petición por encima de ~100 MB y revienta un push de capa grande con
+  413/502. Renombrar el Service `traefik-lan` rompe las dos líneas `rewrite` a la vez.
 - ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
   `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
   reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect
