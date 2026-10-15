@@ -83,12 +83,16 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # SC-2312 (security, 15-10-2026): both routes carry the DGX-729 edge proof —
+    # the plugin requires X-Edge-Proof on any mutation whose socket is not
+    # loopback, and the edge Traefik reaches the x86 over Tailscale.
     - kind: Rule
       match: Host(`claude.e-dani.com`)
       priority: 200
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
       services:
         - name: opencode-claude-panel-edge-host
           namespace: traefik-edge
@@ -104,6 +108,7 @@ spec:
           namespace: traefik-edge
         - name: claude-panel-stripprefix
           namespace: traefik-edge
+        - name: dgx-edge-proof
       services:
         - name: opencode-claude-panel-edge-host
           namespace: traefik-edge

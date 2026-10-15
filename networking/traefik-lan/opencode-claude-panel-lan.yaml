@@ -74,16 +74,27 @@ spec:
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        # SC-2312: ruta canónica del panel — sus escrituras van al plugin por un
+        # socket no-loopback, y el plugin exige la prueba de borde (DGX-729).
+        - name: dgx-edge-proof
       services:
         - name: opencode-claude-panel-lan-host
           port: 8799
     # Higher priority than the OpenCode route (300) so /claude wins the host.
+    # SC-2312 (security, 15-10-2026): this route used to carry no sso-chain, so
+    # every mutation (add/delete/default account, move a session) was accepted
+    # unauthenticated from LAN, tailnet or any pod. Now it authenticates like
+    # the edge route and carries the DGX-729 edge proof, which the plugin
+    # requires on any non-loopback mutation (src/proxy.ts, authorizeMutation).
     - kind: Rule
       match: Host(`code.e-dani.com`) && PathPrefix(`/claude`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 400
       middlewares:
+        - name: sso-chain
+          namespace: keycloak
         - name: claude-panel-slash
         - name: claude-panel-stripprefix
+        - name: dgx-edge-proof
       services:
         - name: opencode-claude-panel-lan-host
           port: 8799
