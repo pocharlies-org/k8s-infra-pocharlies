@@ -6,7 +6,9 @@ test es lo que la hace segura:
 
   - un solo host, `correo.lan.e-dani.com` (Cloudflare resuelve `*.lan.e-dani.com` al VIP de traefik-lan y el
     certificado por defecto de ese store es `*.lan.e-dani.com`), y solo desde las redes de confianza de la casa;
-  - un solo destino, el Service HUMANO `correo:80` del ns `correo`; el de máquina (`correo-machine`, el de
+  - dos destinos (DGX-882 P4): `/v1` y `/healthz` van al Service HUMANO `correo:80` del núcleo, con prioridad
+    explícita, y el resto del host a la web `correo-web:80`, sin access log porque la vuelta del login
+    (`/auth/callback?code=…`) lleva el `code` en la query; el de máquina (`correo-machine`, el de
     `correo.ingest.v1`, solo interno) no se publica en ninguna ruta;
   - ninguna ruta pública por sauvage: ni un host de correo en traefik-edge ni el ns `correo` en el allowlist del
     borde, y la ruta de LAN no lleva clase de ingreso que el borde procese.
@@ -31,7 +33,7 @@ def _docs(ruta):
 class CorreoLanRouteContract(unittest.TestCase):
     def setUp(self):
         (self.route,) = _docs(ROOT / RUTA)
-        (self.rule,) = self.route["spec"]["routes"]
+        self.api, self.web = self.route["spec"]["routes"]
 
     def test_una_ingressroute_de_traefik_lan_que_el_borde_no_procesa(self):
         self.assertEqual((self.route["kind"], self.route["metadata"]["namespace"]), ("IngressRoute", "traefik-lan"))
@@ -42,14 +44,27 @@ class CorreoLanRouteContract(unittest.TestCase):
 
     def test_un_solo_host_y_solo_desde_las_redes_de_confianza(self):
         desde = " || ".join(f"ClientIP(`{cidr}`)" for cidr in TRUSTED)
-        self.assertEqual(self.rule["match"], f"Host(`{HOST}`) && ({desde})")
+        self.assertEqual(self.api["match"], f"Host(`{HOST}`) && (PathPrefix(`/v1`) || Path(`/healthz`)) && ({desde})")
+        self.assertEqual(self.web["match"], f"Host(`{HOST}`) && ({desde})")
 
     def test_sin_sso_chain_ni_prueba_de_borde_ni_ningun_middleware(self):
-        self.assertEqual(self.rule["kind"], "Rule")
-        self.assertNotIn("middlewares", self.rule)
+        for regla in (self.api, self.web):
+            self.assertEqual(regla["kind"], "Rule")
+            self.assertNotIn("middlewares", regla)
 
-    def test_apunta_al_service_humano_y_a_ningun_otro(self):
-        self.assertEqual(self.rule["services"], [{"name": "correo", "namespace": "correo", "port": 80}])
+    def test_la_api_al_service_humano_y_el_resto_a_la_web(self):
+        self.assertEqual(self.api["services"], [{"name": "correo", "namespace": "correo", "port": 80}])
+        self.assertEqual(self.web["services"], [{"name": "correo-web", "namespace": "correo", "port": 80}])
+
+    def test_la_api_gana_a_la_web_aunque_cambie_la_longitud_de_las_reglas(self):
+        # sin `priority`, Traefik usa la longitud de la regla: una red de confianza más en la de la web le daría `/v1`
+        self.assertGreater(self.api["priority"], len(self.web["match"]) + 100)
+        self.assertNotIn("priority", self.web)
+
+    def test_la_web_no_deja_el_code_del_login_en_el_access_log(self):
+        # security (DGX-882, 33631): `/auth/callback?code=…` es de la web, y traefik-lan guarda la query en `RequestPath`
+        self.assertEqual(self.web["observability"], {"accessLogs": False})
+        self.assertNotIn("observability", self.api)
 
     def test_certificado_de_la_casa(self):
         self.assertEqual(self.route["spec"]["tls"], {"store": {"name": "default", "namespace": "traefik-lan"}})
