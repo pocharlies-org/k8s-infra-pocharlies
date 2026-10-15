@@ -48,6 +48,7 @@ data:
       errors
       hosts {
         100.83.56.98 x86.taile0ad27.ts.net
+        100.125.62.10 mac-cb.taile0ad27.ts.net
         ttl 60
         fallthrough
       }
