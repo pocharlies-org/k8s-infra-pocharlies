@@ -164,7 +164,8 @@ without writing it to Git.
 
 ```bash
 export K3S_TOKEN=...
-export K3S_JOIN_SERVER_IP=100.83.56.98
+export K3S_JOIN_SERVER_IP=100.83.56.98   # only while x86 is still the server; for any
+                                         # worker joined after Phase 5 use ks5-cp-1 (see below)
 cd ansible
 ansible-playbook playbooks/bootstrap-ks5.yml
 ```
@@ -182,9 +183,28 @@ Only after the three KS-5-A etcd members are Ready:
 
 ```bash
 export CONFIRM_DEMOTE_X86=demote-x86-after-ks5-quorum
-export K3S_JOIN_SERVER_IP=<ks5-cp-1-tailscale-ip>
+export K3S_JOIN_SERVER_IP=100.107.21.89
 cd ansible
 ansible-playbook playbooks/demote-x86-to-worker.yml
+```
+
+## Joining a worker node (dgx1, dgx2, dgx3, sauvage)
+
+The server URL for every worker is `https://100.107.21.89:6443` (ks5-cp-1's
+Tailscale IP). The agent's built-in load balancer discovers the other two
+control planes (100.71.117.127, 100.75.189.75) on first connect and records them
+in `/var/lib/rancher/k3s/agent/etc/k3s-agent-load-balancer.json`.
+
+`x86.taile0ad27.ts.net:6443` is dead: nothing listens on the x86 node since the
+KS-5 bootstrap (INFRA-773). Workers that still carry it in
+`/etc/systemd/system/k3s-agent.service.env` only work off the cached
+load-balancer file and cannot rejoin after a reinstall. Fixed in place on
+dgx1/dgx2/sauvage on 2026-10-15 (no agent restart; applied at next start).
+
+Verify a join server answers before joining:
+
+```bash
+curl -k https://100.107.21.89:6443/cacerts   # expect HTTP 200
 ```
 
 ## Phase 6: Traefik and DNS
