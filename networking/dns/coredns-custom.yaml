@@ -9,9 +9,20 @@ data:
     e-dani.com:53 {
       errors
       # This more-specific e-dani.com server block wins over the root block.
-      # Rewrite Harbor here, then resolve the service through Kubernetes while
-      # preserving the original hostname in the answer for TLS/SNI.
+      # Names listed here are rewritten to the traefik-lan service: Kubernetes
+      # resolves it while the answer keeps the original hostname, so SNI and the
+      # *.e-dani.com certificate still validate.  A name left out falls through
+      # to `forward` and its answer depends on the resolver of the node hosting
+      # the CoreDNS replica that replies, so in-cluster clients flip between the
+      # LAN and the public edge -- measured on Harbor (SC-2443: a >100 MB image
+      # layer got 413/502 through the Cloudflare proxy, whose body cap also
+      # breaks any large request) and on litellm and argocd (SC-2445).  Add the
+      # name here when an in-cluster client needs it; traefik-lan must already
+      # serve that Host (canonical-hosts-lan.yaml).
       rewrite name exact harbor.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact harbor.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact litellm.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact argocd.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa

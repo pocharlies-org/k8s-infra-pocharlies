@@ -324,12 +324,14 @@ The PostSync reconciler `agentgateway-read-grants-job.yaml` (sync wave 20, so
 it lands before the openclaw-readonly reconciler in wave 21) owns the full
 read matrix:
 
-- Creates the 21 `agentgateway-read:<route>` realm roles (non-composite).
+- Creates the 22 `agentgateway-read:<route>` realm roles (non-composite;
+  INFRA-380 widened the matrix from 21 on 2026-10-13 with
+  `agentgateway-read:plaud`).
 - Grants them individually — never via groups (SC-44 C6): the
-  `agentgateway-mcp` service account receives all 21; the
-  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  `agentgateway-mcp` service account receives all 22; the
+  `openclaw-readonly-agentgateway` service account receives its seven reviewed
   routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
-  `skirmshop-plugins`). `synapse-sre-orchestrator`,
+  `plaud`, `skirmshop-plugins`). `synapse-sre-orchestrator`,
   `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
   none.
 - Maps the same roles into each client's role scope so the grants travel in
@@ -340,14 +342,15 @@ read matrix:
 - Fails closed on any group mapping, any member outside the matrix, any
   composite role, any scope or grant entry outside the matrix, and any
   freshly minted token whose `realm_access.roles` is not exactly the measured
-  set for the client's `fullScopeAllowed` state: 25 roles for
-  `agentgateway-mcp` while the flag is true (the reviewed 22 including
+  set for the client's `fullScopeAllowed` state: 26 roles for
+  `agentgateway-mcp` while the flag is true (the reviewed 23 including
   `agentgateway-write` plus the flattened `default-roles-edani` composites
   `default-roles-edani`, `offline_access` and `uma_authorization`, which pass
-  the scope filter — measured 2026-09-12, INFRA-46) and exactly the reviewed
-  22 once INFRA-45 has turned the flag off (section 11; the defaults do not
-  travel with the flag off); 7 for `openclaw-readonly-agentgateway` including
-  `cto-office-send`, measured 2026-09-12: with `fullScopeAllowed=false` the
+  the scope filter — measured 2026-09-12 as 25 with the 21-role matrix, INFRA-46)
+  and exactly the reviewed
+  23 once INFRA-45 has turned the flag off (section 11; the defaults do not
+  travel with the flag off); 8 for `openclaw-readonly-agentgateway` including
+  `cto-office-send` (7 until INFRA-380), measured 2026-09-12: with `fullScopeAllowed=false` the
   scope mapping filters the defaults out, so they must never appear there.
 
 Check the hook result without printing any JWT or credential:
@@ -361,13 +364,13 @@ kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read
 Expected sanitized output:
 
 ```json
-{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}
+{"reconciler":"agentgateway-read-grants","roles":22,"created":0,"grants_agentgateway_mcp":22,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}
 ```
 
 For state rollback (authorized incidents only, while the versioned ConfigMap
 still exists), apply `manual/agentgateway-read-grants-rollback-job.yaml`. It
 verifies every role's members are inside the reviewed matrix, then deletes the
-21 roles — deleting a realm role cascades its service-account grants and
+22 roles — deleting a realm role cascades its service-account grants and
 client scope mappings — and verifies nothing remains. Reverting Git alone
 does not remove Keycloak state; the PostSync hook re-creates the matrix on
 the next sync of a revision that still contains the reconciler. The
@@ -378,8 +381,8 @@ in section 11. The two Jobs are order-independent.
 
 ## 11. AgentGateway fullScopeAllowed off (INFRA-23 H3 / INFRA-45)
 
-`fullScopeAllowed` on `agentgateway-mcp` is now owned as `false`: the 22
-token roles (`agentgateway-write` plus the 21 `agentgateway-read:<route>`)
+`fullScopeAllowed` on `agentgateway-mcp` is now owned as `false`: the 23
+token roles (`agentgateway-write` plus the 22 `agentgateway-read:<route>`)
 travel exclusively through the client's explicit realm role scope. The same
 wave-20 PostSync reconciler performs the change fail-closed, in this order:
 
@@ -387,25 +390,25 @@ wave-20 PostSync reconciler performs the change fail-closed, in this order:
    has held the grant since the write-role reconciler; only the mapping was
    missing).
 2. Mints a `client_credentials` token (audience `mcp.lan.e-dani.com`) and
-   requires `realm_access.roles` to be exactly the measured 25 — the reviewed
-   22 plus the three flattened realm defaults (`default-roles-edani`,
+   requires `realm_access.roles` to be exactly the measured 26 — the reviewed
+   23 plus the three flattened realm defaults (`default-roles-edani`,
    `offline_access`, `uma_authorization`), which pass the scope filter while
    `fullScopeAllowed` is still true (INFRA-46 measurement) — BEFORE touching
    the flag: this proves the grants are intact before anything is removed.
 3. Only then sets `fullScopeAllowed=false` and reads the flag back.
-4. Mints again and requires exactly the reviewed 22 with the flag off — the
+4. Mints again and requires exactly the reviewed 23 with the flag off — the
    roles now demonstrably travel through the client role scope alone, and the
    measured defaults are gone (they do not travel with the flag off).
 5. If that post-flip token is off-matrix, the reconciler AUTO-RESTORES
    `fullScopeAllowed=true` before aborting: set, read back, and trusted only
-   after a confirmation mint of the exact 25 again — the flip is the live step
+   after a confirmation mint of the exact 26 again — the flip is the live step
    and the service account moves ~9465 requests per 4 h (measured baseline
    2026-09-12), so an abort must not leave its token broken. Only after the
    confirmed restoration does the hook fail. (When the flag was already false
    and the token is off-matrix, nothing is restored — that is drift or an
    attack, and the run fails closed without mutation.)
-6. Asserts the matrix on every later run (scope = write+21, flag = false,
-   final token = exact 22); anything outside aborts the hook.
+6. Asserts the matrix on every later run (scope = write+22, flag = false,
+   final token = exact 23); anything outside aborts the hook.
 
 Check the hook result (sanitized, no JWT):
 
@@ -436,8 +439,8 @@ reconciler is in the tree its PostSync hook re-asserts `false`. During an
 authorized incident, apply `manual/agentgateway-fullscope-rollback-job.yaml`
 (excluded from Kustomize, same pattern as the grants rollback): it sets the
 flag back to `true`, reads it back, mints a token and fails closed if the
-roles fall outside the reviewed 22 plus the three measured defaults — with
-the flag restored the fully intact token is the exact 25; `agentgateway-write`
+roles fall outside the reviewed 23 plus the three measured defaults — with
+the flag restored the fully intact token is the exact 26; `agentgateway-write`
 plus the defaults is the accepted floor if the read grants were already
 rolled back. Pair it with the `git revert`; until the revert syncs, the next
 PostSync flips the flag back to `false`. Expected sanitized output:

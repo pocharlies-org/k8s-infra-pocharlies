@@ -26,19 +26,19 @@ spec:
         # allowPrivilegeEscalation to false on ALL containers, breaking rootlesskit.
         vault.hashicorp.com/agent-inject: "false"
     spec:
-      # arm64 worker pinned to gx10-ec3d (the only arm64 worker node).
-      # The node carries dedicated=llm:NoSchedule so we must tolerate it explicitly.
+      # DGX-852 (14-10-2026, Dani): fijado a dgx3, fuera de gx10-ec3d (dgx2) y nvidia-dgx (dgx1), que llevan el TP=2 del
+      # residente: un build allí le quita la memoria unificada que necesita (en gx10-ec3d el arranque del TP=2 ya va al
+      # límite). Los tres Sparks llevan dedicated=llm:NoSchedule, de ahí la toleración.
       nodeSelector:
         kubernetes.io/arch: arm64
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
                   - key: kubernetes.io/hostname
                     operator: In
-                    values: ["gx10-ec3d"]
+                    values: ["dgx3"]
       tolerations:
         - key: dedicated
           operator: Equal
@@ -134,7 +134,7 @@ spec:
             name: buildkitd-arm64-config
         - name: cache
           persistentVolumeClaim:
-            claimName: buildkitd-arm64-cache
+            claimName: buildkitd-arm64-cache-dgx3
         - name: harbor-push
           secret:
             secretName: harbor-push
@@ -168,7 +168,9 @@ data:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: buildkitd-arm64-cache
+  # local-path: el volumen vive en el disco del nodo, así que cambiar de nodo es un PVC nuevo (el de gx10-ec3d se borra a
+  # mano: la app k8s-infra no hace prune). No confundir con buildkitd-arm64-dgx3-cache, el del builder grande apagado.
+  name: buildkitd-arm64-cache-dgx3
   namespace: buildkit
   labels:
     app: buildkitd

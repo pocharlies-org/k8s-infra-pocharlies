@@ -164,7 +164,7 @@ class RoleCatalogShapeTest(unittest.TestCase):
         mcp = "service-account-agentgateway-mcp"
         held = {name for name, entry in catalog.items() if mcp in entry["grantees"]}
         reads = {name for name in held if name.startswith("agentgateway-read:")}
-        self.assertEqual(len(reads), 21)
+        self.assertEqual(len(reads), 22)
         self.assertEqual(held - reads, {"agentgateway-write", "default-roles-edani"})
         # OWU-80 (2026-09-25): the reviewed holders of agentgateway-write are
         # the privileged service account plus exactly one human, pinned by

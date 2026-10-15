@@ -6,10 +6,10 @@
 # verifies a freshly minted token against the measured fullScopeAllowed=true
 # shape: with the flag restored the three realm defaults (default-roles-edani,
 # offline_access, uma_authorization) travel again, so the fully intact token
-# is the exact 25 (the reviewed 22 — agentgateway-write plus the 21 read
+# is the exact 26 (the reviewed 23 — agentgateway-write plus the 22 read
 # roles — plus the three defaults). agentgateway-write plus the defaults is
 # the accepted floor if the read grants were already rolled back; anything
-# outside the reviewed 22 plus the three defaults aborts.
+# outside the reviewed 23 plus the three defaults aborts.
 #
 # Rollback honesty: git revert alone does NOT restore this flag — Keycloak
 # state is not versioned, and the PostSync hook re-asserts

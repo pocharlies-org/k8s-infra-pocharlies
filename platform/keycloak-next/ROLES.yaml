@@ -2,7 +2,7 @@
   "schema": "keycloak-role-catalog/v1",
   "realm": "edani",
   "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); composites = roles de realm exactos que contiene un rol compuesto (ausente = ninguno); client_composites = objeto clientId → lista exacta de roles de cliente que contiene (ausente = ninguno); client_uuids = objeto clientId → id interno del cliente, exactamente los clientIds que usa algún client_composites (los compuestos solo traen el id interno y así se traducen sin GET clients, que exige view-clients); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
-  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync); SC-2238 (2026-10-09) declara el rol agentgateway-write:browser-navegacion y sus cuatro titulares (service-account-hermes-secretaria, -dani, -leila y -casa) ANTES de crearlo y concederlo en el realm: hasta la concesión, keycloak-role-drift da DRIFT a propósito",
+  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync); SC-2238 (2026-10-09) declara el rol agentgateway-write:browser-navegacion y sus cuatro titulares (service-account-hermes-secretaria, -dani, -leila y -casa) ANTES de crearlo y concederlo en el realm: hasta la concesión, keycloak-role-drift da DRIFT a propósito; INFRA-380 (2026-10-13) declara el rol agentgateway-read:plaud y sus dos titulares (service-account-agentgateway-mcp y service-account-openclaw-readonly-agentgateway, los mismos de gsc) ANTES de crearlo: lo alta y concede el PostSync agentgateway-read-grants-job en el siguiente sync",
   "client_uuids": {
     "account": "5402c4f9-25fc-4a60-8027-2ff55fae0677"
   },
@@ -145,6 +145,20 @@
         "denies": "Cualquier tool de escritura de /picqer (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
       "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+    },
+    {
+      "name": "agentgateway-read:plaud",
+      "status": "active",
+      "meaning": "Lectura de la ruta /plaud de AgentGateway (INFRA-380: grabaciones, notas y transcripciones Plaud — PII). Mismos titulares que /gsc.",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-openclaw-readonly-agentgateway"
+      ],
+      "privilege": {
+        "allows": "Llamar a las tools de solo lectura de la ruta /plaud de AgentGateway.",
+        "denies": "Cualquier otra ruta; en /plaud no hay escritura posible (login/logout están excluidos del ledger por contrato)."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12; alta INFRA-380)"
     },
     {
       "name": "agentgateway-read:shopify",
