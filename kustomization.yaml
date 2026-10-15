@@ -23,6 +23,7 @@ resources:
   - networking/traefik-lan/admin-skirmshop-canonical-lan.yaml
   - networking/traefik-lan/sauvage-bot-lan.yaml
   - networking/traefik-lan/synapse-email-attachments-lan.yaml
+  - networking/traefik-lan/artifacts-lan.yaml
   - networking/traefik-lan/instagram-callback-lan.yaml
   - networking/traefik-lan/correo-lan.yaml
   - networking/traefik-edge/namespace.yaml
@@ -49,6 +50,7 @@ resources:
   - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
   - networking/traefik-edge/skirmshop-s3-public.yaml
+  - networking/traefik-edge/artifacts-public.yaml
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
   - storage/longhorn/openclaw-sauvage-backup-target.yaml
