@@ -8,8 +8,8 @@ metadata:
     arch: amd64
 spec:
   replicas: 1
-  # buildkitd holds the cache PVC (RWO) -> Recreate avoids two pods racing the
-  # same cache during a rollout.
+  # Recreate keeps a single builder: with two pods the Service would split
+  # builds across two independent caches and halve the hit rate.
   strategy:
     type: Recreate
   selector:
@@ -33,8 +33,13 @@ spec:
       # nodes, all at ~99% CPU requests; the apt/npm layer of the synapse
       # release starved there and hit the 75m DOCKER_BUILD_TIMEOUT three times
       # on 2026-09-14/15 (run 34905054888 attempts 1-2, exit 124). savage has
-      # 48 cores, ~38 CPU-requests free, 1.6T free on / and no Longhorn — hence
-      # the cache moved to local-path (it is a rebuildable build cache).
+      # 48 cores and ~38 CPU-requests free.
+      # INFRA-475 (2026-10-15): the local-path cache landed on sauvage's only
+      # disk — md3, RAID1 of two 7200 rpm HDDs at 100% util, ~320 ms await with
+      # MinIO/k3s/containerd on the same array — so apt unpack ran at ~30 s per
+      # package and `buildctl debug workers` blew the 1 s probe timeout (19
+      # restarts). The disk is not fixable here (no SSD on the node); the cache
+      # now lives in RAM (tmpfs emptyDir) — see the cache volume below.
       nodeSelector:
         kubernetes.io/arch: amd64
         kubernetes.io/hostname: sauvage
@@ -48,9 +53,8 @@ spec:
       # setup. The container-level override alone is insufficient because k3s/runc
       # applies the seccomp profile before the container securityContext is merged.
       securityContext:
-        # Fresh CSI filesystems are owned by root. Grant the rootless BuildKit
-        # process group access to the Longhorn cache without a privileged
-        # chown init container or a node-specific preparation step.
+        # kubelet mounts fresh volumes owned by root; fsGroup gives the rootless
+        # BuildKit process group access without a privileged chown init.
         fsGroup: 1000
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
@@ -75,8 +79,8 @@ spec:
             # the REAL size of the cache volume (cmd/buildkitd/config/
             # gcpolicy.go): 4 policies, the last one `all = true`, with
             # reservedSpace = min(10%, 10GB), maxUsedSpace = min(80%, 100GB)
-            # and minFreeSpace = 20% of the volume -> on this 50Gi PVC the GC
-            # targets ~40Gi used / ~10Gi free and CAN reclaim.
+            # and minFreeSpace = 20% of the volume -> on this 30Gi tmpfs the GC
+            # targets ~24Gi used / ~6Gi free and CAN reclaim.
             # History of this flag (third recurrence of the same mechanism):
             # - 2026-08-20: PVC was full at 98% on 25Gi; raised 25->50Gi and
             #   changed keepstorage 8192,8192,12288 -> 6144,6144,10240.
@@ -104,16 +108,21 @@ spec:
             # that requires a buildkitd.toml ConfigMap with [[worker.oci.
             # gcpolicy]] blocks; the flag cannot express per-policy rules.
             - --oci-worker-gc
+          # INFRA-475: timeoutSeconds was 1 (the default) — on a busy builder
+          # the exec probe (fork + gRPC dial) exceeded it and kubelet killed a
+          # healthy daemon (19 restarts). 5 s still catches a wedged daemon.
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 5
             periodSeconds: 30
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 10
             periodSeconds: 30
+            timeoutSeconds: 5
           securityContext:
             # Rootless buildkit needs SETUID+SETGID so newuidmap/newgidmap can
             # configure the user-namespace UID/GID map. Not privileged; Kyverno
@@ -139,10 +148,16 @@ spec:
               # INFRA-42/INFRA-79 (2026-09-13): 500m -> 150m. p95 14d = 8m; build spikes
               # ride the limit (4 CPU), not the request.
               cpu: "150m"
-              memory: 1Gi
+              # INFRA-475: the cache is tmpfs now, and tmpfs pages count against
+              # the pod's cgroup memory. The GC keeps the 30 GiB volume at ~24 GiB
+              # used, so the request reserves cache + build headroom (sauvage has
+              # 125 GiB total, ~95 GiB available at the time of the change).
+              memory: 28Gi
             limits:
               cpu: "4"
-              memory: 8Gi
+              # sizeLimit (30 GiB) + build headroom; an OOM kill of the daemon is
+              # visible and Recreate brings it back with an empty cache.
+              memory: 36Gi
           ports:
             - name: buildkit
               containerPort: 1234
@@ -154,41 +169,26 @@ spec:
               readOnly: true
       volumes:
         - name: cache
-          persistentVolumeClaim:
-            claimName: buildkitd-amd64-cache
+          # INFRA-475: tmpfs, not a disk volume. The local-path PVC (50Gi) sat on
+          # sauvage's only array — RAID1 of two 7200 rpm HDDs, 100% util, ~320 ms
+          # await under MinIO/k3s — and every uncached build paid it (apt unpack
+          # ~30 s per package; the same build on the x86's NVMe: ~4 min). The
+          # node has 125 GiB RAM with ~95 GiB free, and the cache is rebuildable:
+          # losing it costs one slower build, never data (same ruling as the old
+          # PVC's comment). sizeLimit bounds the tmpfs; buildkit's GC keeps it at
+          # ~24 GiB (80% of 30Gi). Verification after GC changes is `df` on the
+          # volume and the Total in `buildctl du` — NEVER the "Reclaimable"
+          # column (v0.31.0 derives it per record as !InUse, so on a busy
+          # builder it always reads 0B; SC-285).
+          emptyDir:
+            medium: Memory
+            sizeLimit: 30Gi
         - name: harbor-push
           secret:
             secretName: harbor-push
             items:
               - key: .dockerconfigjson
                 path: config.json
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: buildkitd-amd64-cache
-  namespace: buildkit
-  labels:
-    app: buildkitd
-    arch: amd64
-spec:
-  accessModes: ["ReadWriteOnce"]
-  # local-path on sauvage (same pattern as buildkitd-arm64 on dgx3):
-  # Longhorn does not run on sauvage, and this is a build cache — losing it
-  # costs one slower build, never data. It replaces
-  # buildkitd-amd64-cache-longhorn (longhorn-single, 50Gi), which held ~49 GiB
-  # on the saturated ks5 control-plane nodes (INFRA-42). sauvage has 1.6T free
-  # on /; the local-path PV lands there.
-  storageClassName: local-path
-  resources:
-    requests:
-      # Size ruled FINAL by the operator (SC-285, 2026-09-05, third 100%-full
-      # recurrence): no further enlargement. The cap lives in the GC policy on
-      # the Deployment (~40Gi of this 50Gi). Verification after GC changes is
-      # `df` on the PVC and the Total in `buildctl du` — NEVER the
-      # "Reclaimable" column (v0.31.0 derives it per record as !InUse, so on a
-      # busy builder it always reads 0B).
-      storage: 50Gi
 ---
 apiVersion: v1
 kind: Service
