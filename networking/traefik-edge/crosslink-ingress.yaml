@@ -1,0 +1,587 @@
+---
+# CROSSLINK (topic 4338, acuerdo pocharlies<->staticduo 14-10-2026): borde de ingreso
+# inter-casa. Contrato normativo: repo pocharlies-org/crosslink (PR #1). Superficie PROPIA
+# y aislada: no expone Synapse/DLQ ni el bus interno, solo este handler stdlib.
+# Fail-closed: sin keystore (Secret crosslink-grants) responde 503 a todo POST.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crosslink-ingress
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+data:
+  handler.py: |
+    #!/usr/bin/env python3
+    """CrossLink v1 - borde de ingreso inter-casa de pocharlies (handler unico, stdlib puro).
+    
+    Contrato normativo: repo pocharlies-org/crosslink (branch feat/canal-summary-grants).
+    Canonizacion, firma y validacion identicas a conformance/canonical.py y check.py del
+    contrato: el borde verifica sobre BYTES CRUDOS, dedupea por tupla event_id+casa+sha256,
+    y solo responde 2xx despues de commit durable (SQLite WAL + synchronous=FULL).
+    
+    Fail-closed: sin keystore montado (Secret crosslink-grants) o con keystore vacio,
+    responde 503 a todo POST. Nunca acepta sin grant.
+    
+    Env: PORT (8080), DATA_DIR (/data), MY_HOUSE (pocharlies), CROSSLINK_KEYSTORE
+         (/secrets/grants.json).
+    """
+    import hashlib, hmac, json, os, re, sqlite3, sys, threading, time
+    from datetime import datetime, timezone
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    
+    LIMIT = 65536   # 64 KiB de body, aplicado al stream antes de acumular mas
+    WINDOW = 300    # +/-300 s sobre el ts del INTENTO
+    TS_RE = re.compile(r"[0-9]{1,10}")     # ASCII, sin ceros a la izquierda (fullmatch)
+    SIG_RE = re.compile(r"[0-9a-f]{64}")   # forma de la firma: hex minusculo (fullmatch)
+    
+    def canonical(obj):
+        return json.dumps(obj, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False, allow_nan=False).encode("utf-8")
+    
+    def _ts_ok(ts):
+        """Forma admitida de X-Link-Timestamp: 1-10 digitos ASCII, sin ceros a la
+        izquierda salvo "0" exacto. Todo lo demas (nan, inf, fracciones, espacios,
+        "+5", "0176...", digitos unicode, 5000 digitos) es bad_timestamp."""
+        if not isinstance(ts, str):
+            return False
+        if not TS_RE.fullmatch(ts):
+            return False
+        return ts == "0" or ts[0] != "0"
+    
+    def signing_string(key_id, ts, body):
+        # ts entra como cadena exacta: quien firma y quien verifica usan el mismo texto
+        return f"{key_id}\n{ts}\n{hashlib.sha256(body).hexdigest()}".encode()
+    
+    def sign(secret, key_id, ts, body):
+        ts = ts if isinstance(ts, str) else str(ts)
+        if not _ts_ok(ts):
+            raise ValueError("timestamp invalido: 1-10 digitos ASCII sin ceros a la izquierda")
+        return hmac.new(secret, signing_string(key_id, ts, body), hashlib.sha256).hexdigest()
+    
+    def verify(secret, key_id, ts, sig, body, now=None, window=WINDOW):
+        """'ok' | 'replay_window' | 'signature' | 'bad_timestamp'.
+        bad_timestamp y replay_window son 401 con cuerpo generico, sin detalle."""
+        ts = ts if isinstance(ts, str) else ("" if ts is None else str(ts))
+        if not _ts_ok(ts):
+            return "bad_timestamp"
+        now = int(time.time()) if now is None else int(now)
+        if abs(now - int(ts)) > window:            # entero puro: sin float(), sin nan
+            return "replay_window"
+        expected = sign(secret, key_id, ts, body)  # firma sobre el texto del header
+        s = (sig or "").strip().lower()
+        if not SIG_RE.fullmatch(s):        # nunca compare_digest con no-ASCII: TypeError
+            return "signature"
+        return "ok" if hmac.compare_digest(expected, s) else "signature"
+    
+    
+    MAX_TTL_S = 48 * 3600
+    UUID7 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+    KEY_ASCII = re.compile(r"[\x20-\x7e]{1,64}")   # \x7e = '~': sin LF/CR/tab; se casa con fullmatch
+    DT_RE = re.compile(r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})")
+    
+    def parse_dt(s):
+        """None si no es un date-time valido para el contrato."""
+        if not isinstance(s, str) or not DT_RE.fullmatch(s):
+            return None
+        t = s.strip()
+        if t[-1] in "Zz":
+            t = t[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(t)
+        except (ValueError, OverflowError):
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt   # aware: las comparaciones funcionan entre offsets sin astimezone
+                    # (astimezone reventaba con OverflowError en year 0001 + offset)
+    
+    def walk(node, path="$"):
+        """Claves ASCII <=64 chars en CUALQUIER profundidad, y ausencia de floats."""
+        errs = []
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if not KEY_ASCII.fullmatch(k):
+                    errs.append(f"clave no-ASCII o >64 chars en {path}: {k!r}")
+                errs += walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                errs += walk(v, f"{path}[{i}]")
+        elif isinstance(node, float):
+            errs.append(f"float no permitido en {path} (payload sin floats)")
+        return errs
+    
+    def check_envelope(env, now=None):
+        errs = []
+        if env.get("v") != 1:
+            errs.append("major 'v' no soportada")
+        if not UUID7.fullmatch(str(env.get("event_id", ""))):
+            errs.append("event_id no es UUIDv7 canonico")
+        if env.get("house") not in ("pocharlies", "staticduo"):
+            errs.append("house desconocida")
+        if env.get("type") not in ("session.close", "task.handoff"):
+            errs.append("type fuera del vocabulario piloto")
+        s = env.get("summary", "")
+        if not (isinstance(s, str) and 1 <= len(s) <= 500):
+            errs.append("summary debe tener 1-500 caracteres")
+        errs += walk(env)
+        sent, exp = parse_dt(env.get("sent_at", "")), parse_dt(env.get("expires_at", ""))
+        if sent is None or exp is None:
+            errs.append("sent_at/expires_at no son date-time validos")
+            return errs
+        if exp <= sent:
+            errs.append("expires_at debe ser posterior a sent_at")
+        elif (exp - sent).total_seconds() > MAX_TTL_S:
+            errs.append("expires_at - sent_at excede 48 h")
+        now = now or datetime.now(timezone.utc)
+        if exp < now:
+            errs.append("EXPIRED")
+        return errs
+    
+    def check_body(body):
+        """Tamano y parseo sobre los bytes YA leidos. El corte en stream (sin acumular
+    mas de LIMIT) lo hace el bucle de lectura del receptor, no esta funcion."""
+        if len(body) > LIMIT:
+            return [f"payload_too_large: {len(body)} bytes > {LIMIT}"]
+        try:
+            return json.loads(body.decode("utf-8"))
+        except Exception as e:
+            return [f"json_invalido: {e}"]
+    
+    
+    
+    MY_HOUSE = os.environ.get("MY_HOUSE", "pocharlies")
+    DB = None
+    LOCK = threading.Lock()
+    METRICS = {"accepted": 0, "duplicate": 0, "conflict": 0, "expired": 0,
+               "rejected_4xx": 0, "quarantined": 0, "by_reason": {}}
+    GRANTS = {}
+    
+    
+    def now_iso():
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    def init_db(path):
+        con = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA synchronous=FULL")   # el 2xx va despues de fsync real
+        con.execute("""CREATE TABLE IF NOT EXISTS events(
+            event_id TEXT NOT NULL, house TEXT NOT NULL, body_sha TEXT NOT NULL,
+            body BLOB NOT NULL, type TEXT, channel TEXT, actor TEXT, summary TEXT,
+            received_at TEXT NOT NULL, expires_at TEXT NOT NULL, key_id TEXT,
+            PRIMARY KEY(event_id, house))""")
+        con.execute("CREATE INDEX IF NOT EXISTS ix_events_id ON events(event_id)")
+        con.execute("""CREATE TABLE IF NOT EXISTS quarantine(
+            id INTEGER PRIMARY KEY, event_id TEXT, house TEXT, reason TEXT,
+            detail TEXT, body_sha TEXT, at TEXT NOT NULL)""")
+        con.execute("CREATE TABLE IF NOT EXISTS inbox(event_id TEXT, house TEXT, body_sha TEXT, delivered INTEGER DEFAULT 0)")
+        return con
+    
+    def load_grants(path):
+        """Keystore: JSON con los grants activos, montado desde un Secret (ro).
+        Si falta o esta vacio, el borde queda FAIL-CLOSED: 503 a todo POST."""
+        if not path or not os.path.exists(path):
+            return {}
+        out = {}
+        for g in json.load(open(path)):
+            out[g["key_id"]] = g
+        return out
+    
+    def grant_allows(g, etype, channel, actor):
+        """Scope: OR dentro de lista, AND entre listas; lista ausente o vacia NO
+        amplifica (ese eje no limita). La casa del body se contrasta ANTES (key_id
+        -> casa), aqui solo tipo/canal/ambito/vigencia del grant."""
+        if g.get("direction") != "publish":
+            return "direction"
+        t = g.get("type")
+        if t not in ("*", None) and t != etype:
+            return "type"
+        if g.get("channel") != channel:
+            return "channel"
+        exp = parse_dt(g.get("expires_at", ""))
+        if exp is None or exp < datetime.now(timezone.utc):
+            return "grant_expired"
+        sc = g.get("scope") or {}
+        lst = sc.get("actors")
+        if lst and actor not in lst:
+            return "scope_actors"
+        return None
+    
+    def bump(kind, reason):
+        METRICS[kind] = METRICS.get(kind, 0) + 1
+        METRICS["by_reason"][reason] = METRICS["by_reason"].get(reason, 0) + 1
+    
+    def reject(code, reason, detail=""):
+        bump("rejected_4xx", reason)
+        return code, {"error": reason}
+    
+    def quarantine(eid, house, reason, detail, sha):
+        with LOCK:
+            DB.execute("INSERT INTO quarantine(event_id,house,reason,detail,body_sha,at) VALUES(?,?,?,?,?,?)",
+                       (eid, house, reason, detail, sha, now_iso()))
+        METRICS["quarantined"] += 1
+    
+    def handle_post(headers, body):
+        key_id = headers.get("x-link-key-id", "")
+        ts = headers.get("x-link-timestamp", "")
+        sig = headers.get("x-link-signature", "")
+    
+        if not GRANTS:
+            return 503, {"error": "keystore_unavailable"}
+        # 1. key_id conocido (401 generico, sin decir cual falta)
+        g = GRANTS.get(key_id)
+        if g is None:
+            return reject(401, "signature")
+        secret = g["secret"].encode()
+    
+        # 2-3. ventana de ts y firma sobre BYTES CRUDOS
+        v = verify(secret, key_id, ts, sig, body)
+        if v == "replay_window" or v == "bad_timestamp":
+            return reject(401, "replay_window")
+        if v == "signature":
+            return reject(401, "signature")
+    
+        # 4. JSON (el tamano ya se corto en stream en do_POST: body <= LIMIT)
+        parsed = check_body(body)
+        if isinstance(parsed, list):
+            return reject(400, "json_invalid")
+        env = parsed
+    
+        # 5. esquema + reglas semanticas (fechas, UUIDv7, summary, ASCII/sin floats)
+        errs = check_envelope(env)
+        expired = "EXPIRED" in errs
+        errs = [e for e in errs if e != "EXPIRED"]
+        if errs:
+            return reject(400, "invalid_envelope")
+    
+        # house del body vs casa ligada al key_id: la casa NUNCA se confia del body
+        house = env["house"]
+        if g.get("counterparty") != house or house == MY_HOUSE:
+            return reject(403, "house_mismatch")
+    
+        # 6. grant cubre direccion+tipo+canal+ambito y esta vigente
+        reason = grant_allows(g, env["type"], env["channel"], env.get("actor", ""))
+        if reason:
+            return reject(403, "grant_denied", reason)
+    
+        eid, sha = env["event_id"], hashlib.sha256(body).hexdigest()
+    
+        # 7. dedupe: UNA decision sobre la tupla event_id + casa + sha256(body)
+        #    (antes que la caducidad: un duplicado caducado es 200, no 422)
+        with LOCK:
+            row = DB.execute("SELECT body_sha FROM events WHERE event_id=? AND house=?",
+                             (eid, house)).fetchone()
+        if row is not None:
+            if row[0] == sha:
+                bump("duplicate", "duplicate")
+                return 200, {"status": "duplicate", "event_id": eid}
+            bump("conflict", "event_id_conflict")
+            quarantine(eid, house, "event_id_conflict", f"stored={row[0][:12]} got={sha[:12]}", sha)
+            return reject(409, "event_id_conflict")
+    
+        # 8. caducidad de evento NUEVO: 422, no se ejecuta ni se ledgeriza como evento
+        if expired:
+            bump("expired", "expired")
+            quarantine(eid, house, "expired", "evento nuevo caducado", sha)
+            return reject(422, "expired")
+    
+        # 9. persistencia durable (dedupe + bytes + trabajo pendiente, en una transaccion)
+        try:
+            with LOCK:
+                DB.execute("BEGIN IMMEDIATE")
+                DB.execute(
+                    "INSERT INTO events(event_id,house,body_sha,body,type,channel,actor,summary,"
+                    "received_at,expires_at,key_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (eid, house, sha, body, env["type"], env["channel"], env.get("actor"),
+                     env.get("summary"), now_iso(), env["expires_at"], key_id))
+                DB.execute("INSERT INTO inbox(event_id,house,body_sha) VALUES(?,?,?)", (eid, house, sha))
+                DB.execute("COMMIT")
+        except sqlite3.IntegrityError:
+            DB.execute("ROLLBACK")
+            bump("duplicate", "race_duplicate")
+            return 200, {"status": "duplicate", "event_id": eid}
+        except Exception:
+            DB.execute("ROLLBACK")
+            return 500, {"error": "storage_unavailable"}
+    
+        bump("accepted", env["type"])
+        return 202, {"status": "accepted", "event_id": eid}
+    
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+    
+        def _send(self, code, obj):
+            payload = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            try:
+                self.wfile.write(payload)
+            except BrokenPipeError:
+                pass
+    
+        def do_POST(self):
+            try:
+                declared = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._send(*reject(400, "bad_content_length"))
+            if declared > LIMIT:                       # corte en stream, sin acumular
+                self.rfile.read(min(declared, 1 << 20))
+                return self._send(*reject(413, "payload_too_large"))
+            chunks, got = [], 0
+            while got < declared:
+                b = self.rfile.read(min(65536, declared - got))
+                if not b:
+                    break
+                got += len(b)
+                if got > LIMIT:
+                    return self._send(*reject(413, "payload_too_large"))
+                chunks.append(b)
+            code, obj = handle_post({k.lower(): v for k, v in self.headers.items()}, b"".join(chunks))
+            self._send(code, obj)
+    
+        def do_GET(self):
+            if self.path == "/crosslink/healthz":
+                with LOCK:
+                    n = DB.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+                    q = DB.execute("SELECT COUNT(*) FROM quarantine").fetchone()[0]
+                    pend = DB.execute("SELECT COUNT(*) FROM inbox WHERE delivered=0").fetchone()[0]
+                return self._send(200, {"ok": True, "house": MY_HOUSE, "events": n,
+                                        "pending": pend, "quarantined": q, "metrics": METRICS})
+            return self._send(404, {"error": "not_found"})
+    
+        def log_message(self, fmt, *a):
+            sys.stderr.write("%s %s\n" % (self.address_string(), fmt % a))
+    
+    
+    def main():
+        global DB, GRANTS
+        port = int(os.environ.get("PORT", "8080"))
+        DB = init_db(os.path.join(os.environ.get("DATA_DIR", "/data"), "crosslink.sqlite3"))
+        GRANTS = load_grants(os.environ.get("CROSSLINK_KEYSTORE", "/secrets/grants.json"))
+        print(json.dumps({"event": "crosslink-ingress.start", "house": MY_HOUSE,
+                          "port": port, "grants": len(GRANTS)}), flush=True)
+        ThreadingHTTPServer(("0.0.0.0", port), H).serve_forever()
+    
+    
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: crosslink-grants
+  namespace: traefik-edge
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  refreshPolicy: OnChange
+  refreshInterval: 24h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: onepassword-connect
+  target:
+    name: crosslink-grants
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      type: Opaque
+      data:
+        grants.json: "{{ .grants_json }}"
+  data:
+    - secretKey: grants_json
+      remoteRef:
+        key: crosslink-pocharlies/grants_json
+        property: grants_json
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crosslink-ingress
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crosslink-ingress
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crosslink-ingress
+        app.kubernetes.io/part-of: crosslink
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # PVC longhorn: sin esta colocacion el pod puede caer en sauvage (sin driver
+      # longhorn) y quedarse en ContainerCreating para siempre (leccion registrada
+      # por synapse-brain-feedback-handler el 31-07).
+      nodeSelector:
+        node-pool: ks5-nvme
+      containers:
+        - name: ingress
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/handler.py"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DATA_DIR
+              value: /data
+            - name: MY_HOUSE
+              value: pocharlies
+            - name: CROSSLINK_KEYSTORE
+              value: /secrets/grants.json
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /crosslink/healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /crosslink/healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: handler
+              mountPath: /app
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: grants
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: handler
+          configMap:
+            name: crosslink-ingress
+        - name: data
+          persistentVolumeClaim:
+            claimName: crosslink-ingress-data
+        - name: grants
+          secret:
+            secretName: crosslink-grants
+            # optional: hasta que el item crosslink-pocharlies exista en el vault,
+            # el pod arranca con el mount vacio y el handler responde 503
+            # (fail-closed). Sin esto el pod se queda en ContainerCreating.
+            optional: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crosslink-ingress-data
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crosslink-ingress
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  selector:
+    app.kubernetes.io/name: crosslink-ingress
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Ruta publica del borde. Solo los dos paths del contrato; el resto del host no
+# existe. TLS con el wildcard *.e-dani.com del store default (igual que el resto
+# de rutas publicas de traefik-edge).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-crosslink-public
+  namespace: traefik-edge
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: crosslink.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`crosslink.e-dani.com`) && (Path(`/crosslink/ingest`) || Path(`/crosslink/healthz`))
+      priority: 2500
+      services:
+        - name: crosslink-ingress
+          namespace: traefik-edge
+          port: 8080
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
+---
+# traefik-edge tiene default-deny. El borde solo es alcanzable desde el proxy
+# (ipBlocks del patron synapse-brain-feedback-handler) y desde su propio ns.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: crosslink-ingress-allow-edge
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: crosslink-ingress
+    app.kubernetes.io/part-of: crosslink
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: crosslink-ingress
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 100.64.0.0/10
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080
