@@ -15,31 +15,31 @@ data:
   handler.py: |
     #!/usr/bin/env python3
     """CrossLink v1 - borde de ingreso inter-casa de pocharlies (handler unico, stdlib puro).
-    
+
     Contrato normativo: repo pocharlies-org/crosslink (branch feat/canal-summary-grants).
     Canonizacion, firma y validacion identicas a conformance/canonical.py y check.py del
     contrato: el borde verifica sobre BYTES CRUDOS, dedupea por tupla event_id+casa+sha256,
     y solo responde 2xx despues de commit durable (SQLite WAL + synchronous=FULL).
-    
+
     Fail-closed: sin keystore montado (Secret crosslink-grants) o con keystore vacio,
     responde 503 a todo POST. Nunca acepta sin grant.
-    
+
     Env: PORT (8080), DATA_DIR (/data), MY_HOUSE (pocharlies), CROSSLINK_KEYSTORE
          (/secrets/grants.json).
     """
     import hashlib, hmac, json, os, re, sqlite3, sys, threading, time
     from datetime import datetime, timezone
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    
+
     LIMIT = 65536   # 64 KiB de body, aplicado al stream antes de acumular mas
     WINDOW = 300    # +/-300 s sobre el ts del INTENTO
     TS_RE = re.compile(r"[0-9]{1,10}")     # ASCII, sin ceros a la izquierda (fullmatch)
     SIG_RE = re.compile(r"[0-9a-f]{64}")   # forma de la firma: hex minusculo (fullmatch)
-    
+
     def canonical(obj):
         return json.dumps(obj, sort_keys=True, separators=(",", ":"),
                           ensure_ascii=False, allow_nan=False).encode("utf-8")
-    
+
     def _ts_ok(ts):
         """Forma admitida de X-Link-Timestamp: 1-10 digitos ASCII, sin ceros a la
         izquierda salvo "0" exacto. Todo lo demas (nan, inf, fracciones, espacios,
@@ -49,17 +49,17 @@ data:
         if not TS_RE.fullmatch(ts):
             return False
         return ts == "0" or ts[0] != "0"
-    
+
     def signing_string(key_id, ts, body):
         # ts entra como cadena exacta: quien firma y quien verifica usan el mismo texto
         return f"{key_id}\n{ts}\n{hashlib.sha256(body).hexdigest()}".encode()
-    
+
     def sign(secret, key_id, ts, body):
         ts = ts if isinstance(ts, str) else str(ts)
         if not _ts_ok(ts):
             raise ValueError("timestamp invalido: 1-10 digitos ASCII sin ceros a la izquierda")
         return hmac.new(secret, signing_string(key_id, ts, body), hashlib.sha256).hexdigest()
-    
+
     def verify(secret, key_id, ts, sig, body, now=None, window=WINDOW):
         """'ok' | 'replay_window' | 'signature' | 'bad_timestamp'.
         bad_timestamp y replay_window son 401 con cuerpo generico, sin detalle."""
@@ -74,13 +74,13 @@ data:
         if not SIG_RE.fullmatch(s):        # nunca compare_digest con no-ASCII: TypeError
             return "signature"
         return "ok" if hmac.compare_digest(expected, s) else "signature"
-    
-    
+
+
     MAX_TTL_S = 48 * 3600
     UUID7 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     KEY_ASCII = re.compile(r"[\x20-\x7e]{1,64}")   # \x7e = '~': sin LF/CR/tab; se casa con fullmatch
     DT_RE = re.compile(r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})")
-    
+
     def parse_dt(s):
         """None si no es un date-time valido para el contrato."""
         if not isinstance(s, str) or not DT_RE.fullmatch(s):
@@ -96,7 +96,7 @@ data:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt   # aware: las comparaciones funcionan entre offsets sin astimezone
                     # (astimezone reventaba con OverflowError en year 0001 + offset)
-    
+
     def walk(node, path="$"):
         """Claves ASCII <=64 chars en CUALQUIER profundidad, y ausencia de floats."""
         errs = []
@@ -111,7 +111,7 @@ data:
         elif isinstance(node, float):
             errs.append(f"float no permitido en {path} (payload sin floats)")
         return errs
-    
+
     def check_envelope(env, now=None):
         errs = []
         if env.get("v") != 1:
@@ -138,7 +138,7 @@ data:
         if exp < now:
             errs.append("EXPIRED")
         return errs
-    
+
     def check_body(body):
         """Tamano y parseo sobre los bytes YA leidos. El corte en stream (sin acumular
     mas de LIMIT) lo hace el bucle de lectura del receptor, no esta funcion."""
@@ -148,20 +148,20 @@ data:
             return json.loads(body.decode("utf-8"))
         except Exception as e:
             return [f"json_invalido: {e}"]
-    
-    
-    
+
+
+
     MY_HOUSE = os.environ.get("MY_HOUSE", "pocharlies")
     DB = None
     LOCK = threading.Lock()
     METRICS = {"accepted": 0, "duplicate": 0, "conflict": 0, "expired": 0,
                "rejected_4xx": 0, "quarantined": 0, "by_reason": {}}
     GRANTS = {}
-    
-    
+
+
     def now_iso():
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
+
     def init_db(path):
         con = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         con.execute("PRAGMA journal_mode=WAL")
@@ -177,7 +177,7 @@ data:
             detail TEXT, body_sha TEXT, at TEXT NOT NULL)""")
         con.execute("CREATE TABLE IF NOT EXISTS inbox(event_id TEXT, house TEXT, body_sha TEXT, delivered INTEGER DEFAULT 0)")
         return con
-    
+
     def load_grants(path):
         """Keystore: JSON con los grants activos, montado desde un Secret (ro).
         Si falta o esta vacio, el borde queda FAIL-CLOSED: 503 a todo POST."""
@@ -187,7 +187,7 @@ data:
         for g in json.load(open(path)):
             out[g["key_id"]] = g
         return out
-    
+
     def grant_allows(g, etype, channel, actor):
         """Scope: OR dentro de lista, AND entre listas; lista ausente o vacia NO
         amplifica (ese eje no limita). La casa del body se contrasta ANTES (key_id
@@ -207,26 +207,26 @@ data:
         if lst and actor not in lst:
             return "scope_actors"
         return None
-    
+
     def bump(kind, reason):
         METRICS[kind] = METRICS.get(kind, 0) + 1
         METRICS["by_reason"][reason] = METRICS["by_reason"].get(reason, 0) + 1
-    
+
     def reject(code, reason, detail=""):
         bump("rejected_4xx", reason)
         return code, {"error": reason}
-    
+
     def quarantine(eid, house, reason, detail, sha):
         with LOCK:
             DB.execute("INSERT INTO quarantine(event_id,house,reason,detail,body_sha,at) VALUES(?,?,?,?,?,?)",
                        (eid, house, reason, detail, sha, now_iso()))
         METRICS["quarantined"] += 1
-    
+
     def handle_post(headers, body):
         key_id = headers.get("x-link-key-id", "")
         ts = headers.get("x-link-timestamp", "")
         sig = headers.get("x-link-signature", "")
-    
+
         if not GRANTS:
             return 503, {"error": "keystore_unavailable"}
         # 1. key_id conocido (401 generico, sin decir cual falta)
@@ -234,39 +234,39 @@ data:
         if g is None:
             return reject(401, "signature")
         secret = g["secret"].encode()
-    
+
         # 2-3. ventana de ts y firma sobre BYTES CRUDOS
         v = verify(secret, key_id, ts, sig, body)
         if v == "replay_window" or v == "bad_timestamp":
             return reject(401, "replay_window")
         if v == "signature":
             return reject(401, "signature")
-    
+
         # 4. JSON (el tamano ya se corto en stream en do_POST: body <= LIMIT)
         parsed = check_body(body)
         if isinstance(parsed, list):
             return reject(400, "json_invalid")
         env = parsed
-    
+
         # 5. esquema + reglas semanticas (fechas, UUIDv7, summary, ASCII/sin floats)
         errs = check_envelope(env)
         expired = "EXPIRED" in errs
         errs = [e for e in errs if e != "EXPIRED"]
         if errs:
             return reject(400, "invalid_envelope")
-    
+
         # house del body vs casa ligada al key_id: la casa NUNCA se confia del body
         house = env["house"]
         if g.get("counterparty") != house or house == MY_HOUSE:
             return reject(403, "house_mismatch")
-    
+
         # 6. grant cubre direccion+tipo+canal+ambito y esta vigente
         reason = grant_allows(g, env["type"], env["channel"], env.get("actor", ""))
         if reason:
             return reject(403, "grant_denied", reason)
-    
+
         eid, sha = env["event_id"], hashlib.sha256(body).hexdigest()
-    
+
         # 7. dedupe: UNA decision sobre la tupla event_id + casa + sha256(body)
         #    (antes que la caducidad: un duplicado caducado es 200, no 422)
         with LOCK:
@@ -279,13 +279,13 @@ data:
             bump("conflict", "event_id_conflict")
             quarantine(eid, house, "event_id_conflict", f"stored={row[0][:12]} got={sha[:12]}", sha)
             return reject(409, "event_id_conflict")
-    
+
         # 8. caducidad de evento NUEVO: 422, no se ejecuta ni se ledgeriza como evento
         if expired:
             bump("expired", "expired")
             quarantine(eid, house, "expired", "evento nuevo caducado", sha)
             return reject(422, "expired")
-    
+
         # 9. persistencia durable (dedupe + bytes + trabajo pendiente, en una transaccion)
         try:
             with LOCK:
@@ -304,13 +304,13 @@ data:
         except Exception:
             DB.execute("ROLLBACK")
             return 500, {"error": "storage_unavailable"}
-    
+
         bump("accepted", env["type"])
         return 202, {"status": "accepted", "event_id": eid}
-    
+
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-    
+
         def _send(self, code, obj):
             payload = json.dumps(obj).encode()
             self.send_response(code)
@@ -321,7 +321,7 @@ data:
                 self.wfile.write(payload)
             except BrokenPipeError:
                 pass
-    
+
         def do_POST(self):
             try:
                 declared = int(self.headers.get("Content-Length") or 0)
@@ -341,7 +341,7 @@ data:
                 chunks.append(b)
             code, obj = handle_post({k.lower(): v for k, v in self.headers.items()}, b"".join(chunks))
             self._send(code, obj)
-    
+
         def do_GET(self):
             if self.path == "/crosslink/healthz":
                 with LOCK:
@@ -351,11 +351,11 @@ data:
                 return self._send(200, {"ok": True, "house": MY_HOUSE, "events": n,
                                         "pending": pend, "quarantined": q, "metrics": METRICS})
             return self._send(404, {"error": "not_found"})
-    
+
         def log_message(self, fmt, *a):
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % a))
-    
-    
+
+
     def main():
         global DB, GRANTS
         port = int(os.environ.get("PORT", "8080"))
@@ -364,8 +364,8 @@ data:
         print(json.dumps({"event": "crosslink-ingress.start", "house": MY_HOUSE,
                           "port": port, "grants": len(GRANTS)}), flush=True)
         ThreadingHTTPServer(("0.0.0.0", port), H).serve_forever()
-    
-    
+
+
     if __name__ == "__main__":
         main()
 ---
