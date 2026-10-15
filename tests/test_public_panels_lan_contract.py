@@ -91,24 +91,27 @@ def test_no_route_serves_or_points_at_openchamber():
 
 SSO_CHAIN = {"name": "sso-chain", "namespace": "keycloak"}
 PASEO_HOST = "Host(`paseo.e-dani.com`)"
+PASEOCB_HOST = "Host(`paseocb.e-dani.com`)"
 
 
-def assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, service):
+def assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, service, host=PASEO_HOST):
     # INFRA-825: Paseo ejecuta agentes con shell en el x86. Solo LAN/tailnet entra directo; todo lo
     # demas (y la regla comodin del host, que cubre tambien el WebSocket /ws) pasa por sso-chain.
     rules = route["spec"]["routes"]
     for rule in rules:
-        assert PASEO_HOST in rule["match"]
+        assert host in rule["match"]
         assert rule["services"] == [service]
         if SSO_CHAIN not in rule.get("middlewares", []):
             assert all(f"ClientIP(`{cidr}`)" in rule["match"] for cidr in TRUSTED), rule["match"]
             assert "middlewares" not in rule
-    [catchall] = [rule for rule in rules if rule["match"] == PASEO_HOST]
+    [catchall] = [rule for rule in rules if rule["match"] == host]
     assert catchall["middlewares"] == [SSO_CHAIN]
 
 
 def assert_x86_externalname(path, name):
-    [service] = [item for item in documents(path) if item.get("kind") == "Service"]
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == name
+    ]
     assert service["metadata"]["name"] == name
     assert service["spec"]["type"] == "ExternalName"
     assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
@@ -141,6 +144,34 @@ def test_paseo_lan_route_points_at_the_x86_externalname_on_6767():
     assert_x86_externalname(path, "paseo-lan-x86")
 
 
+def test_paseocb_public_route_requires_sso_chain_outside_trusted_networks():
+    path = "networking/traefik-edge/paseo-public.yaml"
+    route = ingress(path, "edge-paseocb-public")
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/hostname": "paseocb.e-dani.com",
+        "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+        "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+    }
+    assert route["spec"]["ingressClassName"] == "traefik-edge"
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+        route, {"name": "paseo-edge-maccb", "namespace": "traefik-edge", "port": 6767}, PASEOCB_HOST
+    )
+
+
+def test_paseocb_lan_route_points_at_the_mac_cb_externalname_on_6767():
+    path = "networking/traefik-lan/paseo-lan.yaml"
+    route = ingress(path, "lan-paseocb")
+    assert "ingressClassName" not in route["spec"]
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-maccb", "port": 6767}, PASEOCB_HOST)
+    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == "paseo-lan-maccb"
+    ]
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "mac-cb.taile0ad27.ts.net"
+    assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
+
+
 def test_coredns_pins_the_x86_tailnet_name():
     config = next(
         item for item in documents("networking/dns/coredns-custom.yaml")
@@ -150,6 +181,7 @@ def test_coredns_pins_the_x86_tailnet_name():
     tailnet_zone = config["data"]["x86-taile0ad27.server"]
     assert "taile0ad27.ts.net:53 {" in tailnet_zone
     assert "100.83.56.98 x86.taile0ad27.ts.net" in tailnet_zone
+    assert "100.125.62.10 mac-cb.taile0ad27.ts.net" in tailnet_zone
     assert "hosts {" in tailnet_zone
     assert "fallthrough" in tailnet_zone
     assert "forward . /etc/resolv.conf" in tailnet_zone
