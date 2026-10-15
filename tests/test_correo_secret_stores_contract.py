@@ -72,7 +72,7 @@ class _ContratoDelStore:
         # un ClusterSecretStore sin `conditions` lo puede nombrar un ExternalSecret de cualquier ns: Synapse
         # leería el HMAC de Hermes. Con `conditions` el otro ns recibe «not allowed» de ESO.
         store = self._uno("ClusterSecretStore")
-        self.assertEqual(store["spec"]["conditions"], [{"namespaces": [self.NS]}])
+        self.assertEqual(store["spec"].get("conditions"), [{"namespaces": [self.NS]}])
 
     def test_role_solo_get_por_resourcenames_sobre_los_secretos_de_su_consumidor(self):
         role = self._uno("Role")
@@ -82,6 +82,7 @@ class _ContratoDelStore:
         (regla,) = secretos
         self.assertEqual(regla["apiGroups"], [""])
         self.assertEqual(regla["verbs"], ["get"])                                   # ni list, ni watch, ni create
+        self.assertIn("resourceNames", regla, "sin resourceNames la regla alcanza TODOS los Secrets del ns")
         self.assertEqual(sorted(regla["resourceNames"]), sorted(self.SECRETOS))    # solo los suyos
         self.assertFalse([n for n in regla["resourceNames"] if "gmail" in n or "apns" in n])
         demas = [r for r in role["rules"] if r.get("resources") != ["secrets"]]
