@@ -38,6 +38,14 @@ catalog names a principal (and two roles) the realm does not have yet, and the
 `keycloak-role-drift` runs that fall in that window report it. It clears on the
 first run after the hooks, with no action.
 
+SC-2522 adopts the 33rd, `dom.greco@alphalinkcrossfit.com`: a human user the
+realm gained on 2026-10-16 at 12:36 UTC through the admin API (self-registration
+is off), with no attributes, no realm roles beyond `default-roles-edani` and no
+reference in any repo of the platform. No session of the company claims it, so
+it enters as `origen-desconocido` under Dani (operador), the way
+`daniel.ibanez@cloudblue.com` did. If it turns out to be a stray fixture, its
+retirement goes through the CTO as always.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -82,6 +90,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `correo@e-dani.com` | humano | Dani (operador) | activo | Cuenta de correo de la org Claude Team E-dani («E-dani Correo»); su login a claude.ai pasa por el SSO de este realm. Sin roles propios. |
 | `daniel.ibanez@alphalinkcrossfit.com` | humano | Dani (operador) | activo | Cuenta Google de Dani (Alphalink). SSO del realm y usuario de las sesiones de Claude nacidas del chat (OWU-27). |
 | `daniel.ibanez@cloudblue.com` | humano | Dani (operador) (origen-desconocido) | activo | Cuenta Google de trabajo de Dani (CloudBlue); SSO del realm, sin roles propios. |
+| `dom.greco@alphalinkcrossfit.com` | humano | Dani (operador) (origen-desconocido) | activo | Usuario de origen desconocido (alta por API de admin el 16-10, SC-2522); sin atributos ni roles propios. |
 | `info@e-dani.com` | humano | Dani (operador) | activo | Buzón del negocio (Skirmshop Spain); SSO del realm, grupos edani-operators y skirmbooks-users. |
 | `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace. |
 | `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office y el write global agentgateway-write concedido por OWU-80. |
@@ -117,7 +126,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 ```json
 {
   "realm": "edani",
-  "measured": "2026-10-06",
+  "measured": "2026-10-16",
   "principals": [
     {
       "username": "correo@e-dani.com",
@@ -151,6 +160,21 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "owner": "Dani (operador)",
       "source": "ninguna: solo el propio realm (IdP google, nombre Daniel Ibanez Fernandez)",
       "purpose": "Cuenta Google de trabajo de Dani (CloudBlue); SSO del realm, sin roles propios.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo",
+      "flags": [
+        "origen-desconocido"
+      ]
+    },
+    {
+      "username": "dom.greco@alphalinkcrossfit.com",
+      "type": "humano",
+      "client": null,
+      "owner": "Dani (operador)",
+      "source": "ninguna: alta en el realm el 2026-10-16 12:36 UTC por la API de admin (auto-registro apagado), sin atributos y sin referencia en ningún repo; adoptada por SC-2522",
+      "purpose": "Usuario de origen desconocido; sin roles propios más allá del compuesto del realm.",
       "realm_roles": [
         "default-roles-edani"
       ],
