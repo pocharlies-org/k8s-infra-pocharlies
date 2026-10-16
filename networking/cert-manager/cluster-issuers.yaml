@@ -18,6 +18,19 @@ spec:
         selector:
           dnsZones:
             - e-dani.com
+      # SC-2495: host del cliente con la zona en GoDaddy (sin API nuestra). La
+      # validación se delega con un CNAME `_acme-challenge.horarios` ->
+      # `_acme-challenge.horarios.alphalinkcrossfit.com.e-dani.com`, así que el
+      # TXT se escribe en la zona e-dani.com de Cloudflare, donde el token ya
+      # puede. El selector va por la zona del nombre retado.
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones:
+            - alphalinkcrossfit.com
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -46,3 +59,12 @@ spec:
         selector:
           dnsZones:
             - skirmshop.es
+      # SC-2495: igual que en staging, por el CNAME de delegación en GoDaddy.
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones:
+            - alphalinkcrossfit.com

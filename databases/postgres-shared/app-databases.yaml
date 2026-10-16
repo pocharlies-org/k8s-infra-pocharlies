@@ -383,3 +383,21 @@ spec:
   ensure: present
   cluster:
     name: postgres-shared
+---
+# SC-2495: base del planificador de AlphaLink (horarios-alphalink). El esquema de
+# tablas NO lo declara este CRD (CNPG solo crea la base): lo crea la propia app al
+# arrancar con `create table if not exists`, como dgxbench.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: horarios
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: horarios
+  owner: horarios
+  ensure: present
+  cluster:
+    name: postgres-shared
