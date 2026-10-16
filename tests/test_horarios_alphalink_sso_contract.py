@@ -170,5 +170,37 @@ class DatabaseContract(unittest.TestCase):
                          ["username", "password"])
 
 
+class ReconcilerCompartido(unittest.TestCase):
+    """El cuerpo del reconciler es UN fichero (sso-app-common.sh) que fuentean los
+    dos guiones de app: duplicados no deja traer la copia, y el riesgo —pisar los
+    redirect_uris de la cadena— es el mismo para las dos. Lo que hace seguro
+    desplegarlo: que el ConfigMap de cada Job monte el común y que los literales del
+    guion sigan siendo los que declara el Job (si difieren, el Job muere con
+    «is immutable» y Dom no entra)."""
+
+    SCRIPTS = ROOT / "platform" / "keycloak-next" / "scripts"
+
+    def test_el_configmap_de_cada_job_lleva_el_comun(self):
+        kust = yaml.safe_load(PLATFORM_KUSTOMIZATION.read_text(encoding="utf-8"))
+        for nombre in ("keycloak-skirmbooks-sso", "keycloak-alphalink-sso"):
+            gen = next(g for g in kust["configMapGenerator"] if g["name"] == nombre)
+            self.assertIn("sso-app-common.sh", [f.split("=")[0] for f in gen["files"]],
+                          f"{nombre} montaría un guion que fuentea un fichero que no está")
+
+    def test_cada_guion_es_fino_y_declara_lo_de_su_job(self):
+        for app in ("skirmbooks", "alphalink"):
+            guion = (self.SCRIPTS / f"{app}-sso.sh").read_text(encoding="utf-8")
+            self.assertIn('. "${0%/*}/sso-app-common.sh"', guion,
+                          f"{app}-sso.sh no fuentea el común: volvería a ser una copia")
+            env = {e["name"]: str(e["value"]) for e in
+                   next(by_kind(ROOT / "platform" / "keycloak-next" / f"{app}-sso.yaml",
+                                "Job"))["spec"]["template"]["spec"]["containers"][0]["env"]}
+            for variable, clave in (("EXPECT_REDIRECT_URI", "REDIRECT_URI"),
+                                    ("EXPECT_USER_GROUP", "USER_GROUP"),
+                                    ("EXPECT_ADMIN_GROUP", "ADMIN_GROUP")):
+                self.assertIn(f"{variable}={env[clave]}", guion,
+                              f"{app}-sso.sh y su Job no concuerdan en {clave}")
+
+
 if __name__ == "__main__":
     unittest.main()

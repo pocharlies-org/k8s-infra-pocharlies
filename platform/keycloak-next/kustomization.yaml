@@ -137,6 +137,7 @@ configMapGenerator:
   - name: keycloak-skirmbooks-sso
     files:
       - skirmbooks-sso.sh=scripts/skirmbooks-sso.sh
+      - sso-app-common.sh=scripts/sso-app-common.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
@@ -144,6 +145,7 @@ configMapGenerator:
   - name: keycloak-alphalink-sso
     files:
       - alphalink-sso.sh=scripts/alphalink-sso.sh
+      - sso-app-common.sh=scripts/sso-app-common.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
     options:
       labels:
