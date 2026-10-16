@@ -110,8 +110,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
 | `service-account-hermes-enviar` | sa | DevOps | activo | Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail (agentgateway-write:workspace-envio) por /workspace, más agentgateway-read:workspace para llegar a la ruta; nunca agentgateway-write ni otro dominio (INFRA-676). |
-| `service-account-hermes-secretaria` | sa | DevOps | activo | Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
-| `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria` | sa | DevOps | activo | Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-dani` | sa | DevOps | activo | Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-leila` | sa | DevOps | activo | Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar. |
@@ -465,12 +465,13 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "hermes-secretaria",
       "owner": "DevOps",
       "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
-      "purpose": "Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
+      "purpose": "Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
+        "agentgateway-write:compania",
         "agentgateway-write:social",
         "agentgateway-write:workspace",
         "default-roles-edani"
@@ -483,12 +484,13 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "hermes-secretaria-casa",
       "owner": "DevOps",
       "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-casa de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-casa` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
-      "purpose": "Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
+      "purpose": "Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
+        "agentgateway-write:compania",
         "agentgateway-write:social",
         "agentgateway-write:workspace",
         "default-roles-edani"
