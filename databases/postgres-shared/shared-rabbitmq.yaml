@@ -102,6 +102,16 @@ data:
     # delivery-limit (quorum, phase-2) + the backlog alert below are.
     vm_memory_high_watermark.absolute = 1800MB
     disk_free_limit.absolute = 500MB
+    # INFRA-879 (2026-10-16): the /synapse critical queues (the sf-quorum-exclude
+    # list) are classic and lose service for the whole duration of a node reboot
+    # (post-upgrade-reboot windows, 04:00/05:00/06:00 UTC). Policy
+    # sf-critical-mirror (ha-mode all, promote-on-shutdown always) mirrors them so
+    # a mirror is promoted when their node goes down; this build of 3.13.7 does
+    # not permit classic mirroring by default, so it must be set here. Decision
+    # and procedure: docs/runbook-rabbitmq-synapse-ha.md. Interim until the
+    # Synapse code re-declares these queues as quorum (x-queue-type is immutable,
+    # so IT cannot convert them in place).
+    deprecated_features.permit.classic_queue_mirroring = true
 ---
 # enabled_plugins + cluster formation config for the 3-replica HA cluster.
 apiVersion: v1
