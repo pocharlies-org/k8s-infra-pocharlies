@@ -1,15 +1,54 @@
-# INFRA-882: se quita el VMServiceScrape `longhorn` (job longhorn-backend). El scrape
-# apuntaba BIEN (longhorn-manager expone /metrics en el puerto `manager`=9500; medido:
-# podIP:9500/metrics responde 200 con series longhorn_*). Lo que lo rompio es el
-# NetworkPolicy `longhorn-manager` del propio chart de Longhorn (app ArgoCD `longhorn`,
-# creado ~15-10), que solo deja ingress a los pods longhorn-manager/ui/csi-plugin/
-# recurring/driver-deployer. vmagent (ns monitoring) no esta admitido -> connection
-# refused en las 4 instancias -> TargetDown permanente (0 series longhorn_* activas).
-# Arreglarlo de verdad exige admitir al scraper en ESE NetworkPolicy, que vive en otro
-# repo (los values del chart en k8s-gitops-pocharlies), no aqui: es una Request aparte.
-# Mientras no exista esa excepcion, el scrape no puede recolectar nada y solo genera
-# ruido, asi que se retira. La VMRule de abajo (longhorn-scheduling) queda SIN datos
-# hasta que se restaure el scrape con la excepcion de red.
+# SC-2508: se RESTAURA el VMServiceScrape `longhorn` (job longhorn-backend) junto con la
+# excepcion de red que pedia INFRA-882. La causa estaba medida: el scrape apuntaba bien
+# (longhorn-manager expone /metrics en el puerto `manager`=9500; podIP:9500/metrics
+# responde 200), y lo que lo rompio es el NetworkPolicy `longhorn-manager` del chart de
+# Longhorn (app ArgoCD `longhorn`), que solo deja ingress a los pods propios. vmagent
+# (ns monitoring) no estaba admitido -> connection refused en las 4 instancias ->
+# TooManyLogs/TargetDown -> incidente Keep «Monitorización degradada» (MON-15076).
+# La excepcion NO toca el NetworkPolicy del chart (es del chart, selfHeal lo revertiria):
+# los NetworkPolicy son aditivos — la politica de abajo, en ESTE repo, abre el 9500 a
+# vmagent sin tocar lo que el chart declara. No borrar la de arriba del chart ni la de
+# aqui: la del chart sigue cerrando todo lo demas.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-manager-allow-monitoring-scrape
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes:
+    - Ingress
+  ingress:
+    # Solo el puerto de metricas, solo desde el namespace de monitorizacion (vmagent).
+    # No abrir 9500 a todo el cluster: el chart lo cierra a proposito.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9500
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: longhorn
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  endpoints:
+    - port: manager
+      path: /metrics
+      interval: 30s
+---
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
