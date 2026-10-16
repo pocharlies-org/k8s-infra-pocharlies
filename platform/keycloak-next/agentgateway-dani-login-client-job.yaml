@@ -1,0 +1,214 @@
+# OWU-75 (OWU-28 P1; security ruling OWU-100): the confidential ROPC test
+# client `dani-login-test` (realm edani), declared in GitOps so qa can exchange
+# Daniel's password for a short-lived token and measure C1, C2 positive and C4
+# live. Two ExternalSecrets, never one (architect ruling, hallazgo 2 — the
+# lesson of #231): ES A carries the client secret (1Password item
+# `keycloak-next-dani-login-test`, field `client_secret`, seeded by security
+# BEFORE the merge); ES B carries Daniel's password (item `keycloak-next-dani-login`,
+# field `password`), seeded ONLY with his own gesture. While that item is
+# absent, ES B stays in error: expected state, not an incident — and the
+# reconciler Job below references ONLY the Secret of ES A, so the PostSync of
+# the whole k8s-infra app never depends on the pending consent.
+#
+# The reconciler (scripts/agentgateway-dani-login-client.sh) owns exactly one
+# IdP fact: the client itself — directAccessGrantsEnabled=true, every other
+# flow off, no redirect URIs, TTL 900 s with refresh tokens off (OWU-100
+# condition 3), the house audience mapper `aud-mcp` to mcp.lan.e-dani.com and a
+# realm scope mapping that EMITS (never concedes) exactly `agentgateway-write`
+# (#190 pattern). State rollback deletes only the client
+# (manual/agentgateway-dani-login-client-rollback-job.yaml, excluded from Argo;
+# RUNBOOK section 19).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agentgateway-dani-login-client-secret
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-dani-login-client
+spec:
+  refreshInterval: 24h
+  # Kyverno policy externalsecret-onepassword-onchange lo exige: OnChange no
+  # vuelve a leer el proveedor al reiniciar ESO (cuota de 1000 lecturas/día).
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: agentgateway-dani-login-client-secret
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: DANI_LOGIN_CLIENT_SECRET
+      remoteRef:
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-dani-login-test/client_secret
+---
+# ES B — Daniel's password, consumed by qa's scripted ROPC exchange (P2), NOT
+# by this Job. Seeded with Daniel's gesture (consent registered in OWU-100);
+# until then this ExternalSecret reports error and the Secret is absent. That
+# is the expected state: nothing in the PostSync path references it, so the
+# k8s-infra sync stays green regardless (the lesson of #231).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agentgateway-dani-login-password
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-dani-login-client
+spec:
+  refreshInterval: 24h
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: agentgateway-dani-login-password
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: DANI_PASSWORD
+      remoteRef:
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-dani-login/password
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-dani-login-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-dani-login-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Wave 25: after agentgateway-write-role-job.yaml (wave 20), which owns the
+    # role this client maps into its scope, and same-wave as the Daniel grant
+    # and the write fixture user; the three own disjoint facts. Before the
+    # roles→token smoke (wave 26).
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  backoffLimit: 1
+  # A handful of kcadm calls (resolve/create-or-update client, mapper, one
+  # scope write, post-reads). Same production-safe margin as the sibling
+  # single-fact reconcilers.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-dani-login-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reconcile-dani-login-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-dani-login-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - name: MODE
+              value: ensure
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: edani
+            - name: CLIENT_ID
+              value: dani-login-test
+            - name: AGENTGATEWAY_AUDIENCE
+              value: mcp.lan.e-dani.com
+            - name: MAPPER_NAME
+              value: aud-mcp
+            - name: ROLE_NAME
+              value: agentgateway-write
+            - name: ACCESS_TOKEN_LIFESPAN
+              value: "900"
+            - name: USE_REFRESH_TOKENS
+              value: "false"
+            # El secreto del cliente llega por el Secret del ExternalSecret A
+            # de arriba (valueFrom.secretKeyRef); el hook lo pasa a kcadm solo
+            # como flag -s de la llamada create/update, nunca por stdout. El
+            # Secret del ExternalSecret B (contraseña de Daniel) NO se
+            # referencia aquí: su ausencia no puede tumbar el PostSync.
+            - name: DANI_LOGIN_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: agentgateway-dani-login-client-secret
+                  key: DANI_LOGIN_CLIENT_SECRET
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-dani-login-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-agentgateway-dani-login-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-dani-login-client
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agentgateway-dani-login-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

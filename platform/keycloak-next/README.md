@@ -343,6 +343,40 @@ role and its holders belong to `agentgateway-write-role.sh` and
 `agentgateway-write-grant-daniel.sh`. State rollback deletes the client
 (`manual/agentgateway-chat-mcp-client-rollback-job.yaml`, excluded from Argo).
 
+## ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
+
+`agentgateway-dani-login-client-job.yaml` reconciles the confidential client
+`dani-login-test` (realm `edani`), the only authorized way (security ruling
+OWU-100) for QA to exchange Daniel's password for a short-lived token and
+measure C1, C2 positive and C4 of OWU-28 live. It is ROPC-only:
+`directAccessGrantsEnabled=true` with standard/implicit flows, public-client
+mode and service accounts all off, `fullScopeAllowed=false` and no redirect
+URIs. OWU-100 condition 3 (session cap) is pinned as
+`attributes."access.token.lifespan"=900` and
+`attributes."use.refresh.tokens"="false"` — Keycloak emits refresh tokens by
+default, so without the second pin a test session would silently outlive its
+15-minute cap. The house audience mapper `aud-mcp` puts
+`mcp.lan.e-dani.com` in the access token (the gateway's `/chat-atlassian`
+audience), and the realm scope mapping EMITS exactly `agentgateway-write`
+(#190 pattern): the mapping concedes nothing; the role and its holders belong
+to `agentgateway-write-role.sh` and `agentgateway-write-grant-daniel.sh`. The
+client gets no role of its own and no route allowlist (OWU-100 condition 4),
+so it is absent from `PRINCIPALS.md` (no service account) and from
+`ROLES.yaml`.
+
+Credentials are split across two ExternalSecrets (ruling hallazgo 2, the
+lesson of #231): ES A (`agentgateway-dani-login-client-secret`, 1Password
+item `keycloak-next-dani-login-test`, field `client_secret`, seeded by
+security BEFORE the merge) feeds the reconciler Job, which re-applies the
+secret on every sync; ES B (`agentgateway-dani-login-password`, item
+`keycloak-next-dani-login`, field `password`) carries Daniel's password,
+seeded only with his own gesture, and is consumed by QA's scripted ROPC
+exchange — never by the Job. While ES B's item is absent its ExternalSecret
+stays in error: expected state, not an incident (RUNBOOK section 19). State
+rollback deletes only the client
+(`manual/agentgateway-dani-login-client-rollback-job.yaml`, excluded from
+Argo).
+
 ## AgentGateway MCP access token TTL (`agentgateway-mcp`)
 
 `agentgateway-mcp-token-ttl-job.yaml` (INFRA-187) owns the single client
