@@ -205,6 +205,11 @@ jobs:
         run: |
           bash -n scripts/valkey/activate-shared-valkey-acl.sh
           python3 -m unittest tests/test_shared_valkey_acl_contract.py
+      # INFRA-859: the startup scripts from the shared-valkey ConfigMap run
+      # against fake valkey binaries (behavioural, proves no circular
+      # replication and a stable Sentinel myid).
+      - name: Validate shared Valkey startup scripts (INFRA-859)
+        run: python3 -m unittest tests/test_shared_valkey_startup_contract.py
 
   longhorn-strict-local-contract:
     runs-on: arc-k8s
