@@ -23,35 +23,73 @@ data:
     HEADLESS="shared-valkey-headless.${POD_NAMESPACE}.svc.cluster.local"
     SENTINEL_SVC="shared-valkey-sentinel.${POD_NAMESPACE}.svc.cluster.local"
     MYFQDN="${POD_NAME}.${HEADLESS}"
+    P0FQDN="shared-valkey-0.${HEADLESS}"
     CLI=valkey-cli
+
+    ask_sentinel() {
+      $CLI -h "$SENTINEL_SVC" -p 26379 -a "$SENTINEL_PASSWORD" --no-auth-warning \
+        sentinel get-master-addr-by-name shared-cache-master 2>/dev/null | head -1 || true
+    }
 
     MASTER_IP=""
     for i in $(seq 1 10); do
-      MASTER_IP=$($CLI -h "$SENTINEL_SVC" -p 26379 -a "$SENTINEL_PASSWORD" --no-auth-warning sentinel get-master-addr-by-name shared-cache-master 2>/dev/null | head -1 || true)
+      MASTER_IP=$(ask_sentinel)
       [ -n "$MASTER_IP" ] && break
       sleep 2
     done
 
     COMMON="--port 6379 --dir /data --appendonly yes --appendfsync everysec --save '' --maxmemory 2gb --maxmemory-policy noeviction --aclfile /acl/users.acl --replica-announce-ip ${MYFQDN} --masteruser replication --masterauth ${REPLICATION_PASSWORD}"
-    if [ -n "$MASTER_IP" ] && [ "$MASTER_IP" != "$MYFQDN" ]; then
-      exec valkey-server $COMMON --replicaof "$MASTER_IP" 6379
-    elif [ "$POD_NAME" = "shared-valkey-0" ]; then
+
+    # INFRA-822: never reach --replicaof shared-valkey-0 without proof that 0 is
+    # the master. When Sentinel answers "the master is me" (its view survives a
+    # pod restart), this pod IS the master: starting it as a replica of pod 0
+    # produced circular replication on 04-07 and 10-10 (0 and 2 replicas of each
+    # other, shared-valkey-master left without endpoints, Sentinel unable to
+    # fail over).
+    if [ "$MASTER_IP" = "$MYFQDN" ]; then
       exec valkey-server $COMMON
-    else
-      exec valkey-server $COMMON --replicaof "shared-valkey-0.${HEADLESS}" 6379
     fi
+    if [ -n "$MASTER_IP" ]; then
+      exec valkey-server $COMMON --replicaof "$MASTER_IP" 6379
+    fi
+    if [ "$POD_NAME" = "shared-valkey-0" ]; then
+      exec valkey-server $COMMON
+    fi
+    # No known master and I am not pod 0: replicate to pod 0 only once its own
+    # ROLE says master; otherwise keep waiting for Sentinel to learn the
+    # topology instead of guessing.
+    while true; do
+      R0=$($CLI -h "$P0FQDN" -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning role 2>/dev/null | head -1 || true)
+      if [ "$R0" = "master" ]; then
+        exec valkey-server $COMMON --replicaof "$P0FQDN" 6379
+      fi
+      MASTER_IP=$(ask_sentinel)
+      if [ "$MASTER_IP" = "$MYFQDN" ]; then
+        exec valkey-server $COMMON
+      fi
+      if [ -n "$MASTER_IP" ]; then
+        exec valkey-server $COMMON --replicaof "$MASTER_IP" 6379
+      fi
+      sleep 2
+    done
   start-sentinel.sh: |
     #!/bin/sh
     set -eu
 
     HEADLESS="shared-valkey-headless.${POD_NAMESPACE}.svc.cluster.local"
     CONF=/data/sentinel.conf
+    # INFRA-822: stable per-pod myid (sha1 of the pod name). Rewriting the conf
+    # without one minted a new myid on every restart, so other Sentinels kept
+    # the old entries as ghosts (3 known sentinels in 2 pods on 10-10) and the
+    # failover election never reached majority (-failover-abort-not-elected).
+    MYID=$(printf '%s' "$POD_NAME" | sha1sum | cut -c1-40)
     cat > "$CONF" <<EOF
     port 26379
     dir /data
     requirepass ${SENTINEL_PASSWORD}
     sentinel resolve-hostnames yes
     sentinel announce-hostnames yes
+    sentinel myid ${MYID}
     sentinel monitor shared-cache-master shared-valkey-0.${HEADLESS} 6379 2
     sentinel auth-user shared-cache-master sentinel
     sentinel auth-pass shared-cache-master ${SENTINEL_VALKEY_PASSWORD}
@@ -311,6 +349,15 @@ spec:
                     slave)  kubectl -n databases label pod "$p" valkey-role=replica --overwrite >/dev/null 2>&1 ;;
                     *) : ;;
                   esac
+                  # INFRA-822: log every role change (the labeler is the only
+                  # witness of who was master when; the 04-07 and 10-10 loops
+                  # were invisible in its logs).
+                  var="PREV_$(printf '%s' "$p" | tr - _)"
+                  prev=$(eval "echo \${$var:-}")
+                  if [ "$role" != "$prev" ]; then
+                    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $p role: ${prev:-unknown} -> ${role:-none}"
+                    eval "$var=\$role"
+                  fi
                 done
                 sleep 20
               done
