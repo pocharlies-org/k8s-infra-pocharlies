@@ -1,0 +1,81 @@
+# Manual state rollback. This file is intentionally excluded from kustomization.
+# It deletes ONLY the confidential ROPC test client `dani-login-test`
+# (OWU-100 condition 4): the realm role `agentgateway-write`, its holders, every
+# other client and both ExternalSecrets are left untouched. The Job carries no
+# client secret (rollback needs none), so it runs even while the 1Password item
+# of ExternalSecret A is being rotated. To restore the client afterwards, git
+# revert the commit owning this reconciler and let the next PostSync re-apply
+# it. See RUNBOOK section 19.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-dani-login-client-rollback
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-dani-login-client
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-dani-login-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: rollback-dani-login-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-dani-login-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - name: MODE
+              value: rollback
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: edani
+            - name: CLIENT_ID
+              value: dani-login-test
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-dani-login-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
