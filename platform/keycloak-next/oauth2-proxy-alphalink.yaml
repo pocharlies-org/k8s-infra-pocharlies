@@ -1,0 +1,196 @@
+# SC-2495 — oauth2-proxy PROPIO para el planificador de AlphaLink.
+#
+# Mismo patrón que `oauth2-proxy-skirmbooks`: cookie propia pegada al host
+# (nada de `_edani_sso`, que mezclaría la sesión de Dom con la del dashboard de
+# casa) y grupos propios. La lista de permisos aquí es corta y nominal: dos
+# correos del dominio del cliente. `whitelist_domains` deja fuera cualquier
+# cuenta de e-dani.com que no esté en el grupo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-alphalink-config
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+data:
+  oauth2_proxy.cfg: |
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
+    skip_oidc_discovery = true
+    # `prompt=login`: sin él, la sesión de Keycloak que Dom ya tenga en
+    # auth-next reintroduce en silencio otra cuenta. Aquí se elige la cuenta.
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth?prompt=login"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/certs"
+    redirect_url = "https://horarios.alphalinkcrossfit.com/oauth2/callback"
+    scope = "openid email profile"
+
+    reverse_proxy = true
+    http_address = "0.0.0.0:4180"
+    upstreams = [ "static://202" ]
+
+    # Sin `cookie_domains`: la cookie nace y muere en el host del planificador.
+    cookie_name = "_alphalink_horarios_sso"
+    cookie_secure = true
+    cookie_samesite = "lax"
+    cookie_expire = "12h"
+    cookie_refresh = "1h"
+
+    # Solo cuentas del cliente: cualquier e-dani.com queda fuera aunque tenga
+    # grupo en el realm (es el dominio del gimnasio, no el de casa).
+    whitelist_domains = [ ".alphalinkcrossfit.com" ]
+    email_domains = [ "*" ]
+    allowed_groups = [ "/alphalink-horarios-users", "/alphalink-horarios-admins" ]
+
+    pass_user_headers = true
+    set_xauthrequest = true
+    skip_provider_button = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-alphalink
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oauth2-proxy-alphalink
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-alphalink
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      # Mismo criterio que oauth2-proxy-skirmbooks: stateless y en `edge`, no en
+      # el x86 de desarrollo, que se reinicia sin aviso.
+      tolerations:
+        - key: role
+          operator: Equal
+          value: edge
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+              - matchExpressions:
+                  - key: node-pool
+                    operator: In
+                    values: [ks5-nvme]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [edge]
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+          args: ["--config=/etc/oauth2-proxy/oauth2_proxy.cfg"]
+          envFrom:
+            - secretRef:
+                # Mismo client `oauth2-proxy` del realm edani: lo que cambia por
+                # app son la cookie y los grupos. Su redirect_uri lo declara el
+                # Job keycloak-alphalink-sso.
+                name: oauth2-proxy-secrets
+          ports:
+            - { name: http, containerPort: 4180 }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy/oauth2_proxy.cfg
+              subPath: oauth2_proxy.cfg
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: oauth2-proxy-alphalink-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-alphalink
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+spec:
+  selector:
+    app: oauth2-proxy-alphalink
+  ports:
+    - { name: http, port: 4180, targetPort: http }
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-alphalink-forward-auth
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-alphalink.keycloak.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    maxResponseBodySize: 1048576
+    authResponseHeaders:
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-alphalink-errors
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+spec:
+  errors:
+    # SOLO 401, como en skirmbooks: reescribir el 403 a sign_in mete en bucle a
+    # quien entre con una cuenta sin grupo.
+    status:
+      - "401"
+    service:
+      name: oauth2-proxy-alphalink
+      port: 4180
+    query: /oauth2/sign_in?rd={url}
+    statusRewrites:
+      "401": 302
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-alphalink-chain
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: oauth2-proxy-alphalink
+    app.kubernetes.io/component: forward-auth
+spec:
+  chain:
+    middlewares:
+      - name: sso-alphalink-errors
+      - name: sso-alphalink-forward-auth

@@ -96,6 +96,12 @@ spec:
 
   managed:
     roles:
+      - name: horarios
+        ensure: present
+        login: true
+        passwordSecret:
+          name: horarios-db-credentials
+        comment: "Planificador AlphaLink (repo: pocharlies-org/horarios-alphalink). SC-2495."
       - name: keycloak
         ensure: present
         login: true

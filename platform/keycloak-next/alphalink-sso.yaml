@@ -1,0 +1,109 @@
+# SC-2495 — reconciler Keycloak para el SSO propio de alphalink.
+# PostSync: los grupos y el redirect_uri tienen que existir ANTES de que nadie
+# intente entrar por la cadena nueva, y el Job entra con el bootstrap admin del
+# realm (mismo secreto que synapse-sre-client / openclaw-readonly-clients).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-alphalink-sso
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: alphalink-sso
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "21"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: alphalink-sso
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-alphalink-sso
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/alphalink-sso.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: oauth2-proxy }
+            - { name: REDIRECT_URI, value: https://horarios.alphalinkcrossfit.com/oauth2/callback }
+            - { name: USER_GROUP, value: /alphalink-horarios-users }
+            - { name: ADMIN_GROUP, value: /alphalink-horarios-admins }
+            # Dani entra con su cuenta del cliente: `whitelist_domains` del proxy solo
+            # admite @alphalinkcrossfit.com, así que me@e-dani.com no daría.
+            - { name: ADMIN_EMAILS, value: "daniel.ibanez@alphalinkcrossfit.com" }
+            # dom.greco ya existe en el realm (alta del 16-10, con grupo); el Job solo
+            # reconcilia membresías de quien ya está, no crea usuarios.
+            - { name: USER_EMAILS, value: "dom.greco@alphalinkcrossfit.com daniel.ibanez@alphalinkcrossfit.com" }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-alphalink-sso
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-alphalink-sso-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: alphalink-sso
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: alphalink-sso
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
