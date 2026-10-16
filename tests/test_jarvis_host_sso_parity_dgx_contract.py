@@ -7,14 +7,16 @@ el control set que dgx puso tras sso-chain (400) en SC-1192/DGX-809. Este contra
 evalúa las reglas de Traefik v3 de los dos hosts, elige la de más prioridad que casa (como Traefik) y
 exige que la cadena de middlewares ganadora sea idéntica en ambos para toda petición de la lista.
 """
-import ipaddress
 import pathlib
-import re
 import unittest
 
-import yaml
+from tests.traefik_rules import cadena as _cadena, gana as _gana, rutas as _rutas_compartidas
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _rutas(fichero, nombre):
+    return _rutas_compartidas(ROOT, fichero, nombre)
 
 JARVIS = ("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host", "jarvis.e-dani.com")
 DGX = ("networking/traefik-lan/dgx-public-host-lan.yaml", "lan-dgx-dashboard-public-host", "dgx.e-dani.com")
@@ -53,38 +55,6 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
 )]
 # INFRA-732: rutas internas — 404 en el borde (edge-static-server) en los dos hosts, nunca al backend.
 INTERNO = [("GET", "/api/interno/ping")]
-
-
-def _casa(rule, host, ip, method, path):
-    """Evalúa una regla de Traefik v3 con los matchers que usan estos ficheros (otro matcher = NameError)."""
-    env = {
-        "Host": lambda h: h == host,
-        "ClientIP": lambda cidr: ipaddress.ip_address(ip) in ipaddress.ip_network(cidr),
-        "Path": lambda p: path == p,
-        "PathPrefix": lambda p: path.startswith(p),
-        "PathRegexp": lambda rx: re.search(rx, path) is not None,
-        "Method": lambda m: method == m,
-    }
-    trozos = re.split(r"(`[^`]*`)", rule)
-    expr = "".join(repr(t[1:-1]) if t.startswith("`") else
-                   t.replace("&&", " and ").replace("||", " or ").replace("!", " not ") for t in trozos)
-    return eval(expr, {"__builtins__": {}}, env)  # noqa: S307 — solo reglas de este repo
-
-
-def _rutas(fichero, nombre):
-    for doc in yaml.safe_load_all((ROOT / fichero).read_text()):
-        if doc and doc.get("kind") == "IngressRoute" and doc["metadata"]["name"] == nombre:
-            return doc["spec"]["routes"]
-    raise AssertionError(f"{nombre} no está en {fichero}")
-
-
-def _gana(rutas, host, ip, method, path):
-    casan = [r for r in rutas if _casa(r["match"], host, ip, method, path)]
-    return max(casan, key=lambda r: r.get("priority", 0)) if casan else None
-
-
-def _cadena(ruta):
-    return [(m["name"], m.get("namespace", "")) for m in (ruta or {}).get("middlewares", [])]
 
 
 class ParidadJarvisConDgx(unittest.TestCase):

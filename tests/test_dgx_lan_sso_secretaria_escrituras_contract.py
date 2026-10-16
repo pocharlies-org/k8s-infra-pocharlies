@@ -12,14 +12,16 @@ prioridad que casa, como Traefik, y mira su cadena de middlewares. Así cubre el
 de /escalar y que las lecturas que la app usa sin sesión siguen cayendo en el bypass.
 Toda cadena acaba en dgx-edge-proof (DGX-729): la prueba de borde va en cada ruta al dashboard.
 """
-import ipaddress
 import pathlib
-import re
 import unittest
 
-import yaml
+from tests.traefik_rules import gana as _gana, rutas as _rutas_compartidas
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _rutas(fichero, nombre):
+    return _rutas_compartidas(ROOT, fichero, nombre)
 
 # (fichero, IngressRoute, hosts, namespace de dgx-strip-identity-headers)
 RUTAS = (
@@ -84,34 +86,6 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
-
-
-def _casa(rule, host, ip, method, path):
-    """Evalúa una regla de Traefik v3 con los matchers que usan estos ficheros (otro matcher = NameError)."""
-    env = {
-        "Host": lambda h: h == host,
-        "ClientIP": lambda cidr: ipaddress.ip_address(ip) in ipaddress.ip_network(cidr),
-        "Path": lambda p: path == p,
-        "PathPrefix": lambda p: path.startswith(p),
-        "PathRegexp": lambda rx: re.search(rx, path) is not None,
-        "Method": lambda m: method == m,
-    }
-    trozos = re.split(r"(`[^`]*`)", rule)
-    expr = "".join(repr(t[1:-1]) if t.startswith("`") else
-                   t.replace("&&", " and ").replace("||", " or ").replace("!", " not ") for t in trozos)
-    return eval(expr, {"__builtins__": {}}, env)  # noqa: S307 — solo reglas de este repo
-
-
-def _rutas(fichero, nombre):
-    for doc in yaml.safe_load_all((ROOT / fichero).read_text()):
-        if doc and doc.get("kind") == "IngressRoute" and doc["metadata"]["name"] == nombre:
-            return doc["spec"]["routes"]
-    raise AssertionError(f"{nombre} no está en {fichero}")
-
-
-def _gana(rutas, host, ip, method, path):
-    casan = [r for r in rutas if _casa(r["match"], host, ip, method, path)]
-    return max(casan, key=lambda r: r.get("priority", 0)) if casan else None
 
 
 class SecretariaYEscriturasTrasSSO(unittest.TestCase):
