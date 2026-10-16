@@ -50,16 +50,25 @@ class RouteContract(unittest.TestCase):
 
     def test_la_ruta_del_host_va_por_la_cadena_propia(self):
         regla = self.rules[f"Host(`{HOST}`)"]
-        self.assertEqual([(m["name"], m["namespace"]) for m in regla["middlewares"]],
-                         [("sso-alphalink-chain", "keycloak")])
+        self.assertIn(("sso-alphalink-chain", "keycloak"),
+                      [(m["name"], m["namespace"]) for m in regla["middlewares"]])
         svc = regla["services"][0]
         self.assertEqual((svc["name"], svc["namespace"], svc["port"]),
                          ("horarios-alphalink", "alphalink", 8080))
 
-    def test_el_callback_del_proxy_no_lleva_middleware(self):
+    def test_las_dos_rutas_vacian_las_cabeceras_de_identidad(self):
+        # security: la app se fía de X-Auth-Request-Email; si llega de la calle,
+        # es un forged. Se vacía SIEMPRE, y antes de la cadena (después borrase
+        # lo que inyecta el proxy y no entra nadie).
+        for match, cadena in ((f"Host(`{HOST}`)", True),
+                             (f"Host(`{HOST}`) && PathPrefix(`/oauth2`)", False)):
+            mw = [(m["name"], m["namespace"]) for m in self.rules[match]["middlewares"]]
+            self.assertEqual(mw[0], ("alphalink-strip-identity-headers", "traefik-edge"), match)
+            self.assertEqual(("sso-alphalink-chain", "keycloak") in mw, cadena, match)
+
+    def test_el_callback_del_proxy_no_va_por_forward_auth(self):
         # forward-auth sobre /oauth2/callback = bucle de login (precedente skirmbooks).
         regla = self.rules[f"Host(`{HOST}`) && PathPrefix(`/oauth2`)"]
-        self.assertEqual(regla.get("middlewares", []), [])
         self.assertEqual(regla["services"][0]["name"], "oauth2-proxy-alphalink")
 
     def test_la_exportacion_no_es_publica(self):
@@ -153,6 +162,7 @@ class DatabaseContract(unittest.TestCase):
         cluster = yaml.safe_load((ROOT / "databases/postgres-shared/cluster.yaml").read_text())
         roles = {r["name"]: r for r in cluster["spec"]["managed"]["roles"]}
         self.assertEqual(roles["horarios"]["passwordSecret"]["name"], "horarios-db-credentials")
+        self.assertEqual(roles["horarios"]["connectionLimit"], 5)
         secrets = list(by_kind(ROOT / "databases/postgres-shared/app-credentials.yaml",
                                "ExternalSecret"))
         ours_secret = next(s for s in secrets if s["metadata"]["name"] == "horarios-db-credentials")

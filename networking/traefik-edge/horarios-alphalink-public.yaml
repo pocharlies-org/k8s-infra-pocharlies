@@ -24,6 +24,29 @@ spec:
     - "horarios.alphalinkcrossfit.com"
   renewBefore: 720h
 ---
+---
+# security (16-10, condición de su veredicto sobre horarios-alphalink#2): la app
+# se fía de `X-Auth-Request-Email`, así que esa cabecera no puede llegar de la
+# calle. Se vacía ANTES de la cadena en todas las rutas del host (nunca después:
+# borraría lo que inyecta oauth2-proxy y rompería el login). Precedente:
+# `dgx-strip-identity-headers`, definido una vez por instancia de Traefik porque
+# traefik-edge y traefik-lan son instancias distintas.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: alphalink-strip-identity-headers
+  namespace: traefik-edge
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: ""
+      X-Auth-Request-Email: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Forwarded-User: ""
+      X-Forwarded-Email: ""
+      X-Forwarded-Groups: ""
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -38,6 +61,9 @@ spec:
   # /oauth2/callback = bucle (mismo caso que skirmbooks en legacy-public-routes).
   - kind: Rule
     match: Host(`horarios.alphalinkcrossfit.com`) && PathPrefix(`/oauth2`)
+    middlewares:
+    - name: alphalink-strip-identity-headers
+      namespace: traefik-edge
     services:
     - name: oauth2-proxy-alphalink
       namespace: keycloak
@@ -45,6 +71,8 @@ spec:
   - kind: Rule
     match: Host(`horarios.alphalinkcrossfit.com`)
     middlewares:
+    - name: alphalink-strip-identity-headers
+      namespace: traefik-edge
     - name: sso-alphalink-chain
       namespace: keycloak
     services:

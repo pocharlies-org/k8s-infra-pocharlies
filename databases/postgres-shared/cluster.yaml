@@ -99,6 +99,10 @@ spec:
       - name: horarios
         ensure: present
         login: true
+        # security (16-10): con el historial de saturación del clúster (367/400 el
+        # 28-07), el tope va en el servidor y no en el pool de la app. Es una app
+        # de un usuario con un worker: 5 da margen y corta un pool desbocado.
+        connectionLimit: 5
         passwordSecret:
           name: horarios-db-credentials
         comment: "Planificador AlphaLink (repo: pocharlies-org/horarios-alphalink). SC-2495."
