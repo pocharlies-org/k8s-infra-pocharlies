@@ -57,8 +57,13 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
-    hud, sso, catchall = route["spec"]["routes"]
-    assert (hud["priority"], sso["priority"], catchall["priority"]) == (400, 350, 300)
+    interno, hud, control, escrituras, catchall = route["spec"]["routes"]
+    assert (interno["priority"], hud["priority"], control["priority"],
+            escrituras["priority"], catchall["priority"]) == (500, 400, 410, 350, 300)
+    # DGX-829, espejo de la 500 de dgx (INFRA-732): /api/interno responde 404 en el borde, sin backend.
+    assert "PathPrefix(`/api/interno`)" in interno["match"]
+    assert "middlewares" not in interno
+    assert interno["services"] == [{"name": "edge-static-server", "namespace": "traefik-edge", "port": 8080}]
     assert "ingressClassName" not in route["spec"]
     strip = {"name": "dgx-strip-identity-headers", "namespace": "traefik-lan"}
     proof = {"name": "dgx-edge-proof", "namespace": "traefik-lan"}
@@ -67,9 +72,12 @@ def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identi
     # forjada por un pod que llame al Service sin pasar por Traefik.
     assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}, proof]
     assert catchall["middlewares"] == [strip, proof]
-    # salvo lo que DGX-809 pone tras sso-chain (detalle en test_dgx_lan_sso_secretaria_escrituras_contract.py)
-    assert sso["middlewares"] == [strip, {"name": "sso-chain", "namespace": "keycloak"}, proof]
-    assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, sso, catchall))
+    # el control set y las escrituras, tras sso-chain igual que en dgx (DGX-829; detalle en
+    # test_jarvis_host_sso_parity_dgx_contract.py y test_dgx_lan_sso_secretaria_escrituras_contract.py)
+    sso_chain = {"name": "sso-chain", "namespace": "keycloak"}
+    assert control["middlewares"] == escrituras["middlewares"] == [strip, sso_chain, proof]
+    assert all(all(cidr in rule["match"] for cidr in TRUSTED)
+               for rule in (hud, control, escrituras, catchall))
 
 
 def test_no_route_serves_or_points_at_openchamber():

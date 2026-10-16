@@ -9,6 +9,15 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
+    # DGX-829, espejo de la 500 de lan-dgx-dashboard-public-host (INFRA-732): /api/interno/* solo por
+    # el Service del clúster; 404 en el borde (edge-static-server), nunca al backend por este host.
+    - kind: Rule
+      priority: 500
+      match: Host(`jarvis.e-dani.com`) && PathPrefix(`/api/interno`)
+      services:
+        - name: edge-static-server
+          namespace: traefik-edge
+          port: 8080
     - kind: Rule
       priority: 400
       match: Host(`jarvis.e-dani.com`) && (Path(`/`) || Path(`/jarvis`) || Path(`/jarvis.html`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
@@ -23,13 +32,35 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
-    # DGX-809 (security H-2 de DGX-799 y S1 de DGX-800): la 300 de este host sirve el mismo backend que
-    # dgx.lan, así que lo que allí va tras sso-chain por DGX-809 también va aquí; si no, este host sería
-    # la puerta abierta: /api/secretaria (menos POST …/escalar, máquina con HMAC V2), /despacho-secretaria
-    # y tres escrituras sin identidad, solo por POST (refresh se queda abierto, F1). El HUD no usa ninguna.
+    # DGX-829 (security, F3 de DGX-821): este host sirve el mismo backend que dgx.lan, y hasta aquí las
+    # lecturas del control set se servían sin sesión por la 300 (medido: GET /api/company/control y
+    # GET /api/litellm/keys con 200 sin sesión, mientras dgx.e-dani.com da 302 al SSO). Regla espejo de la
+    # 400 de lan-dgx-dashboard-public-host: mismos prefijos, misma cadena (identidad vaciada, sso-chain y
+    # prueba de borde). Prioridad 410 para no empatar con la 400 del HUD (sus rutas no se solapan).
+    # La paridad con dgx la mide tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    - kind: Rule
+      priority: 410
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # DGX-809 (security H-2 de DGX-799 y S1 de DGX-800) y DGX-829: escrituras sin identidad del backend,
+    # solo por POST (GET /api/compute/mode, /api/llm/uncensored… siguen abiertos; POST
+    # /api/activity/claude/refresh se queda abierto, F1: lo llama la extensión vscode-claude-cuenta).
+    # Regla espejo de la 350 de lan-dgx-dashboard-public-host: mismas rutas, misma cadena.
+    # /api/secretaria (menos …/escalar, máquina con HMAC V2) y /despacho-secretaria subieron a la 410.
+    # El HUD no usa ninguna.
     - kind: Rule
       priority: 350
-      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || ((Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`)))
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-lan
@@ -44,7 +75,7 @@ spec:
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      # Sin SSO en este host salvo la 350 de arriba: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
+      # Sin SSO en este host salvo la 410 y la 350 de arriba: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
       # dgx.lan; si no, cualquiera de la LAN/tailnet se haría pasar por Dani ante `es_dani` del dashboard
       # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
       middlewares:
