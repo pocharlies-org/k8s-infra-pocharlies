@@ -48,6 +48,10 @@ ADMIN_CONFIG="/tmp/kcadm-${SSO_APP}-sso-admin.config"
 [ "${REDIRECT_URI}" = "${EXPECT_REDIRECT_URI}" ] || fail "REDIRECT_URI is immutable"
 [ "${USER_GROUP}" = "${EXPECT_USER_GROUP}" ] || fail "USER_GROUP is immutable"
 [ "${ADMIN_GROUP}" = "${EXPECT_ADMIN_GROUP}" ] || fail "ADMIN_GROUP is immutable"
+case "${MODE}" in
+  ensure|audit) ;;
+  *) fail "unsupported MODE=${MODE}" ;;
+esac
 
 # --- grupos ---------------------------------------------------------------
 # GET /groups no admite ?path=, asi que se lista y se casa el path exacto. El
@@ -220,4 +224,4 @@ for email in ${USER_EMAILS}; do
   grant_membership "${email}" "${ugid}" "${USER_GROUP}"
 done
 
-printf 'OK: SSO de ${SSO_APP} reconciliado (%s, %s)\n' "${USER_GROUP}" "${ADMIN_GROUP}"
+printf 'OK: SSO de %s reconciliado (%s, %s)\n' "${SSO_APP}" "${USER_GROUP}" "${ADMIN_GROUP}"
