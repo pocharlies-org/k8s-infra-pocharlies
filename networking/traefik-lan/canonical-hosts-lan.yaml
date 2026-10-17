@@ -265,7 +265,7 @@ spec:
     # OpenClaw K8s keeps its trusted-proxy middleware chain.
     - kind: Rule
       priority: 400
-      match: Host(`openclaw-k8s.e-dani.com`) && HeaderRegexp(`Upgrade`, `(?i)^websocket$`) && (ClientIP(`192.168.50.74/32`) || ClientIP(`192.168.50.96/32`) || ClientIP(`100.90.163.101/32`) || ClientIP(`192.168.50.142/32`))
+      match: Host(`openclaw-k8s.e-dani.com`) && HeaderRegexp(`Upgrade`, `(?i)^websocket$`) && (ClientIP(`192.168.50.113/32`) || ClientIP(`192.168.50.96/32`) || ClientIP(`100.90.163.101/32`) || ClientIP(`192.168.50.142/32`))
       middlewares:
         - {name: openclaw-qwen36-openclaw-lan-preauth-sanitize, namespace: openclaw-qwen36}
         - {name: openclaw-qwen36-openclaw-lan-device-auth, namespace: openclaw-qwen36}

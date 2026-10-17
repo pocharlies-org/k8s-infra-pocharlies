@@ -91,3 +91,50 @@ spec:
           port: 6767
   tls:
     secretName: wildcard-edani-tls
+---
+# Paseo del mac-casa (SC-2639): mismo montaje que paseo.e-dani.com pero contra el daemon launchd del
+# MacBook Casa (100.85.61.58:6767, PASEO_WEB_UI_ENABLED + contraseña). AdGuard manda
+# paseocasa.e-dani.com al VIP de traefik-lan.
+apiVersion: v1
+kind: Service
+metadata:
+  name: paseo-lan-maccasa
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/name: paseo-lan-maccasa
+    app.kubernetes.io/part-of: traefik-lan
+spec:
+  type: ExternalName
+  externalName: mac-casa.taile0ad27.ts.net
+  ports:
+    - name: http
+      port: 6767
+      targetPort: 6767
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-paseocasa
+  namespace: traefik-lan
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`paseocasa.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 300
+      services:
+        - name: paseo-lan-maccasa
+          port: 6767
+    - kind: Rule
+      match: Host(`paseocasa.e-dani.com`)
+      priority: 100
+      middlewares:
+        - name: sso-chain
+          namespace: keycloak
+      services:
+        - name: paseo-lan-maccasa
+          port: 6767
+  tls:
+    secretName: wildcard-edani-tls

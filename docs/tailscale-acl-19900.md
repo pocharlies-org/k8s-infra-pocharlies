@@ -134,7 +134,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:19900/session   # 200
 ```
 
 La consola de Tailscale trae además un comprobador de ACL: se le puede añadir
-un test que afirme que `b13959085` **no** alcanza `100.83.56.98:19900`, y así
+un test que afirme que `mac-casa` **no** alcanza `100.83.56.98:19900`, y así
 la política no se puede volver a guardar abierta por descuido.
 
 ## Quién puede aplicarlo
