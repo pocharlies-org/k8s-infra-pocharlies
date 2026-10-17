@@ -39,6 +39,13 @@ kubelet-arg:
   # past 100 GiB per node. Start GC earlier and keep a useful 10% hysteresis.
   - image-gc-high-threshold=65
   - image-gc-low-threshold=55
+  # These nodes run workloads next to k3s-server (etcd+apiserver, 5 GiB RSS
+  # observed on ks5-cp-1 at 89 % CPU). Without a reservation the kubelet
+  # counted the full 8 CPU / 62 GiB as allocatable and its eviction
+  # thresholds competed with the control-plane processes.
+  - system-reserved=cpu=1,memory=6Gi
+  - kube-reserved=cpu=500m,memory=1Gi
+  - eviction-hard=memory.available<1Gi
 node-label:
   - ingress=true
   - workload=core
