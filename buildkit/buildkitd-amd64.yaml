@@ -110,19 +110,27 @@ spec:
             - --oci-worker-gc
           # INFRA-475: timeoutSeconds was 1 (the default) — on a busy builder
           # the exec probe (fork + gRPC dial) exceeded it and kubelet killed a
-          # healthy daemon (19 restarts). 5 s still catches a wedged daemon.
+          # healthy daemon (19 restarts).
+          # DGX-1035 (2026-10-17): 5 s was still not enough. The LiteLLM image
+          # build (build-litellm of dgx-infra: npm UI build + uv sync) kept the
+          # daemon busy long enough to miss 3 probes in a row, and kubelet
+          # killed it twice mid-build (19:47:01Z and 19:54:31Z, both builds
+          # died with "graceful_stop"). Liveness now tolerates 5 minutes of
+          # unresponsiveness (10 x 30 s) with a 30 s timeout: that still
+          # restarts a truly wedged daemon, but not one that is just working.
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 5
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 30
           livenessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 10
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 30
+            failureThreshold: 10
           securityContext:
             # Rootless buildkit needs SETUID+SETGID so newuidmap/newgidmap can
             # configure the user-namespace UID/GID map. Not privileged; Kyverno
