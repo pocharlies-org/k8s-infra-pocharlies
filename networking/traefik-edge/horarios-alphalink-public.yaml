@@ -1,11 +1,10 @@
 # SC-2495 — el planificador de AlphaLink en el dominio del cliente.
 #
-# La zona `alphalinkcrossfit.com` está en Cloudflare desde el 17-10 (delegada
-# por GoDaddy) y NO la gestiona external-dns: sus `--domain-filter` son
-# e-dani.com y skirmshop.es. Los registros se meten a mano en esa zona: 3 A de
-# `horarios` al VIP del edge (141.94.73.52, 141.94.73.50, 145.239.194.168 — el
-# 57.129.17.172 de las otras targets no escucha 443 desde fuera). Por eso aquí
-# no hay anotaciones `external-dns.*`.
+# La zona `alphalinkcrossfit.com` está en Cloudflare desde el 17-10-2026 (antes,
+# GoDaddy) y NO la gestiona external-dns: sus `--domain-filter` son e-dani.com y
+# skirmshop.es. Los registros se meten a mano en esa zona: 3 A de `horarios` al
+# VIP del edge (141.94.73.52, 141.94.73.50, 145.239.194.168 — el 57.129.17.172
+# de las otras targets no escucha 443 desde fuera), hechas el 17-10 en SC-2532.
 #
 # El certificado se valida por DNS-01 escribiendo el TXT directamente en la zona
 # del cliente (el token de `cloudflare-api-token` puede; ya no hace falta el
