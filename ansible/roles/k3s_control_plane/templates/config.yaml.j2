@@ -18,7 +18,7 @@ advertise-address: {{ tailscale_ipv4 }}
 node-ip: {{ tailscale_ipv4 }}
 node-name: {{ inventory_hostname }}
 flannel-iface: {{ k3s_flannel_iface }}
-write-kubeconfig-mode: "0644"
+write-kubeconfig-mode: "0600"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 # Four snapshots/day. Keep 48 hours locally on every control-plane node;
 # seven days of off-node history are maintained by etcd-s3-snapshot.timer.
