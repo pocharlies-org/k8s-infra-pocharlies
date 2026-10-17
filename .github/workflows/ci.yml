@@ -193,6 +193,18 @@ jobs:
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
 
+  skirmbooks-ui-db-role-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the Skirmbooks UI database role (SKIRM-184)
+        run: python3 -m unittest tests/test_skirmbooks_ui_db_role_contract.py
+
   shared-valkey-acl-contract:
     runs-on: arc-k8s
     steps:

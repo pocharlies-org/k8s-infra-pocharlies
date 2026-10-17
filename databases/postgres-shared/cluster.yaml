@@ -312,6 +312,24 @@ spec:
         passwordSecret:
           name: company-crm-db-credentials
         comment: "CRM propio de la compañía (repo pocharlies-org/company-crm); dueño de la base company_crm"
+      # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
+      # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
+      # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la
+      # reconcilia desde skirmbooks-ui-db-credentials (ExternalSecret en
+      # app-credentials.yaml), que debe estar materializado ANTES de aplicar este
+      # spec. Los GRANT sobre los esquemas gestoría_* los concede la migración del
+      # producto (patrón 0058), no aquí.
+      - name: skirmbooks_ui_app
+        ensure: present
+        login: true
+        # connectionLimit MEDIDO: el pool de la UI es max 8
+        # (skirmbooks-ui/app/lib/db.server.ts:105) con 1 réplica
+        # (k8s-skirmbooks-pocharlies/k8s/manifest.yaml:7); 10 da margen y corta
+        # un pool desbocado, como en `horarios` (SC-2495).
+        connectionLimit: 10
+        passwordSecret:
+          name: skirmbooks-ui-db-credentials
+        comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
 
   backup:
     # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
