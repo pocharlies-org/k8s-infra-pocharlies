@@ -17,11 +17,15 @@ las colas, y eso es código de Synapse (historia aparte). Lo que IT puede aplica
 código es **mirroring de las queues de la lista crítica** (patrón de la política
 `sf-quorum-exclude`), política viva sobre las colas existentes:
 
-- Política `sf-critical-mirror` en el vhost `/synapse`, prioridad 25 (no choca con las
-  claves de `sf-quorum-exclude`, que solo fija `overflow`).
-- `{"ha-mode":"all","ha-promote-on-shutdown":"always"}` — copia en los 3 nodos; con
-  `always` el mirror se promueve aunque pueda perder los últimos mensajes async (mejor
-  eso que 30 min sin servicio; los webhooks críticos son re-consultables por origen).
+- Política `sf-critical-mirror` en el vhost `/synapse`, prioridad **35**. Las políticas de
+  RabbitMQ **no se fusionan**: gana la de mayor prioridad y las definiciones de las demás
+  se ignoran. Con prioridad 25 quedaba tapada por `sf-quorum-exclude` (30) y no creaba
+  réplicas (medido 2026-10-17); por eso va por encima y **repitiendo la clave `overflow`**
+  que `sf-quorum-exclude` ponía en vigor, para no perderla.
+- `{"ha-mode":"all","ha-promote-on-shutdown":"always","overflow":"reject-publish-dlx"}` —
+  copia en los 3 nodos; con `always` el mirror se promueve aunque pueda perder los últimos
+  mensajes async (mejor eso que 30 min sin servicio; los webhooks críticos son
+  re-consultables por origen).
 - Classic mirroring está deprecado y **no permitido por defecto** en esta imagen
   (3.13.7-dme): requiere
   `deprecated_features.permit.classic_queue_mirroring = true` en el ConfigMap
@@ -34,11 +38,13 @@ política y quitar la línea del ConfigMap.
 ## Comandos
 
 ```sh
-# política (idempotente; el patrón es la lista crítica de sf-quorum-exclude)
+# política (idempotente; el patrón es la lista crítica de sf-quorum-exclude).
+# Prioridad 35 > sf-quorum-exclude (30): las políticas NO se fusionan, gana la de más
+# prioridad, así que hay que repetir aquí la clave overflow que aquella fijaba.
 kubectl -n databases exec shared-rabbitmq-0 -- rabbitmqctl set_policy -p /synapse \
-  --apply-to queues --priority 25 sf-critical-mirror \
+  --apply-to queues --priority 35 sf-critical-mirror \
   '^(engine\.workflow_triggers|engine\.step_results|adapter\.gmail\.webhooks|adapter\.shopify\.webhooks|collections-tree\.shopify-events\.skirmshop|adapter\.banking\.movements\.import_stripe_webhook|adapter\.banking\.movements\.import_paypal_webhook|adapter\.banking\.movements\.import_psd2|adapter\.banking\.psd2\.complete_requisition|adapter\.messaging\.send|adapter\.accounting\.entry\.post|adapter\.accounting\.entry\.reverse|adapter\.accounting\.year_end_close|adapter\.accounting\.period\.close|adapter\.invoicing\.issued\.create|adapter\.invoicing\.posting\.post|adapter\.tax\.modelo\.submit|adapter\.sii\.push_recibida|adapter\.sii_emitted\.invoice\.poll)$' \
-  '{"ha-mode":"all","ha-promote-on-shutdown":"always"}'
+  '{"ha-mode":"all","ha-promote-on-shutdown":"always","overflow":"reject-publish-dlx"}'
 
 # aplicar el conf requiere rolling restart (de uno en uno, esperar Ready en medio)
 kubectl -n databases delete pod shared-rabbitmq-2   # el que menos colas maestras críticas tenga
