@@ -394,9 +394,16 @@ spec:
       data:
         grants.json: "{{ .grants_json }}"
   data:
+    # INFRA-893: el Connect busca el item por `key` y el campo por `property` (formato
+    # de ClusterSecretStore `onepassword-connect`, ver el comentario de
+    # platform/external-secrets/cluster-secret-store-onepassword.yaml). Con la barra
+    # ("crosslink-pocharlies/grants_json") ESO buscaba un item con ese nombre literal y
+    # fallaba el sync de la app entera: "key not found ... in: map[k8s-pocharlies:1]".
+    # OJO: el item aun NO existe en el vault k8s-pocharlies — lo crea security por
+    # INFRA-903; hasta entonces este ES queda en error (igual que antes, no peor).
     - secretKey: grants_json
       remoteRef:
-        key: crosslink-pocharlies/grants_json
+        key: crosslink-pocharlies
         property: grants_json
 ---
 apiVersion: apps/v1
