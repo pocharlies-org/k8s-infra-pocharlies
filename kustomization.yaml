@@ -38,6 +38,7 @@ resources:
   - networking/traefik-edge/crosslink-ingress.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/horarios-alphalink-public.yaml
+  - networking/traefik-edge/wordpress-alphalink-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-edge-proof.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
@@ -61,6 +62,7 @@ resources:
   - storage/longhorn/metrics-and-alerts.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
   - kubernetes/storage/longhorn-strict-local.yaml
+  - kubernetes/storage/local-path-retain.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
