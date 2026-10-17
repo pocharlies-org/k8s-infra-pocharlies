@@ -24,6 +24,26 @@ spec:
     - "www.alphalinkcrossfit.com"
   renewBefore: 720h
 ---
+# El edge solo vigila sus propias namespaces: una IngressRoute que apunta a
+# `alphalink/wordpress` se descarta entera («namespace is not within watched
+# namespaces») y el host da 404 (le pasó al primer corte, 18-10). Patrón de la
+# casa: ExternalName dentro de traefik-edge, como `edge-horarios-alphalink`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-wordpress-alphalink
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-wordpress-alphalink
+spec:
+  type: ExternalName
+  externalName: wordpress.alphalink.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -37,8 +57,7 @@ spec:
   - kind: Rule
     match: Host(`alphalinkcrossfit.com`) || Host(`www.alphalinkcrossfit.com`)
     services:
-    - name: wordpress
-      namespace: alphalink
+    - name: edge-wordpress-alphalink
       port: 80
   tls:
     secretName: wordpress-alphalink-tls
