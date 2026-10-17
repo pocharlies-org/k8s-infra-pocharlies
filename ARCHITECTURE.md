@@ -45,7 +45,7 @@ automático `prune: false`, `selfHeal: true`):
 |---|---|---|---|
 | Rutas públicas del edge | `networking/traefik-edge/<app>-public.yaml` | ídem | todas las apps públicas |
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
-| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184) |
+| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184), hindsight (rol `hindsight`, base con `vector` por el CRD Database, INFRA-940) |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
 | Bootstrap de los hooks PostSync de Keycloak (trap de limpieza, `fail`, login admin con reintentos, `kget`, líneas no vacías) | `platform/keycloak-next/scripts/kc-admin-common.sh` | ídem | los hooks de keycloak-next; único sitio de estas funciones |
 | Reconciliadores de clients de servicio de Keycloak (mapper de audiencia, scope de roles, mint y comprobación exacta del token) | `platform/keycloak-next/scripts/keycloak-reconcile-lib.sh` (carga después de `kc-admin-common.sh`) | ídem | chat-agentgateway, jarvis-echo, hermes-enviar, agentgateway-chat-mcp, domain-roles |

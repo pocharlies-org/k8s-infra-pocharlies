@@ -401,3 +401,24 @@ spec:
   ensure: present
   cluster:
     name: postgres-shared
+---
+# INFRA-940: base de Hindsight (memoria de agentes, fase 0 de la migración del
+# brain). `vector` lo crea CNPG como superusuario porque pgvector no es trusted y el
+# rol `hindsight` no podría crearlo en sus migraciones; el esquema lo crea Hindsight.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: hindsight
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: hindsight
+  owner: hindsight
+  ensure: present
+  cluster:
+    name: postgres-shared
+  extensions:
+    - name: vector
+      ensure: present

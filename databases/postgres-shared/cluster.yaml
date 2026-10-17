@@ -330,6 +330,17 @@ spec:
         passwordSecret:
           name: skirmbooks-ui-db-credentials
         comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
+      # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
+      # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
+      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=20 (values de k8s-hindsight-pocharlies)
+      # con 1 réplica de API; 30 deja margen para las migraciones del arranque.
+      - name: hindsight
+        ensure: present
+        login: true
+        connectionLimit: 30
+        passwordSecret:
+          name: hindsight-db-credentials
+        comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
 
   backup:
     # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
