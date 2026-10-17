@@ -104,9 +104,12 @@ spec:
             #   shows Reclaimable: 0B even though the API has records to
             #   reclaim. Valid verification metrics after the sync: `df` on
             #   the PVC and the Total in `buildctl du` — never Reclaimable.
-            # If finer control is ever needed (e.g. an explicit keepDuration),
-            # that requires a buildkitd.toml ConfigMap with [[worker.oci.
-            # gcpolicy]] blocks; the flag cannot express per-policy rules.
+            # INFRA-937 (2026-10-18): finer control now exists — the
+            # buildkitd-amd64-config ConfigMap below mounts a buildkitd.toml
+            # with an explicit [[worker.oci.gcpolicy]]: GC fires only on
+            # pressure (>8 GiB used or <2 GiB free on the tmpfs) and trims to
+            # a 1 GiB floor with a 24 h keepDuration. The flag cannot express
+            # per-policy rules; the toml replaces the four default policies.
             - --oci-worker-gc
           # INFRA-475: timeoutSeconds was 1 (the default) — on a busy builder
           # the exec probe (fork + gRPC dial) exceeded it and kubelet killed a
@@ -157,15 +160,15 @@ spec:
               # ride the limit (4 CPU), not the request.
               cpu: "150m"
               # INFRA-475: the cache is tmpfs now, and tmpfs pages count against
-              # the pod's cgroup memory. The GC keeps the 30 GiB volume at ~24 GiB
-              # used, so the request reserves cache + build headroom (sauvage has
-              # 125 GiB total, ~95 GiB available at the time of the change).
-              memory: 28Gi
+              # the pod's cgroup memory. INFRA-937: the toml gcpolicy caps the
+              # cache at 8 GiB of a 10 GiB tmpfs, so the request reserves cache +
+              # build headroom instead of the old ~24 GiB steady state.
+              memory: 12Gi
             limits:
               cpu: "4"
-              # sizeLimit (30 GiB) + build headroom; an OOM kill of the daemon is
+              # sizeLimit (10 GiB) + build headroom; an OOM kill of the daemon is
               # visible and Recreate brings it back with an empty cache.
-              memory: 36Gi
+              memory: 16Gi
           ports:
             - name: buildkit
               containerPort: 1234
@@ -175,7 +178,14 @@ spec:
             - name: harbor-push
               mountPath: /home/user/.docker
               readOnly: true
+            - name: daemon-config
+              mountPath: /home/user/.config/buildkit/buildkitd.toml
+              subPath: buildkitd.toml
+              readOnly: true
       volumes:
+        - name: daemon-config
+          configMap:
+            name: buildkitd-amd64-config
         - name: cache
           # INFRA-475: tmpfs, not a disk volume. The local-path PVC (50Gi) sat on
           # sauvage's only array — RAID1 of two 7200 rpm HDDs, 100% util, ~320 ms
@@ -183,14 +193,14 @@ spec:
           # ~30 s per package; the same build on the x86's NVMe: ~4 min). The
           # node has 125 GiB RAM with ~95 GiB free, and the cache is rebuildable:
           # losing it costs one slower build, never data (same ruling as the old
-          # PVC's comment). sizeLimit bounds the tmpfs; buildkit's GC keeps it at
-          # ~24 GiB (80% of 30Gi). Verification after GC changes is `df` on the
+          # PVC's comment). sizeLimit bounds the tmpfs; since INFRA-937 the
+          # toml gcpolicy keeps it at ≤8 GiB instead of ~24 GiB. Verification after GC changes is `df` on the
           # volume and the Total in `buildctl du` — NEVER the "Reclaimable"
           # column (v0.31.0 derives it per record as !InUse, so on a busy
           # builder it always reads 0B; SC-285).
           emptyDir:
             medium: Memory
-            sizeLimit: 30Gi
+            sizeLimit: 10Gi
         - name: harbor-push
           secret:
             secretName: harbor-push
@@ -216,3 +226,24 @@ spec:
       port: 1234
       targetPort: 1234
       protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-amd64-config
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: amd64
+data:
+  # INFRA-937: GC a demanda y con tope. Una sola política (all=true) sustituye
+  # a las cuatro por defecto: se dispara solo bajo presión (>8 GiB usados o
+  # <2 GiB libres en el tmpfs de 10 GiB) y poda hasta el suelo de 1 GiB con
+  # 24 h de keepDuration. Antes el default mantenía ~24 GiB de cache en RAM.
+  buildkitd.toml: |
+    [[worker.oci.gcpolicy]]
+      all = true
+      keepBytes = 1073741824
+      keepDuration = "24h"
+      maxUsedSpace = "8gb"
+      minFreeSpace = "2gb"
