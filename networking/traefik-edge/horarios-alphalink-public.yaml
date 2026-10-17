@@ -1,11 +1,10 @@
 # SC-2495 — el planificador de AlphaLink en el dominio del cliente.
 #
-# `horarios.alphalinkcrossfit.com` no está en Cloudflare: la zona vive en
-# GoDaddy y los registros (4 A al VIP del edge + el CNAME de _acme-challenge
-# hacia la zona e-dani.com) se metieron a mano el 16-10. Por eso aquí NO hay
-# anotaciones `external-dns.*`: nada de lo que declara este fichero se escribe
-# en la zona del cliente. El certificado se valida por DNS-01 siguiendo ese
-# CNAME, con el solver de `alphalinkcrossfit.com` de cluster-issuers.yaml.
+# La zona `alphalinkcrossfit.com` está en Cloudflare desde el 17-10-2026
+# (antes, GoDaddy) y se edita a mano: aquí NO hay anotaciones `external-dns.*`,
+# nada de lo que declara este fichero se escribe en la zona del cliente. Los 4 A
+# de `horarios` al edge están pendientes en SC-2532. El certificado se valida
+# por DNS-01 con el solver de `alphalinkcrossfit.com` de cluster-issuers.yaml.
 #
 # Precedente del host de cliente: `affiliate-public.yaml` (Certificate propio +
 # IngressRoute en websecure). La diferencia es el acceso: esto va detrás de
