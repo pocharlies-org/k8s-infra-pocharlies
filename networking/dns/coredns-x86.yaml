@@ -7,9 +7,9 @@
 # saturado. Eso retrasaba LiteLLM, el sidecar de peticiones en vuelo y
 # cualquier cosa que resolviera nombres desde el x86.
 #
-# Qué es: una réplica MÁS de CoreDNS fijada al x86, con la MISMA imagen y la
-# MISMA configuración que la de k3s (ConfigMaps `coredns` y `coredns-custom`)
-# y la etiqueta `k8s-app: kube-dns`. Así la selecciona el Service `kube-dns` y
+# Qué es: una réplica MÁS de CoreDNS fijada al x86, con la MISMA imagen que la
+# de k3s, su NodeHosts y `coredns-custom`, un Corefile propio (abajo) y la
+# etiqueta `k8s-app: kube-dns`. Así la selecciona el Service `kube-dns` y
 # las NetworkPolicies que permiten DNS hacia pods kube-dns de kube-system la
 # siguen aceptando. Por eso se eligió esto y NO NodeLocal DNSCache: esa
 # intercepta 10.43.0.10 en el host y rompería el DNS de los 48 pods con
@@ -24,6 +24,48 @@
 # Upstream: MagicDNS (100.100.100.100), igual que los CoreDNS de los ks5, para
 # que las respuestas sean idénticas (incluidos los *.ts.net). No se hereda el
 # resolv.conf del nodo: en el x86 empieza por 10.43.0.10 y sería un bucle.
+#
+# Respaldo (INFRA-923, 17-10-2026): un `tailscale set --accept-dns=false` en el
+# x86 deja MagicDNS sin upstreams y contesta SERVFAIL a todo lo externo; como
+# esta réplica sigue Ready, PreferSameNode no suelta a los pods del x86 y se
+# quedaron 1 h 45 min sin DNS externo (INFRA-918). Por eso el bloque raíz salta
+# en SERVFAIL/REFUSED a coredns-sauvage (coredns-sauvage.yaml), que pregunta a
+# la MagicDNS de sauvage. El Corefile es el bloque raíz de k3s con solo el
+# `forward` cambiado: si k3s cambia el suyo al subir de versión, se copia aquí.
+# Los bloques de coredns-custom (e-dani.com, ts.net) siguen sin respaldo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-x86
+  namespace: kube-system
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+          pods insecure
+          fallthrough in-addr.arpa ip6.arpa
+        }
+        hosts /etc/coredns/NodeHosts {
+          ttl 60
+          reload 15s
+          fallthrough
+        }
+        prometheus :9153
+        cache 30
+        loop
+        reload
+        loadbalance
+        import /etc/coredns/custom/*.override
+        forward . 100.100.100.100 10.43.0.11 {
+          policy sequential
+          failover SERVFAIL REFUSED
+        }
+    }
+    import /etc/coredns/custom/*.server
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -95,11 +137,16 @@ spec:
             - { name: custom-config-volume, mountPath: /etc/coredns/custom, readOnly: true }
       volumes:
         - name: config-volume
-          configMap:
-            name: coredns
-            items:
-              - { key: Corefile, path: Corefile }
-              - { key: NodeHosts, path: NodeHosts }
+          projected:
+            sources:
+              - configMap:
+                  name: coredns-x86
+                  items:
+                    - { key: Corefile, path: Corefile }
+              - configMap:
+                  name: coredns
+                  items:
+                    - { key: NodeHosts, path: NodeHosts }
         - name: custom-config-volume
           configMap:
             name: coredns-custom
