@@ -35,7 +35,7 @@ CONTROL_SET = [("GET", p) for p in (
 # Escrituras del backend (regla 350): solo por POST; los GET de esas rutas se compran abajo, abiertos.
 ESCRITURAS = [("POST", p) for p in (
     "/api/cluster/apply", "/api/cluster/refresh", "/api/compute/mode", "/api/activity/power",
-    "/api/llm/uncensored", "/api/litellm/opencode/reload",
+    "/api/llm/uncensored", "/api/litellm/opencode/reload", "/api/llm/dgx3/mode",
     "/api/litellm/background-consumers/aurora-rca/block",
     "/api/litellm/background-consumers/aurora-rca/unblock",
 )]
@@ -49,6 +49,7 @@ MAQUINA = [
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/activity", "/api/activity/stream", "/api/compute/mode", "/api/llm/uncensored",
+    "/api/llm/dgx3/mode",
     "/api/litellm/opencode", "/api/litellm/consumers", "/api/litellm/models",
     "/api/litellm/background-consumers", "/api/cluster/llm/resident-profile",
     "/api/hud/jarvis", "/api/jarvis/latency", "/api/service-health",

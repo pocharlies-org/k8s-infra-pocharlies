@@ -140,7 +140,7 @@ spec:
     # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
     # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster).
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
