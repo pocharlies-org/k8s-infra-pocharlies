@@ -1,0 +1,118 @@
+# traefik-alphalink (SC-2659): la entrada pública por la IP del droplet de
+# AlphaLink (206.189.15.5, nodo `alphalink`), tercera instancia del chart junto
+# a traefik-edge (OVH) y traefik-lan.
+#
+# Cada app elige por dónde sale con `ingressClassName`: `traefik-alphalink` sale
+# por esta IP, `traefik-edge` por OVH, sin importar en qué nodo corra el pod (el
+# tráfico va por la red del clúster). Por eso, a diferencia del edge, NO hay
+# lista de namespaces: vigila todos y solo sirve lo que declare esta clase.
+#
+# El nodo es pequeño (2 vCPU / 4 GiB): aquí solo el traefik y lo que se fije a
+# propósito al nodo.
+deployment:
+  kind: DaemonSet
+  dnsPolicy: ClusterFirstWithHostNet
+
+nodeSelector:
+  kubernetes.io/hostname: alphalink
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: alpha
+    effect: NoSchedule
+
+# hostNetwork como el edge: 80/443 en la IP pública del droplet. 9080 (ping) y
+# 9901 (métricas) también quedan en el host; ufw los deja cerrados a internet.
+hostNetwork: true
+
+ingressClass:
+  name: traefik-alphalink
+  enabled: true
+  isDefaultClass: false
+
+ports:
+  web:
+    port: 80
+    exposedPort: 80
+    protocol: TCP
+    expose:
+      default: true
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    port: 443
+    exposedPort: 443
+    protocol: TCP
+    expose:
+      default: true
+    http:
+      tls:
+        enabled: true
+  traefik:
+    port: 9080
+    expose:
+      default: false
+  metrics:
+    port: 9901
+    expose:
+      default: false
+
+service:
+  enabled: false
+
+ingressRoute:
+  dashboard:
+    enabled: false
+
+additionalArguments:
+  - "--log.level=INFO"
+  - "--accesslog=true"
+  - "--metrics.prometheus=true"
+  - "--metrics.prometheus.entrypoint=metrics"
+  - "--ping=true"
+  - "--ping.entryPoint=traefik"
+
+providers:
+  kubernetesCRD:
+    ingressClass: traefik-alphalink
+    allowExternalNameServices: true
+    allowEmptyServices: true
+  kubernetesIngress:
+    ingressClass: traefik-alphalink
+    allowExternalNameServices: true
+    allowEmptyServices: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+    add: ["NET_BIND_SERVICE"]
+
+# Un solo nodo con hostNetwork: el pod nuevo no puede arrancar mientras el viejo
+# tiene los puertos, así que primero se baja el viejo.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+rbac:
+  enabled: true
+
+persistence:
+  enabled: false   # cert-manager manages TLS secrets

@@ -27,6 +27,7 @@ resources:
   - networking/traefik-lan/artifacts-lan.yaml
   - networking/traefik-lan/instagram-callback-lan.yaml
   - networking/traefik-lan/correo-lan.yaml
+  - networking/traefik-alphalink/namespace.yaml
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/networkpolicy.yaml
   - networking/traefik-edge/tls-store.yaml
