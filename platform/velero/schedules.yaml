@@ -99,7 +99,7 @@ metadata:
 spec:
   schedule: "15 3 * * *"   # 03:15 UTC daily
   template:
-    ttl: 336h0m0s   # 14 days retention
+    ttl: 168h0m0s   # 7 days retention
     includedNamespaces:
       - alphalink
     snapshotMoveData: true
