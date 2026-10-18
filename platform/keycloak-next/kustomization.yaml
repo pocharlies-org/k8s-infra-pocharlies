@@ -9,6 +9,7 @@ resources:
   - oauth2-proxy-skirmshop.yaml
   - oauth2-proxy-openclaw-readonly.yaml
   - oauth2-proxy-chat.yaml
+  - oauth2-proxy-hindsight.yaml
   - oauth2-proxy-skirmbooks.yaml
   - skirmbooks-sso.yaml
   - oauth2-proxy-alphalink.yaml

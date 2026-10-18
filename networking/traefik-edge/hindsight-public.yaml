@@ -1,7 +1,8 @@
 ---
 # Panel de Hindsight (memoria que sustituye al brain, INFRA-942) desde fuera: Cloudflare → traefik-edge →
-# hindsight-control-plane (ns hindsight). Keycloak (sso-chain) SIEMPRE: el panel no tiene login propio y habla
-# con la API con la key del tenant, o sea que enseña y edita todas las memorias (también las personales).
+# hindsight-control-plane (ns hindsight). Keycloak SIEMPRE y solo /edani-admins (sso-hindsight-chain, proxy
+# propio en platform/keycloak-next/oauth2-proxy-hindsight.yaml): el panel no tiene login propio y habla con la
+# API con la key del tenant, o sea que enseña y edita todas las memorias (también las personales).
 # ExternalName en el ns vigilado traefik-edge, como langfuse-public.yaml (el DaemonSet no vigila `hindsight`).
 apiVersion: v1
 kind: Service
@@ -30,11 +31,19 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # /oauth2 SIN middleware a propósito (forward-auth en el callback = bucle), como skirmbooks.
+    - kind: Rule
+      match: Host(`hindsight.e-dani.com`) && PathPrefix(`/oauth2`)
+      priority: 210
+      services:
+        - name: oauth2-proxy-hindsight
+          namespace: keycloak
+          port: 4180
     - kind: Rule
       match: Host(`hindsight.e-dani.com`)
       priority: 200
       middlewares:
-        - name: sso-chain
+        - name: sso-hindsight-chain
           namespace: keycloak
       services:
         - name: hindsight-cp-ext
