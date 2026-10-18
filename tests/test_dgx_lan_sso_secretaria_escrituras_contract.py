@@ -87,6 +87,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/pages", "/api/service-health", "/api/studio/gallery",
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
+      ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 
