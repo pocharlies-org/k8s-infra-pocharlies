@@ -86,6 +86,31 @@ spec:
     volumeSnapshotLocations:
       - default
 ---
+# Daily backup of the AlphaLink WordPress (ns alphalink: MySQL, wp-content and
+# the nightly mysqldump PVC). Its volumes are local-path on the droplet node
+# `alphalink`; without this the only copies lived on that same disk. 03:15 UTC,
+# after the in-namespace dump (01:15 Madrid) and between daily-critical and
+# daily-aiops.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: daily-alphalink
+  namespace: velero
+spec:
+  schedule: "15 3 * * *"   # 03:15 UTC daily
+  template:
+    ttl: 336h0m0s   # 14 days retention
+    includedNamespaces:
+      - alphalink
+    snapshotMoveData: true
+    defaultVolumesToFsBackup: true
+    resourcePolicy:
+      kind: ConfigMap
+      name: velero-fsb-volume-policy
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+---
 # Weekly backup of everything else (apps, etc.)
 apiVersion: velero.io/v1
 kind: Schedule

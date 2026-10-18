@@ -42,10 +42,11 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         self.assertEqual(section.count("loadAffinity:"), 1)
         self.assertNotIn("topology: lan", section)
 
-    def test_node_agent_covers_lan_and_ovh_but_not_remote(self):
+    def test_node_agent_covers_lan_ovh_and_cloud_but_not_remote(self):
         section = VALUES.split("nodeAgent:", 1)[1].split("# Velero server", 1)[0]
-        self.assertIn('values: ["lan", "ovh"]', section)
-        self.assertNotIn('values: ["lan", "ovh", "remote"]', section)
+        self.assertIn('values: ["lan", "ovh", "cloud"]', section)
+        self.assertNotIn('"remote"', section)
+        self.assertIn("value: alpha", section)
         self.assertIsNone(re.search(r"^  nodeSelector:\s*$", section, re.MULTILINE))
         self.assertIn("--node-agent-configmap=velero-node-agent-config", section)
         self.assertIn('cpu: "1"', section)
@@ -86,9 +87,9 @@ class VeleroOperabilityContractTest(unittest.TestCase):
 
     def test_all_schedules_keep_pvc_fsb_and_reference_policy(self):
         schedule_count = SCHEDULES.count("kind: Schedule")
-        self.assertEqual(schedule_count, 3)
-        self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), 3)
-        self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), 3)
+        self.assertEqual(schedule_count, 4)
+        self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), schedule_count)
+        self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), schedule_count)
         self.assertNotIn("defaultVolumesToFsBackup: false", SCHEDULES)
 
 
