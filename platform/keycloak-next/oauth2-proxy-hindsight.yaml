@@ -4,8 +4,9 @@
 # incluye cuentas de QA cuyas credenciales están al alcance de los agentes. El panel no tiene login propio y
 # habla con la API con la key del tenant: lee y edita todas las memorias, también las personales. Aquí solo
 # entra /edani-admins (security, 18-10-2026). Mismo patrón que oauth2-proxy-chat (docs/sso-por-app.md):
-# instancia, cookie host-only y grupos propios. El cliente Keycloak es el mismo `oauth2-proxy`; su comodín
-# `https://*.e-dani.com/oauth2/callback` cubre este host sin tocar Keycloak.
+# instancia, cookie host-only y grupos propios. El cliente Keycloak es el mismo `oauth2-proxy`, con
+# `https://hindsight.e-dani.com/oauth2/callback` añadido a sus redirectUris por security (18-10-2026): el
+# comodín `https://*.e-dani.com/...` que cita oauth2-proxy-chat.yaml no vale, Keycloak no admite `*` en el host.
 apiVersion: v1
 kind: ConfigMap
 metadata:
