@@ -25,9 +25,11 @@ spec:
       # 41 synapse services × pool_size 5 = 205 connections projected; max_connections 400 = ×1.95 headroom.
       # shared_buffers 1Gi (12.5% of 8Gi mem limit) absorbs litellm full-scan working set
       # which was OOM-killing pod with 256MB / 2Gi (root cause documented in plan §12.2).
+      # INFRA-942 (2026-10-19): 1GB -> 4GB. Hindsight (4.2 GB, pgvector) leía de disco (IO.DataFileRead) con el
+      # bloqueo de su bank tomado; el límite sube a 10Gi para dejar a los backends el margen que tenían.
       max_connections: "400"
-      shared_buffers: "1GB"
-      effective_cache_size: "4GB"
+      shared_buffers: "4GB"
+      effective_cache_size: "7GB"
       work_mem: "32MB"
       maintenance_work_mem: "256MB"
       checkpoint_completion_target: "0.9"
@@ -81,7 +83,7 @@ spec:
       memory: "2Gi"
     limits:
       cpu: "4"
-      memory: "8Gi"
+      memory: "10Gi"
 
   monitoring:
     enablePodMonitor: false
