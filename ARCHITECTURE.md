@@ -101,7 +101,14 @@ Nº de casos: **pendiente de medir**.
 
 - `README`/`docs/architecture.md` aún dicen k3s v1.32.5 y «ubuntu único control-plane»: el cluster real tiene `ks5-cp-1/2/3`
   (README desfasado).
-- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona.
+- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona
+  (Traefik descarta la ruta entera —`failed to get service <ns>/<svc>: namespace is not within watched
+  namespaces` en sus logs— y el host responde 404 con todo `Synced`). La receta es un `Service` ExternalName
+  dentro de `traefik-edge`, en el mismo fichero del host, referenciado por la IngressRoute sin `namespace`
+  (`edge-chat-public` en `chat-public.yaml`; `edge-horarios-alphalink` en `horarios-alphalink-public.yaml`,
+  SC-2532). **No** se amplía `providers.kubernetescrd.namespaces` con la namespace del producto: cambia los
+  args del DaemonSet (reinicio en cada nodo, hostPort 443) y dejaría que una namespace de producto cargue sus
+  propias rutas en el edge compartido sin pasar por este repo.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
 - Los nombres de `e-dani.com` que necesita un cliente del clúster se fijan a `traefik-lan` en
