@@ -44,6 +44,18 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # DGX-1113: los endpoints del propio oauth2-proxy (sign_in, callback, sign_out) sobre
+    # los hosts dgx, SIN cadena SSO (autenticarse exigiría estar autenticado). El enlace
+    # «Sign Out» de la página 403 del proxy apunta a /oauth2/sign_out del host actual: sin
+    # esta regla caía en el bypass (300) → dashboard → 404 y el 403 no tenía salida.
+    # Precedentes: lan-skirmbooks-public-host (LAN) y edge-chat-public (edge).
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && PathPrefix(`/oauth2`)
+      priority: 600
+      services:
+        - name: oauth2-proxy
+          namespace: keycloak
+          port: 4180
     # INFRA-732 (P6a-2): /api/interno/* son rutas internas del dashboard que solo debe
     # alcanzar el forwardAuth interno de Traefik, por el Service del clúster
     # (control-nexus/dgx-dashboard-ui), nunca por una IngressRoute. Sin esta regla caían

@@ -49,6 +49,24 @@ spec:
       targetPort: 80
       protocol: TCP
 ---
+# DGX-1113: el oauth2-proxy compartido, referenciado con el mismo patrón
+# ExternalName que edge-oauth2-proxy-chat (allowExternalNameServices).
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-oauth2-proxy
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-dgx-dashboard-public
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy.keycloak.svc.cluster.local
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -63,6 +81,17 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # DGX-1113: los endpoints del propio oauth2-proxy (sign_in, callback, sign_out) sobre
+    # dgx.e-dani.com, SIN cadena SSO (autenticarse exigiría estar autenticado). El enlace
+    # «Sign Out» de la página 403 del proxy apunta a /oauth2/sign_out del host actual: sin
+    # esta regla caía en la pública (100) → sso-chain → bucle, y el 403 no tenía salida.
+    # Precedente: edge-chat-public.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && PathPrefix(`/oauth2`)
+      priority: 600
+      services:
+        - name: edge-oauth2-proxy
+          port: 4180
     # INFRA-732 (P6a-2): /api/interno/* son rutas internas del dashboard que solo
     # debe alcanzar el forwardAuth interno de Traefik, por el Service del clúster
     # (control-nexus/dgx-dashboard-ui), nunca por una IngressRoute. Sin esta regla

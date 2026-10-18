@@ -40,7 +40,11 @@ data:
     provider_display_name = "Keycloak"
     oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
     skip_oidc_discovery = true
-    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth"
+    # DGX-1113: prompt=login — tras un sign_out (o sin cookie) Keycloak presenta el
+    # formulario en vez de re-autenticar en silencio con la sesión que haya; si alguien
+    # entró con la cuenta equivocada y cayó al 403, el siguiente intento puede ser otra
+    # cuenta. Con la cookie _edani_sso puesta no se pasa por aquí (dura 720h).
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth?prompt=login"
     redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
     profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
     validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
@@ -101,7 +105,7 @@ spec:
         app: oauth2-proxy
       annotations:
         # oauth2-proxy solo lee el .cfg al arrancar: subir esto con cada cambio del ConfigMap.
-        e-dani.com/config-rev: "2026-09-26-dgx-app-bearer"
+        e-dani.com/config-rev: "2026-10-19-dgx-1113-prompt-login"
     spec:
       enableServiceLinks: false
       nodeSelector:
