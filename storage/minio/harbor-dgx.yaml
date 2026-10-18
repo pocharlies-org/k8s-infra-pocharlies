@@ -1,0 +1,130 @@
+---
+# Almacén de Harbor en el NVMe de dgx (INFRA-482). Los blobs del registry vivían en la
+# MinIO de sauvage —RAID1 de HDD—, que estaba al 100 % de io_time: cerrar una subida de
+# capa (copia multiparte dentro del almacén) costaba 1m45s con 250 MB y la CI cortaba con
+# «timeout awaiting response headers» (INFRA-931). Va a dgx porque es el NVMe con hueco
+# (287 GB libres) y porque los únicos clientes de esas imágenes son los servidores de LLM
+# (orden de Dani, 18-10). Tras la retención —2 últimas, 1 en los repos de IA— y el GC, lo
+# referenciado es ~147 GB.
+# hostPath, como el minio-0 de sauvage: esto es el almacén del registry, no un volumen que
+# un provisioner deba repartir.
+# Credenciales: la misma pareja del item minio-harbor-s3 que ya usa el registry
+# (storage/minio/harbor-identity.yaml), así la secret de Harbor no cambia y solo se mueve
+# el endpoint. Al rotarla hay que reiniciar este StatefulSet: el root entra como env.
+# Riesgo asumido: si dgx se reinicia, el registry no sirve mientras suba. Los pods ya
+# arrancados siguen corriendo con su imagen en containerd.
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor-dgx-s3
+  namespace: minio
+spec:
+  selector:
+    app: harbor-minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: harbor-minio-root
+  namespace: minio
+spec:
+  refreshInterval: 24h
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: harbor-minio-root
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: access-key
+      remoteRef:
+        key: minio-harbor-s3/access_key
+    - secretKey: secret-key
+      remoteRef:
+        key: minio-harbor-s3/secret_key
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: harbor-minio
+  namespace: minio
+spec:
+  serviceName: harbor-dgx-s3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harbor-minio
+  template:
+    metadata:
+      labels:
+        app: harbor-minio
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: nvidia-dgx
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: llm
+          effect: NoSchedule
+      # homelab es privado; harbor-pull lo crea harbor-runtime-pull-bootstrap
+      # (platform/external-secrets/runtime-credentials.yaml).
+      imagePullSecrets:
+        - name: harbor-pull
+      containers:
+        - name: minio
+          # Copia de Harbor: minio/* ya no se descarga de Docker Hub sin login (qa, INFRA-931).
+          image: harbor.e-dani.com/homelab/minio:RELEASE.2025-04-22T22-12-26Z@sha256:ac59a61ad2ae6ec82be02baedbf37916425877c3ac422caf9d237f629ca723d8
+          args: ["server", "/data"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: harbor-minio-root, key: access-key}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: harbor-minio-root, key: secret-key}
+          ports:
+            - containerPort: 9000
+              name: s3
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: 9000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /minio/health/live, port: 9000}
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+        # Crea el bucket del registry (idempotente) y se queda dormido: sin Job, que
+        # ArgoCD recrearía sin fin (convención de storage/minio).
+        - name: bootstrap
+          image: harbor.e-dani.com/homelab/mc:RELEASE.2025-08-13T08-35-41Z@sha256:9492e9f4661723176ce36bf2245592151641d0353dbe3354608c925d3fa0b6bd
+          command: ["sh", "-c"]
+          args:
+            - |
+              export MC_CONFIG_DIR=/tmp/.mc
+              until mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 5; done
+              mc mb --ignore-existing local/harbor-blobs
+              exec sleep 2147483647
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: harbor-minio-root, key: access-key}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: harbor-minio-root, key: secret-key}
+          resources:
+            requests: {cpu: 5m, memory: 16Mi}
+            limits: {memory: 64Mi}
+      volumes:
+        - name: data
+          hostPath:
+            path: /srv/harbor-blobs
+            type: DirectoryOrCreate
