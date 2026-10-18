@@ -76,6 +76,26 @@ spec:
 # sobre la cookie y devuelve 401 en todos los endpoints autenticados tras el
 # signin. Patrón idéntico a aurora-ws-drop-authorization (ns aurora) y a la
 # ruta LAN equivalente (chat-drop-authorization, ns chat).
+# SC-2732: apple-app-site-association para la app iOS (fork conduit). El
+# servicio real (nginx de un fichero) vive en la ns chat (dgx-infra,
+# k8s/apps/chat/aasa.yaml); aquí solo el ExternalName de costumbre.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-chat-aasa
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-chat-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  type: ExternalName
+  externalName: chat-aasa.chat.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -110,6 +130,14 @@ spec:
       services:
         - name: edge-oauth2-proxy-chat
           port: 4180
+    # SC-2732: pareo Universal Links de la app iOS. Sin cadena SSO: swcd no
+    # manda credenciales. `priority` para ganar a la regla genérica (más larga).
+    - kind: Rule
+      match: Host(`chat.e-dani.com`) && PathPrefix(`/.well-known/apple-app-site-association`)
+      priority: 100
+      services:
+        - name: edge-chat-aasa
+          port: 80
     - kind: Rule
       match: Host(`chat.e-dani.com`)
       middlewares:
