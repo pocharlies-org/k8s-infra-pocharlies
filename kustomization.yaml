@@ -39,7 +39,6 @@ resources:
   - networking/traefik-edge/crosslink-ingress.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/horarios-alphalink-public.yaml
-  - networking/traefik-edge/wordpress-alphalink-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-edge-proof.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
