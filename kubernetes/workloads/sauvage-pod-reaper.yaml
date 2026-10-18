@@ -12,6 +12,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "delete"]
+  # INFRA-935 fix (18-10): the global scope (TARGET_NODE="") enumerates
+  # namespaces with `kubectl get ns`; the pods-only role made the job die with
+  # Forbidden. Read-only on namespaces is all the enumeration needs.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
