@@ -375,11 +375,14 @@ spec:
         - {name: connector-public-api-deny, namespace: whatsapp-mcp}
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
-    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, blackbox, x86):
-    # sin SSO, la firma la verifica el conector. SKIRM-116.
+    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, x86): sin SSO,
+    # la firma la verifica el conector. SKIRM-116. Acotada a /api/v1 (SC-2760):
+    # el host ahora es de la app de WhatsApp; lo unico que las maquinas siguen
+    # pidiendo aqui es la API firmada del conector. Blackbox ya no necesita
+    # excepcion: sondea GET / y eso es la app (como lo ve Dani).
     - kind: Rule
       priority: 200
-      match: Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`)
+      match: Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
     # El resto (LAN, tailnet): la app de WhatsApp del fork de Jordi (SC-2760),
