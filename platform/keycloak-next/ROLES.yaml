@@ -409,7 +409,7 @@
     {
       "name": "agentgateway-write:dgx-control",
       "status": "active",
-      "meaning": "Escrituras enumeradas del dominio dgx-control en AgentGateway (compute_mode_set, refusal_lambda_set, opencode_restart en /dgx-control y /chat-dgx-control). Alta inerte (INFRA-249, decisión del CTO en ROUTE-ROLES.md): sin concesionarios, esas tools siguen denegadas hasta que se revise un client dedicado.",
+      "meaning": "Escrituras enumeradas del dominio dgx-control en AgentGateway (compute_mode_set y refusal_lambda_set en /dgx-control y /chat-dgx-control). Alta inerte (INFRA-249, decisión del CTO en ROUTE-ROLES.md): sin concesionarios, esas tools siguen denegadas hasta que se revise un client dedicado.",
       "grantees": [],
       "privilege": {
         "allows": "Las tools de escritura explícitamente enumeradas del dominio dgx-control, con GATEWAY_WRITE activo en la ruta; hoy nadie lo tiene.",

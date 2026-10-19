@@ -248,12 +248,13 @@ class RouteRolesMatrixTest(unittest.TestCase):
         for route in ("dgx-control", "chat-dgx-control"):
             self.assertEqual(self.routes[route]["require"], set(), route)
             self.assertEqual(self.routes[route]["tools"], {
-                "agentgateway-write:dgx-control": {"compute_mode_set", "refusal_lambda_set", "opencode_restart"},
+                "agentgateway-write:dgx-control": {"compute_mode_set", "refusal_lambda_set"},
             }, route)
 
-    def test_cto_office_is_documented_and_untouched(self):
-        self.assertEqual(self.routes["cto-office"]["require"], {"cto-office-send"})
-        self.assertIn("cto-office-send", self.routes["cto-office"]["tools"])
+    def test_cto_office_route_is_retired_but_its_role_stays_reserved(self):
+        # DGX-1135: /cto-office salió del gateway; el rol sigue (base inmutable de los reconciliadores).
+        self.assertNotIn("cto-office", self.routes)
+        self.assertIn("cto-office-send", self.unrouted)
 
     def test_claude_sessions_roles_are_classified(self):
         self.assertEqual(self.routes["claude-sessions-read"]["require"], {"agentgateway-read:claude-sessions"})

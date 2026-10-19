@@ -8,8 +8,8 @@ REALM="${REALM:-edani}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
 # agentgateway-write:dgx-control (INFRA-249, CTO decision in ROUTE-ROLES.md)
-# is created inert: the gateway already gates compute_mode_set,
-# refusal_lambda_set and opencode_restart on it, and it has no entry in
+# is created inert: the gateway already gates compute_mode_set and
+# refusal_lambda_set on it, and it has no entry in
 # ALLOWED_SERVICE_ACCOUNTS, so nobody may hold it and those tools stay denied.
 ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador}"
 EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador"
