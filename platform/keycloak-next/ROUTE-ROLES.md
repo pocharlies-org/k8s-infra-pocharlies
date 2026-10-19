@@ -47,8 +47,8 @@ este repo; el verificador dice qué fila.
 
 ## Decisión del CTO: `agentgateway-write:dgx-control` (INFRA-249)
 
-`/dgx-control` y `/chat-dgx-control` gatean `compute_mode_set`,
-`refusal_lambda_set` y `opencode_restart` en `agentgateway-write:dgx-control`,
+`/dgx-control` y `/chat-dgx-control` gatean `compute_mode_set` y
+`refusal_lambda_set` en `agentgateway-write:dgx-control` (`opencode_restart` salió con DGX-1135),
 un rol que el 24-09-2026 **no existía en el realm** (verificador: `DRIFT:
 agentgateway-write:dgx-control referenciado en config y ausente del realm`).
 Decisión del CTO (INFRA-219, no se reabre): se **añade** el rol al reconciliador
@@ -122,7 +122,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
 | `offers` | `/offers` | — | `agentgateway-write` (3), `agentgateway-write:offers` (3) |
-| `cto-office` | `/cto-office` | `cto-office-send` | `cto-office-send` (2) |
 | `company-metrics` | `/company-metrics` | `company-metrics-read` | `company-metrics-read` (5) |
 | `chat-atlassian` | `/chat-atlassian` | — | `agentgateway-write` (40) |
 | `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40) |
@@ -328,7 +327,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/chat-dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "opencode_restart", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
       }
     },
     {
@@ -336,7 +335,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "opencode_restart", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
       }
     },
     {
@@ -434,14 +433,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       }
     },
     {
-      "route": "cto-office",
-      "path": "/cto-office",
-      "require": ["cto-office-send"],
-      "tools": {
-        "cto-office-send": ["cto_office_fetch", "cto_office_send"]
-      }
-    },
-    {
       "route": "company-metrics",
       "path": "/company-metrics",
       "require": ["company-metrics-read"],
@@ -489,6 +480,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
   "unrouted": [
     {"role": "agentgateway-read:dgx-control", "disposition": "reservado", "purpose": "/dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente."},
     {"role": "agentgateway-read:image", "disposition": "reservado", "purpose": "Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44)."},
+    {"role": "cto-office-send", "disposition": "reservado", "purpose": "Ruta /cto-office retirada 19-10 (DGX-1135, k8s-agentgateway-pocharlies#210: opencode retirado). El rol sigue vivo: openclaw-readonly-clients.sh, synapse-sre-client.sh y agentgateway-read-grants.sh lo usan como rol base inmutable y fallan cerrados sin él; retirarlo exige antes cambiar esos reconciliadores."},
     {"role": "agentgateway-read:offers", "disposition": "reservado", "purpose": "/offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-read:tts", "disposition": "reservado", "purpose": "/tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-write:compania", "disposition": "reservado", "purpose": "Medido en el realm vivo el 16-10 (SC-2522): concedido por admin API a service-account-hermes-secretaria y -casa sin declaracion en GitOps; ninguna ruta de k8s-agentgateway-pocharlies lo exige todavia. Entra en unrouted como llego (precedente INFRA-380); cuando la ruta /compania se declare, sale de aqui y pasa a su fila de la matriz."},
