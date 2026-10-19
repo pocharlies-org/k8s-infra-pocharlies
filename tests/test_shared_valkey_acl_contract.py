@@ -112,6 +112,7 @@ class SharedValkeyAclContractTest(unittest.TestCase):
                     "dgx-dashboard-worker",
                     "dgx-studio-bot",
                     "op-dgx-spark-bot",
+                    "dgx-dashboard-productor",
                 ]}],
             )],
              "ports": [TCP(6379)]},
