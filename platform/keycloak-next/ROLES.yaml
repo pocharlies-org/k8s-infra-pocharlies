@@ -8,6 +8,19 @@
   },
   "roles": [
     {
+      "name": "agentgateway-read:alphalink",
+      "status": "active",
+      "meaning": "Lectura de la ruta /alphalink de AgentGateway (SC-2725: MCP del planificador de horarios de AlphaLink).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las cuatro tools de solo lectura de la ruta /alphalink de AgentGateway.",
+        "denies": "Cualquier otra ruta del plano (y cualquier escritura: no existen en esta ruta)."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; SC-2725, mismo patrón que merchant)"
+    },
+    {
       "name": "agentgateway-read:analytics",
       "status": "active",
       "meaning": "Lectura de la ruta /analytics de AgentGateway (INFRA-23).",
