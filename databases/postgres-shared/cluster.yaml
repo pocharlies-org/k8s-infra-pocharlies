@@ -335,12 +335,12 @@ spec:
         comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
       # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
       # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
-      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=20 (values de k8s-hindsight-pocharlies)
-      # con 1 réplica de API; 30 deja margen para las migraciones del arranque.
+      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=40 (values de k8s-hindsight-pocharlies, INFRA-942 19-10)
+      # con 1 réplica de API; 50 deja margen para las migraciones del arranque y el rollout.
       - name: hindsight
         ensure: present
         login: true
-        connectionLimit: 30
+        connectionLimit: 50
         passwordSecret:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
