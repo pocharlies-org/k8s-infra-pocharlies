@@ -108,8 +108,17 @@ spec:
             # buildkitd-amd64-config ConfigMap below mounts a buildkitd.toml
             # with an explicit [[worker.oci.gcpolicy]]: GC fires only on
             # pressure (>8 GiB used or <2 GiB free on the tmpfs) and trims to
-            # a 1 GiB floor with a 24 h keepDuration. The flag cannot express
-            # per-policy rules; the toml replaces the four default policies.
+            # a 1 GiB floor. The flag cannot express per-policy rules; the toml
+            # replaces the four default policies.
+            # SC-2759 (2026-10-19): that policy first carried keepDuration =
+            # "24h", and in v0.31.0 pruneOnce() skips every record used inside
+            # keepDuration whatever the size limits say (cache/manager.go:
+            # `if lastUsedAt.After(cutOff) { continue }`). A tmpfs cache is
+            # born empty at every pod start and every record had been used in
+            # the last 24 h, so the GC found nothing to delete and the 10 GiB
+            # tmpfs filled up: ENOSPC on every amd64 build of the org. Same
+            # mechanism as SC-285 above. Do not put a keepDuration in this
+            # policy.
             - --oci-worker-gc
           # INFRA-475: timeoutSeconds was 1 (the default) — on a busy builder
           # the exec probe (fork + gRPC dial) exceeded it and kubelet killed a
@@ -160,15 +169,19 @@ spec:
               # ride the limit (4 CPU), not the request.
               cpu: "150m"
               # INFRA-475: the cache is tmpfs now, and tmpfs pages count against
-              # the pod's cgroup memory. INFRA-937: the toml gcpolicy caps the
-              # cache at 8 GiB of a 10 GiB tmpfs, so the request reserves cache +
-              # build headroom instead of the old ~24 GiB steady state.
+              # the pod's cgroup memory. INFRA-937: the toml gcpolicy keeps the
+              # cache at <= 8 GiB between builds, so the request covers that
+              # steady state; builds burst above it up to the limit.
               memory: 12Gi
             limits:
               cpu: "4"
-              # sizeLimit (10 GiB) + build headroom; an OOM kill of the daemon is
+              # sizeLimit (30 GiB) + build headroom (peak RSS of the daemon and
+              # its builds: 5.7 GiB over 4 days); an OOM kill of the daemon is
               # visible and Recreate brings it back with an empty cache.
-              memory: 16Gi
+              # SC-2759: with 10Gi/16Gi the LiteLLM build was OOM-killed even on
+              # an empty cache (INFRA-937 comment); 30Gi/36Gi ran the builds of
+              # 2026-10-15..18.
+              memory: 36Gi
           ports:
             - name: buildkit
               containerPort: 1234
@@ -193,14 +206,20 @@ spec:
           # ~30 s per package; the same build on the x86's NVMe: ~4 min). The
           # node has 125 GiB RAM with ~95 GiB free, and the cache is rebuildable:
           # losing it costs one slower build, never data (same ruling as the old
-          # PVC's comment). sizeLimit bounds the tmpfs; since INFRA-937 the
-          # toml gcpolicy keeps it at ≤8 GiB instead of ~24 GiB. Verification after GC changes is `df` on the
-          # volume and the Total in `buildctl du` — NEVER the "Reclaimable"
-          # column (v0.31.0 derives it per record as !InUse, so on a busy
-          # builder it always reads 0B; SC-285).
+          # PVC's comment). SC-2759 (2026-10-19) re-measured md3 before keeping
+          # this: still 100% util and 283 ms write await with no build cache on
+          # it, so a PVC on sauvage is not an option until the node gets a fast
+          # disk (INFRA-482). sizeLimit bounds the tmpfs: 30Gi leaves >= 22 GiB
+          # for builds in flight on top of the <= 8 GiB the toml gcpolicy keeps
+          # (10Gi left 2 GiB, and every large build — LiteLLM, Open WebUI,
+          # dashboard, correo — hit ENOSPC). RAM is used only as it is written:
+          # the GC trims to 8 GiB after each build. Verification after GC
+          # changes is `df` on the volume and the Total in `buildctl du` —
+          # NEVER the "Reclaimable" column (v0.31.0 derives it per record as
+          # !InUse, so on a busy builder it always reads 0B; SC-285).
           emptyDir:
             medium: Memory
-            sizeLimit: 10Gi
+            sizeLimit: 30Gi
         - name: harbor-push
           secret:
             secretName: harbor-push
@@ -238,12 +257,16 @@ metadata:
 data:
   # INFRA-937: GC a demanda y con tope. Una sola política (all=true) sustituye
   # a las cuatro por defecto: se dispara solo bajo presión (>8 GiB usados o
-  # <2 GiB libres en el tmpfs de 10 GiB) y poda hasta el suelo de 1 GiB con
-  # 24 h de keepDuration. Antes el default mantenía ~24 GiB de cache en RAM.
+  # <2 GiB libres en el tmpfs) y poda hasta el suelo de 1 GiB. Antes el
+  # default mantenía ~24 GiB de cache en RAM.
+  # SC-2759: sin keepDuration. Con él, buildkit v0.31 no borra nada usado
+  # dentro de esa ventana, y en una caché en RAM, que nace vacía en cada
+  # arranque del pod, todo se había usado en las últimas 24 h: el GC no tenía
+  # qué podar y el tmpfs se llenó. Lo que sí se poda va del menos al más
+  # reciente y usado; lo que tiene un build en curso no se toca.
   buildkitd.toml: |
     [[worker.oci.gcpolicy]]
       all = true
       keepBytes = 1073741824
-      keepDuration = "24h"
       maxUsedSpace = "8gb"
       minFreeSpace = "2gb"
