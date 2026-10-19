@@ -41,7 +41,6 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
 ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
-                                     "/api/litellm/opencode/reload",
                                      "/api/llm/dgx3/mode")]  # DGX-1054: el mando LLM|creative de dgx3
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
@@ -75,7 +74,7 @@ ESCALAR = [("POST", "/api/secretaria/despacho/escalar")] + [
 # fixture que ya iban tras SSO (/api/company, /api/claude-sessions, /api/messages…) no están.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/llm/uncensored", "/api/activity", "/api/activity/stream", "/api/activity/claude",
-    "/api/litellm/opencode", "/api/alibaba/accounts", "/api/alibaba/catalog", "/api/alibaba/quota",
+    "/api/alibaba/accounts", "/api/alibaba/catalog", "/api/alibaba/quota",
     "/api/alibaba/uso-clase", "/api/app/build", "/api/app/screens", "/api/app/screens/inferencia",
     "/api/cluster/llm/resident-profile", "/api/compute/batch", "/api/compute/mode",
     "/api/llm/dgx3/mode",  # DGX-1054: el GET del mando sigue abierto

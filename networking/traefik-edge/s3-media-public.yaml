@@ -49,7 +49,7 @@ spec:
           namespace: control-nexus
           port: 80
     # DGX-809 (security H-2 de DGX-799): tres escrituras sin identidad del backend
-    # (POST /api/activity/power, /api/llm/uncensored y /api/litellm/opencode/reload)
+    # (POST /api/activity/power y /api/llm/uncensored)
     # entran igual, solo con POST: sus GET siguen abiertos. POST /api/activity/claude/refresh
     # se queda abierto (F1 de security: lo llama sin sesión la extensión vscode-claude-cuenta).
     # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
@@ -57,7 +57,7 @@ spec:
     # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
     # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster).
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`)) && Method(`POST`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers

@@ -3,7 +3,7 @@
 # Por qué no vale `sso-chain` (el proxy compartido `oauth2-proxy`):
 # ese proxy tiene `allowed_groups = [ "/edani-admins", "/edani-operators" ]` y
 # protege ~90 rutas — Vault, ArgoCD, Longhorn, MinIO, Grafana, brain, synapse,
-# los paneles de opencode. Para que una persona use SOLO el chat haría falta
+# el dashboard. Para que una persona use SOLO el chat haría falta
 # meterla en uno de esos dos grupos, lo que le abriría todo lo demás.
 #
 # Este proxy acepta además `/edani-users`, un grupo sin privilegios que no
