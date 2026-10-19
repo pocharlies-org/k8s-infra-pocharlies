@@ -313,8 +313,9 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write.",
+      "purpose": "Plano MCP de AgentGateway: las 23 lecturas agentgateway-read:* y agentgateway-write.",
       "realm_roles": [
+        "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
         "agentgateway-read:atlassian",
         "agentgateway-read:brain",

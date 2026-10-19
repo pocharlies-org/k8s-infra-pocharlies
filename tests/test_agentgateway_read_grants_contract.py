@@ -12,6 +12,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 
 READ_ROUTES = [
+    "alphalink",
     "analytics", "atlassian", "brain", "dgx-control", "gsc", "image",
     "merchant", "offers", "picqer", "plaud", "shopify", "shopify-admin",
     "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
@@ -379,7 +380,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_matrix_is_immutable_and_exactly_the_reviewed_routes(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertEqual(22, len(READ_ROLE_NAMES))
+        self.assertEqual(23, len(READ_ROLE_NAMES))
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
@@ -421,30 +422,30 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_ensure_from_empty_creates_roles_maps_grants_and_verifies_tokens(self):
         result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
-        self.assertIn('"roles":22,"created":22', result.stdout)
+        self.assertIn('"roles":23,"created":23', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertIn('"tokens_verified":true', result.stdout)
-        self.assertEqual(22, journal.count("create roles "))
+        self.assertEqual(23, journal.count("create roles "))
         self.assertEqual(1, journal.count("create clients/mcp-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create clients/oc-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(23, len(state_files["scope-mcp"].split()))
+        self.assertEqual(24, len(state_files["scope-mcp"].split()))
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its seven reviewed roles on that client.
         self.assertEqual(7, len(state_files["scope-oc"].split()))
-        self.assertEqual(22, len(state_files["grants-mcp-sa"].split()))
+        self.assertEqual(23, len(state_files["grants-mcp-sa"].split()))
         self.assertEqual(7, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
         result, journal, state_files = self.run_reconciler(
             mode="ensure", seed=seed_full_state
         )
-        self.assertIn('"roles":22,"created":0', result.stdout)
+        self.assertIn('"roles":23,"created":0', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertNotIn("create roles ", journal)
         self.assertNotIn("create clients/", journal)
@@ -679,7 +680,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
             mcp_off_roles=MCP_TOKEN_OFF_ROLES + ["create-realm"],
         )
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("not exactly the reviewed 23", result.stderr)
+        self.assertIn("not exactly the reviewed 24", result.stderr)
         self.assertNotIn("update clients/mcp-uuid", journal)
         self.assertEqual("false\n", state_files["fullscope-mcp"])
 
@@ -744,8 +745,8 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, journal, state_files = self.run_reconciler(
             mode="rollback", seed=seed_full_state
         )
-        self.assertIn('"roles_deleted":22,"present":false', result.stdout)
-        self.assertEqual(22, journal.count("delete roles/agentgateway-read:"))
+        self.assertIn('"roles_deleted":23,"present":false', result.stdout)
+        self.assertEqual(23, journal.count("delete roles/agentgateway-read:"))
         self.assertNotIn("delete roles/agentgateway-write", journal)
         self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
         self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
