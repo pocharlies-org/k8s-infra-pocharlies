@@ -88,6 +88,7 @@ resources:
   - storage/minio/dgx-studio-identity.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - networking/traefik-edge/videovigilancia-public.yaml
+  - networking/traefik-edge/brain-shopify-webhooks-public.yaml
   - buildkit
   - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
