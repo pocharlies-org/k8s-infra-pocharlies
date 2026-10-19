@@ -461,6 +461,10 @@ spec:
                   # Valkey only for its Telegram poller lease, dedupe, rate limit
                   # and one-shot user-bound action confirmations.
                   - op-dgx-spark-bot
+                  # Productor de vistas del dashboard (dgx-infra
+                  # k8s/control-nexus/dashboard-productor-deployment.yaml, SC-2716):
+                  # calcula las ranuras de presentación y las publica en dash:v1:*.
+                  - dgx-dashboard-productor
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
