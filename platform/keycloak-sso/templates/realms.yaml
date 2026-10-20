@@ -1,0 +1,117 @@
+{{- /* SC-2822: el realm de cada web, entero desde git (keycloak-config-cli). Realm
+cerrado: sin registro y sin crear usuarios al entrar con Google; solo entra quien
+está declarado en realms.yaml, y su cuenta de Google se le enlaza por email. */ -}}
+{{- if .Values.realms }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-sso-realms
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: keycloak-sso-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+data:
+{{- range $r := .Values.realms }}
+{{- $envName := $r.name | upper | replace "-" "_" }}
+  {{ $r.name }}.yaml: |
+    realm: {{ $r.name }}
+    displayName: {{ $r.displayName | default $r.name | quote }}
+    enabled: true
+    sslRequired: external
+    registrationAllowed: false
+    resetPasswordAllowed: false
+    rememberMe: false
+    loginWithEmailAllowed: true
+    duplicateEmailsAllowed: false
+    bruteForceProtected: true
+    {{- with $r.groups }}
+    groups:
+      {{- range . }}
+      - name: {{ . }}
+      {{- end }}
+    {{- end }}
+    clients:
+      - clientId: oauth2-proxy
+        name: oauth2-proxy ({{ $r.name }})
+        enabled: true
+        protocol: openid-connect
+        publicClient: false
+        clientAuthenticatorType: client-secret
+        secret: $(env:CLIENT_SECRET_{{ $envName }})
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        # Callback exacto por host: sin comodines.
+        redirectUris:
+          {{- range $r.hosts }}
+          - https://{{ . }}/oauth2/callback
+          {{- end }}
+        webOrigins: []
+        protocolMappers:
+          - name: groups
+            protocol: openid-connect
+            protocolMapper: oidc-group-membership-mapper
+            consentRequired: false
+            config:
+              full.path: "true"
+              id.token.claim: "true"
+              access.token.claim: "true"
+              userinfo.token.claim: "true"
+              claim.name: groups
+              multivalued: "true"
+    users:
+      {{- range $r.users }}
+      - username: {{ .email | lower }}
+        email: {{ .email | lower }}
+        enabled: true
+        emailVerified: true
+        {{- with .groups }}
+        groups:
+          {{- range . }}
+          - /{{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- if $r.google }}
+    authenticationFlows:
+      # Primer login con Google: enlaza con el usuario declarado del mismo email
+      # y, si no existe, falla. Nunca crea usuarios.
+      - alias: link-existing-only
+        description: Enlaza Google con un usuario ya declarado; no crea usuarios (SC-2822)
+        providerId: basic-flow
+        topLevel: true
+        builtIn: false
+        authenticationExecutions:
+          - authenticator: idp-detect-existing-broker-user
+            requirement: REQUIRED
+            priority: 10
+            authenticatorFlow: false
+            userSetupAllowed: false
+          - authenticator: idp-auto-link
+            requirement: REQUIRED
+            priority: 20
+            authenticatorFlow: false
+            userSetupAllowed: false
+    identityProviders:
+      - alias: google
+        providerId: google
+        enabled: true
+        trustEmail: true
+        storeToken: false
+        firstBrokerLoginFlowAlias: link-existing-only
+        config:
+          clientId: $(env:GOOGLE_CLIENT_ID)
+          clientSecret: $(env:GOOGLE_CLIENT_SECRET)
+          defaultScope: openid profile email
+          syncMode: IMPORT
+          # Quien tiene varias cuentas de Google elige con cuál entra.
+          prompt: select_account
+          {{- with $r.googleHostedDomain }}
+          hostedDomain: {{ . }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

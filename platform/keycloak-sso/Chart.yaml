@@ -1,0 +1,5 @@
+apiVersion: v2
+name: keycloak-sso
+description: Un realm de Keycloak por web, su oauth2-proxy y su cadena de Traefik (SC-2822).
+type: application
+version: 0.1.0

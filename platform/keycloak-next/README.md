@@ -11,12 +11,12 @@ redirects here for old bookmarks.
   shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
   from 1Password item `keycloak-next-postgres` (vault `k8s-pocharlies`).
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
-- Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
-  namespace:
-  - `sso-forward-auth`
-  - `sso-errors`
-  - `sso-chain`
-- Apps with native OIDC should use Keycloak directly.
+- **One realm per web, always separate (SC-2822):** every web gets its own
+  realm, oauth2-proxy and `sso-<realm>-chain`, declared in
+  `platform/keycloak-sso/realms.yaml`. The rule and how to add a web:
+  `docs/sso-por-app.md`. This directory keeps the `edani` realm (AgentGateway and
+  machine identities) and the legacy `sso-forward-auth`/`sso-errors`/`sso-chain`
+  of the webs not migrated yet; no new web goes on them.
 - The PostSync reconciler scripts in `scripts/` share one bootstrap
   (`scripts/kc-admin-common.sh`: admin login with retries, `kget`,
   `nonempty_lines`, cleanup trap). Hooks source it via
@@ -85,8 +85,8 @@ items and Google OAuth client exist:
 4. Create a confidential client for oauth2-proxy and add a groups mapper.
 5. Test a protected LAN or public route that references `keycloak/sso-chain`.
 
-Protected services should reference the `keycloak/sso-chain` Traefik middleware
-or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
+New protected services do not reference `keycloak/sso-chain`: they get their
+own realm and chain (`docs/sso-por-app.md`).
 
 ## PostgreSQL compartido
 
