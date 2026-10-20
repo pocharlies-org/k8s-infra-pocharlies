@@ -142,8 +142,6 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual({
             "agentgateway-write:workspace-envio=service-account-hermes-enviar",
             "agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop",
-            # SC-2726: el asistente del planificador escribe por el SA del gateway (no es chat).
-            "agentgateway-write:alphalink=service-account-agentgateway-mcp",
         }, guarded_elsewhere)
 
 
