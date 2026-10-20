@@ -80,8 +80,10 @@ spec:
     # identidad borradas antes. Sin gate ClientIP: también para quien no pase
     # por el bypass. Por encima del control set (400), que antes mandaba
     # /api/messages a la copia vieja del dashboard.
+    # /static/vendor/react/ también: la consola carga su React de ahí y el dashboard ya no
+    # lo tiene (INFRA-265 lo borró; sin esto /messages salía en blanco, DGX-1181).
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
