@@ -125,6 +125,28 @@ jobs:
           git show "FETCH_HEAD:$catalog" > "$RUNNER_TEMP/ROLES.base.yaml"
           python3 platform/keycloak-next/scripts/check-catalog-evolution.py --base "$RUNNER_TEMP/ROLES.base.yaml" --head "$catalog"
 
+  # SC-2822: un realm de Keycloak por web (docs/sso-por-app.md). Renderiza el
+  # chart platform/keycloak-sso y comprueba la norma contra todas las rutas.
+  keycloak-realm-per-web:
+    runs-on: arc-k8s
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Realm por web, alphalink y el reconciler de skirmbooks
+        run: |
+          python3 -m unittest -v \
+            tests/test_keycloak_realm_per_web_contract.py \
+            tests/test_horarios_alphalink_sso_contract.py \
+            tests/test_skirmbooks_sso_reconciler_contract.py
+
   velero-operability-contract:
     runs-on: arc-k8s
     steps:

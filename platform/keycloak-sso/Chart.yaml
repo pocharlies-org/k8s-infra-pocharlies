@@ -1,0 +1,6 @@
+# Un realm de Keycloak por web, su oauth2-proxy y su cadena de Traefik (SC-2822).
+# En estilo flujo a propósito: el lint común manda a kubeconform todo fichero con
+# una línea `apiVersion:` y esto no es un manifiesto. Y las plantillas van en .tpl:
+# yamllint pasa por todo *.yaml y una plantilla Helm no es YAML hasta renderizarla.
+{apiVersion: v2, name: keycloak-sso, type: application, version: 0.1.0,
+ description: "Un realm de Keycloak por web, su oauth2-proxy y su cadena de Traefik (SC-2822)."}
