@@ -11,10 +11,12 @@
 #   critical      true = 2 réplicas del proxy
 #   google        login con Google (cliente de google.item); el usuario tiene que
 #                 estar declarado abajo: el primer login enlaza por email, nunca crea
+#   googleHostedDomain  obligatorio con google: dominio (o dominios, separados por
+#                 comas) de las cuentas de Google admitidas
 #   groups        grupos del realm; allowedGroups = los que dan acceso
 #   users         quién existe en el realm (email) y sus grupos
 #
-# Secretos: ítem 1Password `keycloak-sso-<name>` con client_secret y cookie_secret.
+# Secretos: ítem 1Password `keycloak-next-oauth2-proxy-<name>` con client_secret y cookie_secret.
 google:
   item: ""
 

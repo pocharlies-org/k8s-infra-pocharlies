@@ -123,6 +123,11 @@ class RealmsContract(unittest.TestCase):
             for idp in realm.get("identityProviders", []):
                 # Primer login con Google: enlaza o falla; nunca crea un usuario.
                 self.assertEqual(idp["firstBrokerLoginFlowAlias"], "link-existing-only")
+                # security: solo email verificado por Google y del dominio del realm.
+                cfg = idp["config"]
+                self.assertEqual((cfg["filteredByClaim"], cfg["claimFilterName"], cfg["claimFilterValue"]),
+                                 ("true", "email_verified", "true"))
+                self.assertEqual(cfg["hostedDomain"], r["googleHostedDomain"])
                 flow = next(f for f in realm["authenticationFlows"] if f["alias"] == "link-existing-only")
                 self.assertNotIn("idp-create-user-if-unique",
                                  [e["authenticator"] for e in flow["authenticationExecutions"]])

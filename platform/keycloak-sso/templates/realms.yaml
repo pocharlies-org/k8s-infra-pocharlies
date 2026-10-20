@@ -107,11 +107,14 @@ data:
           clientSecret: $(env:GOOGLE_CLIENT_SECRET)
           defaultScope: openid profile email
           syncMode: IMPORT
+          # security: sin email verificado por Google no hay enlace por email.
+          filteredByClaim: "true"
+          claimFilterName: email_verified
+          claimFilterValue: "true"
           # Quien tiene varias cuentas de Google elige con cuál entra.
           prompt: select_account
-          {{- with $r.googleHostedDomain }}
-          hostedDomain: {{ . }}
-          {{- end }}
+          # security: el dominio de las cuentas de Google se declara por realm.
+          hostedDomain: {{ required (printf "realm %s: google necesita googleHostedDomain" $r.name) $r.googleHostedDomain }}
     {{- end }}
 {{- end }}
 {{- end }}

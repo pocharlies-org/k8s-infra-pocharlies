@@ -33,12 +33,12 @@ Application `keycloak-sso`). De ella salen:
 - `oauth2-proxy-<realm>` con cookie `_<realm>_sso` pegada al host (sin
   `cookie_domains`) y `allowed_groups` propio;
 - la cadena `sso-<realm>-chain` (errors solo 401 + forward-auth) en ns `keycloak`;
-- los secretos del ítem 1Password `keycloak-sso-<realm>` (`client_secret`,
-  `cookie_secret` de 32 bytes base64url).
+- los secretos del ítem 1Password `keycloak-next-oauth2-proxy-<realm>` (`client_secret`,
+  `cookie_secret` de 32 bytes en base64url).
 
 Pasos para una web nueva:
 
-1. Ítem `keycloak-sso-<realm>` en 1Password (lo crea security).
+1. Ítem `keycloak-next-oauth2-proxy-<realm>` en 1Password (lo crea security).
 2. Si entra con Google: el callback
    `https://auth-next.e-dani.com/realms/<realm>/broker/google/endpoint` en el
    cliente OAuth de Google Cloud (Request a IT).
