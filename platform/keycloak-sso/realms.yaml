@@ -18,7 +18,7 @@
 #
 # Secretos: ítem 1Password `keycloak-next-oauth2-proxy-<name>` con client_secret y cookie_secret.
 google:
-  item: ""
+  item: keycloak-next-google-oauth
 
 realms:
   - name: alphalink

@@ -116,7 +116,7 @@ op item create --vault k8s-pocharlies --category SECURE_NOTE \
   --title keycloak-next-oauth2-proxy \
   client_id=oauth2-proxy \
   client_secret="<client secret from Keycloak>" \
-  cookie_secret="$(openssl rand -base64 32)"
+  cookie_secret="$(openssl rand 32 | base64 | tr "+/" "-_" | tr -d "=")"  # base64url: oauth2-proxy v7.15.2 no acepta base64 estándar
 ```
 
 Force-sync the ExternalSecret if needed:
