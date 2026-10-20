@@ -3,3 +3,5 @@ name: keycloak-sso
 description: Un realm de Keycloak por web, su oauth2-proxy y su cadena de Traefik (SC-2822).
 type: application
 version: 0.1.0
+# Las plantillas van en .tpl: el lint común del repo pasa yamllint a todo *.yaml
+# y una plantilla Helm no es YAML hasta renderizarla. Helm las renderiza igual.
