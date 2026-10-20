@@ -409,7 +409,9 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "alphalink",
       "path": "/alphalink",
       "require": ["agentgateway-read:alphalink"],
-      "tools": {}
+      "tools": {
+        "agentgateway-write:alphalink": ["alphalink_semana_guardar_borrador"]
+      }
     },
     {
       "route": "plaud",

@@ -165,7 +165,10 @@ class RoleCatalogShapeTest(unittest.TestCase):
         held = {name for name, entry in catalog.items() if mcp in entry["grantees"]}
         reads = {name for name in held if name.startswith("agentgateway-read:")}
         self.assertEqual(len(reads), 23)
-        self.assertEqual(held - reads, {"agentgateway-write", "default-roles-edani"})
+        # SC-2726: + agentgateway-write:alphalink (el asistente del planificador
+        # guarda borradores por la ruta /alphalink; lo concede el domain-roles job).
+        self.assertEqual(held - reads, {"agentgateway-write", "agentgateway-write:alphalink",
+                                        "default-roles-edani"})
         # OWU-80 (2026-09-25): the reviewed holders of agentgateway-write are
         # the privileged service account plus exactly one human, pinned by
         # subject e51253a7-c137-4c6c-9fb9-af9cecd3b147 (me@e-dani.com) and
