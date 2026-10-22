@@ -194,6 +194,16 @@ roles, `agentgateway-read:workspace` and `agentgateway-write:workspace-envio`
 manages the client secret; `RUNBOOK.md` section 18 covers the order of the
 change, seeding the secret into 1Password and rollback.
 
+## Postia case agent identities (`correo-agente-lectura`, `correo-ejecutor`)
+
+`correo-agente-clients.yaml` (two PostSync Jobs, wave 24, one script) reconciles
+the two clients of the Postia case agent (DGX-1218): `correo-agente-lectura`
+with only the six `agentgateway-read:<route>` roles of its profiles and no
+`agentgateway-write*`, and `correo-ejecutor` with
+`agentgateway-write:correo-ejecutor` (held by nobody else) and
+`agentgateway-read:shopify-admin`. Same hardening as `hermes-enviar`; the
+secrets are seeded into 1Password after the sync (`RUNBOOK.md` section 19).
+
 ## Chat identity (`chat-agentgateway`)
 
 `chat-agentgateway-client.yaml` reconciles the confidential client the chat

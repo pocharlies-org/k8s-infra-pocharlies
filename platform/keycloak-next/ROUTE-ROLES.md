@@ -11,12 +11,14 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **43 rutas, 73 gates** en esta matriz (la fila `plaud` se declara por
+  Hoy: **43 rutas, 78 gates** en esta matriz (la fila `plaud` se declara por
   delante del config vivo —INFRA-380, pendiente del merge de
   k8s-agentgateway-pocharlies#197—; el verificador la señala hasta que la ruta
   despliegue). El config vivo trae 77: la
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
-  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676).
+  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). DGX-1218 declara
+  los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
+  del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
   Ninguno se retira desde aquí.
 
@@ -96,9 +98,9 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `chat-stt` | `/chat-stt` | — | — |
 | `stt` | `/stt` | `agentgateway-read:stt` | — |
 | `picqer` | `/picqer` | `agentgateway-read:picqer` | `agentgateway-write` (36), `agentgateway-write:picqer` (36) |
-| `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:skirmshop-plugins` (35) |
+| `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:correo-ejecutor`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:correo-ejecutor` (1), `agentgateway-write:skirmshop-plugins` (35) |
 | `skirmshop-plugins` | `/skirmshop-plugins` | `agentgateway-read:skirmshop-plugins` | — |
-| `shopify-admin` | `/shopify-admin` | `agentgateway-read:shopify-admin` | `agentgateway-write` (18), `agentgateway-write:shopify` (18) |
+| `shopify-admin` | `/shopify-admin` | `agentgateway-read:shopify-admin` | `agentgateway-write` (18), `agentgateway-write:correo-ejecutor` (3), `agentgateway-write:shopify` (18) |
 | `shopify` | `/shopify` | `agentgateway-read:shopify` | `agentgateway-write` (5), `agentgateway-write:shopify` (5) |
 | `chat-analytics` | `/chat-analytics` | — | — |
 | `analytics` | `/analytics` | `agentgateway-read:analytics` | — |
@@ -217,9 +219,10 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
     {
       "route": "skirmshop-plugins-admin",
       "path": "/skirmshop-plugins-admin",
-      "require": ["agentgateway-write", "agentgateway-write:skirmshop-plugins"],
+      "require": ["agentgateway-write", "agentgateway-write:correo-ejecutor", "agentgateway-write:skirmshop-plugins"],
       "tools": {
         "agentgateway-write": ["affiliate_api", "back_in_stock_api", "bundles_api", "catalog_rag_api", "catalog_rag_competitor_coverage", "catalog_rag_competitor_price_comparison", "catalog_rag_competitor_products", "catalog_rag_competitor_rescue_candidates", "catalog_rag_competitor_source", "catalog_rag_competitor_sources", "collections_tree_api", "labels_api", "labels_carrier_service_rates", "labels_correos_fuel_surcharge", "labels_create_label", "labels_latest_order_status", "labels_pickup_create", "labels_rate_quote", "labels_shipment_status", "picker_api", "serial_numbers_api", "shopify_sync_api", "sii_api", "skirmbooks_reconcile_invoices", "skirmbooks_reconcile_movements", "skirmbooks_reconcile_summary", "skirmbooks_reconcile_upload_invoice", "skirmshop_plugins_call", "skirmshop_plugins_describe", "skirmshop_plugins_get", "skirmshop_plugins_list", "skirmshop_plugins_request", "skirmshop_plugins_tools_list", "translations_api"],
+        "agentgateway-write:correo-ejecutor": ["labels_pickup_create"],
         "agentgateway-write:skirmshop-plugins": ["affiliate_api", "back_in_stock_api", "bundles_api", "catalog_rag_api", "catalog_rag_competitor_coverage", "catalog_rag_competitor_price_comparison", "catalog_rag_competitor_products", "catalog_rag_competitor_rescue_candidates", "catalog_rag_competitor_source", "catalog_rag_competitor_sources", "collections_tree_api", "labels_api", "labels_carrier_service_rates", "labels_correos_fuel_surcharge", "labels_create_label", "labels_latest_order_status", "labels_pickup_create", "labels_rate_quote", "labels_shipment_status", "picker_api", "serial_numbers_api", "shopify_sync_api", "sii_api", "skirmbooks_reconcile_invoices", "skirmbooks_reconcile_movements", "skirmbooks_reconcile_summary", "skirmbooks_reconcile_upload_invoice", "skirmshop_plugins_call", "skirmshop_plugins_describe", "skirmshop_plugins_get", "skirmshop_plugins_list", "skirmshop_plugins_request", "skirmshop_plugins_tools_list", "translations_api"]
       }
     },
@@ -235,6 +238,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "require": ["agentgateway-read:shopify-admin"],
       "tools": {
         "agentgateway-write": ["collection_create", "collection_delete", "customer_create", "customer_update", "draft_order_create", "graphql_execute", "metafields_set", "order_returnable_lines_get", "order_shipping_line_replace", "product_archive_or_delete", "product_collection_connect", "product_collection_disconnect", "product_create", "product_publish_toggle", "product_update", "return_create", "translations_register", "variant_update"],
+        "agentgateway-write:correo-ejecutor": ["order_returnable_lines_get", "order_shipping_line_replace", "return_create"],
         "agentgateway-write:shopify": ["collection_create", "collection_delete", "customer_create", "customer_update", "draft_order_create", "graphql_execute", "metafields_set", "order_returnable_lines_get", "order_shipping_line_replace", "product_archive_or_delete", "product_collection_connect", "product_collection_disconnect", "product_create", "product_publish_toggle", "product_update", "return_create", "translations_register", "variant_update"]
       }
     },

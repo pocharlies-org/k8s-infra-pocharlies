@@ -1,0 +1,170 @@
+# The two confidential clients of the Postia case agent (DGX-1218, PR-2 of
+# epic DGX-1209; security condition 3), reconciled by one script with the
+# reviewed role set fixed per CLIENT_ID (scripts/correo-agente-client.sh):
+#   - correo-agente-lectura: only the agentgateway-read:<route> roles of the
+#     agent's profiles (brain, picqer, shopify, shopify-admin,
+#     skirmshop-plugins, workspace) and no agentgateway-write* at all.
+#   - correo-ejecutor: agentgateway-write:correo-ejecutor (the per-tool CEL
+#     rules of k8s-agentgateway-pocharlies#221) and agentgateway-read:shopify-admin;
+#     never the bare agentgateway-write.
+# Same hardening as hermes-enviar-client.yaml: GitOps-declared, service account
+# only, fullScopeAllowed=false, audience mcp.lan.e-dani.com, exact token
+# verified. No ExternalSecret here: Keycloak generates each secret and a devops
+# step after the sync copies it to 1Password (RUNBOOK section 19).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-correo-agente-lectura-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: correo-agente-lectura-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the domain-roles (19) and read-grants (20) hooks that own the
+    # roles; same wave as hermes-enviar and jarvis-echo, which reconcile other
+    # clients and share no state with this one.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # Same 1800 s budget as hermes-enviar; the read identity maps six roles,
+  # the measured heavy case of the chat client (701 s).
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: correo-agente-lectura-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/correo-agente-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: correo-agente-lectura }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-correo-agente-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-correo-ejecutor-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: correo-ejecutor-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the domain-roles (19) and read-grants (20) hooks that own the
+    # roles; same wave as hermes-enviar and jarvis-echo, which reconcile other
+    # clients and share no state with this one.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # Same 1800 s budget as hermes-enviar; the read identity maps six roles,
+  # the measured heavy case of the chat client (701 s).
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: correo-ejecutor-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/correo-agente-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: correo-ejecutor }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-correo-agente-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
