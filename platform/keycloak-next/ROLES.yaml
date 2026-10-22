@@ -2,7 +2,7 @@
   "schema": "keycloak-role-catalog/v1",
   "realm": "edani",
   "contract": "Registro de contrato de los roles de realm de edani (INFRA-219 C1). JSON válido, que es YAML 1.2; se lee con json.load. Ninguna entrada se borra nunca: un rol retirado pasa a status deprecated. grantees = usernames con el rol concedido DIRECTAMENTE (no por compuesto); composites = roles de realm exactos que contiene un rol compuesto (ausente = ninguno); client_composites = objeto clientId → lista exacta de roles de cliente que contiene (ausente = ninguno); client_uuids = objeto clientId → id interno del cliente, exactamente los clientIds que usa algún client_composites (los compuestos solo traen el id interno y así se traducen sin GET clients, que exige view-clients); ningún rol catalogado se concede por grupo (R2). Lo comprueba scripts/verify-role-catalog.py contra el realm vivo.",
-  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync); SC-2238 (2026-10-09) declara el rol agentgateway-write:browser-navegacion y sus cuatro titulares (service-account-hermes-secretaria, -dani, -leila y -casa) ANTES de crearlo y concederlo en el realm: hasta la concesión, keycloak-role-drift da DRIFT a propósito; INFRA-380 (2026-10-13) declara el rol agentgateway-read:plaud y sus dos titulares (service-account-agentgateway-mcp y service-account-openclaw-readonly-agentgateway, los mismos de gsc) ANTES de crearlo: lo alta y concede el PostSync agentgateway-read-grants-job en el siguiente sync; SC-2522 (2026-10-16) añade como grantee de default-roles-edani a dom.greco@alphalinkcrossfit.com, usuario del realm de origen desconocido adoptado en PRINCIPALS.md; SC-2522 (2026-10-16) declara además el rol agentgateway-write:compania medido en el realm con sus dos titulares (service-account-hermes-secretaria y -casa), concedido en vivo sin declaración en GitOps; SC-2726 (2026-10-20) declara el rol agentgateway-write:alphalink como alta inerte (grantees vacíos, patrón dgx-control): la ruta /alphalink acepta el write pelado o el rol de dominio (regla dual, decisión del arquitecto); el PostSync agentgateway-domain-roles-job lo crea y revoca la concesión al SA compartido que llegó a aplicar en un sync previo",
+  "measured": "2026-09-24, admin API de auth-next.e-dani.com, realm edani (43 roles); client_uuids medido 2026-09-25; grantees de agentgateway-write actualizado 2026-09-25 por OWU-80 (usuario me@e-dani.com resuelto por sub e51253a7-c137-4c6c-9fb9-af9cecd3b147, read-only); grantees actualizados 2026-10-07 por SC-2005 (drift cerrado: 5 SAs de perfiles de secretaria INFRA-494, sonda atlassian-mcp-probe SC-1834 y los usuarios staticduo@gmail.com INFRA-383-M1B, correo@e-dani.com SC-1958 y qa-sso-test INFRA-561); INFRA-676 (2026-10-07) declara por GitOps los roles agentgateway-write:workspace-envio y :workspace-borrador y el principal service-account-hermes-enviar (alta nueva: aún sin medir en vivo, lo medirá keycloak-role-drift tras el sync); SC-2238 (2026-10-09) declara el rol agentgateway-write:browser-navegacion y sus cuatro titulares (service-account-hermes-secretaria, -dani, -leila y -casa) ANTES de crearlo y concederlo en el realm: hasta la concesión, keycloak-role-drift da DRIFT a propósito; INFRA-380 (2026-10-13) declara el rol agentgateway-read:plaud y sus dos titulares (service-account-agentgateway-mcp y service-account-openclaw-readonly-agentgateway, los mismos de gsc) ANTES de crearlo: lo alta y concede el PostSync agentgateway-read-grants-job en el siguiente sync; SC-2522 (2026-10-16) añade como grantee de default-roles-edani a dom.greco@alphalinkcrossfit.com, usuario del realm de origen desconocido adoptado en PRINCIPALS.md; SC-2522 (2026-10-16) declara además el rol agentgateway-write:compania medido en el realm con sus dos titulares (service-account-hermes-secretaria y -casa), concedido en vivo sin declaración en GitOps; SC-2726 (2026-10-20) declara el rol agentgateway-write:alphalink como alta inerte (grantees vacíos, patrón dgx-control): la ruta /alphalink acepta el write pelado o el rol de dominio (regla dual, decisión del arquitecto); el PostSync agentgateway-domain-roles-job lo crea y revoca la concesión al SA compartido que llegó a aplicar en un sync previo; DGX-1218 (2026-10-22) declara el rol agentgateway-write:correo-ejecutor y los principales service-account-correo-agente-lectura y service-account-correo-ejecutor ANTES de crearlos: los altan y conceden los PostSync agentgateway-domain-roles-job y correo-agente-clients en el siguiente sync; hasta entonces keycloak-role-drift da DRIFT a propósito",
   "client_uuids": {
     "account": "5402c4f9-25fc-4a60-8027-2ff55fae0677"
   },
@@ -53,6 +53,7 @@
       "meaning": "Lectura de la ruta /brain de AgentGateway (INFRA-23).",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
         "service-account-hermes-secretaria",
         "service-account-hermes-secretaria-casa",
         "service-account-hermes-secretaria-dani",
@@ -63,7 +64,7 @@
         "allows": "Llamar a las tools de solo lectura de la ruta /brain de AgentGateway.",
         "denies": "Cualquier tool de escritura de /brain (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-read:claude-sessions",
@@ -151,13 +152,14 @@
       "meaning": "Lectura de la ruta /picqer de AgentGateway (INFRA-23).",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
         "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a las tools de solo lectura de la ruta /picqer de AgentGateway.",
         "denies": "Cualquier tool de escritura de /picqer (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-read:plaud",
@@ -179,13 +181,14 @@
       "meaning": "Lectura de la ruta /shopify de AgentGateway (INFRA-23).",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
         "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a las tools de solo lectura de la ruta /shopify de AgentGateway.",
         "denies": "Cualquier tool de escritura de /shopify (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-read:shopify-admin",
@@ -193,13 +196,15 @@
       "meaning": "Lectura de la ruta /shopify-admin de AgentGateway (INFRA-23). DGX-854: la secretaria de la tienda la tiene para product_stock_status (stock real y preorder/factory order); su lista fina de Hermes no expone otra tool de la ruta.",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
+        "service-account-correo-ejecutor",
         "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a las tools de solo lectura de la ruta /shopify-admin de AgentGateway.",
         "denies": "Cualquier tool de escritura de /shopify-admin (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura y service-account-correo-ejecutor se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-read:skirmshop-plugins",
@@ -207,6 +212,7 @@
       "meaning": "Lectura de la ruta /skirmshop-plugins de AgentGateway (INFRA-23).",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
         "service-account-hermes-secretaria-skirmshop",
         "service-account-openclaw-readonly-agentgateway"
       ],
@@ -214,7 +220,7 @@
         "allows": "Llamar a las tools de solo lectura de la ruta /skirmshop-plugins de AgentGateway.",
         "denies": "Cualquier tool de escritura de /skirmshop-plugins (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-read:social",
@@ -334,6 +340,7 @@
       "meaning": "Lectura de la ruta /workspace de AgentGateway (INFRA-23).",
       "grantees": [
         "service-account-agentgateway-mcp",
+        "service-account-correo-agente-lectura",
         "service-account-hermes-enviar",
         "service-account-hermes-secretaria",
         "service-account-hermes-secretaria-casa",
@@ -346,7 +353,7 @@
         "allows": "Llamar a las tools de solo lectura de la ruta /workspace de AgentGateway.",
         "denies": "Cualquier tool de escritura de /workspace (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); el holder service-account-jarvis-echo se revisa en la allowlist de titulares de ese script y lo concede jarvis-echo-client.sh (PostSync jarvis-echo-client.yaml; INFRA-477); el holder service-account-hermes-enviar se revisa en la misma allowlist y lo concede hermes-enviar-client.sh (PostSync hermes-enviar-client.yaml; INFRA-676)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); el holder service-account-jarvis-echo se revisa en la allowlist de titulares de ese script y lo concede jarvis-echo-client.sh (PostSync jarvis-echo-client.yaml; INFRA-477); el holder service-account-hermes-enviar se revisa en la misma allowlist y lo concede hermes-enviar-client.sh (PostSync hermes-enviar-client.yaml; INFRA-676); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
       "name": "agentgateway-write",
@@ -416,6 +423,19 @@
         "denies": "Las escrituras de otros dominios y el write global agentgateway-write."
       },
       "origin": "concedido en el realm por admin API sin declaración en GitOps; adoptado por SC-2522 (keycloak-role-drift)"
+    },
+    {
+      "name": "agentgateway-write:correo-ejecutor",
+      "status": "active",
+      "meaning": "Escrituras del ejecutor de casos de Postia por AgentGateway (DGX-1218, épica DGX-1209): order_shipping_line_replace, order_returnable_lines_get y return_create en /shopify-admin y labels_pickup_create en /skirmshop-plugins-admin, una regla mcpAuthorization por ruta (k8s-agentgateway-pocharlies#221). Un único titular: el client correo-ejecutor.",
+      "grantees": [
+        "service-account-correo-ejecutor"
+      ],
+      "privilege": {
+        "allows": "Esas cuatro tools, con GATEWAY_WRITE activo en la ruta; en /shopify-admin el titular necesita además agentgateway-read:shopify-admin para pasar la puerta de la ruta.",
+        "denies": "Cualquier otra escritura de /shopify-admin y /skirmshop-plugins-admin (graphql_execute, skirmshop_plugins_call, labels_create_label…), las de otros dominios, el write global agentgateway-write y cualquier lectura que no conceda un agentgateway-read:<ruta>."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; DGX-1218); el titular service-account-correo-ejecutor lo concede correo-agente-client.sh (PostSync correo-agente-clients.yaml)"
     },
     {
       "name": "agentgateway-write:dgx-control",
@@ -663,6 +683,8 @@
         "service-account-claude-sessions-test",
         "service-account-cloudblue",
         "service-account-company-metrics-agentgateway",
+        "service-account-correo-agente-lectura",
+        "service-account-correo-ejecutor",
         "service-account-hermes-enviar",
         "service-account-hermes-secretaria",
         "service-account-hermes-secretaria-casa",

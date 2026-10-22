@@ -110,6 +110,19 @@ PROBE_SA_USERNAME="service-account-atlassian-mcp-probe"
 ENVIAR_READ_ROLE_NAMES="${ENVIAR_READ_ROLE_NAMES:-agentgateway-read:workspace}"
 EXPECTED_ENVIAR_READ_ROLE_NAMES="agentgateway-read:workspace"
 ENVIAR_SA_USERNAME="service-account-hermes-enviar"
+# DGX-1218 (PR-2 de DGX-1209): the two identities of the Postia case agent are
+# reviewed holders. correo-agente-lectura holds exactly the read roles of the
+# agent's profiles (the same six as secretaria-skirmshop) and no write role;
+# correo-ejecutor holds agentgateway-read:shopify-admin, which /shopify-admin
+# requires before its agentgateway-write:correo-ejecutor rules apply. Same rule
+# as INFRA-676: grants and client scope are owned by correo-agente-client.sh
+# (wave 24) and the clients are never resolved here.
+CORREO_LECTURA_READ_ROLE_NAMES="${CORREO_LECTURA_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
+EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
+CORREO_LECTURA_SA_USERNAME="service-account-correo-agente-lectura"
+CORREO_EJECUTOR_READ_ROLE_NAMES="${CORREO_EJECUTOR_READ_ROLE_NAMES:-agentgateway-read:shopify-admin}"
+EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES="agentgateway-read:shopify-admin"
+CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -151,6 +164,10 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "PROBE_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${ENVIAR_READ_ROLE_NAMES}" = "${EXPECTED_ENVIAR_READ_ROLE_NAMES}" ] || \
   fail "ENVIAR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${CORREO_LECTURA_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES}" ] || \
+  fail "CORREO_LECTURA_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${CORREO_EJECUTOR_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES}" ] || \
+  fail "CORREO_EJECUTOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -261,17 +278,26 @@ role_allowed_users() {
   if printf '%s\n' "${ENVIAR_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${ENVIAR_SA_USERNAME}"
   fi
+  # DGX-1218: same rule for the two case-agent service accounts (granted by
+  # correo-agente-client.sh, wave 24).
+  if printf '%s\n' "${CORREO_LECTURA_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${CORREO_LECTURA_SA_USERNAME}"
+  fi
+  if printf '%s\n' "${CORREO_EJECUTOR_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${CORREO_EJECUTOR_SA_USERNAME}"
+  fi
 }
 
 assert_role_exclusivity() {
   role="$1"
   # Bounded role-member endpoints (same idiom as the SRE reconciler): at most
   # the allowed service accounts, never a group, never a human. The bound is
-  # the widest reviewed holder set plus one — since INFRA-676 that is eight
+  # the widest reviewed holder set plus one — since DGX-1218 that is nine
   # service accounts on agentgateway-read:workspace (agentgateway-mcp,
-  # jarvis-echo, hermes-enviar and the five hermes-secretaria profiles), so
-  # max=9 is what makes an extra, unauthorized holder visible.
-  users="$(kget "roles/${role}/users" -q first=0 -q max=9 \
+  # jarvis-echo, hermes-enviar, correo-agente-lectura and the five
+  # hermes-secretaria profiles), so max=10 is what makes an extra,
+  # unauthorized holder visible.
+  users="$(kget "roles/${role}/users" -q first=0 -q max=10 \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/${role}/groups" -q first=0 -q max=9 \
     --fields path --format csv --noquotes | nonempty_lines)"

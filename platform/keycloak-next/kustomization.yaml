@@ -25,6 +25,7 @@ resources:
   - agentgateway-chat-mcp-client.yaml
   - jarvis-echo-client.yaml
   - hermes-enviar-client.yaml
+  - correo-agente-clients.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
@@ -98,6 +99,14 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: hermes-enviar-client
+  - name: keycloak-correo-agente-client
+    files:
+      - correo-agente-client.sh=scripts/correo-agente-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: correo-agente-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh

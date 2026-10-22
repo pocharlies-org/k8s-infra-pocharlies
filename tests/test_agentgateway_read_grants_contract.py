@@ -391,12 +391,13 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         # INFRA-477: the jarvis holder allowlist is its own reviewed constant.
         self.assertIn("JARVIS_READ_ROLE_NAMES is immutable", script)
         self.assertIn("service-account-jarvis-echo", script)
-        # INFRA-676: so is the hermes-enviar holder allowlist, and the holder
-        # listing is bounded by the widest reviewed set (eight) plus one.
+        # INFRA-676: so is the hermes-enviar holder allowlist; DGX-1218 adds the
+        # two case-agent holders, and the user listing is bounded by the widest
+        # reviewed set (nine, on agentgateway-read:workspace) plus one.
         self.assertIn("ENVIAR_READ_ROLE_NAMES is immutable", script)
         self.assertIn("service-account-hermes-enviar", script)
-        self.assertIn("-q first=0 -q max=9", script)
-        self.assertNotIn("-q max=8", script)
+        self.assertIn('kget "roles/${role}/users" -q first=0 -q max=10', script)
+        self.assertNotIn('kget "roles/${role}/users" -q first=0 -q max=9', script)
         self.assertIn("group role-mapping is forbidden (SC-44 C6)", script)
         # INFRA-45: fullScopeAllowed=false is part of the owned matrix.
         self.assertIn("must keep fullScopeAllowed=false", script)
