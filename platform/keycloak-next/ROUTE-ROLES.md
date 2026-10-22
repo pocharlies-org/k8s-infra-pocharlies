@@ -11,7 +11,10 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **43 rutas, 78 gates** en esta matriz (la fila `plaud` se declara por
+  Hoy: **45 rutas, 87 gates** en esta matriz (INFRA-974, 23-10-2026: se declaran
+  las dos filas `hindsight-*`, vivas en el config desde INFRA-942 y en el realm
+  desde el 22-10; el verificador las señalaba como drift; los conteos de esta
+  fila son los del bloque json, que manda). La fila `plaud` se declara por
   delante del config vivo —INFRA-380, pendiente del merge de
   k8s-agentgateway-pocharlies#197—; el verificador la señala hasta que la ruta
   despliegue). El config vivo trae 77: la
@@ -422,6 +425,18 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "plaud",
       "path": "/plaud",
       "require": ["agentgateway-read:plaud"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-cloudblue",
+      "path": "/hindsight-cloudblue",
+      "require": ["agentgateway-read:hindsight-cloudblue"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-tienda",
+      "path": "/hindsight-tienda",
+      "require": ["agentgateway-read:hindsight-tienda"],
       "tools": {}
     },
     {
