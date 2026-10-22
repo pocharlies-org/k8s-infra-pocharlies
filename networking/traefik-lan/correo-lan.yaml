@@ -11,7 +11,8 @@
 #
 # Destinos (DGX-882 P4, chart 0.2.0): `/v1` y `/healthz` van al Service HUMANO `correo:80` del núcleo, con
 # prioridad explícita para que ningún cambio de longitud de las reglas le dé `/v1` a la web, y el resto del host a la
-# web `correo-web:80`. La regla de la web va sin access log: la vuelta del login (`/auth/callback?code=…`) es suya y
+# web `correo-web:80`. DGX-1213 (22-10, épica DGX-1208): de `/v2` solo `/v2/casos` y `/v2/clientes` van al núcleo, con la
+# misma regla y las mismas redes; `/v2/inbound` y `/v2/buzones` son de máquina y no se publican. La regla de la web va sin access log: la vuelta del login (`/auth/callback?code=…`) es suya y
 # traefik-lan guarda la query en `RequestPath` (security, DGX-882 33631). El Service de máquina
 # (`correo-machine`, ingest de productores y métricas, solo interno: Hermes y Synapse lo llaman por el DNS del
 # clúster) NUNCA se publica aquí ni en ninguna otra ruta (tests/test_correo_lan_route_contract.py). Tampoco hay ruta
@@ -32,7 +33,7 @@ spec:
     - websecure
   routes:
     - kind: Rule
-      match: Host(`correo.lan.e-dani.com`) && (PathPrefix(`/v1`) || Path(`/healthz`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      match: Host(`correo.lan.e-dani.com`) && (PathPrefix(`/v1`) || PathPrefix(`/v2/casos`) || PathPrefix(`/v2/clientes`) || Path(`/healthz`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 1000
       services:
         - name: correo
