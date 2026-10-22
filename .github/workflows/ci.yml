@@ -64,6 +64,7 @@ jobs:
           sh -n platform/keycloak-next/scripts/jarvis-echo-client.sh
           sh -n platform/keycloak-next/scripts/hermes-enviar-client.sh
           sh -n platform/keycloak-next/scripts/correo-agente-client.sh
+          sh -n platform/keycloak-next/scripts/keycloak-scoped-client-lib.sh
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh

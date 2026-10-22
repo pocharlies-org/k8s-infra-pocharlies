@@ -96,6 +96,7 @@ configMapGenerator:
       - hermes-enviar-client.sh=scripts/hermes-enviar-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
       - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+      - keycloak-scoped-client-lib.sh=scripts/keycloak-scoped-client-lib.sh
     options:
       labels:
         app.kubernetes.io/component: hermes-enviar-client
@@ -104,6 +105,7 @@ configMapGenerator:
       - correo-agente-client.sh=scripts/correo-agente-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
       - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+      - keycloak-scoped-client-lib.sh=scripts/keycloak-scoped-client-lib.sh
     options:
       labels:
         app.kubernetes.io/component: correo-agente-client

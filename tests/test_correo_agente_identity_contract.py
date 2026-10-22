@@ -69,7 +69,9 @@ def _converged(client_id, **extra):
 
 class CorreoAgenteReconcilerTest(unittest.TestCase):
     def test_reconciler_is_fixed_scope_and_never_touches_the_secret(self):
-        script = SCRIPT.read_text()
+        own = SCRIPT.read_text()
+        self.assertIn('. "$(dirname "$0")/keycloak-scoped-client-lib.sh"', own)
+        script = own + (SCRIPTS / "keycloak-scoped-client-lib.sh").read_text()
         self.assertIn("unsupported immutable client", script)
         self.assertIn('. "$(dirname "$0")/keycloak-reconcile-lib.sh"', script)
         self.assertIn('ensure_role_in_client_scope "${role}"', script)
@@ -79,7 +81,7 @@ class CorreoAgenteReconcilerTest(unittest.TestCase):
         self.assertNotIn("-s secret=", script)
         self.assertNotIn("set -x", script)
         # The read identity's role set never names a write role.
-        lectura = script.split("correo-agente-lectura)", 1)[1].split(";;", 1)[0]
+        lectura = own.split("correo-agente-lectura)", 1)[1].split(";;", 1)[0]
         self.assertNotIn("agentgateway-write", lectura)
 
     def test_guards_are_immutable_before_any_call(self):
@@ -206,7 +208,8 @@ class CorreoAgenteManifestContractTest(unittest.TestCase):
         block = kustomization.split("name: keycloak-correo-agente-client", 1)[1].split("  - name:", 1)[0]
         for entry in ("correo-agente-client.sh=scripts/correo-agente-client.sh",
                       "kc-admin-common.sh=scripts/kc-admin-common.sh",
-                      "keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh"):
+                      "keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh",
+                      "keycloak-scoped-client-lib.sh=scripts/keycloak-scoped-client-lib.sh"):
             self.assertIn(entry, block)
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")

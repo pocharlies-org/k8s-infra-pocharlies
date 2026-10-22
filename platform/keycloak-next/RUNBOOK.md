@@ -826,7 +826,8 @@ next PostSync recreates the client with a NEW secret, so also retire the
 `correo-agente-clients.yaml` (two PostSync Jobs, sync-wave 24) reconciles the
 two confidential clients of the Postia case agent with one script,
 `scripts/correo-agente-client.sh`, whose reviewed role set is fixed per
-`CLIENT_ID`:
+`CLIENT_ID`; the flow itself is `keycloak-scoped-client-lib.sh`, shared with
+`hermes-enviar`:
 
 - `correo-agente-lectura`: `agentgateway-read:` `brain`, `picqer`, `shopify`,
   `shopify-admin`, `skirmshop-plugins`, `workspace`, and no `agentgateway-write*`

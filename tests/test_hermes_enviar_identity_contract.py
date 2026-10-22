@@ -15,6 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 SCRIPT = BASE / "scripts" / "hermes-enviar-client.sh"
 LIB = BASE / "scripts" / "keycloak-reconcile-lib.sh"
+SCOPED_LIB = BASE / "scripts" / "keycloak-scoped-client-lib.sh"
 SCRIPTS = BASE / "scripts"
 
 # The CI calls `python3 -m unittest tests/test_x.py` by path, so tests/ is not on sys.path.
@@ -68,7 +69,12 @@ def _converged_client(**extra):
 
 class HermesEnviarReconcilerTest(unittest.TestCase):
     def test_reconciler_is_fixed_scope_and_never_touches_the_secret(self):
-        script = SCRIPT.read_text()
+        # The flow is shared with correo-agente-client.sh (DGX-1218) through
+        # keycloak-scoped-client-lib.sh; the policy (guards, reviewed roles)
+        # stays in the reconciler.
+        self.assertIn('. "$(dirname "$0")/keycloak-scoped-client-lib.sh"', SCRIPT.read_text())
+        self.assertIn("run_scoped_client", SCRIPT.read_text())
+        script = SCRIPT.read_text() + SCOPED_LIB.read_text()
         self.assertIn('CLIENT_ID="${CLIENT_ID:-hermes-enviar}"', script)
         self.assertIn('READ_ROLE_NAME="${READ_ROLE_NAME:-agentgateway-read:workspace}"', script)
         self.assertIn('WRITE_ROLE_NAME="${WRITE_ROLE_NAME:-agentgateway-write:workspace-envio}"', script)
@@ -96,8 +102,9 @@ class HermesEnviarReconcilerTest(unittest.TestCase):
         self.assertNotIn("scope-mappings/realm", script.replace('kget "clients/${CLIENT_UUID}/scope-mappings/realm"', ""))
         # Both roles are owned by other hooks: never created or deleted here,
         # and the reconciler refuses to run without them.
-        self.assertIn("the agentgateway-read-grants hook owns it", script)
-        self.assertIn("the agentgateway-domain-roles hook owns it", script)
+        self.assertIn('owner="agentgateway-read-grants"', script)
+        self.assertIn('owner="agentgateway-domain-roles"', script)
+        self.assertIn('fail "${role} is missing; the ${owner} hook owns it"', script)
         self.assertNotIn("create roles", script)
         self.assertNotIn('delete "roles/', script)
         self.assertNotIn("delete roles", script)
@@ -340,6 +347,7 @@ class HermesEnviarManifestContractTest(unittest.TestCase):
         # OWU-76: the shared bootstrap ships with it, is sourced first, and
         # carries the bearer-token file into the shared EXIT trap.
         self.assertIn("kc-admin-common.sh=scripts/kc-admin-common.sh", block)
+        self.assertIn("keycloak-scoped-client-lib.sh=scripts/keycloak-scoped-client-lib.sh", block)
         script = (BASE / "scripts" / "hermes-enviar-client.sh").read_text()
         self.assertLess(
             script.index('. "${0%/*}/kc-admin-common.sh"'),
