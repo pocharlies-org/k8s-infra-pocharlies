@@ -67,13 +67,46 @@ spec:
       max_wal_size: "4GB"
       min_wal_size: "1GB"
 
+  # INFRA-942 (2026-10-22): longhorn -> local-path-retain. Las réplicas de Longhorn
+  # se morían y con ellas el volumen del cluster (postgres-shared-4 no pudo hacer
+  # pg_rewind: WAL perdido), y todo el I/O de Hindsight (IO.DataFileRead) pasaba por
+  # Longhorn. local-path-retain escribe en el NVMe del propio nodo (los ks5-cp tienen
+  # un solo disco NVMe; /opt/local-path-provisioner está en él) y conserva el PV al
+  # borrar el PVC. La HA no la da el disco sino la replicación en streaming de CNPG:
+  # las 2 instancias siguen en nodos distintos por la anti-afinidad requerida de abajo.
+  # Tamaños: 46 GB de bases hoy; 80Gi + 20Gi de WAL por instancia caben en cualquier
+  # ks5-cp (cp-1 es el más justo: ~199 GB libres). Si un nodo se pierde, se recupera
+  # desde el objeto S3 (bootstrap.recovery) y el volcado lógico diario.
   storage:
-    storageClass: longhorn
+    storageClass: local-path-retain
     size: 80Gi
 
   walStorage:
-    storageClass: longhorn
+    storageClass: local-path-retain
     size: 20Gi
+
+  # Recreación desde el almacén de barman (misma ruta que backup.barmanObjectStore).
+  # CNPG solo lo usa al inicializar un cluster sin datos; con datos lo ignora, así que
+  # queda declarado como la vía de reconstrucción (cambio de storageClass incluido).
+  bootstrap:
+    recovery:
+      source: postgres-shared-backup
+
+  externalClusters:
+    - name: postgres-shared-backup
+      barmanObjectStore:
+        destinationPath: "s3://cnpg-backups/postgres-shared"
+        endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"
+        s3Credentials:
+          accessKeyId:
+            name: postgres-shared-minio
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: postgres-shared-minio
+            key: ACCESS_SECRET_KEY
+        wal:
+          compression: gzip
+          maxParallel: 4
 
   resources:
     requests:
