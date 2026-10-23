@@ -21,7 +21,7 @@ spec:
       - databases
   selector:
     matchLabels:
-      cnpg.io/cluster: postgres-shared
+      cnpg.io/cluster: postgres-shared-nvme
   podMetricsEndpoints:
     - port: metrics
       path: /metrics
