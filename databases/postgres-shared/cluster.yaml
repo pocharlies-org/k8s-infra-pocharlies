@@ -76,7 +76,7 @@ spec:
   # las 2 instancias siguen en nodos distintos por la anti-afinidad requerida de abajo.
   # Tamaños: 46 GB de bases hoy; 80Gi + 20Gi de WAL por instancia caben en cualquier
   # ks5-cp (cp-1 es el más justo: ~199 GB libres). Si un nodo se pierde, se recupera
-  # desde el objeto S3 (bootstrap.recovery) y el volcado lógico diario.
+  # del storage local del nodo o de barman; el PV se conserva al borrar el PVC.
   storage:
     storageClass: local-path-retain
     size: 80Gi
@@ -85,29 +85,11 @@ spec:
     storageClass: local-path-retain
     size: 20Gi
 
-  # Recreación desde el almacén de barman (misma ruta que backup.barmanObjectStore).
-  # CNPG solo lo usa al inicializar un cluster sin datos; con datos lo ignora, así que
-  # queda declarado como la vía de reconstrucción (cambio de storageClass incluido).
-  bootstrap:
-    recovery:
-      source: postgres-shared-backup
-
-  externalClusters:
-    - name: postgres-shared-backup
-      barmanObjectStore:
-        destinationPath: "s3://cnpg-backups/postgres-shared"
-        endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"
-        s3Credentials:
-          accessKeyId:
-            name: postgres-shared-minio
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: postgres-shared-minio
-            key: ACCESS_SECRET_KEY
-        wal:
-          compression: gzip
-          maxParallel: 4
-
+  # INFRA-942 (2026-10-23): sin bootstrap.recovery. El restore desde barman se
+  # descartó (2 h de corte) en favor de la réplica en streaming (cluster-nvme.yaml),
+  # y mientras el objeto vivo tenga bootstrap.initdb el webhook rechaza el manifiesto
+  # ("Only one bootstrap method can be specified at a time"), lo que deja a ArgoCD
+  # sin poder comparar ni sincronizar la app.
   resources:
     requests:
       # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
