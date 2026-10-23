@@ -103,12 +103,18 @@ spec:
         port: "5432"
         dbname: postgres
         user: streaming_replica
-      password:
-        name: postgres-shared-replication
-        key: password
+        sslmode: verify-full
+      # El usuario streaming_replica se autentica con certificado de cliente
+      # (el secreto postgres-shared-replication es kubernetes.io/tls, no tiene password).
       sslRootCert:
         name: postgres-shared-ca
         key: ca.crt
+      sslCert:
+        name: postgres-shared-replication
+        key: tls.crt
+      sslKey:
+        name: postgres-shared-replication
+        key: tls.key
 
   # 2026-08-07: after a cordon the primary took 123 min and 452 attempts to find
   # a node. Preempt ordinary workloads instead of queueing behind them.
