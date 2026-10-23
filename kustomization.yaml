@@ -56,6 +56,8 @@ resources:
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
   - storage/longhorn/openclaw-sauvage-backup-target.yaml
+  - storage/longhorn/longhorn-encrypted-storageclass.yaml
+  - storage/longhorn/plaud-mcp-home-crypto-externalsecret.yaml
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
   - storage/longhorn/metrics-and-alerts.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
