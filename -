@@ -1,0 +1,31 @@
+# 00-spec · Historia 1 (P1) — Ninguna entrada cae en «skirmshop» ni en administrador
+
+Rol: tech-lead · Fecha: 2026-10-17 · Sesión: SKIRM-177 (sesión en vivo del CTO) · Estado: LISTO
+
+Repos y PRs: `skirmbooks-gestoria-src` (producto, trunk main) y `k8s-skirmbooks-pocharlies` (despliegue, trunk main, detrás de la de producto). Dependencia: el rol **security** siembra en 1Password `RECONCILIATION_API_TOKENS` (ítem `skirmshop-skirmbooks-ui`) y la credencial del token de ledger-layers (PARA SECURITY); bloquea solo el merge de la PR de despliegue. Versión 2: incorpora los hallazgos 2, 3 y 4 de `nota-architect-plan.md`. Contexto en `10-plan.md` de SKIRM-177.
+
+Qué y por qué: hoy una llamada sin sesión cae en la empresa `skirmshop`; la API de conciliación tiene un único token sin empresa; los webhooks, los callbacks PSD2 y el SSO resuelven la empresa por default; ledger-layers cree la cabecera `X-Tenant-Id` sin autenticar. Antes de dar acceso a otra empresa, toda entrada sin empresa explícita debe negarse (401/403), y Skirmshop debe seguir funcionando igual (contrato con el MCP). Matiz: con `AUTH_ENABLED=true` (prod) `server.js` ya da a todo request un store con `isPlatformAdmin:false`; el fallback a admin solo afecta a paths sin ALS (scripts/crons), y ese es el alcance de C1.4.
+
+## Criterios (cada uno con su comando; el test debe fallar ANTES del cambio)
+
+- [ ] C1.1 Sin credenciales y sin sesión, `GET /api/reconciliation/summary` responde **401** (hoy: 302 a /login). Test vitest en `skirmbooks-ui`: request sin Authorization ni cookies → 401 y cero filas leídas.
+- [ ] C1.2 El token actual (`RECONCILIATION_API_TOKEN`) sigue funcionando y ve **solo `skirmshop`**, con fixture de dos empresas: la respuesta no contiene filas de la otra empresa. (Regresión del contrato con el MCP: el MCP no cambia.)
+- [ ] C1.3 Token de otra empresa (nuevo `RECONCILIATION_API_TOKENS`, JSON tenant→token) ve solo su empresa; el token de A contra datos de B no devuelve nada. Test vitest.
+- [ ] C1.4 `isPlatformAdmin()` sin store en el ALS devuelve **false** (hoy: true). Test unitario en `db.server.ts`. Los callers sin ALS (scripts/crons del repo) fijan su store explícitamente con `tenantALS.run` (barrido en el PR).
+- [ ] C1.5 ledger-layers: sin token → 401; con token y sin `X-Tenant-Id` → 400 (hoy: cae a `cfg.default_tenant`). **Exentas del token: `/healthz`** (sondas readiness/liveness del despliegue, `k8s/ledger-layers.yaml:122-134`) **y `/docs`/`/openapi.json`** — patrón de la exención en `reconciliation-api/auth.server.ts`. Test pytest en `services/ledger-layers/tests/`: sin token, `/healthz` sigue dando 200 (si se cerrara, el pod queda not-ready y bloquea el sync: el test lo fija).
+- [ ] C1.6 Webhooks y callbacks PSD2: `webhooks.email-invoice`, `webhooks.stripe`, `banking.enablebanking.callback.tsx:29` y `banking.tink.callback.tsx:29` resuelven la empresa de forma **explícita** (la ruta actual = skirmshop; hoy los cuatro salen de `tenantId()`/default); una cookie `sb_tenant` válida de otra empresa NO los desvía (test: cookie de `moreno` → escribe en skirmshop). El `state` firmado por empresa para los PSD2 es de la épica «Ficha de empresa» (veredicto del architect): aquí solo el fail-closed; el parámetro `state` ya llega a `complete_requisition` y es el punto donde esa épica pondrá la empresa.
+- [ ] C1.7 SSO (`auth.sso.tsx`): usuario sin grants no recibe cookie con `skirmshop`; la sesión resultante no ve datos (403 en rutas de datos). Test vitest.
+- [ ] C1.8 Skirmshop sigue funcionando (medido en producción por qa, fixture fijo): la herramienta MCP `skirmbooks_reconcile_summary` con el token actual devuelve los datos de skirmshop; el barrido de conciliación, la conexión PSD2 y la UI, operativos.
+- [ ] C1.9 PR de despliegue (`k8s-skirmbooks-pocharlies`): `LEDGER_LAYERS_API_TOKEN` llega al pod por ExternalSecret (patrón `ui-secrets-external.yaml`); `RECONCILIATION_API_TOKENS` llega a la UI (verificar que entra solo por `envFrom` del ítem espejado `skirmshop-skirmbooks-ui`; si no, añadir el secretRef). Con los secrets sembrados por security, la API por empresa y ledger-layers quedan activas; sin sembrar, nacen fail-closed (503) y el test de C1.5 lo fija.
+
+## Cómo se verifica (comandos)
+
+- `cd skirmbooks-ui && npx vitest run` (los tests nuevos corren en el paso "UI tests" de `ci.yml`).
+- `python -m pytest services/ledger-layers -q`.
+- qa en producción: C1.8; y que el pod de ledger-layers queda Ready con el token puesto (C1.5/C1.9).
+
+## Referencias (usar, no reinventar)
+
+`skirmbooks-ui/app/lib/reconciliation-api/auth.server.ts:19-88` (seam único; `isValidApiToken`; exención de `/docs`); `skirmbooks-ui/server.js:27,243-278,294-311`; `skirmbooks-ui/app/lib/db.server.ts:48,53-56,84-88` + `tenantALS`; `skirmbooks-ui/app/lib/tenant-cookie.server.ts` (HMAC); `skirmbooks-ui/app/routes/webhooks.email-invoice.tsx:65`, `webhooks.stripe.tsx:64-74`, `banking.enablebanking.callback.tsx:29`, `banking.tink.callback.tsx:29`, `auth.sso.tsx:44-47`; `services/ledger-layers/src/skirmbooks_ledger_layers/app.py:105-106`; despliegue `k8s/ledger-layers.yaml:91,122-134` y `k8s/ui-secrets-external.yaml`. No: OAuth, tabla de tokens en BD, sesiones nuevas. Los tokens viven en Vault/ESO como hoy.
+
+Documentación: nota en `ARCHITECTURE.md` (auth de la API, fail-closed de `isPlatformAdmin`) y comentario en el ExternalSecret nuevo.

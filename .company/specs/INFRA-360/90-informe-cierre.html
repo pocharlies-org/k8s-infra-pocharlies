@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>INFRA-360 — cierre</title>
+<h1>INFRA-360 · Cierre por entrega</h1>
+<p><b>Qué pedía:</b> cazar quién reescribía los config.yaml de los 29 perfiles de Hermes (show_reasoning volvía a true solo), resumir la historia git y arreglar la raíz para que los ajustes manuales sobrevivan a la resincronización.</p>
+<p><b>Quién lo entregó y dónde:</b> la propia compañía entre el 30-09 y el 01-10. INFRA-361 (sre): nota del escritor. INFRA-362 (developer): PR #460 en k8s-openclaw-qwen36-pocharlies (deploy/prod), mergeada c819456 y desplegada — el seed trata la sección display como USER_OWNED: solo siembra si falta, nunca pisa el valor vivo. INFRA-363 (qa): PASA con prueba en vivo de supervivencia.</p>
+<p><b>Raíz:</b> hermes_seed.py forzaba show_reasoning: true siempre que reasoningStyle estaba activo (añadido el 28-09, commit 05bc341; la política de reescribir el config entero viene de 8ec546a, 16-09). Además, el gateway reescribe los configs en lote pero conserva el valor — no era el culpable.</p>
+<p><b>Evidencia hoy (01-10):</b> true=0 false=13 en perfiles + global false tras el reinicio del pod de las 15:35 UTC; ArgoCD hermes Synced/Healthy. Detalle con comandos en 80-validacion-pm.md.</p>

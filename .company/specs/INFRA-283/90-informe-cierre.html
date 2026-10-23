@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INFRA-283 — Planificación nocturna del cluster: análisis y propuesta</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 16px; color: #1a1a1a; line-height: 1.5; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 1.6rem; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 0.92rem; }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #14161a; } code, td, th { background: #1e2126; } td, th, h2 { border-color: #3a3f46; } a { color: #8ab4f8; } }
+</style>
+</head>
+<body>
+<h1>INFRA-283 — Planificación nocturna del cluster (análisis y propuesta, sin implementación)</h1>
+<p><strong>Cierre: 2026-10-03 · Caso ENTREGADA · pm sesión <code>3b3aa0ff-6c86-4e7c-97b6-a035d7fc2e88</code></strong></p>
+
+<h2>Qué pedía la épica</h2>
+<p>Producir el análisis completo de los disparos nocturnos (22:00–08:00 Europe/Madrid) del cluster y del x86 —inventario con duraciones medidas, mapa de conflictos por recurso compartido y propuesta de escalonamiento con riesgos de catch-up— sin implementar ningún cambio. Cada cambio de horario que salga de la propuesta nace como historia/épica propia con su PR GitOps en el repo dueño del manifiesto.</p>
+
+<h2>Quién lo entregó</h2>
+<p>CTO de la comisión (sesión <code>t_5be06200</code>) con tech-lead (<code>10-plan.md</code>), sre (construcción de los tres documentos, historias INFRA-336/337/338) y qa (PASA en las tres, <code>70-qa.md</code> ids 14004/14022/14032). Veredicto pm <code>80-validacion-pm.md</code>: CUMPLE (C1–C6, medido 03-10-2026).</p>
+
+<h2>Dónde está cada documento</h2>
+<p>Todo merged en <code>main</code> de pocharlies-org/k8s-infra-pocharlies (PR <a href="https://github.com/pocharlies-org/k8s-infra-pocharlies/pull/211">#211</a>, squash <code>9e15d7e</code>, merged 2026-09-30T13:30:31Z), bajo <code>.company/specs/INFRA-283/</code>:</p>
+<table>
+<tr><th>fichero</th><th>contenido</th><th>adjunto en la épica</th></tr>
+<tr><td><code>inventario.md</code> (+ <code>inventario-notas.md</code>)</td><td>94 CronJobs de la ventana con horario, timeZone, duración medida, recursos, nodo y repo dueño + filas del x86 (crontab y timers systemd)</td><td>nota-pm-inventario.md (id 15721)</td></tr>
+<tr><td><code>conflictos.md</code></td><td>mapa de solapes reales por recurso (58 menciones de los 5 conflictos del diseño, con par y minutos)</td><td>nota-pm-conflictos.md (id 15723)</td></tr>
+<tr><td><code>propuesta.md</code></td><td>14 cambios de horario propuestos + candidatos a días alternos + riesgo <code>startingDeadlineSeconds</code> por job (40 menciones) + §7 historias de implementación por repo</td><td>nota-pm-propuesta.md (id 15725)</td></tr>
+<tr><td><code>cuenta_ventana.py</code>, <code>mapa_conflictos.py</code>, <code>verifica_propuesta.py</code></td><td>scripts reutilizables de medición y verificación</td><td>— (viven en main)</td></tr>
+</table>
+
+<h2>Notas del cierre</h2>
+<ul>
+<li>Invariante «informe del VP 08:00»: sin objeto — localizado y retirado el 17-09 (x86-host-runtime <code>a40a329</code>); rol VP retirado el 27-09 (company-roles <code>989c341</code>).</li>
+<li>Riesgo aceptado por el CTO: tope <code>activeDeadlineSeconds</code> 11400 en <code>company-dreaming</code> (propuesta.md cambio nº 11 / §4).</li>
+<li>Fuera de alcance (así lo decía el spec): toda implementación. Las épicas de escalonamiento por repo que lista propuesta.md §7 (incluida cloudflare-ddns en dgx-infra) se abrirán como trabajo propio.</li>
+</ul>
+</body>
+</html>
