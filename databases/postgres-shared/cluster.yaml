@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: postgres-shared
+  name: postgres-shared-nvme
   namespace: databases
   annotations:
     # Bump only by PR after the corresponding ExternalSecrets are healthy.
@@ -12,11 +12,16 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: postgres
 spec:
-  instances: 2
+  instances: 1
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
   primaryUpdateStrategy: unsupervised
   primaryUpdateMethod: switchover
   enableSuperuserAccess: true
+  # INFRA-942: el secreto del superusuario es el del cluster original. Lo leen el volcado
+  # lógico, los hooks PostSync (role-settings, agent-transcripts) y la ExternalSecret de
+  # skirmbooks; con el nombre por defecto (postgres-shared-nvme-superuser) se quedarían sin él.
+  superuserSecret:
+    name: postgres-shared-superuser
 
   postgresql:
     parameters:
@@ -360,28 +365,36 @@ spec:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
 
-  backup:
-    # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
-    # ruta sola ocupaba ~460 GB (33 backups base + sus WAL). 7 dias de base diaria
-    # + WAL continuo dan PITR de una semana, que es lo que se necesita; el archivo
-    # a mas largo plazo va fuera de la maquina (foto semanal -> OVH, retencion 30d).
-    retentionPolicy: "7d"
-    barmanObjectStore:
-      destinationPath: "s3://cnpg-backups/postgres-shared"
-      endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"
-      s3Credentials:
-        accessKeyId:
-          name: postgres-shared-minio
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: postgres-shared-minio
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-        maxParallel: 4
-      data:
-        compression: gzip
-        jobs: 2
+  # INFRA-942 (2026-10-23): réplica en streaming del cluster viejo. Copia los
+  # 46 GB con producción viva y se queda en streaming; al promoverlo (replica.enabled
+  # a false) el corte son minutos en vez del restore de barman (~2 h).
+  replica:
+    enabled: true
+    source: postgres-shared-primary
+
+  bootstrap:
+    pg_basebackup:
+      source: postgres-shared-primary
+
+  externalClusters:
+    - name: postgres-shared-primary
+      connectionParameters:
+        host: postgres-shared-rw.databases.svc.cluster.local
+        port: "5432"
+        dbname: postgres
+        user: streaming_replica
+        sslmode: verify-full
+      # El usuario streaming_replica se autentica con certificado de cliente
+      # (el secreto postgres-shared-replication es kubernetes.io/tls, no tiene password).
+      sslRootCert:
+        name: postgres-shared-ca
+        key: ca.crt
+      sslCert:
+        name: postgres-shared-replication
+        key: tls.crt
+      sslKey:
+        name: postgres-shared-replication
+        key: tls.key
 
   # 2026-08-07: after a cordon the primary took 123 min and 452 attempts to find
   # a node. Preempt ordinary workloads instead of queueing behind them.
