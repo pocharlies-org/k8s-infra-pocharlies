@@ -6,7 +6,6 @@ resources:
   - priorityclass.yaml
   - minio-credentials.yaml
   - app-credentials.yaml
-  - cluster.yaml
   - cluster-nvme.yaml
   - app-databases.yaml
   - agent-transcripts-schema.yaml
