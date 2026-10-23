@@ -108,7 +108,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 24 lecturas agentgateway-read:* y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -317,12 +318,28 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "status": "activo"
     },
     {
+      "username": "service-account-agentgateway-mac-cb",
+      "type": "sa",
+      "client": "agentgateway-mac-cb",
+      "owner": "Dani (operador)",
+      "source": "ningún ticket ni repo: client creado a mano en el realm (el Mac CloudBlue del paseo SC-2473); declarada por security al cerrar la matriz hindsight (INFRA-974)",
+      "purpose": "client_credentials del Mac CloudBlue para la ruta /hindsight-cloudblue de AgentGateway (banco CloudBlue, solo lectura; contenido que solo puede ir a modelos Anthropic/local, nunca a OpenAI/Alibaba).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-cloudblue",
+        "default-roles-edani"
+      ],
+      "status": "activo",
+      "flags": [
+        "origen-desconocido"
+      ]
+    },
+    {
       "username": "service-account-agentgateway-mcp",
       "type": "sa",
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 23 lecturas agentgateway-read:* y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
+      "purpose": "Plano MCP de AgentGateway: las 24 lecturas agentgateway-read:* y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -330,6 +347,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:brain",
         "agentgateway-read:dgx-control",
         "agentgateway-read:gsc",
+        "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
         "agentgateway-read:offers",

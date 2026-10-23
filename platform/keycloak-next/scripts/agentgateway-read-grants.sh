@@ -701,7 +701,7 @@ rollback_roles() {
     IFS=,
   done
   IFS="${old_ifs}"
-  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":23,"present":false}\n'
+  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":24,"present":false}\n'
 }
 
 login_admin
@@ -718,7 +718,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":23,"created":%s,"grants_agentgateway_mcp":23,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":24,"created":%s,"grants_agentgateway_mcp":24,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -728,7 +728,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":23,"created":0,"grants_agentgateway_mcp":23,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":24,"created":0,"grants_agentgateway_mcp":24,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles
