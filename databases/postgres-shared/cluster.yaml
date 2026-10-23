@@ -12,7 +12,7 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: postgres
 spec:
-  instances: 1
+  instances: 2
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
   primaryUpdateStrategy: unsupervised
   primaryUpdateMethod: switchover
@@ -365,11 +365,10 @@ spec:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
 
-  # INFRA-942 (2026-10-23): réplica en streaming del cluster viejo. Copia los
-  # 46 GB con producción viva y se queda en streaming; al promoverlo (replica.enabled
-  # a false) el corte son minutos en vez del restore de barman (~2 h).
+  # INFRA-942 (2026-10-23): promovido. Se creó como réplica en streaming de
+  # postgres-shared (Longhorn) y se promovió en el corte con el viejo cercado.
   replica:
-    enabled: true
+    enabled: false
     source: postgres-shared-primary
 
   bootstrap:
@@ -395,6 +394,32 @@ spec:
       sslKey:
         name: postgres-shared-replication
         key: tls.key
+
+  backup:
+    # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
+    # ruta sola ocupaba ~460 GB (33 backups base + sus WAL). 7 dias de base diaria
+    # + WAL continuo dan PITR de una semana, que es lo que se necesita; el archivo
+    # a mas largo plazo va fuera de la maquina (foto semanal -> OVH, retencion 30d).
+    retentionPolicy: "7d"
+    # INFRA-942: carpeta propia (serverName = postgres-shared-nvme). La del cluster
+    # viejo (s3://cnpg-backups/postgres-shared/postgres-shared) se queda intacta como
+    # vía de recuperación anterior al corte: nunca dos escritores en el mismo archivo.
+    barmanObjectStore:
+      destinationPath: "s3://cnpg-backups/postgres-shared"
+      endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"
+      s3Credentials:
+        accessKeyId:
+          name: postgres-shared-minio
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: postgres-shared-minio
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+        maxParallel: 4
+      data:
+        compression: gzip
+        jobs: 2
 
   # 2026-08-07: after a cordon the primary took 123 min and 452 attempts to find
   # a node. Preempt ordinary workloads instead of queueing behind them.
