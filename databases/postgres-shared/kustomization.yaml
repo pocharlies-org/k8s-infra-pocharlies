@@ -7,6 +7,7 @@ resources:
   - minio-credentials.yaml
   - app-credentials.yaml
   - cluster.yaml
+  - cluster-nvme.yaml
   - app-databases.yaml
   - agent-transcripts-schema.yaml
   - role-settings.yaml
