@@ -27,7 +27,8 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 # Control set: lecturas que dgx ya protege (regla 400 de lan-dgx-dashboard-public-host).
 CONTROL_SET = [("GET", p) for p in (
     "/api/company/control", "/api/company/entregas", "/api/litellm/keys", "/api/litellm/config",
-    "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/app/secure/x",
+    "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/hermes-sessions",
+    "/api/app/secure/x",
     "/api/app/pagos/lista", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
     "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel",
     "/api/secretaria/despacho/temas", "/despacho-secretaria",
