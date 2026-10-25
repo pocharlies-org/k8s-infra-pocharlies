@@ -33,17 +33,10 @@ spec:
       # Pin to sauvage (edge HDD RAID, 2.6T free)
       nodeSelector:
         kubernetes.io/hostname: sauvage
-      # INFRA-992: MinIO es el plano de datos de Harbor y de los backups; un
-      # DiskPressure en sauvage no puede desalojarlo (deja al clúster entero en
-      # ImagePullBackOff). Crítico + tolera la presión para volver a arrancar.
-      priorityClassName: system-cluster-critical
       tolerations:
         - key: role
           operator: Equal
           value: edge
-          effect: NoSchedule
-        - key: node.kubernetes.io/disk-pressure
-          operator: Exists
           effect: NoSchedule
       containers:
         - name: minio
