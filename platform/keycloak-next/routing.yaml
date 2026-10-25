@@ -67,9 +67,8 @@ metadata:
     app.kubernetes.io/component: sso
   annotations:
     external-dns.alpha.kubernetes.io/hostname: auth-next.e-dani.com
-    # INFRA-992 (temporal): sin sauvage mientras su nodo acepta conexiones pero no responde (Cloudflare no lo detecta
-    # y deja la petición colgada). Al cerrar INFRA-992 vuelve a los cuatro edges, como el resto de rutas públicas.
-    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168
+    # INFRA-992: los cuatro edges, como el resto de rutas públicas; con solo sauvage, su caída deja Keycloak en 521.
+    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
     external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
 spec:
   entryPoints:
