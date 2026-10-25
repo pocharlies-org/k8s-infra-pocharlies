@@ -80,8 +80,13 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # 66c8717 added the second skip: CNPG-managed PVCs, which CNPG/barman
         # already backs up with real PITR. The durable volume-type selectors
         # below remain forbidden; the CNPG rule matches by pvcLabels only.
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 2)
+        # INFRA-993 adds four more pvcLabels skips: VictoriaMetrics, Loki and
+        # Langfuse carry no backup by decision (Dani, 26-10).
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 6)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
+        for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
+                          "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio"):
+            self.assertIn(no_backup, VOLUME_POLICY)
         for durable_selector in ("persistentVolumeClaim", "csi:", "nfs:"):
             self.assertNotIn(durable_selector, VOLUME_POLICY)
 
