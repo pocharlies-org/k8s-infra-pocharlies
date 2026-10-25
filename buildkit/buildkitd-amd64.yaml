@@ -40,9 +40,10 @@ spec:
       # package and `buildctl debug workers` blew the 1 s probe timeout (19
       # restarts). The disk is not fixable here (no SSD on the node); the cache
       # now lives in RAM (tmpfs emptyDir) — see the cache volume below.
+      # 25-10 (DGX-1278): a atlantic — sauvage saturado (load 29, disco 97 %) y el pull de la imagen colgaba 30+ min.
       nodeSelector:
         kubernetes.io/arch: amd64
-        kubernetes.io/hostname: sauvage
+        kubernetes.io/hostname: atlantic
       tolerations:
         - key: role
           operator: Equal
