@@ -8,7 +8,7 @@ metadata:
 spec:
   schedule: "0 3 * * *"   # 03:00 UTC daily
   template:
-    ttl: 336h0m0s   # 14 days retention
+    ttl: 168h0m0s   # 7 days retention
     includedNamespaces:
       - harbor
       - argocd
@@ -74,7 +74,7 @@ metadata:
 spec:
   schedule: "30 3 * * *"   # 03:30 UTC daily (staggered after daily-critical)
   template:
-    ttl: 336h0m0s   # 14 days retention
+    ttl: 168h0m0s   # 7 days retention
     includedNamespaces:
       - aiops
     snapshotMoveData: true
@@ -120,7 +120,7 @@ metadata:
 spec:
   schedule: "0 5 * * 0"   # Sunday 05:00 UTC
   template:
-    ttl: 2160h0m0s   # 90 days retention
+    ttl: 336h0m0s   # 14 days retention
     includeClusterResources: true
     excludedNamespaces:
       - velero
