@@ -32,9 +32,12 @@ spec:
       # which was OOM-killing pod with 256MB / 2Gi (root cause documented in plan §12.2).
       # INFRA-942 (2026-10-19): 1GB -> 4GB. Hindsight (4.2 GB, pgvector) leía de disco (IO.DataFileRead) con el
       # bloqueo de su bank tomado; el límite sube a 10Gi para dejar a los backends el margen que tenían.
+      # INFRA-942 (2026-10-26): 4GB -> 6GB y effective_cache_size 7GB -> 18GB con el límite a 24Gi. Los índices
+      # HNSW por banco de Hindsight (personal 6,2 GB, claude-personal 2,5 GB…) no cabían en 10Gi y el recall leía de
+      # disco (IO/DataFileRead de 11 s por consulta). Lo que no es shared_buffers queda como caché de páginas del SO.
       max_connections: "400"
-      shared_buffers: "4GB"
-      effective_cache_size: "7GB"
+      shared_buffers: "6GB"
+      effective_cache_size: "18GB"
       work_mem: "32MB"
       maintenance_work_mem: "256MB"
       checkpoint_completion_target: "0.9"
@@ -109,11 +112,13 @@ spec:
       # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
       # 68m (postgres-shared-2). Limits unchanged (4 CPU) absorb the spikes.
       cpu: "200m"
-      # INFRA-942: el webhook de CNPG exige request >= shared_buffers (4GB).
-      memory: "5Gi"
+      # INFRA-942 (2026-10-26): 5Gi -> 16Gi, para que el scheduler cuente con la memoria (el webhook de CNPG exige
+      # además request >= shared_buffers). ks5-cp-2/3: 62,5 GiB, con 22-26 GiB libres en el peor momento de 7 días.
+      memory: "16Gi"
     limits:
+      # La CPU se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores y el recall de Hindsight va a la réplica.
       cpu: "4"
-      memory: "10Gi"
+      memory: "24Gi"
 
   monitoring:
     enablePodMonitor: false
