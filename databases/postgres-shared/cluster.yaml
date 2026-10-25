@@ -364,6 +364,16 @@ spec:
         passwordSecret:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
+      # SC-2956 D2: base de los empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies).
+      # Contraseña en 1Password (item `analisis-db`, sembrado por security), reconciliada desde
+      # analisis-db-credentials (app-credentials.yaml). No aplicar hasta que ese item exista.
+      - name: analisis
+        ensure: present
+        login: true
+        connectionLimit: 5
+        passwordSecret:
+          name: analisis-db-credentials
+        comment: "Empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies). SC-2956 D2."
 
   # INFRA-942 (2026-10-23): promovido. Se creó como réplica en streaming de
   # postgres-shared (Longhorn) y se promovió en el corte con el viejo cercado.
