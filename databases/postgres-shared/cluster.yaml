@@ -72,6 +72,15 @@ spec:
       max_wal_size: "4GB"
       min_wal_size: "1GB"
 
+    # INFRA-942 (2026-10-25): réplica síncrona en modo preferred. El primario confirma el commit cuando la réplica
+    # ya lo tiene en disco (medido: 2-6 ms más por commit), así que un fallo del primario no pierde nada confirmado.
+    # Si la réplica cae, vuelve a asíncrono solo en vez de bloquear las escrituras (con `required` y 2 instancias
+    # se bloquearían).
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: preferred
+
   # INFRA-942 (2026-10-22): longhorn -> local-path-retain. Las réplicas de Longhorn
   # se morían y con ellas el volumen del cluster (postgres-shared-4 no pudo hacer
   # pg_rewind: WAL perdido), y todo el I/O de Hindsight (IO.DataFileRead) pasaba por
