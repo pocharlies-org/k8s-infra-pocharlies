@@ -92,3 +92,4 @@ resources:
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
   - kubernetes/workloads/company-dreaming-cronjob.yaml
   - kubernetes/workloads/sauvage-pod-reaper.yaml
+  - kubernetes/node-capacity-alerts.yaml
