@@ -28,3 +28,27 @@ data:
             app.kubernetes.io/managed-by: cloudnative-pg
         action:
           type: skip
+      # INFRA-993 (Dani, 26-10): metricas, logs y trazas NO llevan backup: se
+      # regeneran o no merece la pena restaurarlas. VictoriaMetrics (~55 GB por
+      # copia), Loki y Langfuse (ClickHouse ~11 GB). Mismo criterio en Longhorn:
+      # dgx-infra k8s/backup/longhorn-recurring.
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: vmsingle
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: loki
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/instance: langfuse
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app: langfuse-events-minio
+        action:
+          type: skip
