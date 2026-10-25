@@ -45,7 +45,7 @@ automático `prune: false`, `selfHeal: true`):
 |---|---|---|---|
 | Rutas públicas del edge | `networking/traefik-edge/<app>-public.yaml` | ídem | todas las apps públicas |
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
-| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184), hindsight (rol `hindsight`, base con `vector` por el CRD Database, INFRA-940) |
+| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184), hindsight (rol `hindsight`, base con `vector` por el CRD Database, INFRA-940), analisis (rol y base `analisis`, SC-2956 D2; el ExternalSecret lee el item `analisis-db`) |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
 | Login de una web (un realm de Keycloak por web, siempre separado: norma en `docs/sso-por-app.md`, SC-2822) | `platform/keycloak-sso/realms.yaml` (chart: realm por keycloak-config-cli, oauth2-proxy y `sso-<realm>-chain`) | ídem | cada web con login; `tests/test_keycloak_realm_per_web_contract.py` |
 | Bootstrap de los hooks PostSync de Keycloak (trap de limpieza, `fail`, login admin con reintentos, `kget`, líneas no vacías) | `platform/keycloak-next/scripts/kc-admin-common.sh` | ídem | los hooks de keycloak-next; único sitio de estas funciones |
