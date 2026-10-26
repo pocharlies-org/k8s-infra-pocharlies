@@ -161,6 +161,33 @@ def test_admin_skirmshop_has_a_dedicated_lan_certificate_and_route():
     }
 
 
+def test_admin_skirmshop_panel_on_lan_asks_the_same_login_as_the_edge():
+    # SKIRM-301: without it the LAN got the fixed lan-operator identity, so an
+    # admin never saw «Mover» nor the Hermes profile that moves.
+    route = ingress(
+        "networking/traefik-lan/admin-skirmshop-canonical-lan.yaml",
+        "admin-skirmshop-canonical-lan",
+    )
+    rules = {rule["match"]: rule for rule in route["spec"]["routes"]}
+    sso = {"name": "sso-skirmshop-chain", "namespace": "keycloak"}
+    for match in (
+        "Host(`admin.skirmshop.es`) && PathPrefix(`/api/panel`)",
+        "Host(`admin.skirmshop.es`) && Path(`/`)",
+        "Host(`admin.skirmshop.es`) && PathPrefix(`/`)",
+    ):
+        assert rules[match]["middlewares"] == [sso]
+    oauth2 = rules["Host(`admin.skirmshop.es`) && PathPrefix(`/oauth2`)"]
+    assert oauth2["services"] == [
+        {"name": "oauth2-proxy-skirmshop", "namespace": "keycloak", "port": 4180}
+    ]
+    assert "middlewares" not in oauth2
+    assert all(
+        middleware["name"] != "admin-lan-panel-operator-identity"
+        for rule in route["spec"]["routes"]
+        for middleware in rule.get("middlewares", [])
+    )
+
+
 def test_edge_watches_every_namespace_used_by_canonical_routes():
     route_documents = documents(
         "networking/traefik-edge/canonical-hosts-public.yaml"
