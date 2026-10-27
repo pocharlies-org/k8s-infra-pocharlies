@@ -73,7 +73,7 @@ spec:
       # INFRA-942 (2026-10-27): con Hindsight el WAL subió a ~74 GB/día y el 77-80 % seguían siendo páginas completas
       # (pg_waldump: B-tree, HNSW de pgvector como Generic, hint bits). En 3,6 días hubo 63 checkpoints forzados por
       # max_wal_size, además de los de tiempo. 15min -> 30min y 4GB -> 16GB: la mitad de checkpoints y menos páginas
-      # completas. El WAL vive en el NVMe local (local-path no aplica la cuota de 20Gi; ~500 GB libres); replicar
+      # completas. El WAL vive en el NVMe local (local-path no aplica la cuota de 20Gi; ~500 GB libres); reproducir
       # 16 GB al recuperar de una caída tarda pocos minutos.
       wal_compression: "zstd"
       checkpoint_timeout: "30min"
