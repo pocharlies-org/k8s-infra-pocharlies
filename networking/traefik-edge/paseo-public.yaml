@@ -1,13 +1,13 @@
 ---
-# Paseo (sustituye a OpenChamber, INFRA-824/825): el daemon `paseo.service` del x86 escucha en
-# 100.83.56.98:6767 y ya admite el Host paseo.e-dani.com. Cloudflare -> traefik-edge -> x86:6767.
+# Paseo (sustituye a OpenChamber, INFRA-824/825): el daemon Paseo escucha en el 6767 y admite el Host
+# paseo.e-dani.com. Hoy corre en el pod paseo-0 de atlantic (Service paseo.paseo). Cloudflare -> traefik-edge -> paseo.paseo:6767.
 #
-# El daemon ejecuta agentes con shell en el x86: desde fuera SIEMPRE sso-chain. Solo LAN/tailnet/pods
+# El daemon ejecuta agentes con shell en el pod: desde fuera SIEMPRE sso-chain. Solo LAN/tailnet/pods
 # (las mismas ClientIP que tenia chamber.e-dani.com) entran directo. El WebSocket (/ws) va por la misma
 # regla del host: Traefik pasa el Upgrade sin configuracion y, al secuestrar la conexion, Go quita el
 # readTimeout de 60 s del entrypoint, asi que no corta la sesion.
 #
-# ExternalName al x86 por el pin de CoreDNS (networking/dns/coredns-custom.yaml), como oficinas-public.yaml.
+# ExternalName al Service del clúster (paseo.paseo.svc.cluster.local): DNS interno, ya no hace falta el pin de CoreDNS del x86.
 apiVersion: v1
 kind: Service
 metadata:
@@ -18,7 +18,7 @@ metadata:
     app.kubernetes.io/part-of: traefik-edge-cutover
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: paseo.paseo.svc.cluster.local
   ports:
     - name: http
       port: 6767
