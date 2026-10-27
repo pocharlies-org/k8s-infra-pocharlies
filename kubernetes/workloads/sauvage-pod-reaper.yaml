@@ -44,7 +44,11 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 240
+      # SC-2679 (27-10): desde el fix INFRA-935 (18-10) el reaper barre TODOS los
+      # namespaces (~100 x 2 fases, ~200 llamadas kubectl): sano tarda ~75 s, pero
+      # con el API algo lento superaba los 240 s y moría por DeadlineExceeded en
+      # cascada (keep-causa cron-job-failed:90dcdf1ed6). 600 s = 8x de margen.
+      activeDeadlineSeconds: 600
       backoffLimit: 1
       ttlSecondsAfterFinished: 3600
       template:

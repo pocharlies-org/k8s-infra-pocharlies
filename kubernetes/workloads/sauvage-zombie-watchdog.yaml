@@ -41,7 +41,11 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 180
+      # SC-2679 (27-10): con el API lento las pasadas sanas de ~15 s se estiraban
+      # más allá de 180 s y el job moría por DeadlineExceeded (keep-causa
+      # cron-job-failed:90dcdf1ed6). 240 s sigue por debajo del paso de 5 min
+      # (concurrencyPolicy: Forbid), así que nunca bloquea la siguiente pasada.
+      activeDeadlineSeconds: 240
       backoffLimit: 1
       ttlSecondsAfterFinished: 3600
       template:
