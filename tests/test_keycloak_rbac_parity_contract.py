@@ -33,6 +33,7 @@ SECRETARIA_SAS = [
 SECRETARIA_SKIRMSHOP_SA = "service-account-hermes-secretaria-skirmshop"
 PROBE_SA = "service-account-atlassian-mcp-probe"
 CORREO_LECTURA_SA = "service-account-correo-agente-lectura"
+ANALISIS_SA = "service-account-analisis"
 CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
 
 
@@ -63,8 +64,10 @@ class RoleCatalogParityTest(unittest.TestCase):
         probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
         correo_lectura = shell_list(READ_GRANTS, "EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES")
         correo_ejecutor = shell_list(READ_GRANTS, "EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES")
+        analisis = shell_list(READ_GRANTS, "EXPECTED_ANALISIS_READ_ROLE_NAMES")
         self.assertTrue(set(correo_lectura) <= set(reads))
         self.assertTrue(set(correo_ejecutor) <= set(reads))
+        self.assertTrue(set(analisis) <= set(reads))
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
@@ -95,6 +98,9 @@ class RoleCatalogParityTest(unittest.TestCase):
                 # correo-agente-client.sh.
                 | ({CORREO_LECTURA_SA} if role in correo_lectura else set())
                 | ({CORREO_EJECUTOR_SA} if role in correo_ejecutor else set())
+                # SC-1282: the analysis platform grantee (granted by security
+                # in SC-2967, outside this reconciler).
+                | ({ANALISIS_SA} if role in analisis else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
