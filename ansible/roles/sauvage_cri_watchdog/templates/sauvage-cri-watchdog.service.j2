@@ -1,0 +1,7 @@
+[Unit]
+Description=INFRA-944: restart k3s-agent when the CRI on sauvage stops creating pod sandboxes
+Documentation=file:///etc/sauvage-host-units.md
+
+[Service]
+Type=oneshot
+ExecStart={{ sauvage_cri_watchdog_script_path }}
