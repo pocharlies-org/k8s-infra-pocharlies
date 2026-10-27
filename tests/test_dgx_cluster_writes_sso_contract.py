@@ -6,6 +6,8 @@ solo pide SSO para apply, scale/restart y sync/rollback, el botón «refresh» d
 (POST /api/cluster/argocd/<app>/refresh) y las acciones docker llegan sin identidad y
 el backend responde 403. Aquí se fija que la regla de escrituras (priority 350) de cada
 host del panel cubra el prefijo entero, solo para POST y con sso-chain.
+DGX-1314: en LAN no hay regla de escrituras (LAN = Dani, la 300 estampa su identidad con
+/edani-admins); quedan las del edge.
 """
 import pathlib
 import unittest
@@ -16,7 +18,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 FICHEROS = [
     ROOT / "networking/traefik-edge/dgx-dashboard-public.yaml",
     ROOT / "networking/traefik-edge/s3-media-public.yaml",
-    ROOT / "networking/traefik-lan/dgx-public-host-lan.yaml",
 ]
 PREFIJO = "PathPrefix(`/api/cluster/`)"
 
@@ -39,8 +40,8 @@ def _middlewares(ruta):
 class EscriturasDeClusterPorSSO(unittest.TestCase):
     def test_cada_host_del_panel_pide_sso_para_todo_post_de_cluster(self):
         reglas = [(f, r) for f, r in _rutas() if PREFIJO in r["match"]]
-        # dgx.e-dani.com (edge), s3.e-dani.com (edge), dgx+dgx.lan y s3 (LAN)
-        self.assertEqual(len(reglas), 4, [f for f, _ in reglas])
+        # dgx.e-dani.com y s3.e-dani.com (edge)
+        self.assertEqual(len(reglas), 2, [f for f, _ in reglas])
         for f, ruta in reglas:
             with self.subTest(fichero=f, priority=ruta.get("priority")):
                 self.assertIn("Method(`POST`)", ruta["match"])

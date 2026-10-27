@@ -32,54 +32,13 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
-    # DGX-829 (security, F3 de DGX-821): este host sirve el mismo backend que dgx.lan, y hasta aquí las
-    # lecturas del control set se servían sin sesión por la 300 (medido: GET /api/company/control y
-    # GET /api/litellm/keys con 200 sin sesión, mientras dgx.e-dani.com da 302 al SSO). Regla espejo de la
-    # 400 de lan-dgx-dashboard-public-host: mismos prefijos, misma cadena (identidad vaciada, sso-chain y
-    # prueba de borde). Prioridad 410 para no empatar con la 400 del HUD (sus rutas no se solapan).
-    # La paridad con dgx la mide tests/test_jarvis_host_sso_parity_dgx_contract.py.
-    - kind: Rule
-      priority: 410
-      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    # DGX-809 (security H-2 de DGX-799 y S1 de DGX-800) y DGX-829: escrituras sin identidad del backend,
-    # solo por POST (GET /api/compute/mode, /api/llm/uncensored… siguen abiertos; POST
-    # /api/activity/claude/refresh se queda abierto, F1: lo llama la extensión vscode-claude-cuenta).
-    # Regla espejo de la 350 de lan-dgx-dashboard-public-host: mismas rutas, misma cadena.
-    # /api/secretaria (menos …/escalar, máquina con HMAC V2) y /despacho-secretaria subieron a la 410.
-    # El HUD no usa ninguna.
-    - kind: Rule
-      priority: 350
-      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      # Sin SSO en este host salvo la 410 y la 350 de arriba: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
-      # dgx.lan; si no, cualquiera de la LAN/tailnet se haría pasar por Dani ante `es_dani` del dashboard
-      # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
+      # DGX-1314 (Dani, 27-10): LAN = Dani, como dgx.lan: todo el backend sin SSO con la identidad de Dani
+      # estampada (sobrescribe cualquier cabecera forjada). Paridad: tests/test_jarvis_host_sso_parity_dgx_contract.py.
       middlewares:
-        - name: dgx-strip-identity-headers
+        - name: dgx-lan-identidad-dani
           namespace: traefik-lan
         - name: dgx-edge-proof
           namespace: traefik-lan
