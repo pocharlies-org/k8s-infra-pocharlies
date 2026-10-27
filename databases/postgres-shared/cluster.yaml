@@ -80,6 +80,13 @@ spec:
       max_wal_size: "16GB"
       min_wal_size: "1GB"
 
+      # INFRA-942 (2026-10-27): el recall de Hindsight lee de la réplica (READ_DATABASE_URL -> postgres-shared-ro).
+      # Sin feedback, el VACUUM del primario borra filas que una consulta de la réplica aún ve y la reproducción del
+      # WAL la cancela a los 30 s ("canceling statement due to conflict with recovery"): 4 recalls en 500 en la
+      # prueba de rendimiento del 27-10 y confl_snapshot=4 en la réplica. Con feedback, el primario retrasa ese VACUUM
+      # lo que dura la consulta (segundos). SIGHUP: no reinicia.
+      hot_standby_feedback: "on"
+
     # INFRA-942 (2026-10-25): réplica síncrona en modo preferred. El primario confirma el commit cuando la réplica
     # ya lo tiene en disco (medido: 2-6 ms más por commit), así que un fallo del primario no pierde nada confirmado.
     # Si la réplica cae, vuelve a asíncrono solo en vez de bloquear las escrituras (con `required` y 2 instancias
