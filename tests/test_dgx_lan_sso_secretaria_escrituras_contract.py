@@ -11,6 +11,8 @@ con bypass (dgx y s3 en LAN y edge, y jarvis en LAN) para una petición concreta
 prioridad que casa, como Traefik, y mira su cadena de middlewares. Así cubre el método, la negación
 de /escalar y que las lecturas que la app usa sin sesión siguen cayendo en el bypass.
 Toda cadena acaba en dgx-edge-proof (DGX-729): la prueba de borde va en cada ruta al dashboard.
+DGX-1314 (Dani, 27-10): en el Traefik de LAN no hay SSO, LAN = Dani: desde casa TODO cae en la
+cadena LAN_DANI (su identidad estampada + prueba). El edge no cambia.
 """
 import pathlib
 import unittest
@@ -90,6 +92,9 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 
+LAN_DANI = [("dgx-lan-identidad-dani", "traefik-lan"), ("dgx-edge-proof", "traefik-lan")]
+
+
 class SecretariaYEscriturasTrasSSO(unittest.TestCase):
     def _cada_peticion(self, peticiones, ips=DE_CASA, solo=None):
         for fichero, nombre, hosts, ns in RUTAS:
@@ -110,19 +115,22 @@ class SecretariaYEscriturasTrasSSO(unittest.TestCase):
                                *self._cada_peticion(BACKGROUND_CONSUMERS, solo=INFRA_832)]:
             with self.subTest(caso):
                 self.assertIsNotNone(ruta, caso)
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"),
-                                                      ("dgx-edge-proof", ns)],
-                                 f"{caso}: primero se vacía la identidad, luego sso-chain y al final la prueba de borde")
+                esperada = LAN_DANI if ns == "traefik-lan" else [
+                    ("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"), ("dgx-edge-proof", ns)]
+                self.assertEqual(self._cadena(ruta), esperada,
+                                 f"{caso}: LAN = Dani; en el edge, identidad vaciada, sso-chain y prueba de borde")
 
     def test_escalar_de_maquina_cae_en_el_bypass(self):
         for caso, ruta, ns in self._cada_peticion(ESCALAR):
             with self.subTest(caso):
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)], caso)
+                esperada = LAN_DANI if ns == "traefik-lan" else [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)]
+                self.assertEqual(self._cadena(ruta), esperada, caso)
 
     def test_lecturas_de_la_app_sin_sesion_siguen_abiertas(self):
         for caso, ruta, ns in self._cada_peticion(LECTURAS_ABIERTAS):
             with self.subTest(caso):
-                self.assertEqual(self._cadena(ruta), [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)], caso)
+                esperada = LAN_DANI if ns == "traefik-lan" else [("dgx-strip-identity-headers", ns), ("dgx-edge-proof", ns)]
+                self.assertEqual(self._cadena(ruta), esperada, caso)
 
     def test_desde_fuera_todo_sigue_tras_sso(self):
         """Por el edge, desde una IP pública, todo va a la regla 100 (sso-chain), /escalar incluida."""

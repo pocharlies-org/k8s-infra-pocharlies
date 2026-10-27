@@ -1,6 +1,7 @@
 """dgx.app.pagos.v1 (03-10-2026): las rutas de la app DGX de pagos pasan SIEMPRE por
-oauth2-proxy, en LAN y en el edge, y las de máquina se quedan públicas en LAN por diseño
-(HMAC V2 propio, no SSO).
+oauth2-proxy en el edge, y las de máquina se quedan públicas en LAN por diseño
+(HMAC V2 propio, no SSO). DGX-1314 (Dani, 27-10): en LAN no hay SSO, LAN = Dani: la 300
+estampa su identidad (dgx-lan-identidad-dani), que `es_dani` y guarda_cluster aceptan.
 
 El backend exige `es_dani` sobre la cabecera `X-Auth-Request-Email`. Esa cabecera solo vale
 si la estampa el forwardAuth de oauth2-proxy (`sso-forward-auth.authResponseHeaders`): en la
@@ -60,8 +61,19 @@ class PagosSSOContract(unittest.TestCase):
                                  ("dgx-edge-proof", ns)],
                          f"{name}@{priority}: strip first, then sso-chain, then edge-proof")
 
-    def test_lan_400_protege_app_pagos_push_y_alarma(self):
-        self._assert_protected(_docs(LAN), "lan-dgx-dashboard-public-host", 400, "traefik-lan")
+    def test_lan_300_estampa_la_identidad_de_dani(self):
+        """DGX-1314: sin control set en LAN; la 300 lleva la identidad de Dani y la prueba de borde."""
+        docs = _docs(LAN)
+        route = _route(docs, "lan-dgx-dashboard-public-host", 300)
+        chain = [(m["name"], m.get("namespace", "")) for m in route["middlewares"]]
+        self.assertEqual(chain, [("dgx-lan-identidad-dani", "traefik-lan"), ("dgx-edge-proof", "traefik-lan")])
+        mw = next(d for d in docs if d.get("kind") == "Middleware" and d["metadata"]["name"] == "dgx-lan-identidad-dani")
+        cab = mw["spec"]["headers"]["customRequestHeaders"]
+        self.assertEqual(cab["X-Auth-Request-Email"], "me@e-dani.com")  # en SECRETARIA_DANI_EMAILS (es_dani)
+        self.assertIn("/edani-admins", cab["X-Auth-Request-Groups"].split(","))  # guarda_cluster
+        # sobrescribe las mismas 7 cabeceras que vacía el strip: nada forjado pasa tal cual
+        strip = next(d for d in docs if d.get("kind") == "Middleware" and d["metadata"]["name"] == "dgx-strip-identity-headers")
+        self.assertEqual(set(cab), set(strip["spec"]["headers"]["customRequestHeaders"]))
 
     def test_edge_400_protege_app_pagos_push_y_alarma(self):
         self._assert_protected(_docs(EDGE), "edge-dgx-dashboard-public", 400, "traefik-edge")

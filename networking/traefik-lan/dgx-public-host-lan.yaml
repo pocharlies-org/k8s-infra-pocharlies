@@ -13,12 +13,18 @@
 #   H1 — dgx-strip-identity-headers empties the 7 identity headers on EVERY
 #        route, chained BEFORE sso-chain where present (never after: it would
 #        wipe the headers oauth2-proxy injects and break login).
-#   H2 — higher-priority routes put the approved control set behind sso-chain
-#        for LAN/tailnet/cluster callers too; telemetry reads stay open.
+#   H2 — (retirado en DGX-1314, abajo) el control set iba tras sso-chain
+#        también para LAN/tailnet/cluster.
 # The same Middleware is defined once per Traefik instance (here and in
 # networking/traefik-edge/dgx-dashboard-public.yaml) — traefik-lan and
 # traefik-edge are separate instances and each resolves middlewares in the
 # namespaces it watches. Precedent: sauvage-bot-strip-auth-headers.
+#
+# DGX-1314 (Dani, 27-10): en LAN y tailnet el dashboard no pide Keycloak: LAN = Dani.
+# Las rutas con gate ClientIP estampan su identidad (dgx-lan-identidad-dani) en vez de
+# pasar por sso-chain; la estampa SOBRESCRIBE las 7 cabeceras, así que una cabecera
+# forjada no da más que eso. Riesgo aceptado por Dani: cualquier máquina o pod de esos
+# rangos actúa como él. Desde fuera (borde y la regla 100) sigue sso-chain.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -34,6 +40,24 @@ spec:
       X-Forwarded-User: ""
       X-Forwarded-Email: ""
       X-Forwarded-Groups: ""
+---
+# Lo que oauth2-proxy estamparía para Dani (usuario me@e-dani.com del realm edani; sus
+# grupos de Keycloak medidos el 27-10). Si cambian sus grupos, se cambian aquí.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dgx-lan-identidad-dani
+  namespace: traefik-lan
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: me@e-dani.com
+      X-Auth-Request-Email: me@e-dani.com
+      X-Auth-Request-Groups: /company-operator,/edani-admins,/skirmbooks-admins
+      X-Auth-Request-Preferred-Username: me@e-dani.com
+      X-Forwarded-User: me@e-dani.com
+      X-Forwarded-Email: me@e-dani.com
+      X-Forwarded-Groups: /company-operator,/edani-admins,/skirmbooks-admins
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -77,11 +101,20 @@ spec:
     # Consola de mensajería → dgx-messages (ns messages), gemela de la ruta 450
     # del edge (networking/traefik-edge/dgx-dashboard-public.yaml): página,
     # assets propios, API y SSE, siempre tras sso-chain y con las cabeceras de
-    # identidad borradas antes. Sin gate ClientIP: también para quien no pase
-    # por el bypass. Por encima del control set (400), que antes mandaba
-    # /api/messages a la copia vieja del dashboard.
+    # identidad borradas antes, para quien no venga de LAN/tailnet (DGX-1314: esos
+    # entran por la 460 de abajo, con la identidad de Dani y sin login).
     # /static/vendor/react/ también: la consola carga su React de ahí y el dashboard ya no
     # lo tiene (INFRA-265 lo borró; sin esto /messages salía en blanco, DGX-1181).
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`))
+      priority: 460
+      middlewares:
+        - name: dgx-lan-identidad-dani
+          namespace: traefik-lan
+      services:
+        - name: dgx-messages
+          namespace: messages
+          port: http
     - kind: Rule
       match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`))
       priority: 450
@@ -94,78 +127,16 @@ spec:
         - name: dgx-messages
           namespace: messages
           port: http
-    # SC-1192: control set behind sso-chain even for LAN/tailnet/cluster
-    # callers (reads of telemetry and the UI stay on the bypass below).
-    # SC-1316: la pagina /entregas del dashboard y sus assets propios
-    # (/static/entregas*) entran en el control-set: su API (/api/company/entregas)
-    # ya exigia sso-chain y la pagina sin ella quedaba abierta en LAN/tailnet.
-    # dgx.app.pagos.v1 (03-10-2026): las rutas de la app DGX (/api/app/pagos*,
-    # /api/app/push/token) entran en el control-set: el backend exige es_dani sobre
-    # X-Auth-Request-Email, que SOLO puede estampar oauth2-proxy (authResponseHeaders
-    # de sso-forward-auth); en el bypass de prioridad 300 la cabecera va vaciada por
-    # dgx-strip-identity-headers, asi que sin sso-chain la app no funciona y un
-    # forged de identidad tampoco. Las de maquina /api/pagos* (HMAC) se quedan en el
-    # bypass a proposito: llevan firma, no SSO.
-    # dgx.app.alarma.v1 (DGX-674, security C1): igual. /api/app/alarma* (SSO + lista de
-    # emails en el backend) entra aqui; /api/alarma* (HMAC V2) NO: cae en el bypass 300.
-    # dgx.panel.hermes.v1 (SC-2175, security): /api/hermes-panel* (la pestana de Hermes del panel) entra
-    # igual: el backend da 401 sin X-Auth-Request-Email, que solo estampa oauth2-proxy; en el bypass 300 la
-    # cabecera va vaciada y desde casa la pestana daria 401 siempre.
-    # DGX-809 (security S1 de DGX-800): /api/secretaria entera (conversaciones de los cuatro perfiles,
-    # Leila incluida, y las Acciones ACC) y la pagina /despacho-secretaria entran en el control-set: sin
-    # sesion las leia, creaba o borraba cualquiera de la LAN, la tailnet o un pod. Fuera queda solo
-    # POST /api/secretaria/despacho[/<perfil>]/escalar (maquina a maquina, HMAC V2 propio): cae en el bypass.
-    # INFRA-380: /plaud y /api/plaud (grabaciones privadas) entran en el control-set igual que /entregas;
-    # sus assets viven en /static/inferencia* compartido y no llevan datos.
-    # DGX-1021: la pagina /cuentas entra con sus secciones. Sus datos (/api/company/control) ya exigian sesion:
-    # sin cookie la pagina cargaba (bypass LAN) pero cada fetch saltaba al login y moria en «Load failed» — en el
-    # movil (webview de Telegram) no habia forma de iniciar sesion y las cuentas no se veian. Gatear la pagina
-    # hace la navegacion completa -> login Keycloak -> vuelta a /cuentas con la cookie puesta.
-    - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || PathPrefix(`/cuentas`))
-      priority: 400
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    # DGX-809 (security H-2 de DGX-799): tres escrituras sin identidad del backend
-    # (POST /api/activity/power y /api/llm/uncensored)
-    # entran igual, solo con POST: sus GET siguen abiertos. POST /api/activity/claude/refresh
-    # se queda abierto (F1 de security: lo llama sin sesión la extensión vscode-claude-cuenta).
-    # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
-    # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
-    # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
-    # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster).
-    - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
-      priority: 350
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
     # dgx.lan.e-dani.com resolves publicly to the LAN VIP (DoH-proof, unlike the
     # AdGuard rewrite of dgx.e-dani.com that DoH clients skip), so LAN/Tailscale
     # browsers land here without Cloudflare/Keycloak. Same ClientIP gate.
-    # SC-1191: identity headers are stripped even on this open bypass.
+    # DGX-1314: todo el dashboard (control set y escrituras incluidos) entra aquí con la
+    # identidad de Dani estampada; una cabecera forjada queda sobrescrita.
     - kind: Rule
       match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
       middlewares:
-        - name: dgx-strip-identity-headers
+        - name: dgx-lan-identidad-dani
           namespace: traefik-lan
         - name: dgx-edge-proof
           namespace: traefik-lan
@@ -201,42 +172,11 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # SC-1192: sister host of the same backend — same control set, same SSO.
-    # DGX-809: lo mismo que arriba (400: /api/secretaria menos /escalar y /despacho-secretaria;
-    # 350: las tres escrituras por POST).
-    - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
-      priority: 400
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
-      priority: 350
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-lan
-        - name: sso-chain
-          namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-lan
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
     - kind: Rule
       match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
       middlewares:
-        - name: dgx-strip-identity-headers
+        - name: dgx-lan-identidad-dani
           namespace: traefik-lan
         - name: dgx-edge-proof
           namespace: traefik-lan
