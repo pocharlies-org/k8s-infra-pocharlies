@@ -604,3 +604,64 @@ rules:
   - apiGroups: [external-secrets.io]
     resources: [externalsecrets]
     verbs: [get, list, watch]
+---
+# POLICY 9 (SC-2708): la imagen t2v de Aurora al espejo corregido de la casa.
+#
+# El chart aurora-oss 1.2.16 hardcodea en templates/t2v-transformers-deployment.yaml
+# la imagen cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+# (tag mutable, sin override por values). El build del 23-09 de ese tag trae el
+# modelo en 0600 root (comprobado en el digest 75359f8b: ls -l sobre
+# /app/models/model/model.safetensors) y el despliegue corre como uid 1000: el
+# vectorizer no puede abrirlo y el pod cae en bucle, arrastrando a weaviate
+# (espera el /.well-known/ready de t2v) y al CronJob brain-kb-sync
+# (incidente Keep DEPL-15370, 2026-10-27).
+#
+# Esta regla reescribe la imagen en admisión al espejo de la casa en
+# ghcr.io/pocharlies-org — el registry de los puentes de Aurora (INFRA-326),
+# público y ya accesible desde sauvage; Harbor homelab es privado y el nodo no
+# tiene credenciales para él. El espejo es el mismo contenido más una capa de
+# permisos (Dockerfile y README en
+# images/aurora/bridge/transformers/ de k8s-observability-pocharlies). El
+# Deployment conserva la imagen del chart, así que ArgoCD sigue Synced.
+#
+# Se retira cuando el chart permita fijar la imagen o semitechnologies publique
+# un build legible por uid 1000.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aurora-t2v-image-mirror
+  annotations:
+    policies.kyverno.io/title: Aurora t2v image to the corrected house mirror
+    policies.kyverno.io/description: >
+      The upstream aurora chart hardcodes a transformers-inference image whose
+      model files are mode 0600 root, unreadable by the pod's uid 1000. This
+      policy swaps that image for the house mirror in ghcr.io/pocharlies-org,
+      which carries the same content with readable model files.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481): los
+  # defaults que inyecta el webhook, declarados aquí tal como los escribe.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: t2v-image-to-house-mirror
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aurora]
+              operations: [CREATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.containers[0].image || '' }}"
+            operator: Equals
+            value: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+      skipBackgroundRequests: true
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/containers/0/image
+            op: replace
+            value: ghcr.io/pocharlies-org/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-r1
