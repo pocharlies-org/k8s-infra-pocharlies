@@ -137,6 +137,13 @@ CORREO_LECTURA_SA_USERNAME="service-account-correo-agente-lectura"
 CORREO_EJECUTOR_READ_ROLE_NAMES="${CORREO_EJECUTOR_READ_ROLE_NAMES:-agentgateway-read:shopify-admin}"
 EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES="agentgateway-read:shopify-admin"
 CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"
+# SC-1282: the analysis platform (SC-2951/SC-2956) reads /atlassian, /social
+# and /synapse. The grants were made by security in SC-2967 (admin API, outside
+# this reconciler); the holder lands in the reviewed allowlist so the catalog
+# and the matrix stay in parity (precedent SC-1834 probe).
+ANALISIS_READ_ROLE_NAMES="${ANALISIS_READ_ROLE_NAMES:-agentgateway-read:atlassian,agentgateway-read:social,agentgateway-read:synapse}"
+EXPECTED_ANALISIS_READ_ROLE_NAMES="agentgateway-read:atlassian,agentgateway-read:social,agentgateway-read:synapse"
+ANALISIS_SA_USERNAME="service-account-analisis"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -182,6 +189,8 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "CORREO_LECTURA_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CORREO_EJECUTOR_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES}" ] || \
   fail "CORREO_EJECUTOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${ANALISIS_READ_ROLE_NAMES}" = "${EXPECTED_ANALISIS_READ_ROLE_NAMES}" ] || \
+  fail "ANALISIS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -299,6 +308,11 @@ role_allowed_users() {
   fi
   if printf '%s\n' "${CORREO_EJECUTOR_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${CORREO_EJECUTOR_SA_USERNAME}"
+  fi
+  # SC-1282: same rule for the analysis platform service account (granted by
+  # security in SC-2967).
+  if printf '%s\n' "${ANALISIS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${ANALISIS_SA_USERNAME}"
   fi
 }
 
