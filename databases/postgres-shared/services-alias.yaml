@@ -2,6 +2,13 @@
 # nuevo se llama postgres-shared-nvme y sus servicios también. Estos tres alias
 # mantienen los nombres que ya usan ~30 consumidores (postgres-shared-rw sobre todo).
 # Selectores y puertos copiados de los que crea el operador para el cluster.
+#
+# SC-2707 (2026-10-27): el clusterIP va fijado a 10.43.21.183, la IP del servicio
+# antiguo. Los ~35 ficheros de /etc/synapse de sauvage (adapters systemd --user:
+# conversation, telegram, whatsapp, product-creator…) la llevan escrita y no
+# resuelven DNS del clúster; al recrearse el alias con IP nueva (INFRA-942) todos
+# quedaron en crash-loop de TimeoutError contra la IP vieja (25-10 11:27).
+# Fijarla aquí hace el alias inamovible: recrearlo conserva la misma IP.
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,6 +18,7 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
 spec:
   type: ClusterIP
+  clusterIP: 10.43.21.183
   selector:
     cnpg.io/cluster: postgres-shared-nvme
     cnpg.io/instanceRole: primary
