@@ -508,6 +508,15 @@ spec:
                   - libreplay-db-seed
       ports:
         - { protocol: TCP, port: 6379 }
+    # Zammad (spike de evaluación en el namespace zammad, orden de Dani 27-10-2026):
+    # cache + colas Sidekiq en el valkey compartido. Si el spike cuaja, acotar a pods
+    # concreto y dar de alta el usuario ACL en el item 1Password de users_acl.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: zammad
+      ports:
+        - { protocol: TCP, port: 6379 }
     - from:
         - namespaceSelector:
             matchLabels:

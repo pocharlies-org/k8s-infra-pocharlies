@@ -131,6 +131,8 @@ class SharedValkeyAclContractTest(unittest.TestCase):
                 ]}],
             )],
              "ports": [TCP(6379)]},
+            {"from": [namespace_peer("zammad")],
+             "ports": [TCP(6379)]},
             {"from": [namespace_peer("monitoring", pod={"app.kubernetes.io/name": "vmagent"})],
              "ports": [TCP(9121)]},
         ])
