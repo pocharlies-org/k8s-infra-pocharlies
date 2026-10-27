@@ -616,11 +616,16 @@ rules:
 # (espera el /.well-known/ready de t2v) y al CronJob brain-kb-sync
 # (incidente Keep DEPL-15370, 2026-10-27).
 #
-# Esta regla reescribe la imagen en admisión al espejo de la casa en
-# ghcr.io/pocharlies-org — el registry de los puentes de Aurora (INFRA-326),
-# público y ya accesible desde sauvage; Harbor homelab es privado y el nodo no
-# tiene credenciales para él. El espejo es el mismo contenido más una capa de
-# permisos (Dockerfile y README en
+# INFRA-1010 (2026-10-27): el destino original era ghcr.io/pocharlies-org,
+# pero los paquetes puente se crearon PRIVADOS (el token anónimo de ghcr los
+# niega) y la API REST de visibilidad ya no existe — solo UI. Harbor `homelab`
+# es privado y el nodo no tiene credenciales para él (harbor-runtime-pull no
+# cubre el ns aurora). El espejo vive por tanto en harbor.e-dani.com/library,
+# el proyecto PÚBLICO de Harbor (pull anónimo verificado: token de servicio +
+# manifest 200), mismo patrón que library/vllm-qwen38-rank1.
+#
+# Esta regla reescribe la imagen en admisión a ese espejo. El espejo es el
+# mismo contenido más una capa de permisos (Dockerfile y README en
 # images/aurora/bridge/transformers/ de k8s-observability-pocharlies). El
 # Deployment conserva la imagen del chart, así que ArgoCD sigue Synced.
 #
@@ -635,8 +640,9 @@ metadata:
     policies.kyverno.io/description: >
       The upstream aurora chart hardcodes a transformers-inference image whose
       model files are mode 0600 root, unreadable by the pod's uid 1000. This
-      policy swaps that image for the house mirror in ghcr.io/pocharlies-org,
-      which carries the same content with readable model files.
+      policy swaps that image for the house mirror in the public Harbor project
+      (harbor.e-dani.com/library), which carries the same content with readable
+      model files.
 spec:
   admission: true
   background: true
@@ -664,4 +670,4 @@ spec:
         patchesJson6902: |-
           - path: /spec/containers/0/image
             op: replace
-            value: ghcr.io/pocharlies-org/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-r1
+            value: harbor.e-dani.com/library/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-r1
