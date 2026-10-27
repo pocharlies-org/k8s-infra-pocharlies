@@ -107,9 +107,13 @@ data:
     # then times out and the adapter exits -> keep-causa deployment-degraded:c1fa477c92
     # (incidents 17/10, 22/10, 23/10 x3, 25/10 x2, 27/10). Measured RSS baseline is
     # ~0.63GB with bursts over 1.2GiB, so the default threshold sat inside normal
-    # burst range. 1600MB clears the bursts and stays below the 1800MB vm watermark,
+    # burst range. ~1.5GiB clears the bursts and stays below the 1800MB vm watermark,
     # so a real overload still blocks publishers before OOM (limit 3Gi).
-    system_memory_high_watermark.absolute = 1600MB
+    # SC-2597 wrote this as `system_memory_high_watermark.absolute`, which does not
+    # exist in RabbitMQ 3.13 (only `.relative`): the broker crashed at boot with
+    # failed_to_prepare_configuration on the next restart (27/10 12:18, all three
+    # pods). 0.5 x 3Gi = 1.5GiB = 1610MB, the intended threshold.
+    system_memory_high_watermark.relative = 0.5
     disk_free_limit.absolute = 500MB
     # INFRA-879 (2026-10-16): the /synapse critical queues (the sf-quorum-exclude
     # list) are classic and lose service for the whole duration of a node reboot
