@@ -1,0 +1,42 @@
+#!/bin/bash
+# INFRA-944: CRI stall watchdog for sauvage.
+#
+# k3s embeds containerd. When the RAID1 HDDs stall fsync (jbd2), RunPodSandbox
+# exceeds the CRI deadline, kubelet spams "Failed to create pod sandbox" and
+# containerd leaks the sandbox name reservation: every retry then fails with
+# FailedPrecondition "name ... is reserved for ...". No pod can be created on
+# the node until containerd restarts, while already-running pods keep going
+# (the containerd-shims hold them).
+#
+# The in-cluster sauvage-zombie-watchdog cannot cover this: it is pinned to
+# sauvage with nodeName and needs the same stuck CRI to start its own pod.
+# This unit lives on the host and restarts k3s-agent, which clears the stuck
+# embedded containerd without touching running pods. Rate-limited: at most one
+# restart every {{ sauvage_cri_watchdog_min_gap_seconds }} seconds.
+set -eu
+
+failures="$(journalctl -u k3s-agent --since '-{{ sauvage_cri_watchdog_window }}' --no-pager 2>/dev/null \
+  | grep -cE 'Failed to create pod sandbox|failed to reserve sandbox name' || true)"
+echo "{\"msg\":\"cri-watchdog.scan\",\"node\":\"sauvage\",\"failures\":${failures},\"threshold\":{{ sauvage_cri_watchdog_threshold }}}"
+
+if [ "${failures}" -lt {{ sauvage_cri_watchdog_threshold }} ]; then
+  exit 0
+fi
+
+if ! systemctl is-active --quiet k3s-agent.service; then
+  echo '{"msg":"cri-watchdog.skip-not-active","failures":'"${failures}"'}'
+  exit 0
+fi
+
+now="$(date +%s)"
+if [ -f '{{ sauvage_cri_watchdog_state_file }}' ]; then
+  last="$(stat -c %Y '{{ sauvage_cri_watchdog_state_file }}')"
+  if [ $((now - last)) -lt {{ sauvage_cri_watchdog_min_gap_seconds }} ]; then
+    echo "{\"msg\":\"cri-watchdog.rate-limited\",\"seconds_since_restart\":$((now - last))}"
+    exit 0
+  fi
+fi
+
+date +%s > '{{ sauvage_cri_watchdog_state_file }}'
+echo "{\"msg\":\"cri-watchdog.restart\",\"failures\":${failures},\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+systemctl restart k3s-agent.service

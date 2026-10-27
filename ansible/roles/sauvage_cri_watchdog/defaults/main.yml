@@ -1,0 +1,12 @@
+---
+# INFRA-944: CRI stall watchdog for sauvage.
+# A burst of "Failed to create pod sandbox" in the k3s-agent journal (the CRI
+# stops creating sandboxes when the RAID1 HDDs stall fsync and containerd then
+# leaks the sandbox name reservations) triggers one k3s-agent restart.
+sauvage_cri_watchdog_script_path: /usr/local/bin/sauvage-cri-watchdog
+sauvage_cri_watchdog_window: 10m
+sauvage_cri_watchdog_threshold: 5
+sauvage_cri_watchdog_min_gap_seconds: 3600
+sauvage_cri_watchdog_state_file: /run/sauvage-cri-watchdog.last-restart
+sauvage_cri_watchdog_timer_on_boot: 5min
+sauvage_cri_watchdog_timer_interval: 5min
