@@ -424,6 +424,18 @@ spec:
         name: postgres-shared-replication
         key: tls.key
 
+  # INFRA-942 (2026-10-27): barman-cloud (boto3) reintenta minutos, no segundos. El backup sube ~2 h a MinIO en
+  # sauvage, cuyo host se congela de vez en cuando (disco saturado, PSI io full 30-55 %): el 26-10 a las 04:32 y el
+  # 27-10 a las 05:18 (~80 s, nodo NotReady, MinIO sin endpoints). Con el modo por defecto (pocos intentos en segundos)
+  # el upload moría con "Could not connect to the endpoint URL" y se perdía el backup entero. barman no fija
+  # `retries` en su Config, así que botocore toma estas variables (comprobado en la imagen: botocore 1.40.6).
+  # Modo standard: espera exponencial con jitter, tope de 20 s por intento; 30 intentos aguantan ~4 min de media (máx. ~8).
+  env:
+    - name: AWS_RETRY_MODE
+      value: standard
+    - name: AWS_MAX_ATTEMPTS
+      value: "30"
+
   backup:
     # 2026-10-25: 7d -> 2d (Dani, INFRA-993). El store de MinIO vive en el disco de
     # sauvage y hindsight genera ~80 GB/dia de WAL: con 7d la ruta iba a ~750 GB y
