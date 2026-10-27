@@ -23,8 +23,8 @@ import unittest
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CHART = ROOT / "platform" / "keycloak-sso"
-REALMS = CHART / "realms.yaml"
+CHART = ROOT / "platform" / "keycloak-sso" / "charts" / "keycloak-sso"
+REALMS = ROOT / "platform" / "keycloak-sso" / "realms.yaml"
 
 # Hosts que aún entran por una cadena del realm compartido `edani`. Solo se borra.
 LEGACY = {

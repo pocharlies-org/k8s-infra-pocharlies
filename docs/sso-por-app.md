@@ -21,8 +21,9 @@ accounts, identity binding por `sub`); no aloja webs. `master` es solo administr
 
 ## Cómo se declara una web
 
-Una entrada en `platform/keycloak-sso/realms.yaml` (chart `platform/keycloak-sso`,
-Application `keycloak-sso`). De ella salen:
+Una entrada en `platform/keycloak-sso/realms.yaml` (chart
+`platform/keycloak-sso/charts/keycloak-sso`, renderizado por el kustomize de ese
+directorio y desplegado por la Application `keycloak-sso`). De ella salen:
 
 - el realm, entero desde git con keycloak-config-cli (Job hook Sync, wave -1:
   concilia antes de que cambie ningún proxy). Realm cerrado: sin registro, y el
