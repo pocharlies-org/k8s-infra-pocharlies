@@ -85,7 +85,21 @@ spec:
       # WAL la cancela a los 30 s ("canceling statement due to conflict with recovery"): 4 recalls en 500 en la
       # prueba de rendimiento del 27-10 y confl_snapshot=4 en la réplica. Con feedback, el primario retrasa ese VACUUM
       # lo que dura la consulta (segundos). SIGHUP: no reinicia.
+      # INFRA-942 (2026-10-27): el recall de Hindsight lee de la réplica (READ_DATABASE_URL -> postgres-shared-ro).
+      # Sin feedback, el VACUUM del primario borra filas que una consulta de la réplica aún ve y la reproducción del
+      # WAL la cancela a los 30 s ("canceling statement due to conflict with recovery"): 4 recalls en 500 en la
+      # prueba de rendimiento del 27-10 y confl_snapshot=4 en la réplica. Con feedback, el primario retrasa ese VACUUM
+      # lo que dura la consulta (segundos). SIGHUP: no reinicia.
       hot_standby_feedback: "on"
+
+      # SC-2752 (2026-10-27): guarda contra transacciones abandonadas. La alerta PostgresSharedBackendsWaiting
+      # (causa datastore-shared) disparó el 18/10 con 37 backends esperando un lock en el cluster viejo y volvió
+      # a acumular hasta 29 en el nuevo el 26/10 (~15 min sostenidos): siempre transacciones idle in transaction
+      # reteniendo locks, sin nada que las corte. Con 5 min de inactividad la sesión se mata sola y los waiters
+      # se drenan; 5 min es el umbral con el que la propia regla ya considera el cluster saturado, y el trabajo
+      # legítimo es active, no idle-in-transaction (medido el 27/10: 0 sesiones idle in transaction vivas).
+      # SIGHUP: no reinicia.
+      idle_in_transaction_session_timeout: "5min"
 
     # INFRA-942 (2026-10-25): réplica síncrona en modo preferred. El primario confirma el commit cuando la réplica
     # ya lo tiene en disco (medido: 2-6 ms más por commit), así que un fallo del primario no pierde nada confirmado.
