@@ -53,6 +53,15 @@ the read identity and the executor of the Postia case agent. Like
 (`correo-agente-clients.yaml`) creates them in the same sync that ships these
 entries, and `keycloak-role-drift` reports them until the hooks finish.
 
+SC-1282 (2026-10-27) adopts the 37th, `service-account-analisis`: the M2M
+identity of the analysis platform (the six reviewers of SC-2956), created by
+`security` through the admin API in SC-2967 — its
+`agentgateway-write:compania-propuestas` with the verdict of SC-2963 — with no
+GitOps declaration: the same process error `agentgateway-write:compania`
+committed in SC-2522. Adopted as it arrived, measured against the live realm
+on 2026-10-27; the six roles it holds are catalogued in `ROLES.yaml` in the
+same PR, and `keycloak-role-drift` clears on its first run after the sync.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -136,7 +145,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 ```json
 {
   "realm": "edani",
-  "measured": "2026-10-16",
+  "measured": "2026-10-27",
   "principals": [
     {
       "username": "correo@e-dani.com",
@@ -366,6 +375,23 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:weight",
         "agentgateway-read:workspace",
         "agentgateway-write",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-analisis",
+      "type": "sa",
+      "client": "analisis",
+      "owner": "Analisis (plataforma SC-2951/SC-2956)",
+      "source": "creado por security por admin API en SC-2967 ([SEC] de la etapa 0 de SC-2951; el rol agentgateway-write:compania-propuestas con el veredicto de SC-2963) sin declaracion en GitOps; adoptado por SC-1282 (keycloak-role-drift), medido en el realm vivo 2026-10-27",
+      "purpose": "Identidad M2M de la plataforma de analisis (los seis revisores de SC-2956): propone por /compania (agentgateway-write:compania-propuestas, nunca :compania), navega por /playwright (agentgateway-write:analisis, seis tools) y lee /atlassian, /social y /synapse.",
+      "realm_roles": [
+        "agentgateway-read:atlassian",
+        "agentgateway-read:social",
+        "agentgateway-read:synapse",
+        "agentgateway-write:analisis",
+        "agentgateway-write:compania-propuestas",
         "default-roles-edani"
       ],
       "status": "activo"
