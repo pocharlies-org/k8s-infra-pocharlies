@@ -11,8 +11,7 @@
 #
 # ExternalName, not Service+EndpointSlice: ArgoCD excludes EndpointSlice and
 # Endpoints (`resource.exclusions` in argocd-cm), so a slice in Git is never
-# applied — the one behind opencode-public.yaml was `kubectl apply`'d by hand on
-# 2026-08-11 and ArgoCD does not know it exists. `x86.taile0ad27.ts.net` resolves
+# applied (a hand-applied slice is invisible to ArgoCD). `x86.taile0ad27.ts.net` resolves
 # in-cluster through networking/dns/coredns-custom.yaml (hosts entry →
 # 100.83.56.98), which is the same mechanism oficinas-public.yaml relies on.
 #

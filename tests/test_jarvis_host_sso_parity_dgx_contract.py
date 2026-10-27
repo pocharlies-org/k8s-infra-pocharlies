@@ -27,7 +27,8 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 # Control set: lecturas que dgx ya protege (regla 400 de lan-dgx-dashboard-public-host).
 CONTROL_SET = [("GET", p) for p in (
     "/api/company/control", "/api/company/entregas", "/api/litellm/keys", "/api/litellm/config",
-    "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/app/secure/x",
+    "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/hermes-sessions",
+    "/api/app/secure/x",
     "/api/app/pagos/lista", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
     "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel",
     "/api/secretaria/despacho/temas", "/despacho-secretaria",
@@ -35,7 +36,7 @@ CONTROL_SET = [("GET", p) for p in (
 # Escrituras del backend (regla 350): solo por POST; los GET de esas rutas se compran abajo, abiertos.
 ESCRITURAS = [("POST", p) for p in (
     "/api/cluster/apply", "/api/cluster/refresh", "/api/compute/mode", "/api/activity/power",
-    "/api/llm/uncensored", "/api/litellm/opencode/reload",
+    "/api/llm/uncensored", "/api/llm/dgx3/mode",
     "/api/litellm/background-consumers/aurora-rca/block",
     "/api/litellm/background-consumers/aurora-rca/unblock",
 )]
@@ -49,7 +50,8 @@ MAQUINA = [
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/activity", "/api/activity/stream", "/api/compute/mode", "/api/llm/uncensored",
-    "/api/litellm/opencode", "/api/litellm/consumers", "/api/litellm/models",
+    "/api/llm/dgx3/mode",
+    "/api/litellm/consumers", "/api/litellm/models",
     "/api/litellm/background-consumers", "/api/cluster/llm/resident-profile",
     "/api/hud/jarvis", "/api/jarvis/latency", "/api/service-health",
 )]

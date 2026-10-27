@@ -100,6 +100,7 @@ def test_no_route_serves_or_points_at_openchamber():
 SSO_CHAIN = {"name": "sso-chain", "namespace": "keycloak"}
 PASEO_HOST = "Host(`paseo.e-dani.com`)"
 PASEOCB_HOST = "Host(`paseocb.e-dani.com`)"
+PASEOCASA_HOST = "Host(`paseocasa.e-dani.com`)"
 
 
 def assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, service, host=PASEO_HOST):
@@ -180,6 +181,34 @@ def test_paseocb_lan_route_points_at_the_mac_cb_externalname_on_6767():
     assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
 
 
+def test_paseocasa_public_route_requires_sso_chain_outside_trusted_networks():
+    path = "networking/traefik-edge/paseo-public.yaml"
+    route = ingress(path, "edge-paseocasa-public")
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/hostname": "paseocasa.e-dani.com",
+        "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+        "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+    }
+    assert route["spec"]["ingressClassName"] == "traefik-edge"
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+        route, {"name": "paseo-edge-maccasa", "namespace": "traefik-edge", "port": 6767}, PASEOCASA_HOST
+    )
+
+
+def test_paseocasa_lan_route_points_at_the_mac_casa_externalname_on_6767():
+    path = "networking/traefik-lan/paseo-lan.yaml"
+    route = ingress(path, "lan-paseocasa")
+    assert "ingressClassName" not in route["spec"]
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-maccasa", "port": 6767}, PASEOCASA_HOST)
+    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == "paseo-lan-maccasa"
+    ]
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "mac-casa.taile0ad27.ts.net"
+    assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
+
+
 def test_coredns_pins_the_x86_tailnet_name():
     config = next(
         item for item in documents("networking/dns/coredns-custom.yaml")
@@ -190,6 +219,7 @@ def test_coredns_pins_the_x86_tailnet_name():
     assert "taile0ad27.ts.net:53 {" in tailnet_zone
     assert "100.83.56.98 x86.taile0ad27.ts.net" in tailnet_zone
     assert "100.125.62.10 mac-cb.taile0ad27.ts.net" in tailnet_zone
+    assert "100.85.61.58 mac-casa.taile0ad27.ts.net" in tailnet_zone
     assert "hosts {" in tailnet_zone
     assert "fallthrough" in tailnet_zone
     assert "forward . /etc/resolv.conf" in tailnet_zone

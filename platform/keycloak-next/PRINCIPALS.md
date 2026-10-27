@@ -46,6 +46,13 @@ it enters as `origen-desconocido` under Dani (operador), the way
 `daniel.ibanez@cloudblue.com` did. If it turns out to be a stray fixture, its
 retirement goes through the CTO as always.
 
+DGX-1218 (PR-2 of epic DGX-1209) adds the 34th and 35th,
+`service-account-correo-agente-lectura` and `service-account-correo-ejecutor`,
+the read identity and the executor of the Postia case agent. Like
+`hermes-enviar` they are NOT adopted: their PostSync
+(`correo-agente-clients.yaml`) creates them in the same sync that ships these
+entries, and `keycloak-role-drift` reports them until the hooks finish.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -101,7 +108,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 24 lecturas agentgateway-read:* y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -109,6 +117,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
+| `service-account-correo-agente-lectura` | sa | DevOps | activo | Identidad de lectura del agente de casos de Postia ante AgentGateway: los agentgateway-read:<ruta> de sus perfiles (brain, picqer, shopify, shopify-admin, skirmshop-plugins, workspace) y ningún agentgateway-write*. (DGX-1218) |
+| `service-account-correo-ejecutor` | sa | DevOps | activo | Ejecutor de las acciones aprobadas de los casos de Postia: agentgateway-write:correo-ejecutor (order_shipping_line_replace, order_returnable_lines_get, return_create, labels_pickup_create) y agentgateway-read:shopify-admin para pasar la puerta de la ruta. Nunca el agentgateway-write pelado ni otro dominio. (DGX-1218) |
 | `service-account-hermes-enviar` | sa | DevOps | activo | Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail (agentgateway-write:workspace-envio) por /workspace, más agentgateway-read:workspace para llegar a la ruta; nunca agentgateway-write ni otro dominio (INFRA-676). |
 | `service-account-hermes-secretaria` | sa | DevOps | activo | Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
 | `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
@@ -308,18 +318,36 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "status": "activo"
     },
     {
+      "username": "service-account-agentgateway-mac-cb",
+      "type": "sa",
+      "client": "agentgateway-mac-cb",
+      "owner": "Dani (operador)",
+      "source": "ningún ticket ni repo: client creado a mano en el realm (el Mac CloudBlue del paseo SC-2473); declarada por security al cerrar la matriz hindsight (INFRA-974)",
+      "purpose": "client_credentials del Mac CloudBlue para la ruta /hindsight-cloudblue de AgentGateway (banco CloudBlue, solo lectura; contenido que solo puede ir a modelos Anthropic/local, nunca a OpenAI/Alibaba).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-cloudblue",
+        "default-roles-edani"
+      ],
+      "status": "activo",
+      "flags": [
+        "origen-desconocido"
+      ]
+    },
+    {
       "username": "service-account-agentgateway-mcp",
       "type": "sa",
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 22 lecturas agentgateway-read:* y agentgateway-write.",
+      "purpose": "Plano MCP de AgentGateway: las 24 lecturas agentgateway-read:* y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
+        "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
         "agentgateway-read:atlassian",
         "agentgateway-read:brain",
         "agentgateway-read:dgx-control",
         "agentgateway-read:gsc",
+        "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
         "agentgateway-read:offers",
@@ -441,6 +469,38 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Consumidor MCP de las métricas de la compañía; porta company-metrics-read.",
       "realm_roles": [
         "company-metrics-read",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-correo-agente-lectura",
+      "type": "sa",
+      "client": "correo-agente-lectura",
+      "owner": "DevOps",
+      "source": "DGX-1218 (PR-2 de la épica DGX-1209, agente de casos de Postia); condición 3 de security de DGX-1209 (comentarios 37045 y 37075); k8s-agentgateway-pocharlies#221 (reglas del gateway); creado por platform/keycloak-next/correo-agente-clients.yaml, nunca a mano; el secreto lo copia devops a 1Password tras el sync (RUNBOOK sección 19); el binding por sub a los buzones del núcleo en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml va en el mismo cambio de GitOps que el buzón",
+      "purpose": "Identidad de lectura del agente de casos de Postia ante AgentGateway: los agentgateway-read:<ruta> de sus perfiles (brain, picqer, shopify, shopify-admin, skirmshop-plugins, workspace) y ningún agentgateway-write*.",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:picqer",
+        "agentgateway-read:shopify",
+        "agentgateway-read:shopify-admin",
+        "agentgateway-read:skirmshop-plugins",
+        "agentgateway-read:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-correo-ejecutor",
+      "type": "sa",
+      "client": "correo-ejecutor",
+      "owner": "DevOps",
+      "source": "DGX-1218 (PR-2 de la épica DGX-1209, agente de casos de Postia); condición 3 de security de DGX-1209 (comentarios 37045 y 37075); k8s-agentgateway-pocharlies#221 (reglas del gateway); creado por platform/keycloak-next/correo-agente-clients.yaml, nunca a mano; el secreto lo copia devops a 1Password tras el sync (RUNBOOK sección 19)",
+      "purpose": "Ejecutor de las acciones aprobadas de los casos de Postia: agentgateway-write:correo-ejecutor (order_shipping_line_replace, order_returnable_lines_get, return_create, labels_pickup_create) y agentgateway-read:shopify-admin para pasar la puerta de la ruta. Nunca el agentgateway-write pelado ni otro dominio.",
+      "realm_roles": [
+        "agentgateway-read:shopify-admin",
+        "agentgateway-write:correo-ejecutor",
         "default-roles-edani"
       ],
       "status": "activo"

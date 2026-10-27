@@ -9,6 +9,9 @@
 deployment:
   kind: DaemonSet
   dnsPolicy: ClusterFirstWithHostNet
+  # INFRA-992: el edge público no puede desalojarse bajo DiskPressure
+  # (el eviction manager respeta las clases system-*-critical).
+  priorityClassName: system-node-critical
 
 # Run on ks5-cp-1..3 and sauvage after the KS-5 HA rollout.
 nodeSelector:

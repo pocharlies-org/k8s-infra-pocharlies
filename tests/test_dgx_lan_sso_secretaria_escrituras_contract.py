@@ -41,7 +41,7 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
 ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
-                                     "/api/litellm/opencode/reload")]
+                                     "/api/llm/dgx3/mode")]  # DGX-1054: el mando LLM|creative de dgx3
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
     ("GET", "/api/secretaria/despacho/temas"),
@@ -74,9 +74,10 @@ ESCALAR = [("POST", "/api/secretaria/despacho/escalar")] + [
 # fixture que ya iban tras SSO (/api/company, /api/claude-sessions, /api/messages…) no están.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/llm/uncensored", "/api/activity", "/api/activity/stream", "/api/activity/claude",
-    "/api/litellm/opencode", "/api/alibaba/accounts", "/api/alibaba/catalog", "/api/alibaba/quota",
+    "/api/alibaba/accounts", "/api/alibaba/catalog", "/api/alibaba/quota",
     "/api/alibaba/uso-clase", "/api/app/build", "/api/app/screens", "/api/app/screens/inferencia",
     "/api/cluster/llm/resident-profile", "/api/compute/batch", "/api/compute/mode",
+    "/api/llm/dgx3/mode",  # DGX-1054: el GET del mando sigue abierto
     "/api/creative/images", "/api/creative/jobs", "/api/hud/jarvis", "/api/image/queue-size",
     "/api/inference/traffic", "/api/inference/traffic/alibaba", "/api/jarvis/latency",
     "/api/litellm/consumers", "/api/litellm/openrouter/account", "/api/litellm/uso-perfiles",
@@ -85,6 +86,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/pages", "/api/service-health", "/api/studio/gallery",
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
+      ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 

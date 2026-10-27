@@ -32,6 +32,8 @@ SECRETARIA_SAS = [
 ]
 SECRETARIA_SKIRMSHOP_SA = "service-account-hermes-secretaria-skirmshop"
 PROBE_SA = "service-account-atlassian-mcp-probe"
+CORREO_LECTURA_SA = "service-account-correo-agente-lectura"
+CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
 
 
 def shell_list(path, variable, sep=","):
@@ -59,6 +61,10 @@ class RoleCatalogParityTest(unittest.TestCase):
         secretaria = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
         secretaria_skirmshop = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")
         probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
+        correo_lectura = shell_list(READ_GRANTS, "EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES")
+        correo_ejecutor = shell_list(READ_GRANTS, "EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES")
+        self.assertTrue(set(correo_lectura) <= set(reads))
+        self.assertTrue(set(correo_ejecutor) <= set(reads))
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
@@ -85,6 +91,10 @@ class RoleCatalogParityTest(unittest.TestCase):
                 | (set(SECRETARIA_SAS) if role in secretaria else set())
                 | ({SECRETARIA_SKIRMSHOP_SA} if role in secretaria_skirmshop else set())
                 | ({PROBE_SA} if role in probe else set())
+                # DGX-1218: the two case-agent grantees, grants owned by
+                # correo-agente-client.sh.
+                | ({CORREO_LECTURA_SA} if role in correo_lectura else set())
+                | ({CORREO_EJECUTOR_SA} if role in correo_ejecutor else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -102,7 +112,7 @@ class RoleCatalogParityTest(unittest.TestCase):
 
     def test_extractor_reads_the_reviewed_constants(self):
         # Guard against a silent parse: the matrices are non-trivial today.
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 22)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 24)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 7)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
@@ -142,6 +152,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual({
             "agentgateway-write:workspace-envio=service-account-hermes-enviar",
             "agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop",
+            "agentgateway-write:correo-ejecutor=service-account-correo-ejecutor",
         }, guarded_elsewhere)
 
 

@@ -265,7 +265,7 @@ spec:
     # OpenClaw K8s keeps its trusted-proxy middleware chain.
     - kind: Rule
       priority: 400
-      match: Host(`openclaw-k8s.e-dani.com`) && HeaderRegexp(`Upgrade`, `(?i)^websocket$`) && (ClientIP(`192.168.50.74/32`) || ClientIP(`192.168.50.96/32`) || ClientIP(`100.90.163.101/32`) || ClientIP(`192.168.50.142/32`))
+      match: Host(`openclaw-k8s.e-dani.com`) && HeaderRegexp(`Upgrade`, `(?i)^websocket$`) && (ClientIP(`192.168.50.113/32`) || ClientIP(`192.168.50.96/32`) || ClientIP(`100.90.163.101/32`) || ClientIP(`192.168.50.142/32`))
       middlewares:
         - {name: openclaw-qwen36-openclaw-lan-preauth-sanitize, namespace: openclaw-qwen36}
         - {name: openclaw-qwen36-openclaw-lan-device-auth, namespace: openclaw-qwen36}
@@ -375,29 +375,25 @@ spec:
         - {name: connector-public-api-deny, namespace: whatsapp-mcp}
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
-    # QR (pagina, imagen y renovacion) solo con login de Keycloak.
-    - kind: Rule
-      priority: 300
-      match: Host(`whatsapp.e-dani.com`) && PathPrefix(`/qr`)
-      middlewares:
-        - {name: sso-chain, namespace: keycloak}
-      services:
-        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
-    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, blackbox, x86):
-    # sin SSO, la firma la verifica el conector. SKIRM-116.
+    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, x86): sin SSO,
+    # la firma la verifica el conector. SKIRM-116. Acotada a /api/v1 (SC-2760):
+    # el host ahora es de la app de WhatsApp; lo unico que las maquinas siguen
+    # pidiendo aqui es la API firmada del conector. Blackbox ya no necesita
+    # excepcion: sondea GET / y eso es la app (como lo ve Dani).
     - kind: Rule
       priority: 200
-      match: Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`)
+      match: Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
-    # El resto (LAN, tailnet): login de Keycloak.
+    # El resto (LAN, tailnet): la app de WhatsApp del fork de Jordi (SC-2760),
+    # misma que sirve el edge. Trae su propio login OIDC (realm edani), asi que
+    # sin sso-chain aqui (haria doble login). La pagina QR ya no vive en este
+    # host: esta en whatsapp-qr.e-dani.com (edge).
     - kind: Rule
       priority: 100
       match: Host(`whatsapp.e-dani.com`)
-      middlewares:
-        - {name: sso-chain, namespace: keycloak}
       services:
-        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
+        - {name: whatsapp-app, namespace: whatsapp-mcp, port: 3080}
     # /api/public/* del conector no tiene auth (chats, historial, backfill):
     # deny en LAN igual que en el edge (middleware en whatsapp-mcp).
     - kind: Rule

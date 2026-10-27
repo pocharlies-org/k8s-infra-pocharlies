@@ -1,0 +1,29 @@
+---
+# SKIRM-212: Shopify entrega sus webhooks de catálogo (productos, colecciones,
+# páginas, artículos) directamente al handler HMAC de skirmshop-brain, que es el
+# productor de `product_catalog`/`product_collections`/`product_pages`. La auth
+# es la firma X-Shopify-Hmac-Sha256 (mismo patrón que /webhooks de synapse): el
+# sso-chain de brain-k8s.e-dani.com cortaría la entrega de Shopify, así que esta
+# regla gana por prioridad solo en /webhooks/shopify y el resto del host sigue
+# tras SSO. DNS: el wildcard *.e-dani.com ya cubre el host (sin external-dns).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-brain-shopify-webhooks
+  namespace: traefik-edge
+spec:
+  entryPoints:
+  - websecure
+  ingressClassName: traefik-edge
+  routes:
+  - kind: Rule
+    match: Host(`brain-k8s.e-dani.com`) && PathPrefix(`/webhooks/shopify`)
+    priority: 2500
+    services:
+    - name: skirmshop-brain
+      namespace: skirmshop-brain-prod
+      port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge

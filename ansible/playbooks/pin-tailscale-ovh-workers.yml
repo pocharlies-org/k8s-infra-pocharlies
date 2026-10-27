@@ -1,0 +1,20 @@
+---
+# INFRA-999: brings the OVH workers (Atlantic) to the pinned Tailscale version
+# (roles/tailscale/defaults) and holds it. Downgrading restarts tailscaled on
+# the worker only: its pods lose cross-node traffic for a few seconds and any
+# Tailscale SSH session into it is cut. The KS-5 control planes are not
+# targeted (they already run the pinned version). Only the install tasks run:
+# never `tailscale up`, so the node keeps its tailnet name and key.
+#
+#   ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
+#     ansible/playbooks/pin-tailscale-ovh-workers.yml
+- name: Pin Tailscale on the OVH workers
+  hosts: ovh_workers
+  become: true
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Install and hold the pinned Tailscale
+      ansible.builtin.include_role:
+        name: tailscale
+        tasks_from: install

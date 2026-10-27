@@ -6,7 +6,7 @@ test es lo que la hace segura:
 
   - un solo host, `correo.lan.e-dani.com` (Cloudflare resuelve `*.lan.e-dani.com` al VIP de traefik-lan y el
     certificado por defecto de ese store es `*.lan.e-dani.com`), y solo desde las redes de confianza de la casa;
-  - dos destinos (DGX-882 P4): `/v1` y `/healthz` van al Service HUMANO `correo:80` del núcleo, con prioridad
+  - dos destinos (DGX-882 P4): `/v1`, `/v2/casos`, `/v2/clientes` (DGX-1213) y `/healthz` van al Service HUMANO `correo:80` del núcleo, con prioridad
     explícita, y el resto del host a la web `correo-web:80`, sin access log porque la vuelta del login
     (`/auth/callback?code=…`) lleva el `code` en la query; el de máquina (`correo-machine`, el de
     `correo.ingest.v1`, solo interno) no se publica en ninguna ruta;
@@ -44,8 +44,16 @@ class CorreoLanRouteContract(unittest.TestCase):
 
     def test_un_solo_host_y_solo_desde_las_redes_de_confianza(self):
         desde = " || ".join(f"ClientIP(`{cidr}`)" for cidr in TRUSTED)
-        self.assertEqual(self.api["match"], f"Host(`{HOST}`) && (PathPrefix(`/v1`) || Path(`/healthz`)) && ({desde})")
+        self.assertEqual(self.api["match"], f"Host(`{HOST}`) && (PathPrefix(`/v1`) || PathPrefix(`/v2/casos`) || PathPrefix(`/v2/clientes`) || Path(`/healthz`)) && ({desde})")
         self.assertEqual(self.web["match"], f"Host(`{HOST}`) && ({desde})")
+
+    def test_de_v2_solo_salen_casos_y_clientes(self):
+        """DGX-1213: `/v2` entero no se publica; `/v2/inbound` y `/v2/buzones` son de máquina."""
+        reglas = " ".join(r["match"] for r in self.route["spec"]["routes"])
+        self.assertNotIn("PathPrefix(`/v2`)", reglas)
+        self.assertNotIn("/v2/inbound", reglas)
+        self.assertNotIn("/v2/buzones", reglas)
+        self.assertNotIn("/v2", self.web["match"])
 
     def test_sin_sso_chain_ni_prueba_de_borde_ni_ningun_middleware(self):
         for regla in (self.api, self.web):

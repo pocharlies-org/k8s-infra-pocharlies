@@ -40,9 +40,10 @@ spec:
       # package and `buildctl debug workers` blew the 1 s probe timeout (19
       # restarts). The disk is not fixable here (no SSD on the node); the cache
       # now lives in RAM (tmpfs emptyDir) — see the cache volume below.
+      # 25-10 (DGX-1278): a atlantic — sauvage saturado (load 29, disco 97 %) y el pull de la imagen colgaba 30+ min.
       nodeSelector:
         kubernetes.io/arch: amd64
-        kubernetes.io/hostname: sauvage
+        kubernetes.io/hostname: atlantic
       tolerations:
         - key: role
           operator: Equal
@@ -104,25 +105,45 @@ spec:
             #   shows Reclaimable: 0B even though the API has records to
             #   reclaim. Valid verification metrics after the sync: `df` on
             #   the PVC and the Total in `buildctl du` — never Reclaimable.
-            # If finer control is ever needed (e.g. an explicit keepDuration),
-            # that requires a buildkitd.toml ConfigMap with [[worker.oci.
-            # gcpolicy]] blocks; the flag cannot express per-policy rules.
+            # INFRA-937 (2026-10-18): finer control now exists — the
+            # buildkitd-amd64-config ConfigMap below mounts a buildkitd.toml
+            # with an explicit [[worker.oci.gcpolicy]]: GC fires only on
+            # pressure (>8 GiB used or <2 GiB free on the tmpfs) and trims to
+            # a 1 GiB floor. The flag cannot express per-policy rules; the toml
+            # replaces the four default policies.
+            # SC-2759 (2026-10-19): that policy first carried keepDuration =
+            # "24h", and in v0.31.0 pruneOnce() skips every record used inside
+            # keepDuration whatever the size limits say (cache/manager.go:
+            # `if lastUsedAt.After(cutOff) { continue }`). A tmpfs cache is
+            # born empty at every pod start and every record had been used in
+            # the last 24 h, so the GC found nothing to delete and the 10 GiB
+            # tmpfs filled up: ENOSPC on every amd64 build of the org. Same
+            # mechanism as SC-285 above. Do not put a keepDuration in this
+            # policy.
             - --oci-worker-gc
           # INFRA-475: timeoutSeconds was 1 (the default) — on a busy builder
           # the exec probe (fork + gRPC dial) exceeded it and kubelet killed a
-          # healthy daemon (19 restarts). 5 s still catches a wedged daemon.
+          # healthy daemon (19 restarts).
+          # DGX-1035 (2026-10-17): 5 s was still not enough. The LiteLLM image
+          # build (build-litellm of dgx-infra: npm UI build + uv sync) kept the
+          # daemon busy long enough to miss 3 probes in a row, and kubelet
+          # killed it twice mid-build (19:47:01Z and 19:54:31Z, both builds
+          # died with "graceful_stop"). Liveness now tolerates 5 minutes of
+          # unresponsiveness (10 x 30 s) with a 30 s timeout: that still
+          # restarts a truly wedged daemon, but not one that is just working.
           readinessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 5
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 30
           livenessProbe:
             exec:
               command: ["buildctl", "debug", "workers"]
             initialDelaySeconds: 10
             periodSeconds: 30
-            timeoutSeconds: 5
+            timeoutSeconds: 30
+            failureThreshold: 10
           securityContext:
             # Rootless buildkit needs SETUID+SETGID so newuidmap/newgidmap can
             # configure the user-namespace UID/GID map. Not privileged; Kyverno
@@ -149,14 +170,18 @@ spec:
               # ride the limit (4 CPU), not the request.
               cpu: "150m"
               # INFRA-475: the cache is tmpfs now, and tmpfs pages count against
-              # the pod's cgroup memory. The GC keeps the 30 GiB volume at ~24 GiB
-              # used, so the request reserves cache + build headroom (sauvage has
-              # 125 GiB total, ~95 GiB available at the time of the change).
-              memory: 28Gi
+              # the pod's cgroup memory. INFRA-937: the toml gcpolicy keeps the
+              # cache at <= 8 GiB between builds, so the request covers that
+              # steady state; builds burst above it up to the limit.
+              memory: 12Gi
             limits:
               cpu: "4"
-              # sizeLimit (30 GiB) + build headroom; an OOM kill of the daemon is
+              # sizeLimit (30 GiB) + build headroom (peak RSS of the daemon and
+              # its builds: 5.7 GiB over 4 days); an OOM kill of the daemon is
               # visible and Recreate brings it back with an empty cache.
+              # SC-2759: with 10Gi/16Gi the LiteLLM build was OOM-killed even on
+              # an empty cache (INFRA-937 comment); 30Gi/36Gi ran the builds of
+              # 2026-10-15..18.
               memory: 36Gi
           ports:
             - name: buildkit
@@ -167,7 +192,14 @@ spec:
             - name: harbor-push
               mountPath: /home/user/.docker
               readOnly: true
+            - name: daemon-config
+              mountPath: /home/user/.config/buildkit/buildkitd.toml
+              subPath: buildkitd.toml
+              readOnly: true
       volumes:
+        - name: daemon-config
+          configMap:
+            name: buildkitd-amd64-config
         - name: cache
           # INFRA-475: tmpfs, not a disk volume. The local-path PVC (50Gi) sat on
           # sauvage's only array — RAID1 of two 7200 rpm HDDs, 100% util, ~320 ms
@@ -175,11 +207,17 @@ spec:
           # ~30 s per package; the same build on the x86's NVMe: ~4 min). The
           # node has 125 GiB RAM with ~95 GiB free, and the cache is rebuildable:
           # losing it costs one slower build, never data (same ruling as the old
-          # PVC's comment). sizeLimit bounds the tmpfs; buildkit's GC keeps it at
-          # ~24 GiB (80% of 30Gi). Verification after GC changes is `df` on the
-          # volume and the Total in `buildctl du` — NEVER the "Reclaimable"
-          # column (v0.31.0 derives it per record as !InUse, so on a busy
-          # builder it always reads 0B; SC-285).
+          # PVC's comment). SC-2759 (2026-10-19) re-measured md3 before keeping
+          # this: still 100% util and 283 ms write await with no build cache on
+          # it, so a PVC on sauvage is not an option until the node gets a fast
+          # disk (INFRA-482). sizeLimit bounds the tmpfs: 30Gi leaves >= 22 GiB
+          # for builds in flight on top of the <= 8 GiB the toml gcpolicy keeps
+          # (10Gi left 2 GiB, and every large build — LiteLLM, Open WebUI,
+          # dashboard, correo — hit ENOSPC). RAM is used only as it is written:
+          # the GC trims to 8 GiB after each build. Verification after GC
+          # changes is `df` on the volume and the Total in `buildctl du` —
+          # NEVER the "Reclaimable" column (v0.31.0 derives it per record as
+          # !InUse, so on a busy builder it always reads 0B; SC-285).
           emptyDir:
             medium: Memory
             sizeLimit: 30Gi
@@ -208,3 +246,28 @@ spec:
       port: 1234
       targetPort: 1234
       protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-amd64-config
+  namespace: buildkit
+  labels:
+    app: buildkitd
+    arch: amd64
+data:
+  # INFRA-937: GC a demanda y con tope. Una sola política (all=true) sustituye
+  # a las cuatro por defecto: se dispara solo bajo presión (>8 GiB usados o
+  # <2 GiB libres en el tmpfs) y poda hasta el suelo de 1 GiB. Antes el
+  # default mantenía ~24 GiB de cache en RAM.
+  # SC-2759: sin keepDuration. Con él, buildkit v0.31 no borra nada usado
+  # dentro de esa ventana, y en una caché en RAM, que nace vacía en cada
+  # arranque del pod, todo se había usado en las últimas 24 h: el GC no tenía
+  # qué podar y el tmpfs se llenó. Lo que sí se poda va del menos al más
+  # reciente y usado; lo que tiene un build en curso no se toca.
+  buildkitd.toml: |
+    [[worker.oci.gcpolicy]]
+      all = true
+      keepBytes = 1073741824
+      maxUsedSpace = "8gb"
+      minFreeSpace = "2gb"

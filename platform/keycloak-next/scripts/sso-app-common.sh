@@ -1,6 +1,6 @@
 #!/bin/sh
 # Cuerpo compartido del reconciler del SSO de una app en el realm `edani`
-# (SKIRM-15 skirmbooks, SC-2495 alphalink). Cada app es un guion fino que declara
+# (SKIRM-15 skirmbooks; alphalink pasó a su realm en SC-2822). Cada app es un guion fino que declara
 # sus literales y fuentea este fichero: el merge de redirect_uris, el mapper de
 # grupos y las membresias son identicos, y tambien el riesgo (pisar los ~33
 # callbacks de la cadena compartida). Tres cosas, todas idempotentes:
