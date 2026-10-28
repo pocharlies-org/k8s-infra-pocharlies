@@ -517,6 +517,17 @@ spec:
               kubernetes.io/metadata.name: zammad
       ports:
         - { protocol: TCP, port: 6379 }
+    # oauth2-proxy (SC-2816): sesiones en redis (DB 1) para cortar el 403 en
+    # bucle del login. Usuario ACL `oauth2-proxy`, alta en security SC-2817.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keycloak
+          podSelector:
+            matchLabels:
+              app: oauth2-proxy
+      ports:
+        - { protocol: TCP, port: 6379 }
     - from:
         - namespaceSelector:
             matchLabels:
