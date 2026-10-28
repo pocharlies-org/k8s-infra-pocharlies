@@ -11,7 +11,8 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **45 rutas, 87 gates** en esta matriz (INFRA-974, 23-10-2026: se declaran
+  Hoy: **46 rutas, 88 gates** en esta matriz (SC-3508, 28-10-2026: + fila `skills`;
+  INFRA-974, 23-10-2026: se declaran
   las dos filas `hindsight-*`, vivas en el config desde INFRA-942 y en el realm
   desde el 22-10; el verificador las señalaba como drift; los conteos de esta
   fila son los del bloque json, que manda). La fila `plaud` se declara por
@@ -102,6 +103,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `stt` | `/stt` | `agentgateway-read:stt` | — |
 | `picqer` | `/picqer` | `agentgateway-read:picqer` | `agentgateway-write` (36), `agentgateway-write:picqer` (36) |
 | `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:correo-ejecutor`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:correo-ejecutor` (1), `agentgateway-write:skirmshop-plugins` (35) |
+| `skills` | `/skills` | `agentgateway-read:skills` | — |
 | `skirmshop-plugins` | `/skirmshop-plugins` | `agentgateway-read:skirmshop-plugins` | — |
 | `shopify-admin` | `/shopify-admin` | `agentgateway-read:shopify-admin` | `agentgateway-write` (18), `agentgateway-write:correo-ejecutor` (3), `agentgateway-write:shopify` (18) |
 | `shopify` | `/shopify` | `agentgateway-read:shopify` | `agentgateway-write` (5), `agentgateway-write:shopify` (5) |
@@ -228,6 +230,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
         "agentgateway-write:correo-ejecutor": ["labels_pickup_create"],
         "agentgateway-write:skirmshop-plugins": ["affiliate_api", "back_in_stock_api", "bundles_api", "catalog_rag_api", "catalog_rag_competitor_coverage", "catalog_rag_competitor_price_comparison", "catalog_rag_competitor_products", "catalog_rag_competitor_rescue_candidates", "catalog_rag_competitor_source", "catalog_rag_competitor_sources", "collections_tree_api", "labels_api", "labels_carrier_service_rates", "labels_correos_fuel_surcharge", "labels_create_label", "labels_latest_order_status", "labels_pickup_create", "labels_rate_quote", "labels_shipment_status", "picker_api", "serial_numbers_api", "shopify_sync_api", "sii_api", "skirmbooks_reconcile_invoices", "skirmbooks_reconcile_movements", "skirmbooks_reconcile_summary", "skirmbooks_reconcile_upload_invoice", "skirmshop_plugins_call", "skirmshop_plugins_describe", "skirmshop_plugins_get", "skirmshop_plugins_list", "skirmshop_plugins_request", "skirmshop_plugins_tools_list", "translations_api"]
       }
+    },
+    {
+      "route": "skills",
+      "path": "/skills",
+      "require": ["agentgateway-read:skills"],
+      "tools": {}
     },
     {
       "route": "skirmshop-plugins",

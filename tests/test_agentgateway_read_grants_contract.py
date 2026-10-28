@@ -16,7 +16,7 @@ READ_ROUTES = [
     "analytics", "atlassian", "brain", "dgx-control", "gsc", "hindsight-tienda",
     "image",
     "merchant", "offers", "picqer", "plaud", "shopify", "shopify-admin",
-    "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
+    "skills", "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
     "synapse-tools", "tts", "weight", "workspace",
 ]
 OPENCLAW_ROUTES = ["gsc", "offers", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
@@ -381,7 +381,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_matrix_is_immutable_and_exactly_the_reviewed_routes(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertEqual(24, len(READ_ROLE_NAMES))
+        self.assertEqual(25, len(READ_ROLE_NAMES))
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
@@ -424,30 +424,30 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_ensure_from_empty_creates_roles_maps_grants_and_verifies_tokens(self):
         result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
-        self.assertIn('"roles":24,"created":24', result.stdout)
+        self.assertIn('"roles":25,"created":25', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertIn('"tokens_verified":true', result.stdout)
-        self.assertEqual(24, journal.count("create roles "))
+        self.assertEqual(25, journal.count("create roles "))
         self.assertEqual(1, journal.count("create clients/mcp-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create clients/oc-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(25, len(state_files["scope-mcp"].split()))
+        self.assertEqual(26, len(state_files["scope-mcp"].split()))
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its seven reviewed roles on that client.
         self.assertEqual(7, len(state_files["scope-oc"].split()))
-        self.assertEqual(24, len(state_files["grants-mcp-sa"].split()))
+        self.assertEqual(25, len(state_files["grants-mcp-sa"].split()))
         self.assertEqual(7, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
         result, journal, state_files = self.run_reconciler(
             mode="ensure", seed=seed_full_state
         )
-        self.assertIn('"roles":24,"created":0', result.stdout)
+        self.assertIn('"roles":25,"created":0', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertNotIn("create roles ", journal)
         self.assertNotIn("create clients/", journal)
@@ -747,8 +747,8 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, journal, state_files = self.run_reconciler(
             mode="rollback", seed=seed_full_state
         )
-        self.assertIn('"roles_deleted":24,"present":false', result.stdout)
-        self.assertEqual(24, journal.count("delete roles/agentgateway-read:"))
+        self.assertIn('"roles_deleted":25,"present":false', result.stdout)
+        self.assertEqual(25, journal.count("delete roles/agentgateway-read:"))
         self.assertNotIn("delete roles/agentgateway-write", journal)
         self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
         self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
