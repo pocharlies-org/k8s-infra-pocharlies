@@ -213,8 +213,9 @@ def test_external_dns_honors_canonical_route_exclusions():
 
 
 def test_whatsapp_lan_hosts_ask_sso_except_pods_and_keep_qr_and_public_deny_on_top():
-    # whatsapp-pro (SKIRM-116): pods (10.42.0.0/16) reach the connector without
-    # SSO, everyone else on the LAN/tailnet gets Keycloak. Explicit priorities,
+    # whatsapp-pro (SKIRM-116, acotada a /api/v1 por SC-2843): pods
+    # (10.42.0.0/16) reach the connector's signed API without SSO; everything
+    # else — including pods — goes through Keycloak. Explicit priorities,
     # because the rule-length default would rank the ClientIP rule above /qr.
     route = ingress(
         "networking/traefik-lan/canonical-hosts-lan.yaml",
@@ -226,7 +227,9 @@ def test_whatsapp_lan_hosts_ask_sso_except_pods_and_keep_qr_and_public_deny_on_t
         for rule in route["spec"]["routes"]
         if f"Host(`{host}`)" in rule["match"]
     }
-    pods = rules[f"Host(`{host}`) && ClientIP(`10.42.0.0/16`)"]
+    pods = rules[
+        f"Host(`{host}`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)"
+    ]
     rest = rules[f"Host(`{host}`)"]
     qr = rules[f"Host(`{host}`) && PathPrefix(`/qr`)"]
     public = rules[f"Host(`{host}`) && PathPrefix(`/api/public`)"]
@@ -242,12 +245,15 @@ def test_whatsapp_lan_hosts_ask_sso_except_pods_and_keep_qr_and_public_deny_on_t
     assert pods["services"] == rest["services"] == qr["services"]
 
 
-def test_whatsapp_host_lan_is_the_app_pods_only_keep_the_signed_api():
+def test_whatsapp_host_lan_is_the_app_no_direct_connector_rule():
     # SC-2760: whatsapp.e-dani.com is Jordi's WhatsApp app on the LAN (its own
-    # OIDC login, no sso-chain — that would double-login). Machines keep only
-    # the connector's signed /api/v1 (the QR page moved to
-    # whatsapp-qr.e-dani.com, so node-local clients — x86, blackbox — see the
-    # app exactly like a real LAN client does).
+    # OIDC login, no sso-chain — that would double-login). SC-2843 removed the
+    # ClientIP(10.42.0.0/16) && /api/v1 -> connector exception: nothing calls
+    # the personal connector through this host (the app and the synapse bridge
+    # proxy it via in-cluster DNS, the adapter uses the -pro host), and
+    # ClientIP is not a reliable discriminator at this VIP — traffic from the
+    # traefik node itself arrives SNAT-ed to 10.42.0.1, so the rule exposed the
+    # connector's internal API without the app session to everything local.
     route = ingress(
         "networking/traefik-lan/canonical-hosts-lan.yaml",
         "canonical-hosts-lan",
@@ -258,22 +264,15 @@ def test_whatsapp_host_lan_is_the_app_pods_only_keep_the_signed_api():
         if "Host(`whatsapp.e-dani.com`)" in rule["match"]
     }
     app = rules["Host(`whatsapp.e-dani.com`)"]
-    pods_api = rules[
-        "Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`)"
-        " && PathPrefix(`/api/v1`)"
-    ]
     public = rules["Host(`whatsapp.e-dani.com`) && PathPrefix(`/api/public`)"]
 
     assert "middlewares" not in app
     assert app["services"] == [
         {"name": "whatsapp-app", "namespace": "whatsapp-mcp", "port": 3080}
     ]
-    assert "middlewares" not in pods_api
-    assert pods_api["services"] == [
-        {"name": "whatsapp-connector", "namespace": "whatsapp-mcp", "port": 3001}
-    ]
     assert [m["name"] for m in public["middlewares"]] == [
         "connector-public-api-deny"
     ]
-    assert public["priority"] > pods_api["priority"] > app["priority"]
+    assert public["priority"] > app["priority"]
+    assert not [m for m in rules if "ClientIP" in m]
     assert "Host(`whatsapp.e-dani.com`) && PathPrefix(`/qr`)" not in rules

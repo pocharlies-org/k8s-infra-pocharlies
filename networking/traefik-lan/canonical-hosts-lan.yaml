@@ -375,16 +375,14 @@ spec:
         - {name: connector-public-api-deny, namespace: whatsapp-mcp}
       services:
         - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
-    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, x86): sin SSO,
-    # la firma la verifica el conector. SKIRM-116. Acotada a /api/v1 (SC-2760):
-    # el host ahora es de la app de WhatsApp; lo unico que las maquinas siguen
-    # pidiendo aqui es la API firmada del conector. Blackbox ya no necesita
-    # excepcion: sondea GET / y eso es la app (como lo ve Dani).
-    - kind: Rule
-      priority: 200
-      match: Host(`whatsapp.e-dani.com`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)
-      services:
-        - {name: whatsapp-connector, namespace: whatsapp-mcp, port: 3001}
+    # SC-2843: eliminada la excepcion ClientIP(10.42.0.0/16) && /api/v1 ->
+    # conector. No queda ningun consumidor: la app y el bridge proxyan al
+    # conector por DNS in-cluster (whatsapp-connector.whatsapp-mcp.svc), y el
+    # adaptador de synapse usa el host -pro. Ademas el ClientIP no era un
+    # discrimante fiable en este VIP: el trafico del propio nodo ubuntu llega
+    # SNAT-ado a 10.42.0.1 (medido en access logs de traefik-lan), asi que la
+    # regla exponia la API interna del conector sin la sesion de la app a todo
+    # lo que naciera en el nodo. Blackbox sondea GET / y eso es la app.
     # El resto (LAN, tailnet): la app de WhatsApp del fork de Jordi (SC-2760),
     # misma que sirve el edge. Trae su propio login OIDC (realm edani), asi que
     # sin sso-chain aqui (haria doble login). La pagina QR ya no vive en este
@@ -411,11 +409,15 @@ spec:
         - {name: sso-chain, namespace: keycloak}
       services:
         - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
-    # Maquina (pods 10.42.0.0/16: adaptador de synapse en sauvage, blackbox, x86):
-    # sin SSO, la firma la verifica el conector. SKIRM-116.
+    # Maquina (pods 10.42.0.0/16): sin SSO, la firma HMAC la verifica el
+    # conector. SKIRM-116. Acotada a /api/v1 (SC-2843): el unico consumidor es
+    # el adaptador de synapse, que solo llama a /api/v1/* (messages/send,
+    # messages/audio, contacts/seed). El resto del host, tambien para pods, va
+    # por sso-chain: las rutas sin auth del conector (/health, manual-open,
+    # auth/qr) dejan de ser alcanzables sin login desde el borde LAN.
     - kind: Rule
       priority: 200
-      match: Host(`whatsapp-pro.e-dani.com`) && ClientIP(`10.42.0.0/16`)
+      match: Host(`whatsapp-pro.e-dani.com`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)
       services:
         - {name: whatsapp-connector-professional, namespace: whatsapp-mcp, port: 3001}
     # El resto (LAN, tailnet): login de Keycloak.
