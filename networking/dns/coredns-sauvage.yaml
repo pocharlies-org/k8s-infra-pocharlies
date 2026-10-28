@@ -1,16 +1,16 @@
 # CoreDNS de respaldo en sauvage (INFRA-923, 17-10-2026).
 #
-# Para qué: coredns-x86 le pregunta a él cuando la MagicDNS del x86 contesta
+# Para qué: coredns-local le pregunta a él cuando la MagicDNS de su nodo contesta
 # SERVFAIL o REFUSED (su `forward` con `failover`). Pregunta a la MagicDNS de
-# SAUVAGE, que no depende de las prefs de Tailscale del x86.
+# SAUVAGE, que no depende de las prefs de Tailscale de los demás nodos.
 #
 # Solo resuelve nombres externos: lo de *.cluster.local, NodeHosts y
-# coredns-custom ya lo contesta coredns-x86 antes de reenviar. Sin
+# coredns-custom ya lo contesta coredns-local antes de reenviar. Sin
 # `k8s-app: kube-dns` a propósito: no entra en el Service `kube-dns` ni cambia
 # el DNS de los pods de sauvage.
 #
 # ClusterIP fija porque `forward` solo acepta IPs; si cambia, cambia también en
-# el Corefile de coredns-x86.yaml.
+# el Corefile de coredns-local.yaml.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -79,7 +79,7 @@ spec:
           - 100.100.100.100
       containers:
         - name: coredns
-          # Misma imagen que coredns-x86 y el CoreDNS de k3s.
+          # Misma imagen que coredns-local y el CoreDNS de k3s.
           image: rancher/mirrored-coredns-coredns:1.14.4
           args: ["-conf", "/etc/coredns/Corefile"]
           ports:

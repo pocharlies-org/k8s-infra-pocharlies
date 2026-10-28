@@ -115,9 +115,9 @@ Nº de casos: **pendiente de medir**.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
 - Los nombres de `e-dani.com` que necesita un cliente del clúster se fijan a `traefik-lan` en
   `networking/dns/coredns-custom.yaml` — hoy `harbor`, `harbor.lan`, `litellm` y `argocd` (SC-2443, SC-2445). Un nombre
-  sin fijar cae en `forward` y responde el resolver del nodo que hospeda la réplica de CoreDNS que contesta: las de los
-  cp de OVH devuelven las IPs públicas del borde, así que el cliente va por LAN o por el borde público según a quién le
-  toque resolver (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
+  sin fijar cae en `forward` y responde la MagicDNS del nodo del cliente, porque cada nodo resuelve en su réplica de
+  `coredns-local` (INFRA-1019): los nodos de OVH reciben las IPs públicas del borde y los de casa pueden recibir otras,
+  así que el cliente va por LAN o por el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
   grande). `dgx` y `s3` van fijados por `hosts` a la VIP `192.168.50.240`, que también es alcanzable desde los cp
   (medido 15-10-2026). Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez.
 - ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
