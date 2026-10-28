@@ -234,6 +234,19 @@
       "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura y service-account-correo-ejecutor se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
     },
     {
+      "name": "agentgateway-read:skills",
+      "status": "active",
+      "meaning": "Lectura de la ruta /skills de AgentGateway (SC-3508, épica SC-1779: MCP del catálogo único de skills; skill_search y skill_load).",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a skill_search y skill_load de la ruta /skills de AgentGateway (contrato mcp.skills.tools).",
+        "denies": "skill_propose (exige además agentgateway-write en el plano write) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; SC-3508, mismo patrón que alphalink: se declara ANTES de crearlo y lo alta y concede el PostSync en el siguiente sync)"
+    },
+    {
       "name": "agentgateway-read:skirmshop-plugins",
       "status": "active",
       "meaning": "Lectura de la ruta /skirmshop-plugins de AgentGateway (INFRA-23).",
