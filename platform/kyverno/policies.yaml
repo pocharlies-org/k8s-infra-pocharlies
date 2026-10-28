@@ -671,3 +671,79 @@ spec:
           - path: /spec/containers/0/image
             op: replace
             value: harbor.e-dani.com/library/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-r1
+---
+# POLICY 10 (INFRA-965): el data dir de Postgres de Harbor no vuelve a 2770 al
+# re-montarse el volumen.
+#
+# El chart harbor 1.19.0 (templates/database/database-ss.yaml) hardcodea en el pod
+# `securityContext: {runAsUser: 999, fsGroup: 999}` y añade el init
+# `data-permissions-ensurer` (`chmod -R 700 /var/lib/postgresql/data/pgdata`), que
+# solo corre al CREAR el pod. Con fsGroup, kubelet hace un chown+chmod recursivo
+# del volumen cada vez que lo monta y deja los directorios en 2770 (g+w + setgid,
+# gid 999). Postgres exige 0700 u 0750 y con 2770 se niega a arrancar.
+#
+# Medido el 28-10-2026 sobre el PVC database-data-harbor-database-0 (pod
+# harbor-database-0, ks5-cp-2): ctime de data, pgdata y pgdata/pg15 =
+# 2026-10-28T06:26:57Z con el pod de 2026-10-22T06:03Z sin recrearse, modo 2770
+# los tres y `root:postgres` en la raíz: la firma exacta del SetVolumeOwnership de
+# kubelet. Ese mismo pase tumbó Harbor el 21-10: el liveness (timeout de 1 s con
+# ks5-cp-1 al 98 % de CPU) mató el contenedor y en el reinicio Postgres encontró
+# el data dir en 2770 y no volvió a subir hasta recrear el pod (22-10 06:03).
+# Mientras el pod no se recrea el init container no vuelve a correr, así que
+# cualquier reinicio del contenedor repetía la caída: ningún push a
+# harbor.e-dani.com estaba a salvo de un reinicio.
+#
+# `fsGroupChangePolicy: OnRootMismatch` hace que kubelet solo compruebe la raíz del
+# volumen: si ya es del gid 999 y tiene permiso de grupo, NO repite el pase
+# recursivo. La raíz queda como está y pg15 conserva 0700 en re-montes y en
+# reinicios del contenedor. En un volumen restaurado (raíz con otro gid) sí se
+# aplica el pase completo, y ahí lo deja bien el init container.
+#
+# Se muta el POD, no el StatefulSet (patrón de aurora-t2v-image-mirror, POLICY 9):
+# el manifiesto que renderiza el chart no cambia y ArgoCD sigue Synced, sin
+# ignoreDifferences. El pod del StatefulSet es siempre `harbor-database-0`
+# (1 réplica, Recreate).
+#
+# Coste: los pods creados antes de esta política no traen el campo; el pod vivo se
+# recreó a mano al activarla. Se retira si el chart expone fsGroupChangePolicy por
+# values.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: harbor-db-fsgroup-onrootmismatch
+  annotations:
+    policies.kyverno.io/title: Harbor Postgres data dir keeps 0700 across remounts
+    policies.kyverno.io/description: >
+      The harbor chart hardcodes fsGroup 999 on the database pod, so kubelet
+      re-applies a recursive chown/chmod every time it mounts the volume and
+      leaves the Postgres data directory at 2770, which Postgres refuses to start
+      with. This policy sets fsGroupChangePolicy: OnRootMismatch on the pod, so
+      kubelet only checks the volume root and leaves the data directory alone.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481) y
+  # aurora-t2v-image-mirror (POLICY 9): solo admisión, failurePolicy Ignore.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: fsgroup-onrootmismatch-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [harbor]
+              operations: [CREATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.metadata.name || '' }}"
+            operator: Equals
+            value: harbor-database-0
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              fsGroupChangePolicy: OnRootMismatch
