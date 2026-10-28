@@ -1,6 +1,6 @@
 # CoreDNS local: una réplica en cada nodo (INFRA-1019, 28-10-2026).
 #
-# Por qué: el CoreDNS que empaqueta k3s solo corre en dos ks5. Con
+# Por qué: el CoreDNS que empaqueta k3s solo corría en dos ks5. Con
 # `trafficDistribution: PreferSameNode` en el Service `kube-dns`, un nodo con
 # réplica propia se responde a sí mismo y uno sin ella reparte entre todas. En
 # 25-09 el x86 iba a los ks5 por el relay DERP (~180 ms por consulta) y se le dio
@@ -8,6 +8,16 @@
 # consultas a esa réplica de casa (29 ms cada una): 59–66 ms por nombre resuelto,
 # frente a ~1 ms en un ks5 con réplica. Ahora todos los nodos tienen la suya y
 # ninguno sale de su máquina para resolver.
+#
+# Reparto: los tres ks5 (`node-pool=ks5-nvme`) llevan el CoreDNS de k3s y este
+# DaemonSet todos los demás nodos. El Deployment `coredns` de k3s tiene una
+# anti-afinidad OBLIGATORIA contra `k8s-app: kube-dns` por nodo (puesta con
+# `kubectl patch`, no viene en el manifiesto de k3s), así que no puede compartir
+# nodo con una réplica de aquí: por eso se excluyen los ks5 y el Deployment de k3s
+# va a 3 réplicas (`kubectl -n kube-system scale deploy/coredns --replicas=3`), que
+# esa misma anti-afinidad reparte una por ks5. El manifiesto de k3s no fija
+# `replicas` y su reaplicación lo conserva. Si se quedara en 2, el ks5 sin réplica
+# reparte entre todas, también las de casa: más lento, pero sin romperse.
 #
 # Qué es: un DaemonSet de CoreDNS con la MISMA imagen que la de k3s, su NodeHosts
 # y `coredns-custom`, un Corefile propio (abajo) y la etiqueta `k8s-app:
@@ -94,6 +104,13 @@ spec:
     spec:
       serviceAccountName: coredns
       priorityClassName: system-cluster-critical
+      # Los ks5 llevan el CoreDNS de k3s (ver «Reparto» arriba).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - { key: node-pool, operator: NotIn, values: [ks5-nvme] }
       tolerations:
         - operator: Exists
       dnsPolicy: None
