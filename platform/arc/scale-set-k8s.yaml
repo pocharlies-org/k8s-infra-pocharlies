@@ -32,8 +32,16 @@ runnerScaleSetName: arc-k8s
 minRunners: 0
 # Keep DinD builds off the edge/business node. A 2026-06-18 audit found ARC
 # runners on sauvage driving NodeDiskIOSaturation and kubelet exec/probe
-# timeouts. Limit concurrency until there is a dedicated non-edge CPU pool.
-maxRunners: 4
+# timeouts. The dedicated non-edge CPU pool the old comment waited for exists
+# since 2026-10-24 (atlantic, 16 CPU / 128 GiB, workload=cpu), so concurrency
+# goes to 8 — atlantic absorbs 8 runners at their 2-CPU limits; ubuntu
+# (workload=cpu, tolerated PreferNoSchedule pool=dev) is the overflow.
+# INFRA-960: the live release had drifted to maxRunners 16 with no nodeSelector
+# and runners were landing on the untainted control planes, saturating them and
+# timing out skirmshop-labels CI. Re-apply with install-scale-sets.sh after any
+# change here; `kubectl get asrs arc-k8s -n arc-runners -o
+# jsonpath='{.spec.template.spec.nodeSelector}'` must show workload=cpu.
+maxRunners: 8
 
 containerMode:
   type: dind
@@ -42,7 +50,9 @@ template:
   spec:
     # Run only on non-edge amd64 CPU nodes. Do not tolerate `role=edge`; that
     # keeps Docker-in-Docker image builds away from sauvage and its Skirmshop /
-    # Synapse workloads.
+    # Synapse workloads. The control-plane exclusion is belt-and-braces: the
+    # ks5-cp-* nodes carry no taints (INFRA-960), so the selectors alone are the
+    # only thing keeping DinD runners off them.
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -52,6 +62,8 @@ template:
               operator: NotIn
               values:
               - sauvage
+            - key: node-role.kubernetes.io/control-plane
+              operator: DoesNotExist
     nodeSelector:
       kubernetes.io/arch: amd64
       workload: cpu
