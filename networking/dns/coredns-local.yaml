@@ -1,42 +1,45 @@
-# CoreDNS local del nodo x86 (`ubuntu`).
+# CoreDNS local: una réplica en cada nodo (INFRA-1019, 28-10-2026).
 #
-# Por qué (25-09-2026): el CoreDNS que empaqueta k3s solo corre en ks5-cp-2 y
-# ks5-cp-3. Desde el x86 esos dos nodos van por el relay DERP de Tailscale
-# (el NAT del router de casa impide la vía directa), así que cada consulta DNS
-# de un pod del x86 costaba ~180 ms y llegaba a 0,8–2,8 s con el relay
-# saturado. Eso retrasaba LiteLLM, el sidecar de peticiones en vuelo y
-# cualquier cosa que resolviera nombres desde el x86.
+# Por qué: el CoreDNS que empaqueta k3s solo corre en dos ks5. Con
+# `trafficDistribution: PreferSameNode` en el Service `kube-dns`, un nodo con
+# réplica propia se responde a sí mismo y uno sin ella reparte entre todas. En
+# 25-09 el x86 iba a los ks5 por el relay DERP (~180 ms por consulta) y se le dio
+# su réplica (coredns-x86); el 27-10 atlantic y ks5-cp-3 mandaban ~1/3 de sus
+# consultas a esa réplica de casa (29 ms cada una): 59–66 ms por nombre resuelto,
+# frente a ~1 ms en un ks5 con réplica. Ahora todos los nodos tienen la suya y
+# ninguno sale de su máquina para resolver.
 #
-# Qué es: una réplica MÁS de CoreDNS fijada al x86, con la MISMA imagen que la
-# de k3s, su NodeHosts y `coredns-custom`, un Corefile propio (abajo) y la
-# etiqueta `k8s-app: kube-dns`. Así la selecciona el Service `kube-dns` y
-# las NetworkPolicies que permiten DNS hacia pods kube-dns de kube-system la
-# siguen aceptando. Por eso se eligió esto y NO NodeLocal DNSCache: esa
-# intercepta 10.43.0.10 en el host y rompería el DNS de los 48 pods con
-# NetworkPolicy de salida restringida a kube-dns.
+# Qué es: un DaemonSet de CoreDNS con la MISMA imagen que la de k3s, su NodeHosts
+# y `coredns-custom`, un Corefile propio (abajo) y la etiqueta `k8s-app:
+# kube-dns`. Así la selecciona el Service `kube-dns` y las NetworkPolicies que
+# permiten DNS hacia pods kube-dns de kube-system la siguen aceptando. Por eso
+# esto y NO NodeLocal DNSCache: esa intercepta 10.43.0.10 en el host y rompería el
+# DNS de los pods con NetworkPolicy de salida restringida a kube-dns. Tolera todos
+# los taints (Sparks `dedicated=llm`, alphalink, sauvage) y actualiza nodo a nodo
+# con `maxSurge: 1`: la réplica nueva está Ready antes de que se vaya la vieja.
 #
-# Que los pods del x86 la usen a ella lo decide `trafficDistribution:
-# PreferSameNode` en el Service `kube-dns`. Ese Service lo gestiona k3s, no
-# ArgoCD; el campo se puso con `kubectl patch` y la reaplicación de k3s
-# (three-way merge) lo conserva. Si desapareciera, el x86 vuelve a resolver
-# por los ks5: más lento, pero sin romperse.
+# `PreferSameNode` lo lleva el Service `kube-dns`, que gestiona k3s, no ArgoCD: el
+# campo se puso con `kubectl patch` y la reaplicación de k3s (three-way merge) lo
+# conserva. Si desapareciera, cada nodo vuelve a repartir entre todas las
+# réplicas: más lento, pero sin romperse.
 #
-# Upstream: MagicDNS (100.100.100.100), igual que los CoreDNS de los ks5, para
-# que las respuestas sean idénticas (incluidos los *.ts.net). No se hereda el
-# resolv.conf del nodo: en el x86 empieza por 10.43.0.10 y sería un bucle.
+# Upstream: la MagicDNS del propio nodo (100.100.100.100), igual que los CoreDNS
+# de los ks5, para que las respuestas sean idénticas (incluidos los *.ts.net);
+# probada en los 10 nodos el 28-10. No se hereda el resolv.conf del nodo: en el x86
+# empieza por 10.43.0.10 y sería un bucle.
 #
-# Respaldo (INFRA-923, 17-10-2026): un `tailscale set --accept-dns=false` en el
-# x86 deja MagicDNS sin upstreams y contesta SERVFAIL a todo lo externo; como
-# esta réplica sigue Ready, PreferSameNode no suelta a los pods del x86 y se
-# quedaron 1 h 45 min sin DNS externo (INFRA-918). Por eso el bloque raíz salta
-# en SERVFAIL/REFUSED a coredns-sauvage (coredns-sauvage.yaml), que pregunta a
-# la MagicDNS de sauvage. El Corefile es el bloque raíz de k3s con solo el
-# `forward` cambiado: si k3s cambia el suyo al subir de versión, se copia aquí.
-# Los bloques de coredns-custom (e-dani.com, ts.net) siguen sin respaldo.
+# Respaldo (INFRA-923, 17-10-2026): un `tailscale set --accept-dns=false` deja la
+# MagicDNS de ese nodo sin upstreams y contesta SERVFAIL a todo lo externo; como la
+# réplica sigue Ready, PreferSameNode no suelta a los pods del nodo (en el x86 se
+# quedaron 1 h 45 min sin DNS externo, INFRA-918). Por eso el bloque raíz salta en
+# SERVFAIL/REFUSED a coredns-sauvage (coredns-sauvage.yaml), que pregunta a la
+# MagicDNS de sauvage. El Corefile es el bloque raíz de k3s con solo el `forward`
+# cambiado: si k3s cambia el suyo al subir de versión, se copia aquí. Los bloques
+# de coredns-custom (e-dani.com, ts.net) siguen sin respaldo.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: coredns-x86
+  name: coredns-local
   namespace: kube-system
 data:
   Corefile: |
@@ -67,19 +70,18 @@ data:
     import /etc/coredns/custom/*.server
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
-  name: coredns-x86
+  name: coredns-local
   namespace: kube-system
   labels:
-    app.kubernetes.io/name: coredns-x86
+    app.kubernetes.io/name: coredns-local
 spec:
-  replicas: 1
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app.kubernetes.io/name: coredns-x86
-  strategy:
+      app.kubernetes.io/name: coredns-local
+  updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
@@ -87,18 +89,13 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: coredns-x86
+        app.kubernetes.io/name: coredns-local
         k8s-app: kube-dns
     spec:
       serviceAccountName: coredns
       priorityClassName: system-cluster-critical
-      nodeSelector:
-        kubernetes.io/hostname: ubuntu
       tolerations:
-        - key: CriticalAddonsOnly
-          operator: Exists
-        - key: pool
-          operator: Exists
+        - operator: Exists
       dnsPolicy: None
       dnsConfig:
         nameservers:
@@ -140,7 +137,7 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: coredns-x86
+                  name: coredns-local
                   items:
                     - { key: Corefile, path: Corefile }
               - configMap:
