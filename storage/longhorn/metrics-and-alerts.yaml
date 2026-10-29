@@ -122,3 +122,40 @@ spec:
             description: >-
               Con menos de 3 destinos no se puede cumplir numberOfReplicas=3 y los
               volumenes nuevos o en reconstruccion se quedaran degradados.
+
+        # SC-3063: huérfanos de réplica que el job orphan-watch no ha podido purgar
+        # (nodo caído, dato referenciado por un Replica CR vivo, o el propio Longhorn
+        # sin aplicar orphanResourceAutoDeletion). La purga oficial es de Longhorn;
+        # aquí solo suena la campana cuando falla.
+        - alert: LonghornOrphanReplicasStale
+          expr: |
+            longhorn_orphan_replica_data > 0
+          for: 3h
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "{{ $value }} réplicas huérfanas de Longhorn sin purgar en {{ $labels.node }}"
+            description: >-
+              El job longhorn-orphan-watch lleva horas sin poder purgar el dato
+              huérfano. Si el nodo está caído es esperado (Longhorn no borra datos de
+              nodos unreachable); si está arriba, comprobar con
+              kubectl -n longhorn-system get orphans.longhorn.io y el log del job.
+              El riesgo de fondo: el dato huérfano saca al disco del umbral de
+              scheduling y un motor muerto se queda sin candidatos de salvage
+              (keep-causa deployment-degraded:47658437cd).
+
+        # El vigilante del vigilante: si orphan-watch deja de empujar su sello, la
+        # alerta de huérfanos de arriba deja de ser fiable.
+        - alert: LonghornOrphanWatchNotRunning
+          expr: |
+            time() - longhorn_orphan_watch_last_success_timestamp > 7200
+          for: 30m
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "longhorn-orphan-watch no empuja métricas desde hace 2 h"
+            description: >-
+              Comprobar kubectl -n longhorn-system get jobs -l
+              app.kubernetes.io/part-of=longhorn y los logs del cronjob.
