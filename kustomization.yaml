@@ -49,6 +49,9 @@ resources:
   - networking/traefik-edge/canonical-hosts-public.yaml
   - networking/traefik-edge/chat-public.yaml
   - networking/arc-runners/networkpolicy.yaml
+  - networking/arc-skills-eval/namespace.yaml
+  - networking/arc-skills-eval/networkpolicy.yaml
+  - networking/arc-skills-eval/externalsecret-arc-github-app.yaml
   - networking/traefik-edge/sauvage-bot-public.yaml
   - networking/traefik-edge/s3-media-public.yaml
   - networking/traefik-edge/skirmshop-s3-public.yaml
