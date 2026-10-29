@@ -56,11 +56,10 @@ resources:
   - networking/traefik-edge/wildcard-cert.yaml
   - storage/longhorn/ingressroute.yaml
   - storage/longhorn/longhorn-encrypted-storageclass.yaml
-  # INFRA-980: fuera del sync hasta que security deposite el item
-  # `plaud-mcp-home-crypto` en 1Password (campo CRYPTO_KEY_VALUE, 27-10 no estaba
-  # en ningún bóveda). Con CreatedOnce/0s, sin el valor el ExternalSecret queda
-  # Failed para siempre y tumba el sync de todo k8s-infra. Re-add al depositarlo.
-  # - storage/longhorn/plaud-mcp-home-crypto-externalsecret.yaml
+  # INFRA-980: el item `plaud-mcp-home-crypto` está depositado en 1Password
+  # (vault k8s-pocharlies, campo CRYPTO_KEY_VALUE, 64 hex; verificada la clave
+  # materializada el 28-10). Re-added en INFRA-1012 al estar la clave.
+  - storage/longhorn/plaud-mcp-home-crypto-externalsecret.yaml
   - storage/longhorn/openclaw-workspace-precutover-recurring-job.yaml
   - storage/longhorn/metrics-and-alerts.yaml
   - storage/longhorn/orphan-watch.yaml
