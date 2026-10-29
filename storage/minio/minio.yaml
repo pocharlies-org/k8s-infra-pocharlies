@@ -45,11 +45,13 @@ spec:
         - key: node.kubernetes.io/disk-pressure
           operator: Exists
           effect: NoSchedule
-      imagePullSecrets:
-        - name: harbor-pull
       containers:
         - name: minio
-          image: harbor.lan.e-dani.com/homelab/minio:RELEASE.2025-04-22T22-12-26Z
+          # DGX-1336: espejo público en GHCR (digest sha256:ac59a61ad2ae6ec82be02baedbf37916425877c3ac422caf9d237f629ca723d8).
+          # No puede ser harbor.lan: los blobs de Harbor viven en este MinIO — sin
+          # MinIO no hay Harbor y la imagen no se puede tirar (dependencia circular).
+          # Docker Hub ya no sirve este tag (INFRA-997); el pull es anónimo, sin pull secret.
+          image: ghcr.io/pocharlies-org/minio:RELEASE.2025-04-22T22-12-26Z
           args:
             - server
             - /data
