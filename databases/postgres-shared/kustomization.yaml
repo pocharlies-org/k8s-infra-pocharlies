@@ -19,6 +19,7 @@ resources:
   - shared-valkey-secrets.yaml
   - shared-valkey.yaml
   - scheduledbackup.yaml
+  - rw-connectivity-probe.yaml
 labels:
   - includeSelectors: false
     pairs:
