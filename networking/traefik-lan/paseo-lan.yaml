@@ -1,6 +1,7 @@
 ---
 # Paseo en la LAN / tailnet (ver traefik-edge/paseo-public.yaml): AdGuard manda paseo.e-dani.com al VIP de
-# traefik-lan y de aqui va directo al daemon del x86 en el 6767. Si el host llega desde otra red, sso-chain.
+# traefik-lan y de aqui va al daemon Paseo, hoy en el pod paseo-0 de atlantic (Service paseo.paseo).
+# El nombre del Service conserva -x86 por historia; el backend ya no es el x86. Si el host llega desde otra red, sso-chain.
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,7 +12,7 @@ metadata:
     app.kubernetes.io/part-of: traefik-lan
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: paseo.paseo.svc.cluster.local
   ports:
     - name: http
       port: 6767
