@@ -43,6 +43,14 @@ spec:
           enableServiceLinks: false
           nodeSelector:
             kubernetes.io/hostname: sauvage
+          # sauvage se registró con --node-taint role=edge:NoSchedule (nodo del edge);
+          # sin esta toleración el pod queda Pending y el Job muere por activeDeadline.
+          # Es la misma toleración que llevan los deployments de skirmshop del nodo.
+          tolerations:
+            - key: role
+              operator: Equal
+              value: edge
+              effect: NoSchedule
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
