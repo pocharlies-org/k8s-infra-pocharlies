@@ -5,7 +5,7 @@
 # client secret (rollback needs none), so it runs even while the 1Password item
 # of ExternalSecret A is being rotated. To restore the client afterwards, git
 # revert the commit owning this reconciler and let the next PostSync re-apply
-# it. See RUNBOOK section 19.
+# it. See RUNBOOK section 20.
 apiVersion: batch/v1
 kind: Job
 metadata:

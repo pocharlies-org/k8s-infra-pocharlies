@@ -1,0 +1,67 @@
+# SC-2461 (security): el kubeconfig restringido de qa — el muro contra el agujero del script
+# (criterio 3 de SC-2160). El envoltorio `qa-efimero` es la cerca (corre con el kubeconfig admin
+# y un script que llame a kubectl a mano la salta); lo que aplica el API server es esto, vigente
+# también desde dentro de un script: lectura global (qa-read, lo mismo que hoy permite el guard
+# `kubectl get*`, secrets incluidos) y crear/borrar pods y PVCs solo donde exista el RoleBinding
+# `qa-efimero-writer` — que `qa-efimero` crea junto con cada namespace qa-* que funda.
+# El token de larga vida es el Secret de abajo; `security` acuña con él ~/.kube/qa.config en el
+# x86 (copia de respaldo en 1Password, item `kubeconfig-qa`) y el lanzador de sesiones se lo da
+# a los roles qa y qa-reserva como KUBECONFIG (x86-host-runtime, company_runtime.py).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qa-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qa
+  namespace: qa-system
+---
+# Lectura global: get/list/watch sobre todo (incluidos CRDs — qa valida el estado vivo de
+# ArgoCD — y secrets, que el guard ya dejaba leer). Sin ningún verbo de escritura.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: qa-read
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: qa-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: qa-read
+subjects:
+  - kind: ServiceAccount
+    name: qa
+    namespace: qa-system
+---
+# Escritura de prueba: pods y PVCs, solo donde se enlace (RoleBinding por ns qa-*, nunca
+# cluster-scoped: qa no puede fundar namespaces ni borrarlos a mano, eso es de `qa-efimero`).
+# Sin pods/exec: un pod de prueba se mide, no se habita (coherente con el guard de qa).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: qa-efimero-writer
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+---
+# Token de larga vida para el kubeconfig de qa (forma legacy: el controlador lo rellena).
+# IgnoreExtraneous: lo que añade el controlador no es deriva que selfHeal deba revertir.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: qa-kubeconfig-token
+  namespace: qa-system
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    kubernetes.io/service-account.name: qa
+type: kubernetes.io/service-account-token

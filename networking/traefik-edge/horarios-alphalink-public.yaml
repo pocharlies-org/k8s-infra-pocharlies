@@ -1,0 +1,111 @@
+# SC-2495 — el planificador de AlphaLink en el dominio del cliente.
+#
+# La zona `alphalinkcrossfit.com` está en Cloudflare desde el 17-10-2026 (antes,
+# GoDaddy) y NO la gestiona external-dns: sus `--domain-filter` son e-dani.com y
+# skirmshop.es. Los registros se meten a mano en esa zona: 3 A de `horarios` al
+# VIP del edge (141.94.73.52, 141.94.73.50, 145.239.194.168 — el 57.129.17.172
+# de las otras targets no escucha 443 desde fuera), hechas el 17-10 en SC-2532.
+#
+# El certificado se valida por DNS-01 escribiendo el TXT directamente en la zona
+# del cliente (el token de `cloudflare-api-token` puede; ya no hace falta el
+# CNAME de delegación a e-dani.com que se usó mientras la zona estuvo en
+# GoDaddy), con el solver de `alphalinkcrossfit.com` de cluster-issuers.yaml.
+#
+# Precedente del host de cliente: `affiliate-public.yaml` (Certificate propio +
+# IngressRoute en websecure). La diferencia es el acceso: esto va detrás de
+# oauth2-proxy-alphalink, como skirmbooks.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: horarios-alphalink-tls
+  namespace: traefik-edge
+spec:
+  secretName: horarios-alphalink-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "horarios.alphalinkcrossfit.com"
+  renewBefore: 720h
+---
+# SC-2532: el edge solo vigila sus propias namespaces (`providers.kubernetescrd
+# .namespaces` de values.yaml no incluye `alphalink`), así que la IngressRoute no
+# puede referenciar `alphalink/horarios-alphalink` directamente: el provider
+# descarta la ruta entera con «namespace is not within watched namespaces» y el
+# host responde 404. El patrón de la casa (ver `chat-public.yaml`) es un
+# ExternalName dentro de traefik-edge.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-horarios-alphalink
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-horarios-alphalink
+spec:
+  type: ExternalName
+  externalName: horarios-alphalink.alphalink.svc.cluster.local
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+# security (16-10, condición de su veredicto sobre horarios-alphalink#2): la app
+# se fía de `X-Auth-Request-Email`, así que esa cabecera no puede llegar de la
+# calle. Se vacía ANTES de la cadena en todas las rutas del host (nunca después:
+# borraría lo que inyecta oauth2-proxy y rompería el login). Precedente:
+# `dgx-strip-identity-headers`, definido una vez por instancia de Traefik porque
+# traefik-edge y traefik-lan son instancias distintas.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: alphalink-strip-identity-headers
+  namespace: traefik-edge
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: ""
+      X-Auth-Request-Email: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Forwarded-User: ""
+      X-Forwarded-Email: ""
+      X-Forwarded-Groups: ""
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-horarios-alphalink
+  namespace: traefik-edge
+spec:
+  entryPoints:
+  - websecure
+  ingressClassName: traefik-edge
+  routes:
+  # El callback del proxy va SIN cadena a propósito: forward-auth sobre
+  # /oauth2/callback = bucle (mismo caso que skirmbooks en legacy-public-routes).
+  - kind: Rule
+    match: Host(`horarios.alphalinkcrossfit.com`) && PathPrefix(`/oauth2`)
+    middlewares:
+    - name: alphalink-strip-identity-headers
+      namespace: traefik-edge
+    services:
+    - name: oauth2-proxy-alphalink
+      namespace: keycloak
+      port: 4180
+  - kind: Rule
+    match: Host(`horarios.alphalinkcrossfit.com`)
+    middlewares:
+    - name: alphalink-strip-identity-headers
+      namespace: traefik-edge
+    - name: sso-alphalink-chain
+      namespace: keycloak
+    services:
+    - name: edge-horarios-alphalink
+      port: 8080
+  # OJO: `/api/exportacion` NO se publica. La llama el detector de fichajes por
+  # el DNS interno (`horarios-alphalink.alphalink.svc.cluster.local:8080`) y
+  # devuelve nombres y horas de los empleados: eso no sale a internet ni Even
+  # con la semana publicada. Todo lo que entra por este host pasa por el SSO.
+  tls:
+    secretName: horarios-alphalink-tls

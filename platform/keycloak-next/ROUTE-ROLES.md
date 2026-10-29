@@ -11,12 +11,18 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **43 rutas, 73 gates** en esta matriz (la fila `plaud` se declara por
+  Hoy: **46 rutas, 88 gates** en esta matriz (SC-3508, 28-10-2026: + fila `skills`;
+  INFRA-974, 23-10-2026: se declaran
+  las dos filas `hindsight-*`, vivas en el config desde INFRA-942 y en el realm
+  desde el 22-10; el verificador las señalaba como drift; los conteos de esta
+  fila son los del bloque json, que manda). La fila `plaud` se declara por
   delante del config vivo —INFRA-380, pendiente del merge de
   k8s-agentgateway-pocharlies#197—; el verificador la señala hasta que la ruta
   despliegue). El config vivo trae 77: la
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
-  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676).
+  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). DGX-1218 declara
+  los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
+  del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
   Ninguno se retira desde aquí.
 
@@ -47,8 +53,8 @@ este repo; el verificador dice qué fila.
 
 ## Decisión del CTO: `agentgateway-write:dgx-control` (INFRA-249)
 
-`/dgx-control` y `/chat-dgx-control` gatean `compute_mode_set`,
-`refusal_lambda_set` y `opencode_restart` en `agentgateway-write:dgx-control`,
+`/dgx-control` y `/chat-dgx-control` gatean `compute_mode_set` y
+`refusal_lambda_set` en `agentgateway-write:dgx-control` (`opencode_restart` salió con DGX-1135),
 un rol que el 24-09-2026 **no existía en el realm** (verificador: `DRIFT:
 agentgateway-write:dgx-control referenciado en config y ausente del realm`).
 Decisión del CTO (INFRA-219, no se reabre): se **añade** el rol al reconciliador
@@ -96,9 +102,10 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `chat-stt` | `/chat-stt` | — | — |
 | `stt` | `/stt` | `agentgateway-read:stt` | — |
 | `picqer` | `/picqer` | `agentgateway-read:picqer` | `agentgateway-write` (36), `agentgateway-write:picqer` (36) |
-| `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:skirmshop-plugins` (35) |
+| `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:correo-ejecutor`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:correo-ejecutor` (1), `agentgateway-write:skirmshop-plugins` (35) |
+| `skills` | `/skills` | `agentgateway-read:skills` | — |
 | `skirmshop-plugins` | `/skirmshop-plugins` | `agentgateway-read:skirmshop-plugins` | — |
-| `shopify-admin` | `/shopify-admin` | `agentgateway-read:shopify-admin` | `agentgateway-write` (18), `agentgateway-write:shopify` (18) |
+| `shopify-admin` | `/shopify-admin` | `agentgateway-read:shopify-admin` | `agentgateway-write` (18), `agentgateway-write:correo-ejecutor` (3), `agentgateway-write:shopify` (18) |
 | `shopify` | `/shopify` | `agentgateway-read:shopify` | `agentgateway-write` (5), `agentgateway-write:shopify` (5) |
 | `chat-analytics` | `/chat-analytics` | — | — |
 | `analytics` | `/analytics` | `agentgateway-read:analytics` | — |
@@ -122,7 +129,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
 | `offers` | `/offers` | — | `agentgateway-write` (3), `agentgateway-write:offers` (3) |
-| `cto-office` | `/cto-office` | `cto-office-send` | `cto-office-send` (2) |
 | `company-metrics` | `/company-metrics` | `company-metrics-read` | `company-metrics-read` (5) |
 | `chat-atlassian` | `/chat-atlassian` | — | `agentgateway-write` (40) |
 | `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40) |
@@ -218,11 +224,18 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
     {
       "route": "skirmshop-plugins-admin",
       "path": "/skirmshop-plugins-admin",
-      "require": ["agentgateway-write", "agentgateway-write:skirmshop-plugins"],
+      "require": ["agentgateway-write", "agentgateway-write:correo-ejecutor", "agentgateway-write:skirmshop-plugins"],
       "tools": {
         "agentgateway-write": ["affiliate_api", "back_in_stock_api", "bundles_api", "catalog_rag_api", "catalog_rag_competitor_coverage", "catalog_rag_competitor_price_comparison", "catalog_rag_competitor_products", "catalog_rag_competitor_rescue_candidates", "catalog_rag_competitor_source", "catalog_rag_competitor_sources", "collections_tree_api", "labels_api", "labels_carrier_service_rates", "labels_correos_fuel_surcharge", "labels_create_label", "labels_latest_order_status", "labels_pickup_create", "labels_rate_quote", "labels_shipment_status", "picker_api", "serial_numbers_api", "shopify_sync_api", "sii_api", "skirmbooks_reconcile_invoices", "skirmbooks_reconcile_movements", "skirmbooks_reconcile_summary", "skirmbooks_reconcile_upload_invoice", "skirmshop_plugins_call", "skirmshop_plugins_describe", "skirmshop_plugins_get", "skirmshop_plugins_list", "skirmshop_plugins_request", "skirmshop_plugins_tools_list", "translations_api"],
+        "agentgateway-write:correo-ejecutor": ["labels_pickup_create"],
         "agentgateway-write:skirmshop-plugins": ["affiliate_api", "back_in_stock_api", "bundles_api", "catalog_rag_api", "catalog_rag_competitor_coverage", "catalog_rag_competitor_price_comparison", "catalog_rag_competitor_products", "catalog_rag_competitor_rescue_candidates", "catalog_rag_competitor_source", "catalog_rag_competitor_sources", "collections_tree_api", "labels_api", "labels_carrier_service_rates", "labels_correos_fuel_surcharge", "labels_create_label", "labels_latest_order_status", "labels_pickup_create", "labels_rate_quote", "labels_shipment_status", "picker_api", "serial_numbers_api", "shopify_sync_api", "sii_api", "skirmbooks_reconcile_invoices", "skirmbooks_reconcile_movements", "skirmbooks_reconcile_summary", "skirmbooks_reconcile_upload_invoice", "skirmshop_plugins_call", "skirmshop_plugins_describe", "skirmshop_plugins_get", "skirmshop_plugins_list", "skirmshop_plugins_request", "skirmshop_plugins_tools_list", "translations_api"]
       }
+    },
+    {
+      "route": "skills",
+      "path": "/skills",
+      "require": ["agentgateway-read:skills"],
+      "tools": {}
     },
     {
       "route": "skirmshop-plugins",
@@ -236,6 +249,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "require": ["agentgateway-read:shopify-admin"],
       "tools": {
         "agentgateway-write": ["collection_create", "collection_delete", "customer_create", "customer_update", "draft_order_create", "graphql_execute", "metafields_set", "order_returnable_lines_get", "order_shipping_line_replace", "product_archive_or_delete", "product_collection_connect", "product_collection_disconnect", "product_create", "product_publish_toggle", "product_update", "return_create", "translations_register", "variant_update"],
+        "agentgateway-write:correo-ejecutor": ["order_returnable_lines_get", "order_shipping_line_replace", "return_create"],
         "agentgateway-write:shopify": ["collection_create", "collection_delete", "customer_create", "customer_update", "draft_order_create", "graphql_execute", "metafields_set", "order_returnable_lines_get", "order_shipping_line_replace", "product_archive_or_delete", "product_collection_connect", "product_collection_disconnect", "product_create", "product_publish_toggle", "product_update", "return_create", "translations_register", "variant_update"]
       }
     },
@@ -328,7 +342,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/chat-dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "opencode_restart", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
       }
     },
     {
@@ -336,7 +350,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "opencode_restart", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
       }
     },
     {
@@ -407,9 +421,30 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       }
     },
     {
+      "route": "alphalink",
+      "path": "/alphalink",
+      "require": ["agentgateway-read:alphalink"],
+      "tools": {
+        "agentgateway-write": ["alphalink_semana_guardar_borrador"],
+        "agentgateway-write:alphalink": ["alphalink_semana_guardar_borrador"]
+      }
+    },
+    {
       "route": "plaud",
       "path": "/plaud",
       "require": ["agentgateway-read:plaud"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-cloudblue",
+      "path": "/hindsight-cloudblue",
+      "require": ["agentgateway-read:hindsight-cloudblue"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-tienda",
+      "path": "/hindsight-tienda",
+      "require": ["agentgateway-read:hindsight-tienda"],
       "tools": {}
     },
     {
@@ -425,14 +460,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {
         "agentgateway-write": ["offers_dismiss", "offers_import", "offers_link"],
         "agentgateway-write:offers": ["offers_dismiss", "offers_import", "offers_link"]
-      }
-    },
-    {
-      "route": "cto-office",
-      "path": "/cto-office",
-      "require": ["cto-office-send"],
-      "tools": {
-        "cto-office-send": ["cto_office_fetch", "cto_office_send"]
       }
     },
     {
@@ -483,8 +510,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
   "unrouted": [
     {"role": "agentgateway-read:dgx-control", "disposition": "reservado", "purpose": "/dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente."},
     {"role": "agentgateway-read:image", "disposition": "reservado", "purpose": "Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44)."},
+    {"role": "cto-office-send", "disposition": "reservado", "purpose": "Ruta /cto-office retirada 19-10 (DGX-1135, k8s-agentgateway-pocharlies#210: opencode retirado). El rol sigue vivo: openclaw-readonly-clients.sh, synapse-sre-client.sh y agentgateway-read-grants.sh lo usan como rol base inmutable y fallan cerrados sin él; retirarlo exige antes cambiar esos reconciliadores."},
     {"role": "agentgateway-read:offers", "disposition": "reservado", "purpose": "/offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-read:tts", "disposition": "reservado", "purpose": "/tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
+    {"role": "agentgateway-write:compania", "disposition": "reservado", "purpose": "Medido en el realm vivo el 16-10 (SC-2522): concedido por admin API a service-account-hermes-secretaria y -casa sin declaracion en GitOps; ninguna ruta de k8s-agentgateway-pocharlies lo exige todavia. Entra en unrouted como llego (precedente INFRA-380); cuando la ruta /compania se declare, sale de aqui y pasa a su fila de la matriz."},
+    {"role": "agentgateway-write:analisis", "disposition": "reservado", "purpose": "Medido en el realm vivo el 27-10 (SC-1282): creado y concedido por security a service-account-analisis en SC-2967 ([SEC] de SC-2951) con limite de tools (navigate, resize, screenshot, snapshot, console_messages, evaluate) para /playwright; la regla del gateway para ese limite queda pendiente (devops). Entra en unrouted como llego (precedente SC-2522); cuando la ruta lo declare, sale de aqui y pasa a su fila de la matriz."},
+    {"role": "agentgateway-write:compania-propuestas", "disposition": "reservado", "purpose": "Medido en el realm vivo el 27-10 (SC-1282): creado y concedido por security a service-account-analisis en SC-2967 con el veredicto de SC-2963 (SC-2955 P4): solo propuesta_crear y propuestas_rechazadas de /compania, nunca compania_responder. La regla del gateway para la ruta queda pendiente. Entra en unrouted como llego (precedente SC-2522); cuando la ruta lo declare, sale de aqui y pasa a su fila de la matriz."},
     {"role": "claude-sessions", "disposition": "aplicacion", "purpose": "Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions."}
   ]
 }

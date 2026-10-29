@@ -25,6 +25,11 @@ spec:
     - secretKey: OAUTH2_PROXY_COOKIE_SECRET
       remoteRef:
         key: keycloak-next-oauth2-proxy/cookie_secret
+    # SC-2816: password del usuario valkey `oauth2-proxy` (DB 1 del valkey compartido).
+    # La crea security; sin ella el proxy no arranca y el SSO de todo e-dani.com se cae.
+    - secretKey: OAUTH2_PROXY_REDIS_PASSWORD
+      remoteRef:
+        key: keycloak-next-oauth2-proxy/redis_password
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -40,7 +45,11 @@ data:
     provider_display_name = "Keycloak"
     oidc_issuer_url = "https://auth-next.e-dani.com/realms/edani"
     skip_oidc_discovery = true
-    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth"
+    # DGX-1113: prompt=login — tras un sign_out (o sin cookie) Keycloak presenta el
+    # formulario en vez de re-autenticar en silencio con la sesión que haya; si alguien
+    # entró con la cuenta equivocada y cayó al 403, el siguiente intento puede ser otra
+    # cuenta. Con la cookie _edani_sso puesta no se pasa por aquí (dura 720h).
+    login_url = "https://auth-next.e-dani.com/realms/edani/protocol/openid-connect/auth?prompt=login"
     redeem_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/token"
     profile_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
     validate_url = "http://keycloak.keycloak.svc.cluster.local/realms/edani/protocol/openid-connect/userinfo"
@@ -63,6 +72,18 @@ data:
     # round -- refresh every 1h against a session that idled out after 30min --
     # which is what forced a full re-login on every visit.
     cookie_refresh = "1h"
+
+    # SC-2816: la sesión en la cookie no cabe. Con pass_access_token + set_xauthrequest pasa de 4 KB y
+    # oauth2-proxy la parte en `_edani_sso_0`, `_1`…; con cookie_domains en .e-dani.com el navegador se
+    # queda sin un fragmento, al callback no le cuadra el `state` y devuelve 403 («CSRF token mismatch»)
+    # en bucle. Con el store en el servidor la cookie vuelve a ser un id pequeño, y además las 2 réplicas
+    # comparten sesión (con cookie, la emitida por una no la lee la otra).
+    #
+    # La password NO va aquí: v7.15.2 no expande `$(VAR)` en el .cfg — con el literal dentro, el proxy no
+    # arranca. `OAUTH2_PROXY_REDIS_PASSWORD`, del Secret de arriba, es la que oauth2-proxy lleva en AUTH.
+    # La DB 1 es por convención (la 0 es de aiops): el ACL de valkey no sabe de números de DB.
+    session_store_type = "redis"
+    redis_connection_url = "redis://oauth2-proxy@shared-valkey-master.databases.svc.cluster.local:6379/1"
 
     whitelist_domains = [ ".e-dani.com" ]
     email_domains = [ "*" ]
@@ -101,7 +122,7 @@ spec:
         app: oauth2-proxy
       annotations:
         # oauth2-proxy solo lee el .cfg al arrancar: subir esto con cada cambio del ConfigMap.
-        e-dani.com/config-rev: "2026-09-26-dgx-app-bearer"
+        e-dani.com/config-rev: "2026-10-20-sc-2816-sesion-en-redis"
     spec:
       enableServiceLinks: false
       nodeSelector:

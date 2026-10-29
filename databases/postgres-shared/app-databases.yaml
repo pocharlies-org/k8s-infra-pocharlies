@@ -13,7 +13,7 @@ spec:
   owner: keycloak
   ensure: present
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -27,7 +27,7 @@ spec:
   name: litellm
   owner: litellm
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -41,7 +41,7 @@ spec:
   name: langfuse
   owner: langfuse
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -55,7 +55,7 @@ spec:
   name: teslamate
   owner: teslamate
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -69,7 +69,7 @@ spec:
   name: whatsappmcp
   owner: whatsappmcp
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -83,7 +83,7 @@ spec:
   name: sauvage_bot
   owner: sauvage_bot
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -97,7 +97,7 @@ spec:
   name: labels
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -111,7 +111,7 @@ spec:
   name: skirmshop
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -125,7 +125,7 @@ spec:
   name: competitor_intel
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -139,7 +139,7 @@ spec:
   name: bundles
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -153,7 +153,7 @@ spec:
   name: sii
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -167,7 +167,7 @@ spec:
   name: firecrawl
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -181,7 +181,7 @@ spec:
   name: collections_tree
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -195,7 +195,7 @@ spec:
   name: affiliate
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -213,7 +213,7 @@ spec:
   owner: synapse_admin
   ensure: present
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -227,7 +227,7 @@ spec:
   name: translations
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -241,7 +241,7 @@ spec:
   name: back_in_stock
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -255,7 +255,7 @@ spec:
   name: product_ai
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -269,7 +269,7 @@ spec:
   name: serial_numbers
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -283,7 +283,7 @@ spec:
   name: pocharlies
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -297,7 +297,7 @@ spec:
   name: skirmbooks
   owner: skirmshop
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -311,7 +311,7 @@ spec:
   name: keep
   owner: keep
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -325,7 +325,7 @@ spec:
   name: aurora
   owner: aurora
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 # Benchmark results. A separate database rather than a schema inside `litellm`: LiteLLM
 # runs Prisma against that one and `prisma db push` diffs the whole search path.
@@ -344,7 +344,7 @@ spec:
   name: dgxbench
   owner: dgxbench
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 # SC-546: destino de archivo de la retención de sesiones (opencode hoy; mismo
 # sitio para cualquier agente). Creada a mano el 11-09; declarada aquí para
@@ -366,7 +366,7 @@ spec:
   owner: opencode_archive
   ensure: present
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
 ---
 # SC-1743: base del CRM propio (repo company-crm; dueño rol company_crm).
 apiVersion: postgresql.cnpg.io/v1
@@ -382,4 +382,60 @@ spec:
   owner: company_crm
   ensure: present
   cluster:
-    name: postgres-shared
+    name: postgres-shared-nvme
+---
+# SC-2495: base del planificador de AlphaLink (horarios-alphalink). El esquema de
+# tablas NO lo declara este CRD (CNPG solo crea la base): lo crea la propia app al
+# arrancar con `create table if not exists`, como dgxbench.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: horarios
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: horarios
+  owner: horarios
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
+---
+# INFRA-940: base de Hindsight (memoria de agentes, fase 0 de la migración del
+# brain). `vector` lo crea CNPG como superusuario porque pgvector no es trusted y el
+# rol `hindsight` no podría crearlo en sus migraciones; el esquema lo crea Hindsight.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: hindsight
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: hindsight
+  owner: hindsight
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
+  extensions:
+    - name: vector
+      ensure: present
+---
+# SC-2956 D2: base del servicio analisis (estado de propuestas, ejecuciones, cursores). Sin extensiones:
+# el esquema lo crea el servicio al arrancar (migraciones numeradas bajo pg_advisory_lock).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: analisis
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: analisis
+  owner: analisis
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme

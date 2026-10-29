@@ -1,0 +1,8 @@
+---
+# The role wrote config.yaml but never restarted k3s, so any edit to the
+# template was a silent no-op until someone rebooted the node. The playbook
+# runs with serial: 1, so this restart is rolling across the control plane.
+- name: Restart k3s after config change
+  ansible.builtin.service:
+    name: k3s
+    state: restarted

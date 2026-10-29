@@ -49,6 +49,24 @@ spec:
       targetPort: 80
       protocol: TCP
 ---
+# DGX-1113: el oauth2-proxy compartido, referenciado con el mismo patrón
+# ExternalName que edge-oauth2-proxy-chat (allowExternalNameServices).
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-oauth2-proxy
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-dgx-dashboard-public
+spec:
+  type: ExternalName
+  externalName: oauth2-proxy.keycloak.svc.cluster.local
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180
+      protocol: TCP
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -63,6 +81,17 @@ spec:
     - websecure
   ingressClassName: traefik-edge
   routes:
+    # DGX-1113: los endpoints del propio oauth2-proxy (sign_in, callback, sign_out) sobre
+    # dgx.e-dani.com, SIN cadena SSO (autenticarse exigiría estar autenticado). El enlace
+    # «Sign Out» de la página 403 del proxy apunta a /oauth2/sign_out del host actual: sin
+    # esta regla caía en la pública (100) → sso-chain → bucle, y el 403 no tenía salida.
+    # Precedente: edge-chat-public.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && PathPrefix(`/oauth2`)
+      priority: 600
+      services:
+        - name: edge-oauth2-proxy
+          port: 4180
     # INFRA-732 (P6a-2): /api/interno/* son rutas internas del dashboard que solo
     # debe alcanzar el forwardAuth interno de Traefik, por el Service del clúster
     # (control-nexus/dgx-dashboard-ui), nunca por una IngressRoute. Sin esta regla
@@ -118,7 +147,7 @@ spec:
     # INFRA-380: /plaud y /api/plaud (grabaciones privadas: audio, transcript, hablantes) entran en el
     # control-set igual que /entregas; sus assets viven en /static/inferencia* compartido y no llevan datos.
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alarma`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
@@ -132,7 +161,7 @@ spec:
           namespace: control-nexus
           port: 80
     # DGX-809 (security H-2 de DGX-799): tres escrituras sin identidad del backend
-    # (POST /api/activity/power, /api/llm/uncensored y /api/litellm/opencode/reload)
+    # (POST /api/activity/power y /api/llm/uncensored)
     # entran igual, solo con POST: sus GET siguen abiertos. POST /api/activity/claude/refresh
     # se queda abierto (F1 de security: lo llama sin sesión la extensión vscode-claude-cuenta).
     # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
@@ -140,7 +169,7 @@ spec:
     # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
     # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster).
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || Path(`/api/litellm/opencode/reload`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers

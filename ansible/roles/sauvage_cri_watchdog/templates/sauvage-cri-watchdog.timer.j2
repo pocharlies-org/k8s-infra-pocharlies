@@ -1,0 +1,10 @@
+[Unit]
+Description=sauvage-cri-watchdog: scan the k3s-agent journal for CRI sandbox stalls
+
+[Timer]
+OnBootSec={{ sauvage_cri_watchdog_timer_on_boot }}
+OnUnitActiveSec={{ sauvage_cri_watchdog_timer_interval }}
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

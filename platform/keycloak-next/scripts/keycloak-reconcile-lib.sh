@@ -4,8 +4,8 @@
 #
 # NOT a standalone script: it is sourced with `.` by
 #   agentgateway-domain-roles.sh, chat-agentgateway-client.sh,
-#   agentgateway-chat-mcp-client.sh, jarvis-echo-client.sh and
-#   hermes-enviar-client.sh,
+#   agentgateway-chat-mcp-client.sh, jarvis-echo-client.sh,
+#   hermes-enviar-client.sh and correo-agente-client.sh,
 # which mount it in their ConfigMap next to the entrypoint. Every helper
 # resolves its configuration (KCADM, ADMIN_CONFIG, CLIENT_CONFIG, KEYCLOAK_URL,
 # REALM, CLIENT_ID, CLIENT_UUID, MAPPER_NAME, AGENTGATEWAY_AUDIENCE) at CALL

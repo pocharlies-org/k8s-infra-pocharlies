@@ -80,8 +80,8 @@ class ApiInterno404Contract(unittest.TestCase):
         self._assert_rule(_docs(LAN), LAN_IR)
 
     def test_alarma_de_dgx695_sigue_en_el_control_set(self):
-        """La regla /api/app/alarma (DGX-695) no se toca: sigue en la 400 de ambos ficheros."""
-        for docs, name in ((_docs(EDGE), EDGE_IR), (_docs(LAN), LAN_IR)):
+        """La regla /api/app/alarma (DGX-695) sigue en la 400 del edge (en LAN no hay control set desde DGX-1314)."""
+        for docs, name in ((_docs(EDGE), EDGE_IR),):
             ir = _ingressroute(docs, name)
             r400 = next(r for r in ir["spec"]["routes"] if r.get("priority") == 400)
             self.assertIn("PathPrefix(`/api/app/alarma`)", r400["match"],

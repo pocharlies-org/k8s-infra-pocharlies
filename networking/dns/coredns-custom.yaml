@@ -23,6 +23,11 @@ data:
       rewrite name exact harbor.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact litellm.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact argocd.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      # INFRA-889: the LibrePlay LAN synthetic probe (VMProbe
+      # libreplay-lan-synthetic, ns monitoring) runs in-cluster and was
+      # flipping to the public Cloudflare edge -- the 521s behind incident
+      # LPLY-15053 and the LibrePlaySyntheticAvailabilityBudgetLow alerts.
+      rewrite name exact libreplay.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa
@@ -49,6 +54,7 @@ data:
       hosts {
         100.83.56.98 x86.taile0ad27.ts.net
         100.125.62.10 mac-cb.taile0ad27.ts.net
+        100.85.61.58 mac-casa.taile0ad27.ts.net
         ttl 60
         fallthrough
       }

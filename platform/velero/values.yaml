@@ -57,8 +57,9 @@ configuration:
 # Use node-agent for filesystem backups and CSI snapshot data movement.
 deployNodeAgent: true
 nodeAgent:
-  # Node-agent must run wherever protected Pods can land. Cover LAN and KS5
-  # while excluding the remote Sauvage node whose overlay cannot reach MinIO.
+  # Node-agent must run wherever protected Pods can land. Cover LAN, KS5 and
+  # the AlphaLink droplet (cloud; its pods reach MinIO over the tailnet overlay,
+  # measured 18-10) while excluding the remote Sauvage node whose overlay cannot.
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -66,11 +67,15 @@ nodeAgent:
           - matchExpressions:
               - key: topology
                 operator: In
-                values: ["lan", "ovh"]
+                values: ["lan", "ovh", "cloud"]
   tolerations:
     - key: dedicated
       operator: Equal
       value: llm
+      effect: NoSchedule
+    - key: dedicated
+      operator: Equal
+      value: alpha
       effect: NoSchedule
   extraArgs:
     - --node-agent-configmap=velero-node-agent-config

@@ -11,12 +11,12 @@ redirects here for old bookmarks.
   shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
   from 1Password item `keycloak-next-postgres` (vault `k8s-pocharlies`).
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
-- Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
-  namespace:
-  - `sso-forward-auth`
-  - `sso-errors`
-  - `sso-chain`
-- Apps with native OIDC should use Keycloak directly.
+- **One realm per web, always separate (SC-2822):** every web gets its own
+  realm, oauth2-proxy and `sso-<realm>-chain`, declared in
+  `platform/keycloak-sso/realms.yaml`. The rule and how to add a web:
+  `docs/sso-por-app.md`. This directory keeps the `edani` realm (AgentGateway and
+  machine identities) and the legacy `sso-forward-auth`/`sso-errors`/`sso-chain`
+  of the webs not migrated yet; no new web goes on them.
 - The PostSync reconciler scripts in `scripts/` share one bootstrap
   (`scripts/kc-admin-common.sh`: admin login with retries, `kget`,
   `nonempty_lines`, cleanup trap). Hooks source it via
@@ -85,8 +85,8 @@ items and Google OAuth client exist:
 4. Create a confidential client for oauth2-proxy and add a groups mapper.
 5. Test a protected LAN or public route that references `keycloak/sso-chain`.
 
-Protected services should reference the `keycloak/sso-chain` Traefik middleware
-or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
+New protected services do not reference `keycloak/sso-chain`: they get their
+own realm and chain (`docs/sso-por-app.md`).
 
 ## PostgreSQL compartido
 
@@ -193,6 +193,16 @@ roles, `agentgateway-read:workspace` and `agentgateway-write:workspace-envio`
 (the permission to send or delete Gmail drafts, held by nobody else). It never
 manages the client secret; `RUNBOOK.md` section 18 covers the order of the
 change, seeding the secret into 1Password and rollback.
+
+## Postia case agent identities (`correo-agente-lectura`, `correo-ejecutor`)
+
+`correo-agente-clients.yaml` (two PostSync Jobs, wave 24, one script) reconciles
+the two clients of the Postia case agent (DGX-1218): `correo-agente-lectura`
+with only the six `agentgateway-read:<route>` roles of its profiles and no
+`agentgateway-write*`, and `correo-ejecutor` with
+`agentgateway-write:correo-ejecutor` (held by nobody else) and
+`agentgateway-read:shopify-admin`. Same hardening as `hermes-enviar`; the
+secrets are seeded into 1Password after the sync (`RUNBOOK.md` section 19).
 
 ## Chat identity (`chat-agentgateway`)
 
@@ -372,7 +382,7 @@ secret on every sync; ES B (`agentgateway-dani-login-password`, item
 `keycloak-next-dani-login`, field `password`) carries Daniel's password,
 seeded only with his own gesture, and is consumed by QA's scripted ROPC
 exchange — never by the Job. While ES B's item is absent its ExternalSecret
-stays in error: expected state, not an incident (RUNBOOK section 19). State
+stays in error: expected state, not an incident (RUNBOOK section 20). State
 rollback deletes only the client
 (`manual/agentgateway-dani-login-client-rollback-job.yaml`, excluded from
 Argo).

@@ -1,0 +1,32 @@
+# StorageClass cifrada generica (INFRA-980, veredicto security 23-10, opcion B).
+# Mismo patron que kubernetes/storage/longhorn-openclaw-encrypted (cipher por PVC,
+# secret llamado igual que el PVC en su namespace, CRYPTO_KEY_VALUE + provider
+# secret), sin los selectores propios de openclaw. La clave vive en 1Password
+# via ExternalSecret, nunca dentro de un volumen respaldado en claro.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    storage.e-dani.com/purpose: encrypted-home-and-session-state
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: ext4
+  encrypted: "true"
+  dataLocality: disabled
+  replicaAutoBalance: best-effort
+  csi.storage.k8s.io/provisioner-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/provisioner-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-publish-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-publish-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-stage-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-stage-secret-namespace: "${pvc.namespace}"
+  csi.storage.k8s.io/node-expand-secret-name: "${pvc.name}"
+  csi.storage.k8s.io/node-expand-secret-namespace: "${pvc.namespace}"

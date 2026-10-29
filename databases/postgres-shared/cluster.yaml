@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: postgres-shared
+  name: postgres-shared-nvme
   namespace: databases
   annotations:
     # Bump only by PR after the corresponding ExternalSecrets are healthy.
@@ -17,6 +17,11 @@ spec:
   primaryUpdateStrategy: unsupervised
   primaryUpdateMethod: switchover
   enableSuperuserAccess: true
+  # INFRA-942: el secreto del superusuario es el del cluster original. Lo leen el volcado
+  # lógico, los hooks PostSync (role-settings, agent-transcripts) y la ExternalSecret de
+  # skirmbooks; con el nombre por defecto (postgres-shared-nvme-superuser) se quedarían sin él.
+  superuserSecret:
+    name: postgres-shared-superuser
 
   postgresql:
     parameters:
@@ -25,9 +30,14 @@ spec:
       # 41 synapse services × pool_size 5 = 205 connections projected; max_connections 400 = ×1.95 headroom.
       # shared_buffers 1Gi (12.5% of 8Gi mem limit) absorbs litellm full-scan working set
       # which was OOM-killing pod with 256MB / 2Gi (root cause documented in plan §12.2).
+      # INFRA-942 (2026-10-19): 1GB -> 4GB. Hindsight (4.2 GB, pgvector) leía de disco (IO.DataFileRead) con el
+      # bloqueo de su bank tomado; el límite sube a 10Gi para dejar a los backends el margen que tenían.
+      # INFRA-942 (2026-10-26): 4GB -> 6GB y effective_cache_size 7GB -> 18GB con el límite a 24Gi. Los índices
+      # HNSW por banco de Hindsight (personal 6,2 GB, claude-personal 2,5 GB…) no cabían en 10Gi y el recall leía de
+      # disco (IO/DataFileRead de 11 s por consulta). Lo que no es shared_buffers queda como caché de páginas del SO.
       max_connections: "400"
-      shared_buffers: "1GB"
-      effective_cache_size: "4GB"
+      shared_buffers: "6GB"
+      effective_cache_size: "18GB"
       work_mem: "32MB"
       maintenance_work_mem: "256MB"
       checkpoint_completion_target: "0.9"
@@ -60,28 +70,81 @@ spec:
       # wal_compression las comprime antes de escribirlas, así que baja el
       # WAL en disco Y lo archivado. zstd está disponible en PG 17.
       # Los tres son SIGHUP: no reinician el cluster.
+      # INFRA-942 (2026-10-27): con Hindsight el WAL subió a ~74 GB/día y el 77-80 % seguían siendo páginas completas
+      # (pg_waldump: B-tree, HNSW de pgvector como Generic, hint bits). En 3,6 días hubo 63 checkpoints forzados por
+      # max_wal_size, además de los de tiempo. 15min -> 30min y 4GB -> 16GB: la mitad de checkpoints y menos páginas
+      # completas. El WAL vive en el NVMe local (local-path no aplica la cuota de 20Gi; ~500 GB libres); reproducir
+      # 16 GB al recuperar de una caída tarda pocos minutos.
       wal_compression: "zstd"
-      checkpoint_timeout: "15min"
-      max_wal_size: "4GB"
+      checkpoint_timeout: "30min"
+      max_wal_size: "16GB"
       min_wal_size: "1GB"
 
+      # INFRA-942 (2026-10-27): el recall de Hindsight lee de la réplica (READ_DATABASE_URL -> postgres-shared-ro).
+      # Sin feedback, el VACUUM del primario borra filas que una consulta de la réplica aún ve y la reproducción del
+      # WAL la cancela a los 30 s ("canceling statement due to conflict with recovery"): 4 recalls en 500 en la
+      # prueba de rendimiento del 27-10 y confl_snapshot=4 en la réplica. Con feedback, el primario retrasa ese VACUUM
+      # lo que dura la consulta (segundos). SIGHUP: no reinicia.
+      # INFRA-942 (2026-10-27): el recall de Hindsight lee de la réplica (READ_DATABASE_URL -> postgres-shared-ro).
+      # Sin feedback, el VACUUM del primario borra filas que una consulta de la réplica aún ve y la reproducción del
+      # WAL la cancela a los 30 s ("canceling statement due to conflict with recovery"): 4 recalls en 500 en la
+      # prueba de rendimiento del 27-10 y confl_snapshot=4 en la réplica. Con feedback, el primario retrasa ese VACUUM
+      # lo que dura la consulta (segundos). SIGHUP: no reinicia.
+      hot_standby_feedback: "on"
+
+      # SC-2752 (2026-10-27): guarda contra transacciones abandonadas. La alerta PostgresSharedBackendsWaiting
+      # (causa datastore-shared) disparó el 18/10 con 37 backends esperando un lock en el cluster viejo y volvió
+      # a acumular hasta 29 en el nuevo el 26/10 (~15 min sostenidos): siempre transacciones idle in transaction
+      # reteniendo locks, sin nada que las corte. Con 5 min de inactividad la sesión se mata sola y los waiters
+      # se drenan; 5 min es el umbral con el que la propia regla ya considera el cluster saturado, y el trabajo
+      # legítimo es active, no idle-in-transaction (medido el 27/10: 0 sesiones idle in transaction vivas).
+      # SIGHUP: no reinicia.
+      idle_in_transaction_session_timeout: "5min"
+
+    # INFRA-942 (2026-10-25): réplica síncrona en modo preferred. El primario confirma el commit cuando la réplica
+    # ya lo tiene en disco (medido: 2-6 ms más por commit), así que un fallo del primario no pierde nada confirmado.
+    # Si la réplica cae, vuelve a asíncrono solo en vez de bloquear las escrituras (con `required` y 2 instancias
+    # se bloquearían).
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: preferred
+
+  # INFRA-942 (2026-10-22): longhorn -> local-path-retain. Las réplicas de Longhorn
+  # se morían y con ellas el volumen del cluster (postgres-shared-4 no pudo hacer
+  # pg_rewind: WAL perdido), y todo el I/O de Hindsight (IO.DataFileRead) pasaba por
+  # Longhorn. local-path-retain escribe en el NVMe del propio nodo (los ks5-cp tienen
+  # un solo disco NVMe; /opt/local-path-provisioner está en él) y conserva el PV al
+  # borrar el PVC. La HA no la da el disco sino la replicación en streaming de CNPG:
+  # las 2 instancias siguen en nodos distintos por la anti-afinidad requerida de abajo.
+  # Tamaños: 46 GB de bases hoy; 80Gi + 20Gi de WAL por instancia caben en cualquier
+  # ks5-cp (cp-1 es el más justo: ~199 GB libres). Si un nodo se pierde, se recupera
+  # del storage local del nodo o de barman; el PV se conserva al borrar el PVC.
   storage:
-    storageClass: longhorn
+    storageClass: local-path-retain
     size: 80Gi
 
   walStorage:
-    storageClass: longhorn
+    storageClass: local-path-retain
     size: 20Gi
 
+  # INFRA-942 (2026-10-23): sin bootstrap.recovery. El restore desde barman se
+  # descartó (2 h de corte) en favor de la réplica en streaming (cluster-nvme.yaml),
+  # y mientras el objeto vivo tenga bootstrap.initdb el webhook rechaza el manifiesto
+  # ("Only one bootstrap method can be specified at a time"), lo que deja a ArgoCD
+  # sin poder comparar ni sincronizar la app.
   resources:
     requests:
       # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
       # 68m (postgres-shared-2). Limits unchanged (4 CPU) absorb the spikes.
       cpu: "200m"
-      memory: "2Gi"
+      # INFRA-942 (2026-10-26): 5Gi -> 16Gi, para que el scheduler cuente con la memoria (el webhook de CNPG exige
+      # además request >= shared_buffers). ks5-cp-2/3: 62,5 GiB, con 22-26 GiB libres en el peor momento de 7 días.
+      memory: "16Gi"
     limits:
+      # La CPU se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores y el recall de Hindsight va a la réplica.
       cpu: "4"
-      memory: "8Gi"
+      memory: "24Gi"
 
   monitoring:
     enablePodMonitor: false
@@ -96,6 +159,16 @@ spec:
 
   managed:
     roles:
+      - name: horarios
+        ensure: present
+        login: true
+        # security (16-10): con el historial de saturación del clúster (367/400 el
+        # 28-07), el tope va en el servidor y no en el pool de la app. Es una app
+        # de un usuario con un worker: 5 da margen y corta un pool desbocado.
+        connectionLimit: 5
+        passwordSecret:
+          name: horarios-db-credentials
+        comment: "Planificador AlphaLink (repo: pocharlies-org/horarios-alphalink). SC-2495."
       - name: keycloak
         ensure: present
         login: true
@@ -302,13 +375,97 @@ spec:
         passwordSecret:
           name: company-crm-db-credentials
         comment: "CRM propio de la compañía (repo pocharlies-org/company-crm); dueño de la base company_crm"
+      # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
+      # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
+      # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la
+      # reconcilia desde skirmbooks-ui-db-credentials (ExternalSecret en
+      # app-credentials.yaml), que debe estar materializado ANTES de aplicar este
+      # spec. Los GRANT sobre los esquemas gestoría_* los concede la migración del
+      # producto (patrón 0058), no aquí.
+      - name: skirmbooks_ui_app
+        ensure: present
+        login: true
+        # connectionLimit MEDIDO: el pool de la UI es max 8
+        # (skirmbooks-ui/app/lib/db.server.ts:105) con 1 réplica
+        # (k8s-skirmbooks-pocharlies/k8s/manifest.yaml:7); 10 da margen y corta
+        # un pool desbocado, como en `horarios` (SC-2495).
+        connectionLimit: 10
+        passwordSecret:
+          name: skirmbooks-ui-db-credentials
+        comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
+      # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
+      # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
+      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=40 (values de k8s-hindsight-pocharlies, INFRA-942 19-10)
+      # con 1 réplica de API; 50 deja margen para las migraciones del arranque y el rollout.
+      - name: hindsight
+        ensure: present
+        login: true
+        connectionLimit: 50
+        passwordSecret:
+          name: hindsight-db-credentials
+        comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
+      # SC-2956 D2: base de los empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies).
+      # Contraseña en 1Password (item `analisis-db`, sembrado por security), reconciliada desde
+      # analisis-db-credentials (app-credentials.yaml). No aplicar hasta que ese item exista.
+      - name: analisis
+        ensure: present
+        login: true
+        connectionLimit: 5
+        passwordSecret:
+          name: analisis-db-credentials
+        comment: "Empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies). SC-2956 D2."
+
+  # INFRA-942 (2026-10-23): promovido. Se creó como réplica en streaming de
+  # postgres-shared (Longhorn) y se promovió en el corte con el viejo cercado.
+  replica:
+    enabled: false
+    source: postgres-shared-primary
+
+  bootstrap:
+    pg_basebackup:
+      source: postgres-shared-primary
+
+  externalClusters:
+    - name: postgres-shared-primary
+      connectionParameters:
+        host: postgres-shared-rw.databases.svc.cluster.local
+        port: "5432"
+        dbname: postgres
+        user: streaming_replica
+        sslmode: verify-full
+      # El usuario streaming_replica se autentica con certificado de cliente
+      # (el secreto postgres-shared-replication es kubernetes.io/tls, no tiene password).
+      sslRootCert:
+        name: postgres-shared-ca
+        key: ca.crt
+      sslCert:
+        name: postgres-shared-replication
+        key: tls.crt
+      sslKey:
+        name: postgres-shared-replication
+        key: tls.key
+
+  # INFRA-942 (2026-10-27): barman-cloud (boto3) reintenta minutos, no segundos. El backup sube ~2 h a MinIO en
+  # sauvage, cuyo host se congela de vez en cuando (disco saturado, PSI io full 30-55 %): el 26-10 a las 04:32 y el
+  # 27-10 a las 05:18 (~80 s, nodo NotReady, MinIO sin endpoints). Con el modo por defecto (pocos intentos en segundos)
+  # el upload moría con "Could not connect to the endpoint URL" y se perdía el backup entero. barman no fija
+  # `retries` en su Config, así que botocore toma estas variables (comprobado en la imagen: botocore 1.40.6).
+  # Modo standard: espera exponencial con jitter, tope de 20 s por intento; 30 intentos aguantan ~4 min de media (máx. ~8).
+  env:
+    - name: AWS_RETRY_MODE
+      value: standard
+    - name: AWS_MAX_ATTEMPTS
+      value: "30"
 
   backup:
-    # 2026-08-11: 30d -> 7d. El store de MinIO vive en el disco de sauvage y esta
-    # ruta sola ocupaba ~460 GB (33 backups base + sus WAL). 7 dias de base diaria
-    # + WAL continuo dan PITR de una semana, que es lo que se necesita; el archivo
-    # a mas largo plazo va fuera de la maquina (foto semanal -> OVH, retencion 30d).
-    retentionPolicy: "7d"
+    # 2026-10-25: 7d -> 2d (Dani, INFRA-993). El store de MinIO vive en el disco de
+    # sauvage y hindsight genera ~80 GB/dia de WAL: con 7d la ruta iba a ~750 GB y
+    # sauvage ya llego al 97 %. PITR de 2 dias; el dump logico diario y la foto
+    # semanal -> OVH (retencion 30d) cubren lo de mas atras.
+    retentionPolicy: "2d"
+    # INFRA-942: carpeta propia (serverName = postgres-shared-nvme). La del cluster
+    # viejo (s3://cnpg-backups/postgres-shared/postgres-shared) se queda intacta como
+    # vía de recuperación anterior al corte: nunca dos escritores en el mismo archivo.
     barmanObjectStore:
       destinationPath: "s3://cnpg-backups/postgres-shared"
       endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"

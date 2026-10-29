@@ -604,3 +604,146 @@ rules:
   - apiGroups: [external-secrets.io]
     resources: [externalsecrets]
     verbs: [get, list, watch]
+---
+# POLICY 9 (SC-2708): la imagen t2v de Aurora al espejo corregido de la casa.
+#
+# El chart aurora-oss 1.2.16 hardcodea en templates/t2v-transformers-deployment.yaml
+# la imagen cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+# (tag mutable, sin override por values). El build del 23-09 de ese tag trae el
+# modelo en 0600 root (comprobado en el digest 75359f8b: ls -l sobre
+# /app/models/model/model.safetensors) y el despliegue corre como uid 1000: el
+# vectorizer no puede abrirlo y el pod cae en bucle, arrastrando a weaviate
+# (espera el /.well-known/ready de t2v) y al CronJob brain-kb-sync
+# (incidente Keep DEPL-15370, 2026-10-27).
+#
+# INFRA-1010 (2026-10-27): el destino original era ghcr.io/pocharlies-org,
+# pero los paquetes puente se crearon PRIVADOS (el token anónimo de ghcr los
+# niega) y la API REST de visibilidad ya no existe — solo UI. Harbor `homelab`
+# es privado y el nodo no tiene credenciales para él (harbor-runtime-pull no
+# cubre el ns aurora). El espejo vive por tanto en harbor.e-dani.com/library,
+# el proyecto PÚBLICO de Harbor (pull anónimo verificado: token de servicio +
+# manifest 200), mismo patrón que library/vllm-qwen38-rank1.
+#
+# Esta regla reescribe la imagen en admisión a ese espejo. El espejo es el
+# mismo contenido más una capa de permisos (Dockerfile y README en
+# images/aurora/bridge/transformers/ de k8s-observability-pocharlies). El
+# Deployment conserva la imagen del chart, así que ArgoCD sigue Synced.
+#
+# Se retira cuando el chart permita fijar la imagen o semitechnologies publique
+# un build legible por uid 1000.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aurora-t2v-image-mirror
+  annotations:
+    policies.kyverno.io/title: Aurora t2v image to the corrected house mirror
+    policies.kyverno.io/description: >
+      The upstream aurora chart hardcodes a transformers-inference image whose
+      model files are mode 0600 root, unreadable by the pod's uid 1000. This
+      policy swaps that image for the house mirror in the public Harbor project
+      (harbor.e-dani.com/library), which carries the same content with readable
+      model files.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481): los
+  # defaults que inyecta el webhook, declarados aquí tal como los escribe.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: t2v-image-to-house-mirror
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aurora]
+              operations: [CREATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.containers[0].image || '' }}"
+            operator: Equals
+            value: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+      skipBackgroundRequests: true
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/containers/0/image
+            op: replace
+            value: harbor.e-dani.com/library/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-r1
+---
+# POLICY 10 (INFRA-965): el data dir de Postgres de Harbor no vuelve a 2770 al
+# re-montarse el volumen.
+#
+# El chart harbor 1.19.0 (templates/database/database-ss.yaml) hardcodea en el pod
+# `securityContext: {runAsUser: 999, fsGroup: 999}` y añade el init
+# `data-permissions-ensurer` (`chmod -R 700 /var/lib/postgresql/data/pgdata`), que
+# solo corre al CREAR el pod. Con fsGroup, kubelet hace un chown+chmod recursivo
+# del volumen cada vez que lo monta y deja los directorios en 2770 (g+w + setgid,
+# gid 999). Postgres exige 0700 u 0750 y con 2770 se niega a arrancar.
+#
+# Medido el 28-10-2026 sobre el PVC database-data-harbor-database-0 (pod
+# harbor-database-0, ks5-cp-2): ctime de data, pgdata y pgdata/pg15 =
+# 2026-10-28T06:26:57Z con el pod de 2026-10-22T06:03Z sin recrearse, modo 2770
+# los tres y `root:postgres` en la raíz: la firma exacta del SetVolumeOwnership de
+# kubelet. Ese mismo pase tumbó Harbor el 21-10: el liveness (timeout de 1 s con
+# ks5-cp-1 al 98 % de CPU) mató el contenedor y en el reinicio Postgres encontró
+# el data dir en 2770 y no volvió a subir hasta recrear el pod (22-10 06:03).
+# Mientras el pod no se recrea el init container no vuelve a correr, así que
+# cualquier reinicio del contenedor repetía la caída: ningún push a
+# harbor.e-dani.com estaba a salvo de un reinicio.
+#
+# `fsGroupChangePolicy: OnRootMismatch` hace que kubelet solo compruebe la raíz del
+# volumen: si ya es del gid 999 y tiene permiso de grupo, NO repite el pase
+# recursivo. La raíz queda como está y pg15 conserva 0700 en re-montes y en
+# reinicios del contenedor. En un volumen restaurado (raíz con otro gid) sí se
+# aplica el pase completo, y ahí lo deja bien el init container.
+#
+# Se muta el POD, no el StatefulSet (patrón de aurora-t2v-image-mirror, POLICY 9):
+# el manifiesto que renderiza el chart no cambia y ArgoCD sigue Synced, sin
+# ignoreDifferences. El pod del StatefulSet es siempre `harbor-database-0`
+# (1 réplica, Recreate).
+#
+# Coste: los pods creados antes de esta política no traen el campo; el pod vivo se
+# recreó a mano al activarla. Se retira si el chart expone fsGroupChangePolicy por
+# values.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: harbor-db-fsgroup-onrootmismatch
+  annotations:
+    policies.kyverno.io/title: Harbor Postgres data dir keeps 0700 across remounts
+    policies.kyverno.io/description: >
+      The harbor chart hardcodes fsGroup 999 on the database pod, so kubelet
+      re-applies a recursive chown/chmod every time it mounts the volume and
+      leaves the Postgres data directory at 2770, which Postgres refuses to start
+      with. This policy sets fsGroupChangePolicy: OnRootMismatch on the pod, so
+      kubelet only checks the volume root and leaves the data directory alone.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481) y
+  # aurora-t2v-image-mirror (POLICY 9): solo admisión, failurePolicy Ignore.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: fsgroup-onrootmismatch-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [harbor]
+              operations: [CREATE]
+      preconditions:
+        all:
+          - key: "{{ request.object.metadata.name || '' }}"
+            operator: Equals
+            value: harbor-database-0
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              fsGroupChangePolicy: OnRootMismatch

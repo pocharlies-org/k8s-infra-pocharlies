@@ -17,7 +17,7 @@
 # realm scope mapping that EMITS (never concedes) exactly `agentgateway-write`
 # (#190 pattern). State rollback deletes only the client
 # (manual/agentgateway-dani-login-client-rollback-job.yaml, excluded from Argo;
-# RUNBOOK section 19).
+# RUNBOOK section 20).
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:

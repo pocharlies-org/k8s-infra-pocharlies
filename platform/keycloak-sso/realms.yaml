@@ -1,0 +1,36 @@
+# SC-2822 — un realm de Keycloak por web. La norma: docs/sso-por-app.md.
+#
+# Cada entrada es una web (la app, con todos sus hosts alias) y genera: su realm
+# (keycloak-config-cli), su client `oauth2-proxy` con callback exacto por host,
+# su oauth2-proxy con cookie pegada al host y su cadena sso-<name>-chain.
+# Ningún host aparece en dos realms (lo comprueba
+# tests/test_keycloak_realm_per_web_contract.py).
+#
+#   name          slug del realm; también nombra proxy, cookie, cadena y secretos
+#   hosts         todos los hosts de la web; cada uno tiene su callback
+#   critical      true = 2 réplicas del proxy
+#   google        login con Google (cliente de google.item); el usuario tiene que
+#                 estar declarado abajo: el primer login enlaza por email, nunca crea
+#   googleHostedDomain  obligatorio con google: dominio (o dominios, separados por
+#                 comas) de las cuentas de Google admitidas
+#   groups        grupos del realm; allowedGroups = los que dan acceso
+#   users         quién existe en el realm (email) y sus grupos
+#
+# Secretos: ítem 1Password `keycloak-next-oauth2-proxy-<name>` con client_secret y cookie_secret.
+google:
+  item: keycloak-next-google-oauth
+
+realms:
+  - name: alphalink
+    displayName: AlphaLink · horarios
+    hosts: [horarios.alphalinkcrossfit.com]
+    critical: true
+    google: true
+    googleHostedDomain: alphalinkcrossfit.com
+    groups: [alphalink-horarios-users, alphalink-horarios-admins]
+    allowedGroups: [alphalink-horarios-users, alphalink-horarios-admins]
+    users:
+      - email: daniel.ibanez@alphalinkcrossfit.com
+        groups: [alphalink-horarios-users, alphalink-horarios-admins]
+      - email: dom.greco@alphalinkcrossfit.com
+        groups: [alphalink-horarios-users]

@@ -124,7 +124,7 @@ op item create --vault k8s-pocharlies --category SECURE_NOTE \
   --title keycloak-next-oauth2-proxy \
   client_id=oauth2-proxy \
   client_secret="<client secret from Keycloak>" \
-  cookie_secret="$(openssl rand -base64 32)"
+  cookie_secret="$(openssl rand 32 | base64 | tr "+/" "-_" | tr -d "=")"  # base64url: oauth2-proxy v7.15.2 no acepta base64 estándar
 ```
 
 Force-sync the ExternalSecret if needed:
@@ -829,8 +829,57 @@ PR that stops the reconciler, drop the `ROLES.yaml` grantees and the
 next PostSync recreates the client with a NEW secret, so also retire the
 1Password item through the weekly rotation session.
 
+## 19. Postia case agent identities (`correo-agente-lectura`, `correo-ejecutor`, DGX-1218)
 
-## 19. ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
+`correo-agente-clients.yaml` (two PostSync Jobs, sync-wave 24) reconciles the
+two confidential clients of the Postia case agent with one script,
+`scripts/correo-agente-client.sh`, whose reviewed role set is fixed per
+`CLIENT_ID`; the flow itself is `keycloak-scoped-client-lib.sh`, shared with
+`hermes-enviar`:
+
+- `correo-agente-lectura`: `agentgateway-read:` `brain`, `picqer`, `shopify`,
+  `shopify-admin`, `skirmshop-plugins`, `workspace`, and no `agentgateway-write*`
+  at all (security condition 3 of DGX-1209).
+- `correo-ejecutor`: `agentgateway-write:correo-ejecutor` (created by the
+  domain-roles hook, wave 19, which fails the sync if anyone else holds it) and
+  `agentgateway-read:shopify-admin` (the `/shopify-admin` route gate). Never the
+  bare `agentgateway-write`.
+
+The read roles' holder allowlists (read-grants hook, wave 20) review both
+service accounts. Same hardening as section 18: service account only,
+`fullScopeAllowed=false`, `aud-mcp`, exact minted token.
+
+**Order:** k8s-agentgateway-pocharlies#221 (the per-tool rules that need
+`agentgateway-write:correo-ejecutor`) merged → this change, by a full Argo CD
+sync → secrets to 1Password (below) → the `/workspace` identity binding of
+`service-account-correo-agente-lectura` (its `sub` only exists after this sync;
+security 37075: only the core's mailboxes, in the same GitOps change as the
+mailbox) → the receiver on the x86 (DGX-1218 PR-1/PR-3). Expect transient
+`keycloak-role-drift` `DRIFT:` runs until wave 24 finishes.
+
+```bash
+kubectl -n keycloak logs job/keycloak-correo-agente-lectura-client -c reconcile-client
+kubectl -n keycloak logs job/keycloak-correo-ejecutor-client -c reconcile-client
+# {"client_id":"correo-ejecutor","realm_roles":"agentgateway-read:shopify-admin agentgateway-write:correo-ejecutor","present":true,"fullscope_allowed":false,"token_verified":true}
+```
+
+### Seeding the client secrets (after the first sync)
+
+Same rules as section 18: the hook never touches the secrets. Once the clients
+exist, a devops step copies each one to 1Password (`llavero`), items
+`correo-kc-agente-lectura` and `correo-kc-ejecutor`, field `client_secret`,
+reading `clients/<uuid>/client-secret` through the admin API (netrc `0600`,
+never argv, never echoed). The receiver on the x86 reads them by reference.
+
+### State rollback
+
+Run the reconciler with `MODE=rollback` and the client's `CLIENT_ID` (same pod
+spec as the Job, as in section 18). It deletes the client and its grants; the
+roles stay. Then drop the `ROLES.yaml` grantees and the `PRINCIPALS.md` entry in
+the PR that removes the Job, and retire the 1Password item through the weekly
+rotation session.
+
+## 20. ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
 
 The reconciler `agentgateway-dani-login-client-job.yaml` (PostSync wave 25,
 `scripts/agentgateway-dani-login-client.sh`) owns the confidential ROPC test

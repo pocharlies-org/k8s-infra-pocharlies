@@ -7,6 +7,7 @@ resources:
   - minio-credentials.yaml
   - app-credentials.yaml
   - cluster.yaml
+  - services-alias.yaml
   - app-databases.yaml
   - agent-transcripts-schema.yaml
   - role-settings.yaml
@@ -18,6 +19,7 @@ resources:
   - shared-valkey-secrets.yaml
   - shared-valkey.yaml
   - scheduledbackup.yaml
+  - rw-connectivity-probe.yaml
 labels:
   - includeSelectors: false
     pairs:

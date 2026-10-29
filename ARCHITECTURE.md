@@ -45,10 +45,12 @@ automático `prune: false`, `selfHeal: true`):
 |---|---|---|---|
 | Rutas públicas del edge | `networking/traefik-edge/<app>-public.yaml` | ídem | todas las apps públicas |
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
-| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
+| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184), hindsight (rol `hindsight`, base con `vector` por el CRD Database, INFRA-940), analisis (rol y base `analisis`, SC-2956 D2; el ExternalSecret lee el item `analisis-db`) |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
+| Login de una web (un realm de Keycloak por web, siempre separado: norma en `docs/sso-por-app.md`, SC-2822) | `platform/keycloak-sso/realms.yaml` (chart: realm por keycloak-config-cli, oauth2-proxy y `sso-<realm>-chain`) | ídem | cada web con login; `tests/test_keycloak_realm_per_web_contract.py` |
 | Bootstrap de los hooks PostSync de Keycloak (trap de limpieza, `fail`, login admin con reintentos, `kget`, líneas no vacías) | `platform/keycloak-next/scripts/kc-admin-common.sh` | ídem | los hooks de keycloak-next; único sitio de estas funciones |
-| Reconciliadores de clients de servicio de Keycloak (mapper de audiencia, scope de roles, mint y comprobación exacta del token) | `platform/keycloak-next/scripts/keycloak-reconcile-lib.sh` (carga después de `kc-admin-common.sh`) | ídem | chat-agentgateway, jarvis-echo, hermes-enviar, agentgateway-chat-mcp, domain-roles |
+| Reconciliadores de clients de servicio de Keycloak (mapper de audiencia, scope de roles, mint y comprobación exacta del token) | `platform/keycloak-next/scripts/keycloak-reconcile-lib.sh` (carga después de `kc-admin-common.sh`) | ídem | chat-agentgateway, jarvis-echo, hermes-enviar, correo-agente, agentgateway-chat-mcp, domain-roles |
+| Client de servicio dedicado con roles EXACTOS (comprobaciones, scope, concesión, `fullScopeAllowed=false`, token exacto, rollback) | `platform/keycloak-next/scripts/keycloak-scoped-client-lib.sh` (`run_scoped_client`, carga después de `keycloak-reconcile-lib.sh`; la tabla de roles y las guardas quedan en cada script) | ídem | hermes-enviar, correo-agente-lectura, correo-ejecutor |
 | Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae. Kyverno `externalsecret-alibaba-plan-only-litellm` (POLICY 8, Enforce, DGX-619/626) deniega al admitir todo ExternalSecret fuera del ns `litellm` cuyo `remoteRef.key`, `dataFrom.extract.key` o `dataFrom.find.name.regexp` apunte a `alibaba-model-studio*`; las claves del Token Plan de Alibaba solo se leen allí, el resto va por el plan-gateway. No ve Secrets creados a mano. Recoger un secreto nuevo o rotado: la regla única es el comentario de `platform/external-secrets/cluster-secret-store-onepassword.yaml` (nuevo = crear el ES; rotado = force-sync de ESE ES o del CES, o el detector; nunca reiniciar ESO ni anotar el store) | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
@@ -101,14 +103,21 @@ Nº de casos: **pendiente de medir**.
 
 - `README`/`docs/architecture.md` aún dicen k3s v1.32.5 y «ubuntu único control-plane»: el cluster real tiene `ks5-cp-1/2/3`
   (README desfasado).
-- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona.
+- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona
+  (Traefik descarta la ruta entera —`failed to get service <ns>/<svc>: namespace is not within watched
+  namespaces` en sus logs— y el host responde 404 con todo `Synced`). La receta es un `Service` ExternalName
+  dentro de `traefik-edge`, en el mismo fichero del host, referenciado por la IngressRoute sin `namespace`
+  (`edge-chat-public` en `chat-public.yaml`; `edge-horarios-alphalink` en `horarios-alphalink-public.yaml`,
+  SC-2532). **No** se amplía `providers.kubernetescrd.namespaces` con la namespace del producto: cambia los
+  args del DaemonSet (reinicio en cada nodo, hostPort 443) y dejaría que una namespace de producto cargue sus
+  propias rutas en el edge compartido sin pasar por este repo.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
 - Los nombres de `e-dani.com` que necesita un cliente del clúster se fijan a `traefik-lan` en
   `networking/dns/coredns-custom.yaml` — hoy `harbor`, `harbor.lan`, `litellm` y `argocd` (SC-2443, SC-2445). Un nombre
-  sin fijar cae en `forward` y responde el resolver del nodo que hospeda la réplica de CoreDNS que contesta: las de los
-  cp de OVH devuelven las IPs públicas del borde, así que el cliente va por LAN o por el borde público según a quién le
-  toque resolver (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
+  sin fijar cae en `forward` y responde la MagicDNS del nodo del cliente, porque cada nodo resuelve en su réplica de
+  `coredns-local` (INFRA-1019): los nodos de OVH reciben las IPs públicas del borde y los de casa pueden recibir otras,
+  así que el cliente va por LAN o por el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
   grande). `dgx` y `s3` van fijados por `hosts` a la VIP `192.168.50.240`, que también es alcanzable desde los cp
   (medido 15-10-2026). Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez.
 - ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
@@ -123,6 +132,11 @@ Nº de casos: **pendiente de medir**.
 - Un ExternalSecret fuera de `litellm` con un ítem `alibaba-model-studio*` se rechaza al aplicar (mensaje DGX-619;
   POLICY 8). Usa el plan-gateway. `failurePolicy: Ignore`: si Kyverno cae, se admite. Sin medir: un ítem referido por
   UUID en vez de por título y `find.tags`/`find.path` no están cubiertos.
+- Agente de casos de Postia (DGX-1218, épica DGX-1209): los clients `correo-agente-lectura` (solo los
+  `agentgateway-read:<ruta>` de sus perfiles, ningún `agentgateway-write*`) y `correo-ejecutor`
+  (`agentgateway-write:correo-ejecutor` y `agentgateway-read:shopify-admin`) los reconcilia un único script con la tabla
+  de roles fija por `CLIENT_ID` (`correo-agente-clients.yaml`, ola 24); el rol lo crea `agentgateway-domain-roles` (ola
+  19). Mismo molde que `hermes-enviar`: el secreto se siembra en 1Password tras el sync (RUNBOOK 19).
 - Envío de correo de Hermes (INFRA-676, épica INFRA-480): el client `hermes-enviar` (service account, roles
   exactamente `agentgateway-read:workspace` y `agentgateway-write:workspace-envio`, `fullScopeAllowed=false`) y los
   roles `agentgateway-write:workspace-envio` y `:workspace-borrador` los crea `platform/keycloak-next` por hooks
