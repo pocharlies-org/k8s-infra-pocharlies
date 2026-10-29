@@ -137,3 +137,71 @@ spec:
             description: >-
               {{ $value }} backends llevan 5m bloqueados esperando un lock en
               {{ $labels.pod }}. Suele acompañar a transacciones abandonadas.
+
+    # Guarda de HA y de copias (INFRA-971). El 22-10-2026 el clúster pasó más de
+    # un día en Ready=False, «Waiting for the instances to become active» (bucle
+    # de pg_rewind del primario caído) y con la copia de las 03:12 fallida
+    # (LastBackupSucceeded=False), y no sonó nada: las reglas de conexiones son
+    # ciegas a ese estado (el clúster estaba partido, no saturado). Estas dos
+    # reglas lo cubren con series que ya scrapea el VMPodScrape de arriba.
+    - name: postgres-shared.ha-backup
+      rules:
+        # Instancia lista = instancia donde el exporter de CNPG recolecta
+        # (cnpg_collector_up=1). En el bucle de pg_rewind del 22-10 Postgres no
+        # llegaba a subir, así que collector_up se quedaba en 0: exactamente el
+        # estado a cazar. El `or vector(0)` cubre el caso de que desaparezcan
+        # todos los pods: sum() sobre vector vacío devuelve vacío y la alerta no
+        # llegaría a evaluarse; con el guard evalúa 0 y dispara.
+        # El 2 es spec.instances (cluster.yaml): si se cambia uno, el otro.
+        # Las ventanas de desagote de los nodos de control (04:00/05:00/06:00
+        # UTC) promueven el clúster y se recuperan solas; `for: 5m` es el filtro
+        # que pidió la sesión problem (INFRA-971).
+        - alert: PostgresSharedInstancesNotReady
+          expr: >-
+            (sum(cnpg_collector_up{namespace="databases"}) or vector(0)) < 2
+          for: 5m
+          labels:
+            severity: critical
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: postgres-shared lleva +5m con menos de 2 instancias listas
+            description: >-
+              Menos de spec.instances (2) instancias con cnpg_collector_up=1: es
+              el equivalente a Ready=False, «Waiting for the instances to become
+              active» — sin HA, como el 22-10-2026. Mira
+              `kubectl get cluster.postgresql.cnpg.io postgres-shared-nvme -n
+              databases` y los logs `-c postgres` de la instancia que no
+              levanta. Si coincide con la ventana de desagote (04:00-06:00 UTC)
+              y no se resuelve solo, no es un switchover.
+
+        # «Copia buena» = la última completada en el catálogo barman
+        # (cnpg_collector_last_available_backup_timestamp; coincide con
+        # .status.lastSuccessfulBackup). Dos ramas, una alerta:
+        # - sin copia buena en +26h (schedule: diaria 03:00 UTC, ver
+        #   scheduledbackup.yaml);
+        # - última copia fallida (failed_ts > available_ts), el equivalente en
+        #   métricas de LastBackupSucceeded=False.
+        # Un Backup enquistado en walArchivingFailing (como el de las 03:00 del
+        # 29-10-2026) no mueve ninguno de los dos timestamps y bloquea al
+        # ScheduledBackup siguiente: lo caza la primera rama.
+        - alert: PostgresSharedBackupStale
+          expr: >-
+            (time() - max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}) > 93600)
+            or
+            (max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"}) > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}))
+          for: 10m
+          labels:
+            severity: critical
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: postgres-shared sin copia buena (fallida o +26h)
+            description: >-
+              La última copia falló o no hay una copia buena desde hace +26h.
+              Como el 22-10-2026: la copia de las 03:12 falló y tardó un día en
+              verse. Revisa
+              `kubectl get backups.postgresql.cnpg.io -n databases` (ojo: el
+              nombre corto `backup` resuelve a Longhorn, no a CNPG) y el
+              `backupPhase` en los logs del operador cnpg-system;
+              walArchivingFailing que no avanza bloquea la siguiente copia.
