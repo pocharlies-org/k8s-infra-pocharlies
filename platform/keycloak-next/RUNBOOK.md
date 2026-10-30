@@ -24,7 +24,15 @@ Required items (titles) and their fields:
 keycloak-next-bootstrap        admin_username, admin_password
 keycloak-next-postgres         username, password
 keycloak-next-oauth2-proxy     client_id, client_secret, cookie_secret
+keycloak-next-dani-login-test  client_secret
+keycloak-next-dani-login       password
 ```
+
+`keycloak-next-dani-login-test/client_secret` must exist BEFORE the merge of
+the `dani-login-test` reconciler (seeded by `security`, section 19).
+`keycloak-next-dani-login/password` is seeded only with Daniel's own gesture
+(ruling OWU-100); until then its ExternalSecret stays in error — expected
+state, not an incident (section 19).
 
 Using the 1Password CLI with a service account that has Read & Write on that
 vault (`OP_SERVICE_ACCOUNT_TOKEN` set, never echoed):
@@ -870,3 +878,45 @@ spec as the Job, as in section 18). It deletes the client and its grants; the
 roles stay. Then drop the `ROLES.yaml` grantees and the `PRINCIPALS.md` entry in
 the PR that removes the Job, and retire the 1Password item through the weekly
 rotation session.
+
+## 20. ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
+
+The reconciler `agentgateway-dani-login-client-job.yaml` (PostSync wave 25,
+`scripts/agentgateway-dani-login-client.sh`) owns the confidential ROPC test
+client `dani-login-test` (realm `edani`): direct access grants on, every other
+flow off, no redirect URIs, `fullScopeAllowed=false`, TTL 900 s with refresh
+tokens off (OWU-100 condition 3), the audience mapper `aud-mcp` to
+`mcp.lan.e-dani.com`, and a realm scope mapping that EMITS exactly
+`agentgateway-write` (it concedes nothing; the role belongs to
+`agentgateway-write-role.sh`). It exists so QA can exchange Daniel's password
+for a short-lived token and measure C1, C2 positive and C4 of OWU-28 live. The
+client has no service account, so it is absent from `PRINCIPALS.md` and
+`ROLES.yaml` by design (permanent drift otherwise).
+
+Two ExternalSecrets, never one (the lesson of #231):
+
+- `agentgateway-dani-login-client-secret` ← 1Password item
+  `keycloak-next-dani-login-test`, field `client_secret` (vault
+  `k8s-pocharlies`). Seeded by `security` BEFORE the merge; the reconciler
+  re-applies it on every sync (Keycloak == vault). If the item goes missing the
+  ExternalSecret errors and the Job fails closed — repair now (force-sync), not
+  a rotation.
+- `agentgateway-dani-login-password` ← item `keycloak-next-dani-login`, field
+  `password`. Seeded ONLY with Daniel's own gesture (consent registered in
+  OWU-100). Until then this ExternalSecret reports error and the Secret is
+  absent: expected state, not an incident. Nothing in the PostSync path
+  references it, so the k8s-infra sync stays green regardless. QA's scripted
+  ROPC exchange (OWU-28 P2) reads this Secret at measurement time and logs the
+  token out afterwards.
+
+### State rollback
+
+Apply `manual/agentgateway-dani-login-client-rollback-job.yaml` (excluded from
+Kustomize). It deletes ONLY the client — the role, its holders, every other
+client and both ExternalSecrets stay untouched (OWU-100 condition 4) — and
+needs no credential of its own. Verify `"client_id":"dani-login-test",
+"present":false`, remove the Job. To restore, git revert the commit owning the
+reconciler and let the next PostSync re-apply it. While the manifest stays in
+Kustomize the next PostSync recreates the client with the secret of item A, so
+retire item A through the weekly rotation session only when the reconciler is
+also retired.
