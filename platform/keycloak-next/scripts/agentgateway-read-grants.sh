@@ -149,6 +149,17 @@ CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"
 ANALISIS_READ_ROLE_NAMES="${ANALISIS_READ_ROLE_NAMES:-agentgateway-read:atlassian,agentgateway-read:social,agentgateway-read:synapse}"
 EXPECTED_ANALISIS_READ_ROLE_NAMES="agentgateway-read:atlassian,agentgateway-read:social,agentgateway-read:synapse"
 ANALISIS_SA_USERNAME="service-account-analisis"
+# SC-3805 (2026-10-31): the two human holders of the shared route role
+# agentgateway-read:social — Daniel (me@e-dani.com) and Leila
+# (lays84.mv@gmail.com). The grants were made by the SC-705/SC-1144 P1
+# prerequisite C4 session on 2026-10-30 (admin API, outside this reconciler —
+# a human grant is never re-issued by this hook, precedent SC-1282 analisis);
+# the holders land in the reviewed allowlist so the catalog and the matrix
+# stay in parity and the exclusivity guard accepts them on the next sync
+# instead of failing the whole PostSync closed.
+HUMANOS_READ_ROLE_NAMES="${HUMANOS_READ_ROLE_NAMES:-agentgateway-read:social}"
+EXPECTED_HUMANOS_READ_ROLE_NAMES="agentgateway-read:social"
+HUMANOS_USERNAMES="me@e-dani.com,lays84.mv@gmail.com"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -196,6 +207,8 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "CORREO_EJECUTOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${ANALISIS_READ_ROLE_NAMES}" = "${EXPECTED_ANALISIS_READ_ROLE_NAMES}" ] || \
   fail "ANALISIS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${HUMANOS_READ_ROLE_NAMES}" = "${EXPECTED_HUMANOS_READ_ROLE_NAMES}" ] || \
+  fail "HUMANOS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -319,17 +332,25 @@ role_allowed_users() {
   if printf '%s\n' "${ANALISIS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${ANALISIS_SA_USERNAME}"
   fi
+  # SC-3805: same rule for the two reviewed human holders of
+  # agentgateway-read:social (granted by admin API in the SC-1144 C4 session;
+  # this hook never re-issues a human grant).
+  if printf '%s\n' "${HUMANOS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${HUMANOS_USERNAMES}" | tr ',' '\n'
+  fi
 }
 
 assert_role_exclusivity() {
   role="$1"
   # Bounded role-member endpoints (same idiom as the SRE reconciler): at most
-  # the allowed service accounts, never a group, never a human. The bound is
-  # the widest reviewed holder set plus one — since DGX-1218 that is nine
+  # the allowed holders (service accounts; since SC-3805 also the two reviewed
+  # humans of agentgateway-read:social), never a group. The bound is the
+  # widest reviewed holder set plus one — since DGX-1218 that is nine
   # service accounts on agentgateway-read:workspace (agentgateway-mcp,
   # jarvis-echo, hermes-enviar, correo-agente-lectura and the five
   # hermes-secretaria profiles), so max=10 is what makes an extra,
-  # unauthorized holder visible.
+  # unauthorized holder visible (social: six service accounts plus the two
+  # reviewed humans, eight).
   users="$(kget "roles/${role}/users" -q first=0 -q max=10 \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/${role}/groups" -q first=0 -q max=9 \

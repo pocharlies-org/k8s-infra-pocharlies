@@ -35,6 +35,9 @@ PROBE_SA = "service-account-atlassian-mcp-probe"
 CORREO_LECTURA_SA = "service-account-correo-agente-lectura"
 ANALISIS_SA = "service-account-analisis"
 CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
+# SC-3805: the two reviewed human holders of agentgateway-read:social
+# (granted by admin API in the SC-1144 C4 session, outside the reconciler).
+HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
 
 
 def shell_list(path, variable, sep=","):
@@ -65,7 +68,9 @@ class RoleCatalogParityTest(unittest.TestCase):
         correo_lectura = shell_list(READ_GRANTS, "EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES")
         correo_ejecutor = shell_list(READ_GRANTS, "EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES")
         analisis = shell_list(READ_GRANTS, "EXPECTED_ANALISIS_READ_ROLE_NAMES")
+        humanos = shell_list(READ_GRANTS, "EXPECTED_HUMANOS_READ_ROLE_NAMES")
         self.assertTrue(set(correo_lectura) <= set(reads))
+        self.assertTrue(set(humanos) <= set(reads))
         self.assertTrue(set(correo_ejecutor) <= set(reads))
         self.assertTrue(set(analisis) <= set(reads))
         self.assertTrue(set(openclaw) <= set(reads))
@@ -101,6 +106,10 @@ class RoleCatalogParityTest(unittest.TestCase):
                 # SC-1282: the analysis platform grantee (granted by security
                 # in SC-2967, outside this reconciler).
                 | ({ANALISIS_SA} if role in analisis else set())
+                # SC-3805: the two reviewed human grantees of social (granted
+                # by admin API in the SC-1144 C4 session, outside this
+                # reconciler).
+                | (set(HUMANOS_USERNAMES) if role in humanos else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
