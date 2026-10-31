@@ -39,6 +39,11 @@ JARVIS_SHARED_ROLES = ["agentgateway-read:workspace"]
 # the same shared route role (granted by hermes-enviar-client.sh; this hook
 # only widens the allowlist).
 ENVIAR_SA = "service-account-hermes-enviar"
+# SC-3805 (2026-10-31): the two human holders of the shared route role
+# agentgateway-read:social (Daniel and Leila), granted by admin API in the
+# SC-705/SC-1144 P1 prerequisite C4 session; this hook only widens the
+# allowlist, it never re-issues a human grant.
+HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): agentgateway-mcp with
 # fullScopeAllowed=true carries the reviewed 23 PLUS the flattened composites
@@ -547,6 +552,32 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("mapped to an unauthorized user service-account-hermes-enviar", result.stderr)
+
+    def test_human_holders_on_the_social_role_pass(self):
+        # SC-3805: me@e-dani.com and lays84.mv@gmail.com are reviewed holders
+        # of agentgateway-read:social (granted by admin API in the SC-1144 C4
+        # session). The exclusivity assertion must accept them: without this
+        # entry the next PostSync of the app fails closed on the live realm.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                for username in HUMANOS_USERNAMES:
+                    handle.write(f"agentgateway-read:social|{username}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_human_holder_on_any_other_read_role_fails_closed(self):
+        # The human allowlist entry is EXACTLY agentgateway-read:social: the
+        # same user on any other read route is drift or an attack.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{HUMANOS_USERNAMES[0]}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user me@e-dani.com", result.stderr)
 
     def test_unauthorized_token_roles_fail_closed(self):
         # A minted agentgateway-mcp token missing agentgateway-write (the 22
