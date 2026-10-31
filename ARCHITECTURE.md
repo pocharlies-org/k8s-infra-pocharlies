@@ -124,6 +124,8 @@ Nº de casos: **pendiente de medir**.
   `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
   reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect
   está en Harbor; ver `docs/disaster-recovery.md`.
+- El store `onepassword` va en la última wave (30) a propósito: con el cupo agotado queda `InvalidProviderConfig` y
+  bloquearía las waves siguientes; un recurso nuevo con wave > 30 lo rompe (`test_onepassword_store_wave_contract`).
 - 1Password Connect (INFRA-511/520): Deployment de réplica única, emptyDir, sin PVC — SPOF aceptado (si cae, ESO
   conserva el último valor de cada Secret). Las 13 PushSecret de Hermes (ns hermes) permanecen en el store SDK
   `onepassword`: el proveedor Connect no implementa SecretExists, que exige updatePolicy IfNotExists; por eso el
