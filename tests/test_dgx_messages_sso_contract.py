@@ -308,7 +308,10 @@ class DgxMessagesManifestContractTest(unittest.TestCase):
         gens = {g["name"]: g for g in kust["configMapGenerator"]}
         self.assertEqual(
             gens["keycloak-dgx-messages-client"]["files"],
-            ["dgx-messages-client.sh=scripts/dgx-messages-client.sh"],
+            [
+                "dgx-messages-client.sh=scripts/dgx-messages-client.sh",
+                "kc-admin-common.sh=scripts/kc-admin-common.sh",
+            ],
         )
         self.assertNotIn("manual/dgx-messages-client-rollback-job.yaml", kust["resources"])
 

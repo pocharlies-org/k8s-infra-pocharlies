@@ -62,11 +62,17 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-domain-roles.sh
           sh -n platform/keycloak-next/scripts/chat-agentgateway-client.sh
           sh -n platform/keycloak-next/scripts/jarvis-echo-client.sh
+          sh -n platform/keycloak-next/scripts/hermes-enviar-client.sh
+          sh -n platform/keycloak-next/scripts/correo-agente-client.sh
+          sh -n platform/keycloak-next/scripts/keycloak-scoped-client-lib.sh
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-grant-daniel.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-write-fixture-user.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-dani-login-client.sh
+          sh -n platform/keycloak-next/scripts/kc-admin-common.sh
           sh -n platform/keycloak-next/scripts/dgx-messages-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-token-smoke.sh
           python3 -m unittest \
@@ -75,14 +81,22 @@ jobs:
             tests/test_keycloak_agentgateway_domain_roles_contract.py \
             tests/test_chat_agentgateway_identity_contract.py \
             tests/test_jarvis_echo_identity_contract.py \
+            tests/test_hermes_enviar_identity_contract.py \
+            tests/test_correo_agente_identity_contract.py \
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \
             tests/test_admin_keycloack_impersonation_grant_contract.py \
             tests/test_agentgateway_write_grant_daniel_contract.py \
+            tests/test_agentgateway_write_fixture_user_contract.py \
+            tests/test_agentgateway_dani_login_client_contract.py \
             tests/test_dgx_messages_sso_contract.py \
             tests/test_dgx_app_pagos_sso_contract.py \
-            tests/test_agentgateway_token_smoke_contract.py
+            tests/test_dgx_lan_sso_secretaria_escrituras_contract.py \
+            tests/test_jarvis_host_sso_parity_dgx_contract.py \
+            tests/test_dgx_edge_proof_contract.py \
+            tests/test_agentgateway_token_smoke_contract.py \
+            tests/test_brain_shopify_webhooks_edge_contract.py
 
   # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
   # no Keycloak image, no PyYAML; the verifiers run against a fake Keycloak
@@ -115,6 +129,28 @@ jobs:
           fi
           git show "FETCH_HEAD:$catalog" > "$RUNNER_TEMP/ROLES.base.yaml"
           python3 platform/keycloak-next/scripts/check-catalog-evolution.py --base "$RUNNER_TEMP/ROLES.base.yaml" --head "$catalog"
+
+  # SC-2822: un realm de Keycloak por web (docs/sso-por-app.md). Renderiza el
+  # chart platform/keycloak-sso y comprueba la norma contra todas las rutas.
+  keycloak-realm-per-web:
+    runs-on: arc-k8s
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Realm por web, alphalink y el reconciler de skirmbooks
+        run: |
+          python3 -m unittest -v \
+            tests/test_keycloak_realm_per_web_contract.py \
+            tests/test_horarios_alphalink_sso_contract.py \
+            tests/test_skirmbooks_sso_reconciler_contract.py
 
   velero-operability-contract:
     runs-on: arc-k8s
@@ -158,8 +194,13 @@ jobs:
     runs-on: arc-k8s
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the 1Password change detector (DGX-506)
-        run: python3 -m unittest tests/test_onepassword_change_detector.py -v
+        run: python3 -m unittest tests/test_onepassword_change_detector.py tests/test_onepassword_quota_floor_contract.py -v
 
   onepassword-connect-contract:
     runs-on: arc-k8s
@@ -171,7 +212,7 @@ jobs:
       - name: Install YAML parser
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the 1Password Connect read path (INFRA-523)
-        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py tests/test_onepassword_store_wave_contract.py -v
+        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py tests/test_onepassword_store_wave_contract.py tests/test_alibaba_plan_policy_contract.py -v
 
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
@@ -179,6 +220,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
+
+  skirmbooks-ui-db-role-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the Skirmbooks UI database role (SKIRM-184)
+        run: python3 -m unittest tests/test_skirmbooks_ui_db_role_contract.py
 
   shared-valkey-acl-contract:
     runs-on: arc-k8s
@@ -193,3 +246,20 @@ jobs:
         run: |
           bash -n scripts/valkey/activate-shared-valkey-acl.sh
           python3 -m unittest tests/test_shared_valkey_acl_contract.py
+      # INFRA-859: the startup scripts from the shared-valkey ConfigMap run
+      # against fake valkey binaries (behavioural, proves no circular
+      # replication and a stable Sentinel myid).
+      - name: Validate shared Valkey startup scripts (INFRA-859)
+        run: python3 -m unittest tests/test_shared_valkey_startup_contract.py
+
+  longhorn-strict-local-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the longhorn-strict-local StorageClass (INFRA-709)
+        run: python3 -m unittest tests/test_longhorn_strict_local_contract.py -v

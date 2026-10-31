@@ -1,0 +1,175 @@
+# OWU-28 historia g (plan del architect, nota-architect-plan.md): fixture C2
+# reverso — el usuario humano de prueba qa-write-sin-vinculo@e-dani.com con el
+# rol `agentgateway-write` y SIN entrada en atlassian-identity-bindings (ns
+# atlassian-mcp), para verificar por contraste que /chat-atlassian escribe solo
+# con vínculo y rechaza (403) con rol y sin vínculo. El usuario no es de ningún
+# grupo; su vínculo negativo es por construcción (fail-closed por ausencia en
+# el shim de identidad), no por una edición de ese repo.
+#
+# El hook (scripts/agentgateway-write-fixture-user.sh) es hermana de
+# agentgateway-write-grant-daniel.sh (OWU-80) pero posee otro hecho: CREAR el
+# usuario (el id lo genera Keycloak; se resuelve por username exacto) y
+# re-aplicar la contraseña en cada sync para que Keycloak == 1Password. La
+# concesión del rol exige la extensión de exclusividad de
+# agentgateway-write-role.sh incluida en esta misma PR.
+#
+# La contraseña vive SOLO en 1Password (vault k8s-pocharlies, ítem
+# keycloak-next-qa-write-sin-vinculo, campos username y password), creada por
+# devops antes del merge; la trae el ExternalSecret de abajo (patrón
+# dgx-messages-sso-secrets). Sin el ítem, el ExternalSecret queda en error: es
+# repara-ya (force-sync), no rotación.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agentgateway-write-fixture-user-credentials
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-write-fixture-user
+spec:
+  refreshInterval: 24h
+  # Kyverno policy externalsecret-onepassword-onchange lo exige: OnChange no
+  # vuelve a leer el proveedor al reiniciar ESO (cuota de 1000 lecturas/día).
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: agentgateway-write-fixture-user-credentials
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: FIXTURE_PASSWORD
+      remoteRef:
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-qa-write-sin-vinculo/password
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-write-fixture-user
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-write-fixture-user
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Wave 25: after agentgateway-write-role-job.yaml (wave 20), which owns
+    # the role this fixture needs, and same-wave as the Daniel grant and the
+    # impersonation grant; the three own disjoint facts. Before the roles→
+    # token smoke (wave 26).
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  backoffLimit: 1
+  # A handful of kcadm calls (resolve/create user, groups, password, one
+  # role write, post-reads). Same production-safe margin as the sibling
+  # single-fact grant reconcilers.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-write-fixture-user
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reconcile-write-fixture-user
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-write-fixture-user.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - name: MODE
+              value: ensure
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: edani
+            - name: ROLE_NAME
+              value: agentgateway-write
+            - name: USERNAME
+              value: qa-write-sin-vinculo@e-dani.com
+            # La contraseña llega por el Secret del ExternalSecret de arriba;
+            # el hook la pasa a kcadm solo por el entorno de una llamada
+            # (KC_CLI_PASSWORD), nunca por argv ni stdout.
+            - name: FIXTURE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentgateway-write-fixture-user-credentials
+                  key: FIXTURE_PASSWORD
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-write-fixture-user
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-agentgateway-write-fixture-user-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-write-fixture-user
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agentgateway-write-fixture-user
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

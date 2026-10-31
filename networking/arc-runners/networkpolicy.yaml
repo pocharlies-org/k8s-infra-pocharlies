@@ -18,11 +18,9 @@
 # Los e2e SI necesitan el x86, pero solo el :3001 del canario. Eso es lo unico
 # que se abre.
 #
-# ESTO CIERRA LA RUTA DESDE EL CLUSTER, NO EL PUERTO. Desde el resto de la
-# tailnet y la LAN el :19900 sigue respondiendo 200 sin credencial. La via para
-# cerrarlo del todo (ACL de Tailscale, con el impacto ya comprobado) esta en
-# docs/tailscale-acl-19900.md: no se aplico aqui porque la credencial de
-# Tailscale que hay en Vault es de SOLO LECTURA.
+# DGX-1135 (19-10-2026): opencode se retira del x86 y el :19900 deja de escuchar.
+# La policy se queda: el aislamiento del x86 frente a codigo de terceros sigue
+# valiendo para cualquier otro puerto del host.
 #
 # OJO al orden de las reglas de egreso: una policy de egreso es una UNION de
 # permisos, asi que la excepcion del x86 se expresa como un `ipBlock` con

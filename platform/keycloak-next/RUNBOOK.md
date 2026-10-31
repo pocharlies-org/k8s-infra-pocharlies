@@ -24,7 +24,15 @@ Required items (titles) and their fields:
 keycloak-next-bootstrap        admin_username, admin_password
 keycloak-next-postgres         username, password
 keycloak-next-oauth2-proxy     client_id, client_secret, cookie_secret
+keycloak-next-dani-login-test  client_secret
+keycloak-next-dani-login       password
 ```
+
+`keycloak-next-dani-login-test/client_secret` must exist BEFORE the merge of
+the `dani-login-test` reconciler (seeded by `security`, section 19).
+`keycloak-next-dani-login/password` is seeded only with Daniel's own gesture
+(ruling OWU-100); until then its ExternalSecret stays in error — expected
+state, not an incident (section 19).
 
 Using the 1Password CLI with a service account that has Read & Write on that
 vault (`OP_SERVICE_ACCOUNT_TOKEN` set, never echoed):
@@ -116,7 +124,7 @@ op item create --vault k8s-pocharlies --category SECURE_NOTE \
   --title keycloak-next-oauth2-proxy \
   client_id=oauth2-proxy \
   client_secret="<client secret from Keycloak>" \
-  cookie_secret="$(openssl rand -base64 32)"
+  cookie_secret="$(openssl rand 32 | base64 | tr "+/" "-_" | tr -d "=")"  # base64url: oauth2-proxy v7.15.2 no acepta base64 estándar
 ```
 
 Force-sync the ExternalSecret if needed:
@@ -324,12 +332,14 @@ The PostSync reconciler `agentgateway-read-grants-job.yaml` (sync wave 20, so
 it lands before the openclaw-readonly reconciler in wave 21) owns the full
 read matrix:
 
-- Creates the 21 `agentgateway-read:<route>` realm roles (non-composite).
+- Creates the 22 `agentgateway-read:<route>` realm roles (non-composite;
+  INFRA-380 widened the matrix from 21 on 2026-10-13 with
+  `agentgateway-read:plaud`).
 - Grants them individually — never via groups (SC-44 C6): the
-  `agentgateway-mcp` service account receives all 21; the
-  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  `agentgateway-mcp` service account receives all 22; the
+  `openclaw-readonly-agentgateway` service account receives its seven reviewed
   routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
-  `skirmshop-plugins`). `synapse-sre-orchestrator`,
+  `plaud`, `skirmshop-plugins`). `synapse-sre-orchestrator`,
   `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
   none.
 - Maps the same roles into each client's role scope so the grants travel in
@@ -340,14 +350,15 @@ read matrix:
 - Fails closed on any group mapping, any member outside the matrix, any
   composite role, any scope or grant entry outside the matrix, and any
   freshly minted token whose `realm_access.roles` is not exactly the measured
-  set for the client's `fullScopeAllowed` state: 25 roles for
-  `agentgateway-mcp` while the flag is true (the reviewed 22 including
+  set for the client's `fullScopeAllowed` state: 26 roles for
+  `agentgateway-mcp` while the flag is true (the reviewed 23 including
   `agentgateway-write` plus the flattened `default-roles-edani` composites
   `default-roles-edani`, `offline_access` and `uma_authorization`, which pass
-  the scope filter — measured 2026-09-12, INFRA-46) and exactly the reviewed
-  22 once INFRA-45 has turned the flag off (section 11; the defaults do not
-  travel with the flag off); 7 for `openclaw-readonly-agentgateway` including
-  `cto-office-send`, measured 2026-09-12: with `fullScopeAllowed=false` the
+  the scope filter — measured 2026-09-12 as 25 with the 21-role matrix, INFRA-46)
+  and exactly the reviewed
+  23 once INFRA-45 has turned the flag off (section 11; the defaults do not
+  travel with the flag off); 8 for `openclaw-readonly-agentgateway` including
+  `cto-office-send` (7 until INFRA-380), measured 2026-09-12: with `fullScopeAllowed=false` the
   scope mapping filters the defaults out, so they must never appear there.
 
 Check the hook result without printing any JWT or credential:
@@ -361,13 +372,13 @@ kubectl -n keycloak logs job/keycloak-agentgateway-read-grants -c reconcile-read
 Expected sanitized output:
 
 ```json
-{"reconciler":"agentgateway-read-grants","roles":21,"created":0,"grants_agentgateway_mcp":21,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}
+{"reconciler":"agentgateway-read-grants","roles":22,"created":0,"grants_agentgateway_mcp":22,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}
 ```
 
 For state rollback (authorized incidents only, while the versioned ConfigMap
 still exists), apply `manual/agentgateway-read-grants-rollback-job.yaml`. It
 verifies every role's members are inside the reviewed matrix, then deletes the
-21 roles — deleting a realm role cascades its service-account grants and
+22 roles — deleting a realm role cascades its service-account grants and
 client scope mappings — and verifies nothing remains. Reverting Git alone
 does not remove Keycloak state; the PostSync hook re-creates the matrix on
 the next sync of a revision that still contains the reconciler. The
@@ -378,8 +389,8 @@ in section 11. The two Jobs are order-independent.
 
 ## 11. AgentGateway fullScopeAllowed off (INFRA-23 H3 / INFRA-45)
 
-`fullScopeAllowed` on `agentgateway-mcp` is now owned as `false`: the 22
-token roles (`agentgateway-write` plus the 21 `agentgateway-read:<route>`)
+`fullScopeAllowed` on `agentgateway-mcp` is now owned as `false`: the 23
+token roles (`agentgateway-write` plus the 22 `agentgateway-read:<route>`)
 travel exclusively through the client's explicit realm role scope. The same
 wave-20 PostSync reconciler performs the change fail-closed, in this order:
 
@@ -387,25 +398,25 @@ wave-20 PostSync reconciler performs the change fail-closed, in this order:
    has held the grant since the write-role reconciler; only the mapping was
    missing).
 2. Mints a `client_credentials` token (audience `mcp.lan.e-dani.com`) and
-   requires `realm_access.roles` to be exactly the measured 25 — the reviewed
-   22 plus the three flattened realm defaults (`default-roles-edani`,
+   requires `realm_access.roles` to be exactly the measured 26 — the reviewed
+   23 plus the three flattened realm defaults (`default-roles-edani`,
    `offline_access`, `uma_authorization`), which pass the scope filter while
    `fullScopeAllowed` is still true (INFRA-46 measurement) — BEFORE touching
    the flag: this proves the grants are intact before anything is removed.
 3. Only then sets `fullScopeAllowed=false` and reads the flag back.
-4. Mints again and requires exactly the reviewed 22 with the flag off — the
+4. Mints again and requires exactly the reviewed 23 with the flag off — the
    roles now demonstrably travel through the client role scope alone, and the
    measured defaults are gone (they do not travel with the flag off).
 5. If that post-flip token is off-matrix, the reconciler AUTO-RESTORES
    `fullScopeAllowed=true` before aborting: set, read back, and trusted only
-   after a confirmation mint of the exact 25 again — the flip is the live step
+   after a confirmation mint of the exact 26 again — the flip is the live step
    and the service account moves ~9465 requests per 4 h (measured baseline
    2026-09-12), so an abort must not leave its token broken. Only after the
    confirmed restoration does the hook fail. (When the flag was already false
    and the token is off-matrix, nothing is restored — that is drift or an
    attack, and the run fails closed without mutation.)
-6. Asserts the matrix on every later run (scope = write+21, flag = false,
-   final token = exact 22); anything outside aborts the hook.
+6. Asserts the matrix on every later run (scope = write+22, flag = false,
+   final token = exact 23); anything outside aborts the hook.
 
 Check the hook result (sanitized, no JWT):
 
@@ -436,8 +447,8 @@ reconciler is in the tree its PostSync hook re-asserts `false`. During an
 authorized incident, apply `manual/agentgateway-fullscope-rollback-job.yaml`
 (excluded from Kustomize, same pattern as the grants rollback): it sets the
 flag back to `true`, reads it back, mints a token and fails closed if the
-roles fall outside the reviewed 22 plus the three measured defaults — with
-the flag restored the fully intact token is the exact 25; `agentgateway-write`
+roles fall outside the reviewed 23 plus the three measured defaults — with
+the flag restored the fully intact token is the exact 26; `agentgateway-write`
 plus the defaults is the accepted floor if the read grants were already
 rolled back. Pair it with the `git revert`; until the revert syncs, the next
 PostSync flips the flag back to `false`. Expected sanitized output:
@@ -662,3 +673,250 @@ the commit owning the reconciler Job, so the hook is gone before the next
 sync; the same revert retires the `ROLES.yaml` / `PRINCIPALS.md`
 declarations. Restore it afterwards by reverting that revert.
 
+
+## 17. Write fixture user (`qa-write-sin-vinculo@e-dani.com`, OWU-28-g)
+
+`agentgateway-write-fixture-user-job.yaml` (PostSync wave 25) owns the reverse
+C2 fixture: the human user `qa-write-sin-vinculo@e-dani.com` exists, enabled,
+with the realm role `agentgateway-write`, **no groups** and **no entry** in
+`atlassian-identity-bindings` (fail-closed by absence in the shim). Its
+password lives only in 1Password (vault `k8s-pocharlies`, item
+`keycloak-next-qa-write-sin-vinculo`, fields `username` and `password`) and is
+re-applied to Keycloak on every sync via the ExternalSecret
+`agentgateway-write-fixture-user-credentials` — so a manual password reset in
+Keycloak is drift and gets fixed by the next sync, not the other way round.
+The `agentgateway-write-role.sh` exclusivity audit tolerates exactly this
+second human (by exact username) besides Daniel; its role rollback refuses to
+run while the fixture mapping exists (section 7).
+
+Steady state after sync:
+
+```bash
+kubectl -n keycloak logs job/keycloak-agentgateway-write-fixture-user -c reconcile-write-fixture-user
+# {"realm":"edani","role":"agentgateway-write","username":"qa-write-sin-vinculo@e-dani.com","user_id":"<minted-by-keycloak>","present":true,"created":false,"changed":false}
+```
+
+### Scripted login for QA (C2 reverse, no browser)
+
+Authorization code + PKCE (S256) through the public client
+`agentgateway-chat-mcp` — no secret, no `directAccessGrants`, so the flow is
+the redirect dance: GET the auth URL (login form), POST the form with the
+credentials, read the `code` from the `Location` header WITHOUT following the
+redirect, then exchange at the token endpoint with the verifier:
+
+```bash
+BASE=https://auth-next.e-dani.com/realms/edani
+REDIR='https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback'
+# credentials: 1Password item keycloak-next-qa-write-sin-vinculo (vault
+# k8s-pocharlies, fields username and password). The fixture has NO required
+# actions and carries firstName/lastName (the hook sets them, OWU-76), so the
+# form is the plain password page and no profile page follows it.
+VERIFIER="$(openssl rand -hex 32)"
+CHALLENGE="$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+J="$(mktemp)"; ENC="$(printf '%s' "$REDIR" | sed 's|/|%2F|g; s|:|%3A|g')"
+PAGE=$(curl -s -c "$J" "${BASE}/protocol/openid-connect/auth?response_type=code&client_id=agentgateway-chat-mcp&redirect_uri=${ENC}&scope=openid&code_challenge=${CHALLENGE}&code_challenge_method=S256")
+ACTION=$(printf '%s' "$PAGE" | sed -n 's/.*<form[^>]*action="\([^"]*\)".*/\1/p' | head -n1)
+EXEC=$(printf '%s' "$PAGE" | sed -n 's/.*<input[^>]*name="execution"[^>]*value="\([^"]*\)".*/\1/p' | head -n1)
+LOC=$(curl -s -b "$J" -c "$J" -o /dev/null -D - "$ACTION" \
+  --data-urlencode "username=${USER}" --data-urlencode "password=${PASS}" \
+  --data-urlencode "execution=${EXEC}" --data-urlencode "authenticate=")
+CODE=$(printf '%s' "$LOC" | sed -n 's/^[Ll]ocation:.*[?&]code=\([^&]*\).*/\1/p' | tr -d '\r' | head -n1)
+curl -s "${BASE}/protocol/openid-connect/token" \
+  -d grant_type=authorization_code -d client_id=agentgateway-chat-mcp \
+  -d "code=${CODE}" -d "code_verifier=${VERIFIER}" --data-urlencode "redirect_uri=${REDIR}"
+```
+
+The access token must carry `realm_access.roles ∋ agentgateway-write`; its
+`sub` must NOT appear in `kubectl get cm -n atlassian-mcp
+atlassian-identity-bindings -o yaml`. `jira_create_issue` via
+`/chat-atlassian` then returns the shim's 403 (that is the point of the
+fixture); reads work.
+
+### Password rotation
+
+Edit the `password` field of the 1Password item, then force-sync ONLY this
+ExternalSecret (`argocd`/ESO `force-sync` per the store comment — never
+`rollout restart` ESO, never annotate the store: 1Password quota). The next
+PostSync (or an immediate Job re-run) applies it to Keycloak.
+
+### State rollback
+
+Apply the manual rollback Job (excluded from Kustomize). It removes ONLY the
+fixture's mapping of `agentgateway-write` and DISABLES the user; the role,
+the service-account grant and Daniel's grant stay. Do this BEFORE
+`manual/agentgateway-write-role-rollback-job.yaml` (section 7), which refuses
+to delete the role while the fixture mapping exists:
+
+```bash
+kubectl apply -f platform/keycloak-next/manual/agentgateway-write-fixture-user-rollback-job.yaml
+kubectl -n keycloak wait --for=condition=complete \
+  job/keycloak-agentgateway-write-fixture-user-rollback --timeout=300s
+kubectl -n keycloak logs job/keycloak-agentgateway-write-fixture-user-rollback -c rollback-write-fixture-user
+# {"realm":"edani","role":"agentgateway-write","username":"qa-write-sin-vinculo@e-dani.com","user_id":"<id>","present":false,"created":false,"changed":true}
+kubectl -n keycloak delete job keycloak-agentgateway-write-fixture-user-rollback
+```
+
+Rollback honesty: while `agentgateway-write-fixture-user-job.yaml` stays in
+Kustomize, the next PostSync re-creates/re-enables the user and re-applies the
+grant and password. To retire the fixture permanently (OWU-28 close), git
+revert the commit owning the reconciler Job, mark the `PRINCIPALS.md` entry
+`retirada-propuesta`, and delete the 1Password item; deleting the user from
+the realm itself remains a CTO decision.
+
+## 18. Hermes `enviar` identity (`hermes-enviar`, INFRA-676)
+
+`hermes-enviar-client.yaml` (PostSync, sync-wave 24) reconciles the confidential
+client of the Hermes `enviar` plugin, the only identity that sends or deletes
+Gmail drafts through AgentGateway `/workspace`. Its service account holds
+exactly two realm roles, `agentgateway-read:workspace` (owned by the read-grants
+hook, whose holder allowlist reviews it) and `agentgateway-write:workspace-envio`
+(created by the domain-roles hook, wave 19, which fails the sync if anyone else
+holds it). `agentgateway-write:workspace-borrador` is created in the same hook;
+its only reviewed holder is `secretaria-skirmshop` (draft-only, granted by the
+secretaria identity process once the gateway narrowing of `:workspace` has
+propagated). The client has no interactive flow and no redirect URI,
+`fullScopeAllowed=false`, the `aud-mcp` audience mapper (`mcp.lan.e-dani.com`;
+without it the gateway answers 401 InvalidAudience) and the hook ends by
+minting a token and requiring exactly the two roles and the audience, and
+rejecting the bare `agentgateway-write`.
+
+**Order (fixed by the architect):** k8s-agentgateway-pocharlies#186 (the
+gateway rules that need these roles) merged and propagated → this change →
+INFRA-677 (the `hermes-enviar` identity binding in the gateway) →
+k8s-openclaw-qwen36-pocharlies#564 (plugin and chart). The first reconciliation
+must be a full Argo CD sync (hooks are skipped on a selective resource sync).
+Expect at most a few transient `keycloak-role-drift` `DRIFT:` runs between the
+sync start and wave 24 completing (the catalog names two roles and a principal
+the realm does not have yet); it must be green again on the first run after
+the hooks. Merging the `secretaria-skirmshop` pair of `workspace-borrador`
+opens a second, longer window: from that sync until the INFRA-494 process
+grants the role, `keycloak-role-drift` gives `DRIFT:` every 15 minutes (the
+catalog names a holder the realm does not have yet) and `K8sCronJobFailed`
+alerts Telegram. Grant the role right after the domain-roles hook has synced
+(wave 19) and the next run clears it. The order cannot be reversed: granting
+before the merge fails that hook (`assigned to a user; dedicated-client rollout
+is not ready`).
+
+```bash
+kubectl -n keycloak logs job/keycloak-hermes-enviar-client -c reconcile-client
+# {"client_id":"hermes-enviar","realm_roles":"agentgateway-read:workspace agentgateway-write:workspace-envio","present":true,"fullscope_allowed":false,"token_verified":true}
+```
+
+### Seeding the client secret (after the first sync)
+
+The hook never touches the secret: Keycloak generates it when the client is
+created, and the hook only reads it (GET, never rotating) to mint the
+verification token. Once the client exists, a devops step copies it to the
+1Password item `hermes-kc-enviar`, field `client_secret`, in the vault of the
+five `hermes-kc-secretaria*` items (Connect form: item title + field), from
+where the ExternalSecret `hermes-kc-secretarias` (k8s-openclaw-qwen36-pocharlies,
+added by #564) carries it to Hermes. Rules for the step: read
+`clients/<uuid>/client-secret` through the admin API as the `keycloak-admin`
+skill describes (netrc `0600`, never argv), write it straight into a `0600`
+template for `op item create --template`, delete the template, and never echo
+the value, set `-x` or paste it into a ticket or a transcript. Do it **before**
+#564 merges, so its ExternalSecret finds the item on its first reconcile. A
+later rotation is a `rotacion-semanal` item, not an on-the-spot job.
+
+### State rollback
+
+Apply `manual/hermes-enviar-client-rollback-job.yaml` (excluded from Kustomize).
+It deletes only the client (and with it the service account and both grants);
+both roles stay, owned by their hooks. Verify
+`"client_present":false,"roles_retained":true`, remove the Job, and, in the same
+PR that stops the reconciler, drop the `ROLES.yaml` grantees and the
+`PRINCIPALS.md` entry. While `hermes-enviar-client.yaml` stays in Kustomize the
+next PostSync recreates the client with a NEW secret, so also retire the
+1Password item through the weekly rotation session.
+
+## 19. Postia case agent identities (`correo-agente-lectura`, `correo-ejecutor`, DGX-1218)
+
+`correo-agente-clients.yaml` (two PostSync Jobs, sync-wave 24) reconciles the
+two confidential clients of the Postia case agent with one script,
+`scripts/correo-agente-client.sh`, whose reviewed role set is fixed per
+`CLIENT_ID`; the flow itself is `keycloak-scoped-client-lib.sh`, shared with
+`hermes-enviar`:
+
+- `correo-agente-lectura`: `agentgateway-read:` `brain`, `picqer`, `shopify`,
+  `shopify-admin`, `skirmshop-plugins`, `workspace`, and no `agentgateway-write*`
+  at all (security condition 3 of DGX-1209).
+- `correo-ejecutor`: `agentgateway-write:correo-ejecutor` (created by the
+  domain-roles hook, wave 19, which fails the sync if anyone else holds it) and
+  `agentgateway-read:shopify-admin` (the `/shopify-admin` route gate). Never the
+  bare `agentgateway-write`.
+
+The read roles' holder allowlists (read-grants hook, wave 20) review both
+service accounts. Same hardening as section 18: service account only,
+`fullScopeAllowed=false`, `aud-mcp`, exact minted token.
+
+**Order:** k8s-agentgateway-pocharlies#221 (the per-tool rules that need
+`agentgateway-write:correo-ejecutor`) merged → this change, by a full Argo CD
+sync → secrets to 1Password (below) → the `/workspace` identity binding of
+`service-account-correo-agente-lectura` (its `sub` only exists after this sync;
+security 37075: only the core's mailboxes, in the same GitOps change as the
+mailbox) → the receiver on the x86 (DGX-1218 PR-1/PR-3). Expect transient
+`keycloak-role-drift` `DRIFT:` runs until wave 24 finishes.
+
+```bash
+kubectl -n keycloak logs job/keycloak-correo-agente-lectura-client -c reconcile-client
+kubectl -n keycloak logs job/keycloak-correo-ejecutor-client -c reconcile-client
+# {"client_id":"correo-ejecutor","realm_roles":"agentgateway-read:shopify-admin agentgateway-write:correo-ejecutor","present":true,"fullscope_allowed":false,"token_verified":true}
+```
+
+### Seeding the client secrets (after the first sync)
+
+Same rules as section 18: the hook never touches the secrets. Once the clients
+exist, a devops step copies each one to 1Password (`llavero`), items
+`correo-kc-agente-lectura` and `correo-kc-ejecutor`, field `client_secret`,
+reading `clients/<uuid>/client-secret` through the admin API (netrc `0600`,
+never argv, never echoed). The receiver on the x86 reads them by reference.
+
+### State rollback
+
+Run the reconciler with `MODE=rollback` and the client's `CLIENT_ID` (same pod
+spec as the Job, as in section 18). It deletes the client and its grants; the
+roles stay. Then drop the `ROLES.yaml` grantees and the `PRINCIPALS.md` entry in
+the PR that removes the Job, and retire the 1Password item through the weekly
+rotation session.
+
+## 20. ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
+
+The reconciler `agentgateway-dani-login-client-job.yaml` (PostSync wave 25,
+`scripts/agentgateway-dani-login-client.sh`) owns the confidential ROPC test
+client `dani-login-test` (realm `edani`): direct access grants on, every other
+flow off, no redirect URIs, `fullScopeAllowed=false`, TTL 900 s with refresh
+tokens off (OWU-100 condition 3), the audience mapper `aud-mcp` to
+`mcp.lan.e-dani.com`, and a realm scope mapping that EMITS exactly
+`agentgateway-write` (it concedes nothing; the role belongs to
+`agentgateway-write-role.sh`). It exists so QA can exchange Daniel's password
+for a short-lived token and measure C1, C2 positive and C4 of OWU-28 live. The
+client has no service account, so it is absent from `PRINCIPALS.md` and
+`ROLES.yaml` by design (permanent drift otherwise).
+
+Two ExternalSecrets, never one (the lesson of #231):
+
+- `agentgateway-dani-login-client-secret` ← 1Password item
+  `keycloak-next-dani-login-test`, field `client_secret` (vault
+  `k8s-pocharlies`). Seeded by `security` BEFORE the merge; the reconciler
+  re-applies it on every sync (Keycloak == vault). If the item goes missing the
+  ExternalSecret errors and the Job fails closed — repair now (force-sync), not
+  a rotation.
+- `agentgateway-dani-login-password` ← item `keycloak-next-dani-login`, field
+  `password`. Seeded ONLY with Daniel's own gesture (consent registered in
+  OWU-100). Until then this ExternalSecret reports error and the Secret is
+  absent: expected state, not an incident. Nothing in the PostSync path
+  references it, so the k8s-infra sync stays green regardless. QA's scripted
+  ROPC exchange (OWU-28 P2) reads this Secret at measurement time and logs the
+  token out afterwards.
+
+### State rollback
+
+Apply `manual/agentgateway-dani-login-client-rollback-job.yaml` (excluded from
+Kustomize). It deletes ONLY the client — the role, its holders, every other
+client and both ExternalSecrets stay untouched (OWU-100 condition 4) — and
+needs no credential of its own. Verify `"client_id":"dani-login-test",
+"present":false`, remove the Job. To restore, git revert the commit owning the
+reconciler and let the next PostSync re-apply it. While the manifest stays in
+Kustomize the next PostSync recreates the client with the secret of item A, so
+retire item A through the weekly rotation session only when the reconciler is
+also retired.

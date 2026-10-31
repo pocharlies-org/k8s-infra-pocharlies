@@ -2,6 +2,9 @@
 # admin.skirmshop.es is the only canonical hostname outside e-dani.com, so it
 # needs its own LAN-side certificate. Public traffic keeps using Traefik Edge;
 # AdGuard sends the same hostname to Traefik LAN for office/tailnet clients.
+# The Control Panel asks for the same Keycloak login as on the edge, so an
+# admin on the LAN is an admin (SKIRM-301); the no-login operator panel is
+# admin.lan.skirmshop.es.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -29,15 +32,22 @@ spec:
   entryPoints: [websecure]
   routes:
     - kind: Rule
+      priority: 600
+      match: Host(`admin.skirmshop.es`) && PathPrefix(`/oauth2`)
+      services:
+        - {name: oauth2-proxy-skirmshop, namespace: keycloak, port: 4180}
+    - kind: Rule
       priority: 700
       match: Host(`admin.skirmshop.es`) && PathPrefix(`/api/panel`)
       middlewares:
-        - {name: admin-lan-panel-operator-identity, namespace: skirmshop}
+        - {name: sso-skirmshop-chain, namespace: keycloak}
       services:
         - {name: control-panel-bff, namespace: skirmshop, port: 80}
     - kind: Rule
       priority: 500
       match: Host(`admin.skirmshop.es`) && Path(`/`)
+      middlewares:
+        - {name: sso-skirmshop-chain, namespace: keycloak}
       services:
         - {name: control-panel-ui, namespace: skirmshop, port: 80}
     - kind: Rule
@@ -111,6 +121,8 @@ spec:
     - kind: Rule
       priority: 10
       match: Host(`admin.skirmshop.es`) && PathPrefix(`/`)
+      middlewares:
+        - {name: sso-skirmshop-chain, namespace: keycloak}
       services:
         - {name: control-panel-ui, namespace: skirmshop, port: 80}
   tls:

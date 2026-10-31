@@ -1,0 +1,86 @@
+---
+# Egreso del scale set arc-skills-eval (SC-3635, security 2026-10-29).
+#
+# QUE PROTEGE. Los runners de este pool ejecutan SKILLs EXTERNAS — codigo de
+# terceros — dentro de DinD. El sandbox de evaluacion corre con
+# `docker run --network none`, pero la contencion que importa es la RED: si la
+# fuga atraviesa el contenedor anidado y llega al pod del runner, no debe
+# poder hablar con los control planes (ks5-cp-*, API en 100.107.21.89:6443),
+# con la LAN ni con ningun servicio del cluster salvo LiteLLM.
+#
+# PERIMETRO (union de las reglas de abajo, y nada mas):
+#   - DNS (kube-system:53): sin esto no resuelve nada y todo lo demas da igual.
+#   - LiteLLM (ns litellm, :4000): el motor de evaluacion y el juez hablan con
+#     la pasarela; es el UNICO destino interno permitido.
+#   - Internet publico: GitHub (api.github.com, *.githubusercontent.com) y los
+#     registries que usa el runner. La cola de Actions es un sondeo saliente
+#     del runner: sin esta regla el job no arranca siquiera.
+#
+# POR QUE "INTERNET PUBLICO" Y NO LOS CIDRs DE GITHUB. La lista publicada de
+# GitHub (meta.github.com/meta.json) son ~300 bloques IPv4 que cambian sin
+# aviso: fijarlos aqui exige un mecanico de renovacion y su fallo es un runner
+# encolado sin CI. El objetivo de seguridad — que la fuga no alcance ks5-cp-*,
+# la LAN ni el resto del cluster — se cumple excluyendo las redes privadas y
+# la tailnet; lo que sobra (cualquier IP publica) es exfiltrable igual con la
+# clave de LiteLLM, que ademas va restringida de modelos y con tope.
+#
+# OJO al orden: una NetworkPolicy de egreso es una UNION de permisos; no
+# existen las reglas de denegacion. Lo que no este aqui, no pasa.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-skills-eval-egress
+  namespace: arc-skills-eval
+  annotations:
+    e-dani.com/motivo: >-
+      Runners de evaluacion de skills externas (codigo de terceros en DinD,
+      SC-3635): solo DNS, LiteLLM:4000 e internet publico (GitHub). Sin esto,
+      una fuga del sandbox alcanza la API de ks5-cp y toda la LAN.
+spec:
+  # Toda pod del namespace (runner + sidecar dind). No hay pods de otra cosa:
+  # el namespace es exclusivo del scale set.
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+
+    # LiteLLM. kube-router evalua el trafico contra la ClusterIP del Service
+    # antes que las reglas por namespace (probado con arc-openclaw, 22-08-2026:
+    # Harbor por nombre se rechazaba pese a su namespace permitido), y tambien
+    # comprueba el destino tras el DNAT (el pod del backend). Se permiten las
+    # dos vistas, solo por el puerto 4000: el Service CIDR 10.43/16 no abre
+    # nodos ni tailnet, y el namespace litellm solo sirve en ese puerto.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 4000 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: litellm
+      ports:
+        - { protocol: TCP, port: 4000 }
+
+    # Internet publico (GitHub y registries), MENOS lo privado: el cluster
+    # (10/8, incluidos Service/Pod CIDRs), la LAN (192.168/16 y 172.16/12), la
+    # tailnet — aqui viven los ks5-cp-* con la API :6443 y el x86— y el
+    # link-local/metadata. La API del cluster por nombre (kubernetes.default)
+    # cae tambien en 10.43/16 y no se abre: el runner no habla con el API.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16

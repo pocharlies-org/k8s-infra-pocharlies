@@ -4,7 +4,8 @@
 #
 # NOT a standalone script: it is sourced with `.` by
 #   agentgateway-domain-roles.sh, chat-agentgateway-client.sh,
-#   agentgateway-chat-mcp-client.sh and jarvis-echo-client.sh,
+#   agentgateway-chat-mcp-client.sh, jarvis-echo-client.sh,
+#   hermes-enviar-client.sh and correo-agente-client.sh,
 # which mount it in their ConfigMap next to the entrypoint. Every helper
 # resolves its configuration (KCADM, ADMIN_CONFIG, CLIENT_CONFIG, KEYCLOAK_URL,
 # REALM, CLIENT_ID, CLIENT_UUID, MAPPER_NAME, AGENTGATEWAY_AUDIENCE) at CALL
@@ -13,51 +14,15 @@
 # wording and the fullScopeAllowed flip order stay in each reconciler.
 #
 # This file must never execute anything at source time — definitions only.
-
-# Uniform error channel: one line on stderr, exit 1.
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+#
+# The bootstrap (cleanup trap, fail, nonempty_lines, line_count, login_admin,
+# kget) is NOT defined here: it is kc-admin-common.sh, sourced FIRST by every
+# script that sources this file. The helpers below call it.
 
 # Machine-readable progress line for the Job log; CLIENT_ID is the sourcing
 # reconciler's own identity.
 progress() {
   printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
-}
-
-# kcadm csv output pads blank lines; strip them before counting or grepping.
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-# Number of nonempty lines on stdin.
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-# Retry the master-realm bootstrap login up to 30 x 5s: right after a sync
-# Keycloak may still be rolling and the hook must not die on that alone.
-login_admin() {
-  login_attempt=1
-  while [ "${login_attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    login_attempt=$((login_attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-# kcadm get against the admin config, in the reconciler's realm.
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
 }
 
 # Client uuid by CLIENT_ID, or empty when absent (never fatal).
@@ -137,6 +102,25 @@ upsert_audience_mapper() {
 role_scope_has_direct_role() {
   kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
     --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "$1"
+}
+
+# Map ONE realm role into the client role scope, created only when absent and
+# re-read after to fail loud. $1 = role name. With fullScopeAllowed=false,
+# Keycloak 26 emits in the token only the realm roles that are BOTH in this
+# client's realm scope mapping AND actually held by the user; the mapping
+# itself grants nothing to anyone. Which roles belong in the scope (and the
+# check that nothing else does) is policy and stays in the reconciler.
+ensure_role_in_client_scope() {
+  if ! role_scope_has_direct_role "$1"; then
+    role_id="$(kget "roles/$1" --fields id --format csv --noquotes | nonempty_lines)"
+    [ -n "${role_id}" ] || fail "$1 id is empty"
+    role_body="$(printf '[{"id":"%s","name":"%s"}]' "${role_id}" "$1")"
+    "${KCADM}" create "clients/${CLIENT_UUID}/scope-mappings/realm" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -b "${role_body}" >/dev/null 2>&1 || \
+      fail "failed to map $1 into the client role scope"
+    unset role_body role_id
+  fi
+  role_scope_has_direct_role "$1" || fail "client role scope is missing $1"
 }
 
 # The service account Keycloak derives from a confidential client; its id and

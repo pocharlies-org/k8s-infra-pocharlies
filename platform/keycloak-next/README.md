@@ -11,12 +11,16 @@ redirects here for old bookmarks.
   shared CNPG cluster `databases/postgres-shared`; credentials remain sourced
   from 1Password item `keycloak-next-postgres` (vault `k8s-pocharlies`).
 - `auth-next.e-dani.com/oauth2/*` serves oauth2-proxy.
-- Apps that do not support OIDC use the Traefik middlewares in the `keycloak`
-  namespace:
-  - `sso-forward-auth`
-  - `sso-errors`
-  - `sso-chain`
-- Apps with native OIDC should use Keycloak directly.
+- **One realm per web, always separate (SC-2822):** every web gets its own
+  realm, oauth2-proxy and `sso-<realm>-chain`, declared in
+  `platform/keycloak-sso/realms.yaml`. The rule and how to add a web:
+  `docs/sso-por-app.md`. This directory keeps the `edani` realm (AgentGateway and
+  machine identities) and the legacy `sso-forward-auth`/`sso-errors`/`sso-chain`
+  of the webs not migrated yet; no new web goes on them.
+- The PostSync reconciler scripts in `scripts/` share one bootstrap
+  (`scripts/kc-admin-common.sh`: admin login with retries, `kget`,
+  `nonempty_lines`, cleanup trap). Hooks source it via
+  `. "${0%/*}/kc-admin-common.sh"`; change it only there, never in a hook.
 - Traefik Edge must watch the `keycloak` namespace. This is configured in
   `/home/dibanez/k8s/k8s-infra-pocharlies/networking/traefik-edge/values.yaml`.
 
@@ -81,8 +85,8 @@ items and Google OAuth client exist:
 4. Create a confidential client for oauth2-proxy and add a groups mapper.
 5. Test a protected LAN or public route that references `keycloak/sso-chain`.
 
-Protected services should reference the `keycloak/sso-chain` Traefik middleware
-or the centralized `https://auth-next.e-dani.com/oauth2/auth` endpoint.
+New protected services do not reference `keycloak/sso-chain`: they get their
+own realm and chain (`docs/sso-por-app.md`).
 
 ## PostgreSQL compartido
 
@@ -128,15 +132,77 @@ and the AgentGateway CEL policy. Do not sync this hook independently while the
 shared OpenClaw gateway still admits operators. See `RUNBOOK.md` for the ordered
 gate and explicit state rollback.
 
-`agentgateway-domain-roles-job.yaml` creates the twelve reviewed domain roles
+`agentgateway-domain-roles-job.yaml` creates the fourteen reviewed domain roles
 without assigning them (`agentgateway-write:dgx-control` joined inert in
 INFRA-249: no allowlist entry, so its three gated tools stay denied). The hook fails if one is composite, mapped to a group,
-or held by any user other than the single reviewed service account in its
-immutable `ALLOWED_SERVICE_ACCOUNTS` map (today the six chat pairs:
-`:media`, `:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
-`=service-account-chat-agentgateway`). Every other domain role stays unassigned
+or held by any user other than the reviewed service accounts in its
+immutable `ALLOWED_SERVICE_ACCOUNTS` map: the six chat pairs (`:media`,
+`:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them
+`=service-account-chat-agentgateway`), the eight pairs of the four general
+Hermes secretaria profiles on `:social` and `:workspace` (SC-2005), and, since
+INFRA-676, `:workspace-envio=service-account-hermes-enviar` and
+`:workspace-borrador=service-account-hermes-secretaria-skirmshop` (draft-only
+role, granted by the secretaria identity process after the `:workspace`
+narrowing propagated). Every other domain role stays unassigned
 until a dedicated client and a new map entry are reviewed together; the global
 `agentgateway-mcp` client is never granted these roles by this hook.
+
+## AgentGateway write fixture user (`qa-write-sin-vinculo@e-dani.com`, OWU-28-g)
+
+`agentgateway-write-fixture-user-job.yaml` (PostSync wave 25, same wave as the
+Daniel grant, after the write-role hook that owns the role) owns the reverse
+C2 fixture of OWU-28: the human test user
+`qa-write-sin-vinculo@e-dani.com` exists, is enabled, holds the realm role
+`agentgateway-write`, belongs to **no group**, and has **no entry** in
+`atlassian-identity-bindings` (ns `atlassian-mcp`) — that binding file is
+fail-closed by absence, so the negative is by construction and the repo
+needs no edit. It is the negative half of the C2 matrix: with the role and
+without an Atlassian link, `/chat-atlassian` reads but every write returns
+403 (never Daniel's token). Unlike the Daniel grant (which pins a subject
+and never creates users), this hook CREATES the user — the id is minted by
+Keycloak, so the hook resolves it by **exact username** — and re-applies the
+password on every sync from its 1Password item
+(`keycloak-next-qa-write-sin-vinculo` in vault `k8s-pocharlies`, fields
+`username` and `password`) through the ExternalSecret
+`agentgateway-write-fixture-user-credentials` (`refreshPolicy: OnChange`), so
+Keycloak never drifts from 1Password (the SC-1635/SC-1645 incident class).
+The password reaches `kcadm` only via the `KC_CLI_PASSWORD` environment of
+one call — never argv, stdout or a file. The exclusivity audit of
+`agentgateway-write-role.sh` tolerates exactly this second human holder (by
+exact username) besides Daniel; any third user or any group still fails
+closed, and the role rollback refuses to run while the fixture mapping
+exists (undo it first with
+`manual/agentgateway-write-fixture-user-rollback-job.yaml`, RUNBOOK section
+17). Owner QA; retire it when OWU-28 closes (rollback Job + `retirada-propuesta`
+in `PRINCIPALS.md`). Scripted login for QA: authorization code + PKCE S256
+through the public client `agentgateway-chat-mcp` (redirect
+`https://chat.e-dani.com/oauth/clients/mcp:chat-atlassian/callback`), no
+`directAccessGrants` — see RUNBOOK section 17.
+
+**Security condition (OWU-28 ruling, parallel to OWU-80 (b)):** this widens
+the human holder set of `agentgateway-write` beyond Daniel; `security`
+dictaminates before the merge (temporary, no groups, no Atlassian binding,
+retirable). The PR may open in parallel; the merge waits for its SEGURO.
+
+## Hermes `enviar` identity (`hermes-enviar`)
+
+`hermes-enviar-client.yaml` (PostSync, wave 24) reconciles the confidential
+client of the Hermes `enviar` plugin: service account only, no redirect URI,
+`fullScopeAllowed=false`, the `aud-mcp` audience mapper and exactly two realm
+roles, `agentgateway-read:workspace` and `agentgateway-write:workspace-envio`
+(the permission to send or delete Gmail drafts, held by nobody else). It never
+manages the client secret; `RUNBOOK.md` section 18 covers the order of the
+change, seeding the secret into 1Password and rollback.
+
+## Postia case agent identities (`correo-agente-lectura`, `correo-ejecutor`)
+
+`correo-agente-clients.yaml` (two PostSync Jobs, wave 24, one script) reconciles
+the two clients of the Postia case agent (DGX-1218): `correo-agente-lectura`
+with only the six `agentgateway-read:<route>` roles of its profiles and no
+`agentgateway-write*`, and `correo-ejecutor` with
+`agentgateway-write:correo-ejecutor` (held by nobody else) and
+`agentgateway-read:shopify-admin`. Same hardening as `hermes-enviar`; the
+secrets are seeded into 1Password after the sync (`RUNBOOK.md` section 19).
 
 ## Chat identity (`chat-agentgateway`)
 
@@ -286,6 +352,40 @@ for users who already hold them. The mapping grants nothing to anyone; the
 role and its holders belong to `agentgateway-write-role.sh` and
 `agentgateway-write-grant-daniel.sh`. State rollback deletes the client
 (`manual/agentgateway-chat-mcp-client-rollback-job.yaml`, excluded from Argo).
+
+## ROPC test client `dani-login-test` (OWU-75, OWU-28 P1, ruling OWU-100)
+
+`agentgateway-dani-login-client-job.yaml` reconciles the confidential client
+`dani-login-test` (realm `edani`), the only authorized way (security ruling
+OWU-100) for QA to exchange Daniel's password for a short-lived token and
+measure C1, C2 positive and C4 of OWU-28 live. It is ROPC-only:
+`directAccessGrantsEnabled=true` with standard/implicit flows, public-client
+mode and service accounts all off, `fullScopeAllowed=false` and no redirect
+URIs. OWU-100 condition 3 (session cap) is pinned as
+`attributes."access.token.lifespan"=900` and
+`attributes."use.refresh.tokens"="false"` — Keycloak emits refresh tokens by
+default, so without the second pin a test session would silently outlive its
+15-minute cap. The house audience mapper `aud-mcp` puts
+`mcp.lan.e-dani.com` in the access token (the gateway's `/chat-atlassian`
+audience), and the realm scope mapping EMITS exactly `agentgateway-write`
+(#190 pattern): the mapping concedes nothing; the role and its holders belong
+to `agentgateway-write-role.sh` and `agentgateway-write-grant-daniel.sh`. The
+client gets no role of its own and no route allowlist (OWU-100 condition 4),
+so it is absent from `PRINCIPALS.md` (no service account) and from
+`ROLES.yaml`.
+
+Credentials are split across two ExternalSecrets (ruling hallazgo 2, the
+lesson of #231): ES A (`agentgateway-dani-login-client-secret`, 1Password
+item `keycloak-next-dani-login-test`, field `client_secret`, seeded by
+security BEFORE the merge) feeds the reconciler Job, which re-applies the
+secret on every sync; ES B (`agentgateway-dani-login-password`, item
+`keycloak-next-dani-login`, field `password`) carries Daniel's password,
+seeded only with his own gesture, and is consumed by QA's scripted ROPC
+exchange — never by the Job. While ES B's item is absent its ExternalSecret
+stays in error: expected state, not an incident (RUNBOOK section 20). State
+rollback deletes only the client
+(`manual/agentgateway-dani-login-client-rollback-job.yaml`, excluded from
+Argo).
 
 ## AgentGateway MCP access token TTL (`agentgateway-mcp`)
 

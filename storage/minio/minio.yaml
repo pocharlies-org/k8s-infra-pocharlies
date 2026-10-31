@@ -33,14 +33,25 @@ spec:
       # Pin to sauvage (edge HDD RAID, 2.6T free)
       nodeSelector:
         kubernetes.io/hostname: sauvage
+      # INFRA-992: MinIO es el plano de datos de Harbor y de los backups; un
+      # DiskPressure en sauvage no puede desalojarlo (deja al clúster entero en
+      # ImagePullBackOff). Crítico + tolera la presión para volver a arrancar.
+      priorityClassName: system-cluster-critical
       tolerations:
         - key: role
           operator: Equal
           value: edge
           effect: NoSchedule
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: minio
-          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # DGX-1336: espejo público en GHCR (digest sha256:ac59a61ad2ae6ec82be02baedbf37916425877c3ac422caf9d237f629ca723d8).
+          # No puede ser harbor.lan: los blobs de Harbor viven en este MinIO — sin
+          # MinIO no hay Harbor y la imagen no se puede tirar (dependencia circular).
+          # Docker Hub ya no sirve este tag (INFRA-997); el pull es anónimo, sin pull secret.
+          image: ghcr.io/pocharlies-org/minio:RELEASE.2025-04-22T22-12-26Z
           args:
             - server
             - /data

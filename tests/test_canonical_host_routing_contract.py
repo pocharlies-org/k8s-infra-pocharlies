@@ -66,7 +66,6 @@ CANONICAL_LAN_HOSTS = {
     "synapse.e-dani.com",
     "teslamate.e-dani.com",
     "uriel.e-dani.com",
-    "vault.e-dani.com",
     "vm.e-dani.com",
     "whatsapp-pro.e-dani.com",
     "whatsapp.e-dani.com",
@@ -162,6 +161,33 @@ def test_admin_skirmshop_has_a_dedicated_lan_certificate_and_route():
     }
 
 
+def test_admin_skirmshop_panel_on_lan_asks_the_same_login_as_the_edge():
+    # SKIRM-301: without it the LAN got the fixed lan-operator identity, so an
+    # admin never saw «Mover» nor the Hermes profile that moves.
+    route = ingress(
+        "networking/traefik-lan/admin-skirmshop-canonical-lan.yaml",
+        "admin-skirmshop-canonical-lan",
+    )
+    rules = {rule["match"]: rule for rule in route["spec"]["routes"]}
+    sso = {"name": "sso-skirmshop-chain", "namespace": "keycloak"}
+    for match in (
+        "Host(`admin.skirmshop.es`) && PathPrefix(`/api/panel`)",
+        "Host(`admin.skirmshop.es`) && Path(`/`)",
+        "Host(`admin.skirmshop.es`) && PathPrefix(`/`)",
+    ):
+        assert rules[match]["middlewares"] == [sso]
+    oauth2 = rules["Host(`admin.skirmshop.es`) && PathPrefix(`/oauth2`)"]
+    assert oauth2["services"] == [
+        {"name": "oauth2-proxy-skirmshop", "namespace": "keycloak", "port": 4180}
+    ]
+    assert "middlewares" not in oauth2
+    assert all(
+        middleware["name"] != "admin-lan-panel-operator-identity"
+        for rule in route["spec"]["routes"]
+        for middleware in rule.get("middlewares", [])
+    )
+
+
 def test_edge_watches_every_namespace_used_by_canonical_routes():
     route_documents = documents(
         "networking/traefik-edge/canonical-hosts-public.yaml"
@@ -184,3 +210,69 @@ def test_external_dns_honors_canonical_route_exclusions():
     assert values["annotationFilter"] == (
         "external-dns.alpha.kubernetes.io/exclude notin (true)"
     )
+
+
+def test_whatsapp_lan_hosts_ask_sso_except_pods_and_keep_qr_and_public_deny_on_top():
+    # whatsapp-pro (SKIRM-116, acotada a /api/v1 por SC-2843): pods
+    # (10.42.0.0/16) reach the connector's signed API without SSO; everything
+    # else — including pods — goes through Keycloak. Explicit priorities,
+    # because the rule-length default would rank the ClientIP rule above /qr.
+    route = ingress(
+        "networking/traefik-lan/canonical-hosts-lan.yaml",
+        "canonical-hosts-lan",
+    )
+    host = "whatsapp-pro.e-dani.com"
+    rules = {
+        rule["match"]: rule
+        for rule in route["spec"]["routes"]
+        if f"Host(`{host}`)" in rule["match"]
+    }
+    pods = rules[
+        f"Host(`{host}`) && ClientIP(`10.42.0.0/16`) && PathPrefix(`/api/v1`)"
+    ]
+    rest = rules[f"Host(`{host}`)"]
+    qr = rules[f"Host(`{host}`) && PathPrefix(`/qr`)"]
+    public = rules[f"Host(`{host}`) && PathPrefix(`/api/public`)"]
+
+    assert "middlewares" not in pods
+    assert [m["name"] for m in rest["middlewares"]] == ["sso-chain"]
+    assert [m["name"] for m in qr["middlewares"]] == ["sso-chain"]
+    assert [m["name"] for m in public["middlewares"]] == [
+        "connector-public-api-deny"
+    ]
+    assert qr["priority"] > pods["priority"] > rest["priority"]
+    assert public["priority"] > pods["priority"]
+    assert pods["services"] == rest["services"] == qr["services"]
+
+
+def test_whatsapp_host_lan_is_the_app_no_direct_connector_rule():
+    # SC-2760: whatsapp.e-dani.com is Jordi's WhatsApp app on the LAN (its own
+    # OIDC login, no sso-chain — that would double-login). SC-2843 removed the
+    # ClientIP(10.42.0.0/16) && /api/v1 -> connector exception: nothing calls
+    # the personal connector through this host (the app and the synapse bridge
+    # proxy it via in-cluster DNS, the adapter uses the -pro host), and
+    # ClientIP is not a reliable discriminator at this VIP — traffic from the
+    # traefik node itself arrives SNAT-ed to 10.42.0.1, so the rule exposed the
+    # connector's internal API without the app session to everything local.
+    route = ingress(
+        "networking/traefik-lan/canonical-hosts-lan.yaml",
+        "canonical-hosts-lan",
+    )
+    rules = {
+        rule["match"]: rule
+        for rule in route["spec"]["routes"]
+        if "Host(`whatsapp.e-dani.com`)" in rule["match"]
+    }
+    app = rules["Host(`whatsapp.e-dani.com`)"]
+    public = rules["Host(`whatsapp.e-dani.com`) && PathPrefix(`/api/public`)"]
+
+    assert "middlewares" not in app
+    assert app["services"] == [
+        {"name": "whatsapp-app", "namespace": "whatsapp-mcp", "port": 3080}
+    ]
+    assert [m["name"] for m in public["middlewares"]] == [
+        "connector-public-api-deny"
+    ]
+    assert public["priority"] > app["priority"]
+    assert not [m for m in rules if "ClientIP" in m]
+    assert "Host(`whatsapp.e-dani.com`) && PathPrefix(`/qr`)" not in rules

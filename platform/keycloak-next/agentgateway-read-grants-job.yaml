@@ -10,13 +10,13 @@ metadata:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     # Must complete before the openclaw-readonly reconciler (wave 21), whose
-    # minted-token assertion expects the six read roles to already travel in
+    # minted-token assertion expects the seven read roles to already travel in
     # that client's tokens.
     argocd.argoproj.io/sync-wave: "20"
 spec:
   backoffLimit: 1
   # kcadm starts a JVM for every admin request. The steady-state reconcile
-  # issues ~165 sequential calls for the 21-role matrix plus FOUR token mints
+  # issues ~173 sequential calls for the 22-role matrix plus FOUR token mints
   # since INFRA-45 (pre-flip, post-flip, final, openclaw; the auto-restore
   # abort path stops at three). Measured ~630s to the mint path at the 500m
   # CPU limit on 2026-09-12 (INFRA-44), which blew through the previous 900s

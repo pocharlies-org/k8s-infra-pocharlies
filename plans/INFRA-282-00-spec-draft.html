@@ -1,0 +1,298 @@
+Rol: pm · Fecha: 2026-09-30T03:34:53Z · Sesión: 0fba174a-7122-4b22-877c-2a847c5e854d · Estado: LISTO
+
+# INFRA-282 — Galán propuesta: cerrar los 9 huecos de la auditoría
+
+Repo: pocharlies-org/dgx-infra (tronco `master`), path `k8s/apps/galan-proposal`
+Tamaño: 6 historias (3 de construcción, revisión UX, despliegue, qa) · un solo repo · sin Application de ArgoCD
+
+## Objetivo
+
+Que la propuesta que Alberto puede abrir en cualquier momento (galan.e-dani.com) no tenga nada que él pueda
+pillar leyendo: ningún módulo parece cobrable dos veces, la caja de la IA se entiende a la primera, fases y
+packs cuadran entre sí, la calculadora respeta las dependencias y «Vaciar» se queda vacío, el módulo 4 dice
+cuántas horas ahorra, las dos cuentas de la bolsa salen a mano, se imprime o guarda en PDF sin el panel
+encima, las 32 pantallas por módulo están también en `fases.html`, y el documento explica migración, qué se
+espera de él, soporte y salida, protección de datos y una referencia. Además los precios pasan a tener
+una fuente única vigilada por CI. Sin cambios de precio.
+
+## Estado medido hoy (30-09, 02:20Z)
+
+- Código real en `pocharlies-org/dgx-infra` (`k8s/apps/galan-proposal`). En `k8s-infra-pocharlies` NO existe ese
+  path (`ls k8s/apps/galan-proposal` → «No such file or directory»).
+- `origin/master` = `c6736cb4` = remoto (`git ls-remote`). Último cambio de la app: `9b323690` (#697, INFRA-279, 27-09).
+  `git diff --stat origin/master -- k8s/apps/galan-proposal` → vacío. Ningún PR abierto toca la app.
+- Vivo (`kubectl -n traefik-edge get deploy`): `galan-site` 2/2 `harbor.e-dani.com/homelab/galan-proposal-site:v12`,
+  `galan-chat` 2/2 `...-chat:v7`; coincide con `k8s.yaml` (líneas 32 y 59). `kubectl get applications -n argocd | grep galan` → nada.
+- `site/proposal.html` se GENERA: `python3 mockups/patch_proposal.py` desde `mockups/proposal.base.html` → medido
+  byte a byte igual al commiteado (`cmp` sin diferencias). `site/fases.html` se genera con `mockups/build.py`.
+- Comprobador de este spec contra el árbol de hoy: `RESULTADO: NO PASA (1/12)` — solo C0 (precios intactos) pasa.
+
+### Premisas de la auditoría, una a una (grep medido)
+
+| # | premisa | medido | veredicto |
+|---|---|---|---|
+| 1 | m12 y m20 dicen lo mismo | l.622 m12 «quién lleva días sin escribir… a quién le falta el check»; l.706 m20 «quién lleva dos semanas sin aparecer, quién no ha entregado el último check» | confirmado |
+| 1 | cobros en m14 y m20 | l.644 m14 «sin que se lo tengas que recordar»; l.706 m20 «recordatorios de cobro» | confirmado |
+| 1 | inscripciones contadas 3 veces | l.367 «Mesa de inscripciones» (hoy/con el sistema), l.414 Vista del ayudante «Gestiona inscripciones», l.674 m17 «mesa de inscripciones», l.682 m18 «lleva inscripciones» | confirmado (4 menciones) |
+| 1 | ninguna línea diferencia | `grep -c 'a diferencia'` → 3, ninguna en tarjetas de módulo (l.425 kicker, l.893, l.914) | confirmado |
+| 2 | caja IA en 4 sitios | l.395 Vista del entrenador, l.477 m1, l.500 m3 «caja de preguntas ahí mismo», l.606 m10 «le preguntas lo que sea de ese cliente» | confirmado |
+| 2 | m1 «párrafo entero en negrita» | solo va en negrita la frase de entrada «Y en cada apartado, un sitio para preguntarle a la IA.» | parcial |
+| 2 | «aprende» repetido 4 veces | 5: l.448 Brain «Y aprende de ti», l.501 m3, l.574 pie del gráfico de adherencia «aprende de tu respuesta», l.614 m11 «guarda tus correcciones», l.630 m13 «afina el criterio» | peor: 5 |
+| 3 | Arranque incluye m8 (fase B) | `PACKS[0].ids = [1, 2, 3, 4, 8]`; plan: A = 1-4 «primeras 3 semanas», B = 8 y 9 | confirmado |
+| 3 | Equipo Galán salta fases | ids 1,2,3,4,5,6,8,9,10,11,12,14,20 → A, B, C, D sin 7, E sin 17 y 18, F sin 13 | confirmado |
+| 3 | nombre «Equipo Galán» choca | l.669 el grupo de los módulos 17-18 se titula «Equipo y competición · el Equipo Galán» y el pack «Equipo Galán» (l.860, 926, 1043) no los lleva | confirmado |
+| 4 | bug de «Vaciar» | l.1123 tal cual: `if (!Object.keys(saved).length) { setSel(PACKS[1].ids); } else { render(); }`; `render()` guarda `{}` (l.1115). En el navegador: Vaciar + recargar → «13 de 23» | confirmado |
+| 4 | 11 y 16 sueltos | `mod-1` no está clavado (`disabled=false`); marcar 16 no marca 15 («14 de 23» desde Equipo Galán) | confirmado |
+| 5 | m4 «el ahorro» sin cifra | números de la tarjeta 4: solo `4`, `1.300`, `60` | confirmado |
+| 6 | 700 checks | l.781 «300 personas de dieta revisando una vez al mes, más los que compiten cada quince días» → 300 + 50 × 2 = 400 | confirmado, y además el documento se contradice: l.350 «Cada quincena, por cada persona» → 350 × 2 = 700 |
+| 6 | 6.000 consultas y resúmenes | l.772 fila «Consultas al asistente y resúmenes diarios 6.000»; 350 × 30 = 10.500 si es por cliente | confirmado; la pantalla «Resumen de hoy» de `fases.html` (l.508) muestra UN resumen para Alberto |
+| 7 | sin `@media print` | `grep -c '@media print'` → proposal.html 0, assistant.js 0, fases.html 0; `assistant.js` tiene 6 `position:fixed` (`#ga-panel`, `#ga-tab`, `#ga-dock`, `#ga-sel`, `#ga-hl`, `#ga-pickhint`) | confirmado. PDF medido: proposal 22 páginas con el panel en todas (23 textos del panel); fases 2 páginas, 3 de 9 fases |
+| 7 | `fases.html` también carga `assistant.js` | `grep -c assistant.js site/fases.html` → 1 | hallazgo nuevo: el print de fases también lleva el panel |
+| 8 | fases.html sin pantallas de módulo | `grep -c 'modulos/' site/fases.html` → 0; `proposal.html` referencia las 32 (= 32 ficheros en `site/modulos/`) | confirmado |
+| 8 | el diálogo te saca a la fase | array `S` del diálogo: `link` de cada módulo = `fases.html#A`…`#H` (m11 → `#C`); botón l.1135 «Ver la app fase a fase →» (`#mock-all`) | confirmado |
+| 9 | lo que falta | `grep -c -i`: migra 0, RGPD 0, encargado 0, tratamiento 0, referencia 0, plazo de respuesta 0, disponibilidad 0; solo «Importamos el histórico» (l.800, fase B), «te los llevas en un clic» (mantenimiento), «Soporte directo… Sin tickets eternos» | confirmado |
+| extra | copias de precios | 5 copias en 3 ficheros: tarjetas (23) y `GROUPS` (23) de `site/proposal.html`, tarjetas (23) y `GROUPS` (23) de `mockups/proposal.base.html`, lista del `SYSTEM_PROMPT` (l.200-260). Hoy cuadran todas (suma 33.500 / 1.490; Arranque suelto 5.500 + 270; Equipo Galán 14.400 + 700). `mockups/modulos.json` no existe. Ningún test de CI mira la app | confirmado |
+| extra | el SYSTEM_PROMPT repite textos que cambian | l.256-260 packs con nombre «Equipo Galán», l.263-271 plan por fases, l.276-279 la cuenta de los 700 checks tal cual | hay que tocarlo → imagen chat nueva |
+
+## Criterios de aceptación
+
+Comprobador: el script del apartado «Comprobador» (C0-C9). Se extrae de este spec y se corre contra el árbol que se
+quiera medir (la rama del PR o `origin/master`); necesita el Chrome del x86 + playwright + pdftotext (medido: los tres
+están). Preparación, una vez:
+
+```
+python3 ~/.local/libexec/x86-host-runtime/jira_rest.py get --rol qa INFRA-282 00-spec.md /tmp/i282-spec.md
+sed -n '/^# === galan_check.py ===$/,/^# === fin galan_check.py ===$/p' /tmp/i282-spec.md > /tmp/galan_check.py
+rm -rf /tmp/i282; mkdir -p /tmp/i282
+git -C /home/dibanez/k8s/dgx-infra fetch -q origin master
+git -C /home/dibanez/k8s/dgx-infra archive origin/master k8s/apps/galan-proposal | tar -x -C /tmp/i282
+python3 /tmp/galan_check.py /tmp/i282/k8s/apps/galan-proposal
+```
+Salida esperada al cerrar: 12 líneas `PASS` y la última `RESULTADO: PASA (12/12)`, código de salida 0.
+(Hoy: `RESULTADO: NO PASA (1/12)`.)
+
+- [ ] C0 · Sin cambios de precio. `… | grep '^PASS C0'` → `PASS C0 precios intactos · 23 módulos, suelto (33500, 1490), packs [(4900, 240), (12600, 610), (27200, 1090)]`
+- [ ] C1 · Ningún par 12/13/20, 14/20, 17/18 sin su línea que los diferencie: cada tarjeta 12, 13, 14, 17, 18 y 20 lleva «a diferencia del módulo N» (m12 = estado de hoy, m13 = tendencia en el tiempo, m20 = riesgo de baja y dinero; m14 = lo que se debe, m20 = renovar; m17 = los datos de la competición, m18 = usuarios y permisos) y la «Vista del ayudante» cita el «módulo 18». `… | grep '^PASS C1'` → todos `True`. La lectura seguida («ninguno parece cobrable dos veces») la firma el designer en C14.
+- [ ] C2 · La caja de la IA explicada: la tarjeta 1 cita el «módulo 10» (m1 = la caja, la interfaz), la 10 cita el «módulo 1» (m10 = quién responde), la 3 conserva «segunda opinión» (m3 = lectura de las fotos); y la idea «aprende de tus correcciones» sale como máximo 2 veces (patrón `aprend…|tus correcciones|afina el criterio`, hoy 5). `… | grep '^PASS C2'`.
+- [ ] C3 · Puente fases ↔ packs: una `table` con los tres packs y 9 filas o más (cabecera + 8 fases), la frase «el pack es el precio» (y la fase es el orden), la tarjeta del pack Arranque dice que el WhatsApp (módulo 8) se entrega en la «fase B», y el nombre del pack 2 deja de coincidir con el título del grupo de los módulos 17-18 (se renombra uno de los dos) y es el mismo en el `SYSTEM_PROMPT`. `… | grep '^PASS C3'`.
+- [ ] C4 · Calculadora: el módulo 1 sale marcado y no se puede desmarcar; «Vaciar» + recargar → `1 de 23`; marcar el 16 marca el 15 (`3 de 23`); no se puede quedar el 16 sin el 15. `… | grep '^PASS C4'` → `módulo 1 [marcado, clavado]=[True, True] · Vaciar+recargar='1 de 23' … [True, '3 de 23'] … queda 16 sin 15=False`. Se conservan los ids `mod-N`, `b-clear`, `t-count`.
+- [ ] C5 · El módulo 4 lleva una cifra de horas con su fórmula visible («planificaciones × minutos = N horas»), con las frecuencias que dé el documento y los minutos de la Pregunta 2. `… | grep '^PASS C5'` → `fórmula=` no vacía.
+- [ ] C6 · Las dos cuentas de la bolsa salen a mano: en la sección de la bolsa y en el párrafo «CÓMO SE PAGA LA IA» del `SYSTEM_PROMPT` hay al menos 2 cuentas escritas («a × b = c», «a + b × c = d») y todas dan su resultado; la de los checks cabe en la fila «Checks analizados con sus fotos». `… | grep '^PASS C6'`.
+- [ ] C7 · Imprimir: `@media print` en los tres ficheros; con `media=print` ninguno de los 6 elementos `#ga-*` se ve, el PDF de `proposal.html` tiene 0 textos del panel («Pregúntame», «Escribe tu pregunta», «Asistente de la propuesta») y el de `fases.html` lleva los 9 títulos de fase (hoy 3). `… | grep -E '^PASS C7(a|b)'` → las dos.
+- [ ] C8 · Galería única: `fases.html` referencia las 32 pantallas de `site/modulos/`, y el enlace del diálogo de cada uno de los 23 módulos lleva a un ancla de `fases.html` cuyo bloque contiene las pantallas de ESE módulo. `… | grep -E '^PASS C8(a|b)'` → las dos (`sin su pantalla en el destino: 0`).
+- [ ] C9 · Lo que falta por explicar, cada uno en un bloque con su id: `migracion` (Excel + semanas), `que-necesito-de-ti` (horas + voz + Gconcept), `soporte-y-salida` (plazo + baja + formato), `proteccion-de-datos` (encargado del tratamiento + dónde se aloja), `referencias` (al menos un caso). `… | grep '^PASS C9'` → los 5 `True`.
+- [ ] C10 · Precios vigilados por CI: `cd /home/dibanez/k8s/dgx-infra; python3 -m pytest tests/test_galan_prices_contract.py -q` → `N passed`, 0 failed, con un caso que altera un precio en memoria y comprueba que el test lo detecta; cubre las 5 copias (tarjetas y `GROUPS` de `site/proposal.html` y de `mockups/proposal.base.html`, y el `SYSTEM_PROMPT`) o las genera desde `mockups/modulos.json`. `grep -c test_galan_prices_contract .github/workflows/ci.yml` → 1 o más (job `manifests`, runner `arc-k8s`). `grep -c test_galan_prices_contract k8s/apps/galan-proposal/README.md` → 1 o más (el README deja de decir «Son dos copias a propósito»).
+- [ ] C11 · PRs contra `master` con CI verde: `gh pr list -R pocharlies-org/dgx-infra --state merged --search 'INFRA-282 in:title' --json number,baseRefName --jq '.[] | "\(.number) \(.baseRefName)"'` → todas `master`; por cada una, `gh pr checks NUM -R pocharlies-org/dgx-infra` → ningún `fail`.
+- [ ] C12 · Desplegado y visible en vivo (lo corre devops o qa; `kubectl exec` no está en el mapa de pm):
+  - `KUBECONFIG=/home/dibanez/.kube/config kubectl -n traefik-edge get deploy galan-site galan-chat -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.containers[0].image} {.status.readyReplicas}/{.spec.replicas}{"\n"}{end}'` → site en un tag mayor que `v12` y chat mayor que `v7`, los dos `2/2`, y los mismos tags que `git -C /home/dibanez/k8s/dgx-infra show origin/master:k8s/apps/galan-proposal/k8s.yaml | grep -o 'galan-proposal-[a-z]*:v[0-9]*'`.
+  - El vivo es master: `kubectl -n traefik-edge exec deploy/galan-site -- cat /usr/share/nginx/html/proposal.html | cmp - /tmp/i282/k8s/apps/galan-proposal/site/proposal.html; echo $?` → `0`; lo mismo con `fases.html` y `assistant.js`; y `kubectl -n traefik-edge exec deploy/galan-chat -- cat /app/chat_server.py | cmp - /tmp/i282/k8s/apps/galan-proposal/backend/chat_server.py; echo $?` → `0`.
+  - Por dentro, sin BasicAuth: `kubectl -n traefik-edge exec deploy/galan-site -- wget -qO- http://127.0.0.1:8080/fases.html | grep -o 'modulos/m[0-9]*-[a-z]*\.webp' | sort -u | wc -l` → `32`.
+  - El candado sigue: `curl -s -o /dev/null -w '%{http_code}\n' https://galan.e-dani.com/` → `401`.
+- [ ] C13 · qa en el Chrome de Dani con BasicAuth `galan`, escritorio (1280 px) y móvil (390 px): la propuesta abre tras la puerta; Vaciar + recargar deja `1 de 23`; marcar 16 marca 15; en el módulo 11, «Ver cómo se ve →» y el enlace del diálogo abren `fases.html` en las pantallas del módulo 11; la vista previa de impresión (Ctrl+P) de la propuesta y de `fases.html` sale sin el panel; y el asistente, preguntado «¿de dónde salen los checks de la bolsa?», da la misma cuenta que el documento. Evidencia (capturas) en `70-qa.md`, `Estado: PASA`.
+- [ ] C14 · Revisión UX: `nota-designer-ux.md` adjunta (en la épica o en su historia) con `Estado: CUMPLE`, que dice en una línea por punto: leído seguido, ningún módulo parece cobrable dos veces; la caja de la IA se entiende sin leer m1, m3 y m10 juntos; la tabla fase ↔ pack se lee en móvil; el PDF es legible.
+
+## Restricciones
+
+- Sin cambios de precio (C0). Ni módulos, ni packs, ni suelto, ni cuotas. La bolsa no sube (subirla es coste de Dani).
+- Se edita la FUENTE y se regenera: `mockups/proposal.base.html` + `mockups/patch_proposal.py` → `site/proposal.html`;
+  `mockups/build.py`, `mockups/frags/`, `mockups/mock.css` → `site/fases.html`. Nunca a mano el generado; un conflicto
+  en un generado se resuelve regenerando, no mezclando. `patch_proposal.py` mira `site/modulos/` junto al fichero de salida.
+- Si cambia un texto que también está en el `SYSTEM_PROMPT` (packs, fases, bolsa, lo del punto 9), cambia en el mismo PR:
+  el asistente no puede contradecir al documento. Por eso hay imagen `chat` nueva.
+- Se conservan: los ids `mod-N`, `b-clear`, `b-arranque`, `b-completa`, `b-todo`, `t-count`, `t-once`, `t-month`; el array
+  `var S = [` del diálogo; los ids `ga-*`; los títulos «CÓMO SE PAGA LA IA» y «MANTENIMIENTO INCLUYE» del `SYSTEM_PROMPT`
+  (el comprobador los lee). La clave de `localStorage` de la calculadora cambia (hoy `galan-calc-v4`) para que nadie
+  arrastre la selección vieja.
+- El checkout `/home/dibanez/k8s/dgx-infra` está en la rama `std/entregas-visual` de otra sesión: se trabaja en un
+  worktree o clon propio desde `origin/master`, sin cambiarle la rama.
+- CI: el test entra en el job `manifests` de `.github/workflows/ci.yml` (runner `arc-k8s`, skill `ci-runners-arc`).
+- Despliegue: mergear NO despliega (no hay Application de ArgoCD). `site/fetch-deps.sh` antes del build del site (vendor/ y
+  models/ no están en git); push por `harbor.lan.e-dani.com` (por `harbor.e-dani.com` Cloudflare da 413); el bump de
+  `k8s.yaml` va en su PR; tras el merge, `git show origin/master:k8s/apps/galan-proposal/k8s.yaml | kubectl apply -f -`.
+  Nunca `kubectl set image` ni `edit`. Nada de esto toca los Sparks.
+- BasicAuth intacto (C12: 401 sin contraseña). Las fotos de `site/fotos/` (Qwen-Image 2.1, licencia no comercial) no se
+  cambian ni la propuesta se difunde fuera del círculo de Alberto.
+- Contratos: nada de esto es superficie consumida por otros.
+
+## Decisiones tomadas en el plan
+
+- DECISIÓN TOMADA: `Repo:` es `pocharlies-org/dgx-infra`, no `k8s-infra-pocharlies`: la app solo existe ahí (medido). La
+  épica vive en INFRA y `dgx-infra` es repo de DGX en la tabla de proyectos: se nombra en el informe, no se mueve.
+- DECISIÓN TOMADA: el pack Arranque conserva sus 5 módulos y su precio (quitar el 8 cambiaría 4.900 €) y se explica: el
+  8 se paga en el Arranque y se entrega en la fase B. «El pack es el precio, la fase es el orden».
+- DECISIÓN TOMADA (hasta que conteste Dani, Pregunta 1): la frecuencia de revisión es la de la l.350 («cada quincena, por
+  cada persona», repetida en l.509, l.795 y l.988): 350 × 2 = 700 checks, que cuadra con la fila de 700. Se corrige la
+  frase de la l.781 (hoy dice «una vez al mes» y «sobra margen»).
+- DECISIÓN TOMADA (hasta que conteste Dani, Pregunta 3): el resumen diario es uno para Alberto al día (como la pantalla
+  «Resumen de hoy»); la fila de 6.000 se desglosa con su cuenta y no sube.
+
+## Preguntas para Dani (no bloquean H1-H4; bloquean H5, que es publicar)
+
+La CTO las hace en UNA `PREGUNTA:` al empezar; mientras, se construye con el valor por defecto.
+1. ¿Las 300 personas de dieta revisan cada quincena o una vez al mes? Defecto: cada quincena (350 × 2 = 700). Si es
+   mensual: 300 + 50 × 2 = 400 y los 700 llevan margen; se corrigen además l.350, l.509, l.795 y l.988.
+2. ¿Cuántos minutos le lleva a Alberto cada Excel de planificación? Defecto: un valor de ejemplo, escrito como ejemplo
+   («pongamos 20 minutos»), hasta tener el suyo. Con 700 al mes, cada 10 minutos son unas 117 horas al mes.
+3. ¿El resumen diario es uno para Alberto o uno por cliente? Defecto: uno para él. Por cliente serían 350 × 30 = 10.500 al
+   mes y habría que subir la bolsa (coste suyo).
+4. Los compromisos del punto 9: plazo de respuesta y disponibilidad del soporte; formato en que se lleva sus datos al
+   irse; dónde se alojan; quién es el encargado del tratamiento; qué referencia se puede nombrar (¿Skirmshop?). Defecto:
+   se redacta con lo que el documento ya promete (24/7, copias diarias, «te los llevas en un clic», «el código y los datos
+   son propiedad del cliente») y cada cifra o nombre nuevo queda marcado para que lo confirme antes del despliegue.
+
+## Seguridad
+
+- PARA SECURITY: el bloque `proteccion-de-datos` va a prometer a Alberto, para datos de salud y fotos, un encargado del
+  tratamiento, un lugar de alojamiento, cifrado, acceso por cliente y borrado a petición. ¿Son garantías que la
+  plataforma que se le construiría puede cumplir tal como se escriben? Bloquea solo ese bloque antes de H5.
+
+## Trabajo reciente (24 h)
+
+Nada en 24 h que afecte a este plan.
+- Radar al arrancar: 8 sesiones vivas, ninguna en `k8s/apps/galan-proposal`; 7 transcripts de menos de 24 h nombran
+  galan: lecturas de otras sesiones (inventario de `dgx-infra`, un grep de Renovate) y SC-1333, que escribe un caso
+  «sistema-galan» para la web de e-dani en `/home/dibanez/compania/dev/SC-1333/content/` — no toca esta app.
+- Sin PR abierto que toque la app (`gh pr list … files`); último merge #697 el 27-09.
+
+## Diseño
+
+Diseñador: sí — sin mockup previo (es un documento HTML que ya existe con su sistema de estilos; lo nuevo es una
+tabla, cinco bloques de texto, estilos de impresión y una sección de pantallas en una página que ya tiene pestañas);
+sí revisión UX de lo construido antes de qa (H4, C14), escritorio, móvil y PDF.
+
+## Historias previstas
+
+Orden: H1 → H2 y H3 (en paralelo) → H4 → H5 → H6. H1 va primero porque fija cómo se generan precios y calculadora, que
+H2 y H3 regeneran.
+- H1 · Fuente única de precios y calculadora (dueño: developer) — `mockups/modulos.json` con los 23 módulos (precio, fase,
+  prerrequisitos) y los 3 packs; tarjetas, `GROUPS`/`PACKS` y la lista del `SYSTEM_PROMPT` salen de él o se comparan con
+  él; `tests/test_galan_prices_contract.py` en el job `manifests`; módulo 1 clavado, 16 arrastra 15, «Vaciar» persiste;
+  README. Criterios C0, C4, C10.
+- H2 · Textos del documento (dueño: developer) — solapes, caja IA, «aprende» a 2, tabla fase ↔ pack y su frase, Arranque y
+  fase B, nombre del pack 2 o del grupo 17-18, horas del m4, cuentas de la bolsa, los 5 bloques del punto 9; lo mismo en el
+  `SYSTEM_PROMPT`. Criterios C1, C2, C3, C5, C6, C9.
+- H3 · Impresión y galería (dueño: developer) — `@media print` en el CSS de `patch_proposal.py`, en `assistant.js` y en
+  `mock.css`/`build.py` (en papel, todas las fases a la vez); las 32 pantallas de módulo en `fases.html` con un ancla por
+  módulo; el enlace del diálogo a esa ancla. Criterios C7, C8.
+- H4 · revisión UX (dueño: designer) — sobre la rama con H1-H3. Criterio C14.
+- H5 · Despliegue (dueño: devops) — con H1-H3 mergeados y la respuesta de Dani: build site y chat desde `master`, push,
+  PR del bump de `k8s.yaml`, apply tras su merge. Criterios C11, C12.
+- H6 · Verificación (dueño: qa) — comprobador sobre `origin/master`, C12 en vivo y C13 en el Chrome de Dani. Criterio C13
+  (y reejecuta C0-C12).
+
+## Dificultad
+
+Dificultad: media — un solo repo y sin arquitectura nueva (textos, estilos y un bug localizado), pero sobre ficheros
+generados (base → parche → site, frags → fases), con un test de CI nuevo para los precios, dos imágenes que rehacer y el
+despliegue manual de una app sin ArgoCD.
+
+## Comprobador
+
+Se extrae con el `sed` de «Criterios de aceptación». No escribe nada en el repo: sirve la carpeta `site/` en un puerto
+local y la abre con el Chrome del x86.
+
+```python
+# === galan_check.py ===
+# INFRA-282 · comprobador C0-C9. Uso: python3 galan_check.py RUTA/k8s/apps/galan-proposal
+import asyncio, functools, html, http.server, json, pathlib, re, subprocess, sys, tempfile, threading
+APP = pathlib.Path(sys.argv[1]).resolve(); SITE = APP / "site"
+P = (SITE / "proposal.html").read_text(encoding="utf-8")
+F = (SITE / "fases.html").read_text(encoding="utf-8")
+A = (SITE / "assistant.js").read_text(encoding="utf-8")
+CHAT = (APP / "backend" / "chat_server.py").read_text(encoding="utf-8")
+res = []
+def out(ok, name, got): res.append(bool(ok)); print(("PASS" if ok else "FAIL"), name, "·", got)
+def txt(h): return re.sub(r"\s+", " ", html.unescape(re.sub(r"\x3c[^>]+>", " ", re.sub(r"(?s)\x3c(script|style)\b.*?\x3c/\1>", " ", h)))).strip()
+def card(n):
+    m = re.search(r'(?s)\x3carticle class="mod[^"]*">\s*\x3cdiv>\s*\x3ch4>%d · .*?\x3c/article>' % n, P)
+    return txt(m.group(0)) if m else ""
+def num(s): return int(s.replace(".", ""))
+T = txt(P)
+# C0 precios intactos
+js = {int(a): (int(b), int(c)) for a, b, c in re.findall(r'\{ id: (\d+), name: "[^"]+", once: (\d+), mo: (\d+)', P)}
+packs = [(int(a), int(b)) for a, b in re.findall(r'once: (\d+), mo: (\d+), label:', P)]
+tot = (sum(v[0] for v in js.values()), sum(v[1] for v in js.values()))
+out(len(js) == 23 and tot == (33500, 1490) and packs == [(4900, 240), (12600, 610), (27200, 1090)], "C0 precios intactos", f"{len(js)} módulos, suelto {tot}, packs {packs}")
+# C1 solapes
+dif = {n: bool(re.search(r"(?i)a diferencia del módulo \d+", card(n))) for n in (12, 13, 14, 17, 18, 20)}
+door = re.search(r"Vista del ayudante(.{0,600})", T); ayud = bool(door and re.search(r"módulo 18", door.group(1)))
+out(all(dif.values()) and ayud, "C1 solapes", f"'a diferencia del módulo N' en {dif} · Vista del ayudante cita módulo 18={ayud}")
+# C2 caja IA + aprende
+c1, c3, c10 = card(1), card(3), card(10)
+learn = len(re.findall(r"(?i)aprend\w*|tus correcciones|afina el criterio", T))
+r10 = re.search(r"módulo 1\b", c10) is not None
+out("módulo 10" in c1 and r10 and "segunda opinión" in c3 and learn in (0, 1, 2), "C2 caja IA", f"m1 cita módulo 10={'módulo 10' in c1} · m10 cita módulo 1={r10} · m3 'segunda opinión'={'segunda opinión' in c3} · veces que 'aprende'={learn} (máx 2)")
+# C3 fases-packs
+labels = [l.replace("pack ", "") for l in re.findall(r'label: "([^"]+)"', P)]
+tables = [t for t in re.findall(r"(?s)\x3ctable\b.*?\x3c/table>", P) if all(l in txt(t) for l in labels)]
+rows = max((len(re.findall(r"\x3ctr\b", t)) for t in tables), default=0)
+lema = re.search(r"(?i)el pack es el precio", T) is not None
+arr = re.search(r"(?s)\x3ch3>\s*Arranque\s*\x3c/h3>.*?(?=\x3ch3>)", P); arr_b = bool(arr and re.search(r"(?i)fase B", txt(arr.group(0))))
+grp = re.search(r'\x3ch3>([^\x3c]*)\x3c/h3>\s*\x3cdiv class="modules">\s*\x3carticle class="mod[^"]*">\s*\x3cdiv>\s*\x3ch4>17 ·', P); gname = txt(grp.group(1)) if grp else "?"
+p2 = labels[1] if len(labels) == 3 else "?"; nombre = p2 not in gname and p2 in CHAT
+out(tables and rows >= 9 and lema and arr_b and nombre, "C3 fases-packs", f"tabla con los 3 packs={bool(tables)} filas={rows} (9+) · 'el pack es el precio'={lema} · Arranque explica fase B={arr_b} · pack 2 '{p2}' distinto del grupo 17-18 '{gname}' y presente en SYSTEM_PROMPT={nombre}")
+# C5 horas m4
+f4 = re.search(r"\d[\d.]*\s*[×x]\s*\d[\d.,]*.{0,80}?=\s*[\d.,]+\s*horas", card(4))
+out(f4, "C5 horas m4", f"fórmula={f4.group(0) if f4 else 'ninguna'}")
+# C6 bolsa
+def cuentas(t): return [(e, num(v), eval(re.sub(r"(\d)\.(\d{3})", r"\1\2", e).replace("×", "*")) == num(v)) for e, v in re.findall(r"(\d[\d.]*(?:\s*[+×]\s*\d[\d.]*)+)\s*=\s*(\d[\d.]*)", t)]
+bolsa = T[T.find("Qué entra en la bolsa"):T.find("De lo simple a tenerlo todo")]
+pb = CHAT[CHAT.find("CÓMO SE PAGA LA IA"):CHAT.find("MANTENIMIENTO INCLUYE")]
+cd, cp = cuentas(bolsa), cuentas(pb)
+fila = re.search(r"Checks analizados con sus fotos (\d[\d.]*)", bolsa)
+chk = re.search(r"checks[^.]*?(\d[\d.]*(?:\s*[+×]\s*\d[\d.]*)+)\s*=\s*(\d[\d.]*)", bolsa)
+chk_ok = bool(chk and fila and num(fila.group(1)) >= num(chk.group(2)))
+out(len(cd) >= 2 and all(c[2] for c in cd) and len(cp) >= 2 and all(c[2] for c in cp) and chk_ok, "C6 bolsa", f"cuentas en el documento={cd} · en SYSTEM_PROMPT={cp} · cuenta de checks cabe en la fila={chk_ok}")
+# C7a @media print
+mp = {n: len(re.findall(r"@media print", s)) for n, s in (("proposal.html", P), ("assistant.js", A), ("fases.html", F))}
+out(all(v >= 1 for v in mp.values()), "C7a @media print", str(mp))
+# C8a fases.html con las 32 pantallas de módulo
+refs = sorted(set(re.findall(r"modulos/m\d\d-(?:escritorio|movil)\.webp", F))); files = sorted(p.name for p in (SITE / "modulos").glob("m*.webp"))
+out(len(refs) == 32 and [r.split("/")[1] for r in refs] == files, "C8a fases.html sirve las 32", f"{len(refs)} de {len(files)}")
+# C9 lo que falta por explicar
+need = {"migracion": ["Excel", "semana"], "que-necesito-de-ti": ["hora", "voz", "Gconcept"], "soporte-y-salida": ["plazo", "baja", "CSV|JSON|Excel|PDF"], "proteccion-de-datos": ["encargad[oa] del tratamiento", "aloja"], "referencias": [r"\w{3,}"]}
+got = {}
+for i, pats in need.items():
+    m = re.search(r'(?s)\x3c(\w+)[^>]*\bid="%s".*?\x3c/\1>' % i, P); got[i] = bool(m) and all(re.search(p, txt(m.group(0))) for p in pats)
+out(all(got.values()), "C9 lo que falta", str(got))
+# C4, C7b, C8b en el navegador (sitio servido en local, sin BasicAuth)
+H = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(SITE)); H.log_message = lambda *a: None
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); U = f"http://127.0.0.1:{srv.server_address[1]}"
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+IDS = ["ga-panel", "ga-tab", "ga-dock", "ga-sel", "ga-hl", "ga-pickhint"]
+TIT = ["La aplicación completa", "Tu método, dentro", "El WhatsApp y los audios", "El cerebro y el asistente", "Dieta, ejercicios y salud", "El dinero y el equipo", "Auditoría, patrones y retención", "Tu papeleo", "Tienda, contenido, app y reloj"]
+VIS = "ids => ids.filter(i => { const e = document.getElementById(i); return e ? (getComputedStyle(e).display !== 'none' ? getComputedStyle(e).visibility !== 'hidden' : false) : false; })"
+HAS = "([a, n]) => { const e = a ? document.getElementById(a) : null; return e ? e.outerHTML.includes('modulos/m' + String(n).padStart(2, '0') + '-') : false; }"
+async def browser():
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        b = await p.chromium.launch(channel="chrome")
+        ctx = await b.new_context(); pg = await ctx.new_page(); await pg.goto(U + "/proposal.html"); await pg.wait_for_timeout(800)
+        m1 = await pg.evaluate("[document.getElementById('mod-1').checked, document.getElementById('mod-1').disabled]")
+        await pg.click("#b-clear"); await pg.reload(); await pg.wait_for_timeout(800); vac = (await pg.inner_text("#t-count")).strip()
+        await pg.evaluate("document.getElementById('mod-16').click()"); await pg.wait_for_timeout(200)
+        d16 = await pg.evaluate("[document.getElementById('mod-15').checked, document.getElementById('t-count').textContent]")
+        await pg.evaluate("(() => { const e = document.getElementById('mod-15'); if (!e.disabled) e.click(); })()"); await pg.wait_for_timeout(200)
+        orphan = await pg.evaluate("document.getElementById('mod-16').checked ? !document.getElementById('mod-15').checked : false")
+        out(m1 == [True, True] and vac == "1 de 23" and d16 == [True, "3 de 23"] and not orphan, "C4 calculadora", f"módulo 1 [marcado, clavado]={m1} · Vaciar+recargar='{vac}' (1 de 23) · marcar 16 da [15 marcado, total]={d16} (True, 3 de 23) · queda 16 sin 15={orphan}")
+        await ctx.close(); tmp = pathlib.Path(tempfile.mkdtemp()); info = {}
+        for name in ("proposal.html", "fases.html"):
+            pg = await b.new_page(viewport={"width": 1280, "height": 900}); await pg.goto(U + "/" + name); await pg.wait_for_timeout(1500); await pg.emulate_media(media="print")
+            vis = await pg.evaluate(VIS, IDS); pdf = tmp / (name + ".pdf"); await pg.pdf(path=str(pdf), format="A4", print_background=True)
+            t = re.sub(r"\s+", " ", subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout)
+            pages = int(re.search(r"Pages:\s+(\d+)", subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True).stdout).group(1))
+            info[name] = (vis, pages, len(re.findall(r"Pregúntame|Escribe tu pregunta|Asistente de la propuesta", t)), sum(x in t for x in TIT))
+        pv, fv = info["proposal.html"], info["fases.html"]
+        out(not pv[0] and not fv[0] and pv[2] == 0 and fv[2] == 0 and fv[3] == 9, "C7b impresión", f"proposal: panel visible={pv[0]} páginas={pv[1]} textos del panel en el PDF={pv[2]} · fases: panel visible={fv[0]} páginas={fv[1]} textos del panel={fv[2]} títulos de fase={fv[3]}/9")
+        src = next(s for s in re.findall(r"(?s)\x3cscript>(.*?)\x3c/script>", P) if "var S = [" in s)
+        S = json.loads(re.search(r"var S = (\[.*?\]);\n", src, re.S).group(1))
+        links = {s["id"]: s["link"] for s in S if isinstance(s["id"], int)}
+        pf = await b.new_page(); await pf.goto(U + "/fases.html"); await pf.wait_for_timeout(800); bad = []
+        for n, link in sorted(links.items()):
+            if not await pf.evaluate(HAS, [link.split("#", 1)[1] if "#" in link else "", n]): bad.append(n)
+        out(len(links) == 23 and not bad, "C8b diálogo lleva a la pantalla del módulo", f"{len(links)} módulos · sin su pantalla en el destino: {len(bad)} {bad[:8]}")
+        await b.close()
+asyncio.run(browser())
+print("RESULTADO:", "PASA" if all(res) else "NO PASA", f"({sum(res)}/{len(res)})"); sys.exit(0 if all(res) else 1)
+# === fin galan_check.py ===
+```

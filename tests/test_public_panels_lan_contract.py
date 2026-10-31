@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -56,48 +57,155 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
-    hud, catchall = route["spec"]["routes"]
-    assert hud["priority"] == 400 and catchall["priority"] == 300
+    interno, hud, catchall = route["spec"]["routes"]
+    assert (interno["priority"], hud["priority"], catchall["priority"]) == (500, 400, 300)
+    # DGX-829, espejo de la 500 de dgx (INFRA-732): /api/interno responde 404 en el borde, sin backend.
+    assert "PathPrefix(`/api/interno`)" in interno["match"]
+    assert "middlewares" not in interno
+    assert interno["services"] == [{"name": "edge-static-server", "namespace": "traefik-edge", "port": 8080}]
     assert "ingressClassName" not in route["spec"]
     strip = {"name": "dgx-strip-identity-headers", "namespace": "traefik-lan"}
+    proof = {"name": "dgx-edge-proof", "namespace": "traefik-lan"}
     # sin SSO en jarvis: la identidad nunca llega del cliente (es_dani del dashboard; security 03-10-2026)
-    assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}]
-    assert catchall["middlewares"] == [strip]
+    # DGX-729: además la prueba de borde, para que el backend no se fíe de una x-auth-request-email
+    # forjada por un pod que llame al Service sin pasar por Traefik.
+    assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}, proof]
+    # DGX-1314 (Dani, 27-10): LAN = Dani, como dgx.lan: el resto del backend, con su identidad estampada
+    # y sin SSO (detalle en test_jarvis_host_sso_parity_dgx_contract.py)
+    assert catchall["middlewares"] == [{"name": "dgx-lan-identidad-dani", "namespace": "traefik-lan"}, proof]
     assert all(all(cidr in rule["match"] for cidr in TRUSTED) for rule in (hud, catchall))
 
 
-def test_openchamber_accepts_public_split_host_without_removing_fallback():
-    route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-openchamber-public-host")
-    trusted, fallback = route["spec"]["routes"]
-    assert "ingressClassName" not in route["spec"]
-    assert "Host(`chamber.e-dani.com`)" in trusted["match"]
-    assert all(cidr in trusted["match"] for cidr in TRUSTED)
-    assert "middlewares" not in trusted
-    assert fallback["middlewares"] == [{"name": "sso-chain", "namespace": "keycloak"}]
-    assert all(
-        rule["services"] == [{"name": "openchamber-lan-x86", "port": 3000, "serversTransport": "openchamber-lan-transport"}]
-        for rule in (trusted, fallback)
+def test_no_route_serves_or_points_at_openchamber():
+    # INFRA-824: OpenChamber se retiro el 10-10-2026 (lo sustituye Paseo). Ninguna ruta sirve sus
+    # hosts (chamber, chamber-beta, chamber.lan) ni el redirect /openchamber, y ninguna apunta a un
+    # Service, middleware o ServersTransport `openchamber*` que ya no existe.
+    assert "openchamber" not in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+    for path in sorted((ROOT / "networking").rglob("*.yaml")):
+        for item in documents(path.relative_to(ROOT)):
+            if not isinstance(item, dict) or item.get("kind") != "IngressRoute":
+                continue
+            for rule in item["spec"]["routes"]:
+                assert not re.search(r"Host\(`chamber[.-]|/openchamber", rule["match"]), (path, rule["match"])
+                refs = [*rule.get("services", []), *rule.get("middlewares", [])]
+                assert not any(
+                    "openchamber" in ref[key] for ref in refs for key in ("name", "serversTransport") if key in ref
+                ), (path, item["metadata"]["name"])
+
+
+SSO_CHAIN = {"name": "sso-chain", "namespace": "keycloak"}
+PASEO_HOST = "Host(`paseo.e-dani.com`)"
+PASEOCB_HOST = "Host(`paseocb.e-dani.com`)"
+PASEOCASA_HOST = "Host(`paseocasa.e-dani.com`)"
+
+
+def assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, service, host=PASEO_HOST):
+    # INFRA-825: Paseo ejecuta agentes con shell en el x86. Solo LAN/tailnet entra directo; todo lo
+    # demas (y la regla comodin del host, que cubre tambien el WebSocket /ws) pasa por sso-chain.
+    rules = route["spec"]["routes"]
+    for rule in rules:
+        assert host in rule["match"]
+        assert rule["services"] == [service]
+        if SSO_CHAIN not in rule.get("middlewares", []):
+            assert all(f"ClientIP(`{cidr}`)" in rule["match"] for cidr in TRUSTED), rule["match"]
+            assert "middlewares" not in rule
+    [catchall] = [rule for rule in rules if rule["match"] == host]
+    assert catchall["middlewares"] == [SSO_CHAIN]
+
+
+def assert_x86_externalname(path, name):
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == name
+    ]
+    assert service["metadata"]["name"] == name
+    assert service["spec"]["type"] == "ExternalName"
+    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+    assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
+
+
+def test_paseo_public_route_requires_sso_chain_outside_trusted_networks():
+    path = "networking/traefik-edge/paseo-public.yaml"
+    assert f"  - {path}\n" in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+    route = ingress(path, "edge-paseo-public")
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/hostname": "paseo.e-dani.com",
+        "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+        "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+    }
+    assert route["spec"]["ingressClassName"] == "traefik-edge"
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+        route, {"name": "paseo-edge-x86", "namespace": "traefik-edge", "port": 6767}
     )
+    assert_x86_externalname(path, "paseo-edge-x86")
+
+
+def test_paseo_lan_route_points_at_the_x86_externalname_on_6767():
+    path = "networking/traefik-lan/paseo-lan.yaml"
+    assert f"  - {path}\n" in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+    route = ingress(path, "lan-paseo")
+    assert "ingressClassName" not in route["spec"]
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-x86", "port": 6767})
     assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    assert_x86_externalname(path, "paseo-lan-x86")
 
 
-def test_openchamber_lan_backend_uses_the_pinned_x86_externalname():
-    resources = documents("networking/traefik-lan/openchamber-lan.yaml")
-    service = next(item for item in resources if item.get("kind") == "Service")
-    assert service["metadata"]["name"] == "openchamber-lan-x86"
+def test_paseocb_public_route_requires_sso_chain_outside_trusted_networks():
+    path = "networking/traefik-edge/paseo-public.yaml"
+    route = ingress(path, "edge-paseocb-public")
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/hostname": "paseocb.e-dani.com",
+        "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+        "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+    }
+    assert route["spec"]["ingressClassName"] == "traefik-edge"
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+        route, {"name": "paseo-edge-maccb", "namespace": "traefik-edge", "port": 6767}, PASEOCB_HOST
+    )
+
+
+def test_paseocb_lan_route_points_at_the_mac_cb_externalname_on_6767():
+    path = "networking/traefik-lan/paseo-lan.yaml"
+    route = ingress(path, "lan-paseocb")
+    assert "ingressClassName" not in route["spec"]
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-maccb", "port": 6767}, PASEOCB_HOST)
+    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == "paseo-lan-maccb"
+    ]
     assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+    assert service["spec"]["externalName"] == "mac-cb.taile0ad27.ts.net"
+    assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
 
 
-def test_openchamber_edge_backend_uses_the_pinned_x86_externalname():
-    resources = documents("networking/traefik-edge/openchamber-public.yaml")
-    service = next(item for item in resources if item.get("kind") == "Service")
-    assert service["metadata"]["name"] == "openchamber-edge-x86"
+def test_paseocasa_public_route_requires_sso_chain_outside_trusted_networks():
+    path = "networking/traefik-edge/paseo-public.yaml"
+    route = ingress(path, "edge-paseocasa-public")
+    assert route["metadata"]["annotations"] == {
+        "external-dns.alpha.kubernetes.io/hostname": "paseocasa.e-dani.com",
+        "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+        "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+    }
+    assert route["spec"]["ingressClassName"] == "traefik-edge"
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+        route, {"name": "paseo-edge-maccasa", "namespace": "traefik-edge", "port": 6767}, PASEOCASA_HOST
+    )
+
+
+def test_paseocasa_lan_route_points_at_the_mac_casa_externalname_on_6767():
+    path = "networking/traefik-lan/paseo-lan.yaml"
+    route = ingress(path, "lan-paseocasa")
+    assert "ingressClassName" not in route["spec"]
+    assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-maccasa", "port": 6767}, PASEOCASA_HOST)
+    assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+    [service] = [
+        item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == "paseo-lan-maccasa"
+    ]
     assert service["spec"]["type"] == "ExternalName"
-    assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+    assert service["spec"]["externalName"] == "mac-casa.taile0ad27.ts.net"
+    assert [(port["port"], port["targetPort"]) for port in service["spec"]["ports"]] == [(6767, 6767)]
 
 
-def test_coredns_pins_the_openchamber_externalname_to_x86():
+def test_coredns_pins_the_x86_tailnet_name():
     config = next(
         item for item in documents("networking/dns/coredns-custom.yaml")
         if item.get("kind") == "ConfigMap" and item["metadata"]["name"] == "coredns-custom"
@@ -106,6 +214,8 @@ def test_coredns_pins_the_openchamber_externalname_to_x86():
     tailnet_zone = config["data"]["x86-taile0ad27.server"]
     assert "taile0ad27.ts.net:53 {" in tailnet_zone
     assert "100.83.56.98 x86.taile0ad27.ts.net" in tailnet_zone
+    assert "100.125.62.10 mac-cb.taile0ad27.ts.net" in tailnet_zone
+    assert "100.85.61.58 mac-casa.taile0ad27.ts.net" in tailnet_zone
     assert "hosts {" in tailnet_zone
     assert "fallthrough" in tailnet_zone
     assert "forward . /etc/resolv.conf" in tailnet_zone

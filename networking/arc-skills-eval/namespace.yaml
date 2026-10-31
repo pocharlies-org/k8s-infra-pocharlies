@@ -1,0 +1,15 @@
+# Namespace propio del scale set arc-skills-eval (SC-3635, security 2026-10-29).
+#
+# POR QUE OTRO NAMESPACE Y NO arc-runners. Las NetworkPolicy de egreso se
+# UNIONAN: en arc-runners toda pod ya esta cubierta por `arc-runners-egress`
+# (podSelector {}), que abre todo el cluster en 80/443 y la VIP de traefik-lan.
+# Desde dentro no se puede RESTAR. Los runners de evaluacion ejecutan skills
+# externas (codigo de terceros) en DinD y su egress debe quedar reducido a
+# DNS + LiteLLM + internet publico (GitHub): eso solo se logra en un namespace
+# donde la unica politica de egreso sea la de este fichero.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: arc-skills-eval
+  labels:
+    infra: "true"

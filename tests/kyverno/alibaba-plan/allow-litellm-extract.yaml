@@ -1,0 +1,17 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: t-extract
+  namespace: litellm
+  labels:
+    dgx-626-test: 'true'
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: t-extract
+  dataFrom:
+  - extract:
+      key: alibaba-model-studio

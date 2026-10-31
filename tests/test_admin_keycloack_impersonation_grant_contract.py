@@ -309,8 +309,13 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
         # The exact filter must be plain POSIX shell: the keycloak image ships
         # no awk, and #163 died on "awk: command not found" (SC-1215). Checked
         # against executable code only; the comments name awk to explain why.
+        # The sourced kc-admin-common.sh runs in the same image: audited too.
         code = "\n".join(
-            line for line in script.splitlines() if not line.lstrip().startswith("#")
+            line
+            for line in (
+                script + (BASE / "scripts" / "kc-admin-common.sh").read_text()
+            ).splitlines()
+            if not line.lstrip().startswith("#")
         )
         self.assertNotIn("awk", code)
         # A failed lookup reports both row counts and the clientIds involved,
@@ -510,7 +515,14 @@ class AdminKeycloackImpersonationGrantContractTest(unittest.TestCase):
 
     @in_keycloak_image
     def test_every_external_command_exists_in_the_keycloak_image(self):
-        cmds = self._external_commands(SCRIPT.read_text())
+        # The hook sources kc-admin-common.sh (rm/sleep live there since the
+        # OWU-28-g bootstrap extraction): the shared file runs in the same
+        # image, so its commands are audited too.
+        cmds = self._external_commands(
+            SCRIPT.read_text()
+            + "\n"
+            + (BASE / "scripts" / "kc-admin-common.sh").read_text()
+        )
         # Sanity: the extraction must actually see the commands the script is
         # known to use, or the audit is vacuous.
         for expected in {"sed", "grep", "wc", "tr", "cut", "rm", "sleep",

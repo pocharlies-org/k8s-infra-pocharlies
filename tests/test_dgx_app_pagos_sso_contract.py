@@ -1,6 +1,7 @@
 """dgx.app.pagos.v1 (03-10-2026): las rutas de la app DGX de pagos pasan SIEMPRE por
-oauth2-proxy, en LAN y en el edge, y las de máquina se quedan públicas en LAN por diseño
-(HMAC V2 propio, no SSO).
+oauth2-proxy en el edge, y las de máquina se quedan públicas en LAN por diseño
+(HMAC V2 propio, no SSO). DGX-1314 (Dani, 27-10): en LAN no hay SSO, LAN = Dani: la 300
+estampa su identidad (dgx-lan-identidad-dani), que `es_dani` y guarda_cluster aceptan.
 
 El backend exige `es_dani` sobre la cabecera `X-Auth-Request-Email`. Esa cabecera solo vale
 si la estampa el forwardAuth de oauth2-proxy (`sso-forward-auth.authResponseHeaders`): en la
@@ -12,6 +13,7 @@ la cadena completa sobre los dos ficheros que poseen las rutas:
   - networking/traefik-edge/dgx-dashboard-public.yaml (IngressRoute edge-dgx-dashboard-public)
 """
 import pathlib
+import re
 import unittest
 
 import yaml
@@ -21,7 +23,11 @@ LAN = ROOT / "networking" / "traefik-lan" / "dgx-public-host-lan.yaml"
 EDGE = ROOT / "networking" / "traefik-edge" / "dgx-dashboard-public.yaml"
 ROUTING = ROOT / "platform" / "keycloak-next" / "routing.yaml"
 
-APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/push`)")
+# DGX-674 (security C1): /api/app/alarma* (SSO + lista de emails en el backend) entra igual que
+# pagos; /api/alarma* es la ruta de maquina (HMAC V2) y NO entra, como /api/pagos*.
+# SC-2175 (security): /api/hermes-panel* (dgx.panel.hermes.v1) entra igual: su backend da 401 sin la cabecera.
+APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/push`)",
+                "PathPrefix(`/api/app/alarma`)", "PathPrefix(`/api/hermes-panel`)")
 
 
 def _docs(path):
@@ -46,14 +52,30 @@ class PagosSSOContract(unittest.TestCase):
         # y NUNCA la ruta de máquina /api/pagos (lleva HMAC, se queda en el bypass)
         self.assertNotIn("PathPrefix(`/api/pagos`)", match)
         self.assertNotIn("Path(`/api/pagos`)", match)
+        self.assertNotIn("PathPrefix(`/api/alarma`)", match)
+        self.assertNotIn("Path(`/api/alarma`)", match)
+        # DGX-729: la prueba de borde va al final de la cadena; el strip solo vacía las
+        # 7 de identidad, nunca X-Edge-Proof, así que el proof sobrevive al strip.
         chain = [(m["name"], m.get("namespace", "")) for m in route["middlewares"]]
-        self.assertEqual(chain, [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak")],
-                         f"{name}@{priority}: strip first, then sso-chain")
+        self.assertEqual(chain, [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"),
+                                 ("dgx-edge-proof", ns)],
+                         f"{name}@{priority}: strip first, then sso-chain, then edge-proof")
 
-    def test_lan_400_protege_app_pagos_y_push(self):
-        self._assert_protected(_docs(LAN), "lan-dgx-dashboard-public-host", 400, "traefik-lan")
+    def test_lan_300_estampa_la_identidad_de_dani(self):
+        """DGX-1314: sin control set en LAN; la 300 lleva la identidad de Dani y la prueba de borde."""
+        docs = _docs(LAN)
+        route = _route(docs, "lan-dgx-dashboard-public-host", 300)
+        chain = [(m["name"], m.get("namespace", "")) for m in route["middlewares"]]
+        self.assertEqual(chain, [("dgx-lan-identidad-dani", "traefik-lan"), ("dgx-edge-proof", "traefik-lan")])
+        mw = next(d for d in docs if d.get("kind") == "Middleware" and d["metadata"]["name"] == "dgx-lan-identidad-dani")
+        cab = mw["spec"]["headers"]["customRequestHeaders"]
+        self.assertEqual(cab["X-Auth-Request-Email"], "me@e-dani.com")  # en SECRETARIA_DANI_EMAILS (es_dani)
+        self.assertIn("/edani-admins", cab["X-Auth-Request-Groups"].split(","))  # guarda_cluster
+        # sobrescribe las mismas 7 cabeceras que vacía el strip: nada forjado pasa tal cual
+        strip = next(d for d in docs if d.get("kind") == "Middleware" and d["metadata"]["name"] == "dgx-strip-identity-headers")
+        self.assertEqual(set(cab), set(strip["spec"]["headers"]["customRequestHeaders"]))
 
-    def test_edge_400_protege_app_pagos_y_push(self):
+    def test_edge_400_protege_app_pagos_push_y_alarma(self):
         self._assert_protected(_docs(EDGE), "edge-dgx-dashboard-public", 400, "traefik-edge")
 
     def test_ninguna_ruta_de_mas_prioridad_cubre_api_app(self):
@@ -65,8 +87,9 @@ class PagosSSOContract(unittest.TestCase):
                     continue
                 for route in doc["spec"]["routes"]:
                     if route.get("priority", 0) > 400:
-                        self.assertNotIn("/api/app", route["match"],
-                                         f"{name}@{route.get('priority')} would shadow the control set")
+                        for prefix in ("/api/app", "/api/hermes-panel"):
+                            self.assertNotIn(prefix, route["match"],
+                                             f"{name}@{route.get('priority')} would shadow the control set")
 
     def test_edge_publico_cae_en_sso_chain(self):
         """Un caller sin IP LAN/tailnet/cluster que entre por dgx.e-dani.com cae en la regla
@@ -74,6 +97,29 @@ class PagosSSOContract(unittest.TestCase):
         route = _route(_docs(EDGE), "edge-dgx-dashboard-public", 100)
         self.assertNotIn("ClientIP", route["match"])
         self.assertIn("sso-chain", [m["name"] for m in route["middlewares"]])
+
+    def test_api_alarma_de_maquina_cae_en_el_bypass_y_fuera_en_sso(self):
+        """/api/alarma* (HMAC) no tiene regla propia: ninguna ruta por encima del bypass lo
+        captura, asi que desde LAN/tailnet/cluster llega al backend por la 200/300 (que exige
+        HMAC) y desde internet por la 100 (sso-chain)."""
+        path = "/api/alarma/estado"
+        for docs, name, bypass in ((_docs(LAN), "lan-dgx-dashboard-public-host", 300),
+                                   (_docs(EDGE), "edge-dgx-dashboard-public", 200)):
+            self.assertNotIn("Path", _route(docs, name, bypass)["match"], f"{name}@{bypass} is the open bypass")
+            for doc in docs:
+                if doc.get("kind") != "IngressRoute" or doc["metadata"]["name"] != name:
+                    continue
+                for route in doc["spec"]["routes"]:
+                    if route.get("priority", 0) <= bypass:
+                        continue
+                    m = route["match"]
+                    for prefix in re.findall(r"PathPrefix\(`([^`]+)`\)", m):
+                        self.assertFalse(path.startswith(prefix),
+                                         f"{name}@{route['priority']} captures {path} via {prefix}")
+                    for exact in re.findall(r"\bPath\(`([^`]+)`\)", m):
+                        self.assertNotEqual(path, exact, f"{name}@{route['priority']} captures {path}")
+                    for rx in re.findall(r"PathRegexp\(`([^`]+)`\)", m):
+                        self.assertIsNone(re.search(rx, path), f"{name}@{route['priority']} captures {path}")
 
     def test_sso_forward_auth_estampa_email_y_strip_la_vacia(self):
         docs = _docs(ROUTING)

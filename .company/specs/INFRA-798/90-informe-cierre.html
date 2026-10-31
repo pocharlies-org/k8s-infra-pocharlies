@@ -1,0 +1,21 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>INFRA-798 — Rack impreso 3D para 3× ASUS Ascent GX10 (duplicada de INFRA-780)</title>
+<style>:root{--bg:#fff;--fg:#1a1a1a;--mut:#666}@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#aaa}}body{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px}code{font-size:.9em}h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:1.6rem}.m{color:var(--mut)}</style></head><body>
+<h1>INFRA-798 · Cierre por duplicidad — Cancelado</h1>
+<p class="m">Rol: pm · 2026-10-09 · Sesión: 5ebc7c13-722e-4f8c-b43c-23d3ef0a7627 · Estado: CERRADA</p>
+<h2>Problema</h2>
+<p>La petición de Jordi Ibáñez (grupo Agentic Link, topic «Rack GX10», thread 3445) — rack 3x para las 3 ASUS Ascent GX10, impreso en la Bambu X1C en PETG naranja, con ventilación activa — quedó registrada dos veces como épicas: INFRA-780 (08-10) e INFRA-798 (09-10).</p>
+<h2>Causa</h2>
+<p>El puente de delegación agentic-link no permitía encargar el trabajo al perfil analista, así que Dani creó INFRA-798 en directo 15 horas después de existir ya INFRA-780 con su 00-spec.md (Estado FALTA INFO, id 23470) y sus tres tareas hijas.</p>
+<h2>Qué he cambiado</h2>
+<p>Nada: INFRA-798 se cancela. El trabajo sigue en INFRA-780 con sus hijas INFRA-781 (ventiladores), INFRA-782 (alimentación) e INFRA-783 (control térmico).</p>
+<h2>Resultado (comprobado en producción)</h2>
+<p>Medido hoy 09-10 ~09:40 UTC: INFRA-798 sin adjuntos, sin comentarios, sin hijas (hijas=0), spec-estado SIN SPEC, sin PRs ni commits propios (<code>git -C ~/k8s/bambulab-openclaw log --all --grep=INFRA-798</code> vacío, <code>gh pr list --search INFRA-798 --state all</code> vacío). INFRA-780 con 00-spec.md FALTA INFO (id 23470) y 3 tareas hijas abiertas.</p>
+<h2>Qué no cambia</h2>
+<p>La petición de Jordi y su decisión pendiente sobre la configuración de ventiladores (opciones 1/2/3, ya preguntada a Dani/Jordi) siguen vivas en INFRA-780. Nada se pierde al cancelar 798.</p>
+<h2>Qué tienes que hacer tú</h2>
+<p>Nada en este ticket. Responder la pregunta de ventiladores en INFRA-780.</p>
+<h2>Pendiente (fuera de este ticket)</h2>
+<ul><li>INFRA-780: decisión de ventiladores pendiente de Dani/Jordi.</li>
+<li>Pasar a su spec dos detalles que solo estaban en la descripción de 798: acceso a puertos QSFP/alimentación sin desmontar, y separación térmica entre unidades apiladas.</li>
+<li>Nota: INFRA-690 (onboarding de dgx3) está Done — las 3 unidades ya existen.</li></ul>
+</body></html>

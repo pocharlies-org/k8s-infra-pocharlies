@@ -20,6 +20,48 @@ fail): adopted, not recreated, by its own PostSync
 (`jarvis-echo-client.yaml`), so its service-account sub keeps matching the
 AgentGateway identity bindings approved in k8s-agentgateway-pocharlies#170.
 
+SC-2005 closed the drift of 2026-10-06: measured against the live realm
+that day, 12 users + 18 service accounts = **30 principals** — the 21 above
+plus the five service accounts of the Hermes secretaria profiles
+(`service-account-hermes-secretaria*`, INFRA-494), the Atlassian probe
+`service-account-atlassian-mcp-probe` (SC-1834) and the users
+`staticduo@gmail.com` (INFRA-383 M1B), `correo@e-dani.com` (SC-1958)
+and `qa-sso-test` (INFRA-561), all created outside this repo and
+adopted here without being recreated.
+
+INFRA-676 (P4b of INFRA-480) adds the 31st, `service-account-hermes-enviar`,
+the client of the Hermes `enviar` plugin — the only identity that sends or
+deletes Gmail drafts through AgentGateway. Unlike the entries above it is NOT
+adopted: its PostSync (`hermes-enviar-client.yaml`) creates it in the same sync
+that ships this entry, so until the PostSync hooks of that sync finish the
+catalog names a principal (and two roles) the realm does not have yet, and the
+`keycloak-role-drift` runs that fall in that window report it. It clears on the
+first run after the hooks, with no action.
+
+SC-2522 adopts the 33rd, `dom.greco@alphalinkcrossfit.com`: a human user the
+realm gained on 2026-10-16 at 12:36 UTC through the admin API (self-registration
+is off), with no attributes, no realm roles beyond `default-roles-edani` and no
+reference in any repo of the platform. No session of the company claims it, so
+it enters as `origen-desconocido` under Dani (operador), the way
+`daniel.ibanez@cloudblue.com` did. If it turns out to be a stray fixture, its
+retirement goes through the CTO as always.
+
+DGX-1218 (PR-2 of epic DGX-1209) adds the 34th and 35th,
+`service-account-correo-agente-lectura` and `service-account-correo-ejecutor`,
+the read identity and the executor of the Postia case agent. Like
+`hermes-enviar` they are NOT adopted: their PostSync
+(`correo-agente-clients.yaml`) creates them in the same sync that ships these
+entries, and `keycloak-role-drift` reports them until the hooks finish.
+
+SC-1282 (2026-10-27) adopts the 37th, `service-account-analisis`: the M2M
+identity of the analysis platform (the six reviewers of SC-2956), created by
+`security` through the admin API in SC-2967 — its
+`agentgateway-write:compania-propuestas` with the verdict of SC-2963 — with no
+GitOps declaration: the same process error `agentgateway-write:compania`
+committed in SC-2522. Adopted as it arrived, measured against the live realm
+on 2026-10-27; the six roles it holds are catalogued in `ROLES.yaml` in the
+same PR, and `keycloak-role-drift` clears on its first run after the sync.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -61,22 +103,37 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 
 | principal | type | owner | status | purpose |
 |---|---|---|---|---|
+| `correo@e-dani.com` | humano | Dani (operador) | activo | Cuenta de correo de la org Claude Team E-dani («E-dani Correo»); su login a claude.ai pasa por el SSO de este realm. Sin roles propios. |
 | `daniel.ibanez@alphalinkcrossfit.com` | humano | Dani (operador) | activo | Cuenta Google de Dani (Alphalink). SSO del realm y usuario de las sesiones de Claude nacidas del chat (OWU-27). |
 | `daniel.ibanez@cloudblue.com` | humano | Dani (operador) (origen-desconocido) | activo | Cuenta Google de trabajo de Dani (CloudBlue); SSO del realm, sin roles propios. |
+| `dom.greco@alphalinkcrossfit.com` | humano | Dani (operador) (origen-desconocido) | activo | Usuario de origen desconocido (alta por API de admin el 16-10, SC-2522); sin atributos ni roles propios. |
 | `info@e-dani.com` | humano | Dani (operador) | activo | Buzón del negocio (Skirmshop Spain); SSO del realm, grupos edani-operators y skirmbooks-users. |
-| `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace. |
-| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office y el write global agentgateway-write concedido por OWU-80. |
+| `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users), su buzón en /workspace y la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805). |
+| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80 y la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805). |
 | `pocharlies@gmail.com` | humano | Dani (operador) | activo | Cuenta Google de administración de la plataforma (Plataforma Admin); grupos edani-admins y company-operator. |
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
+| `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
+| `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
+| `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 21 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 25 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
 | `service-account-claude-sessions-other` | sa | QA | retirada-propuesta | Segundo sub con claude-sessions: el 403 de propiedad entre sesiones de otro usuario. |
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
 | `service-account-cloudblue` | sa | Dani (operador) (origen-desconocido) | activo | client_credentials con el que CloudBlue llama a litellm.e-dani.com (team_id=cloudblue, aud=litellm). |
 | `service-account-company-metrics-agentgateway` | sa | DevOps | activo | Consumidor MCP de las métricas de la compañía; porta company-metrics-read. |
+| `service-account-correo-agente-lectura` | sa | DevOps | activo | Identidad de lectura del agente de casos de Postia ante AgentGateway: los agentgateway-read:<ruta> de sus perfiles (brain, picqer, shopify, shopify-admin, skirmshop-plugins, workspace) y ningún agentgateway-write*. (DGX-1218) |
+| `service-account-correo-ejecutor` | sa | DevOps | activo | Ejecutor de las acciones aprobadas de los casos de Postia: agentgateway-write:correo-ejecutor (order_shipping_line_replace, order_returnable_lines_get, return_create, labels_pickup_create) y agentgateway-read:shopify-admin para pasar la puerta de la ruta. Nunca el agentgateway-write pelado ni otro dominio. (DGX-1218) |
+| `service-account-hermes-enviar` | sa | DevOps | activo | Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail (agentgateway-write:workspace-envio) por /workspace, más agentgateway-read:workspace para llegar a la ruta; nunca agentgateway-write ni otro dominio (INFRA-676). |
+| `service-account-hermes-secretaria` | sa | DevOps | activo | Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria-casa` | sa | DevOps | activo | Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria-dani` | sa | DevOps | activo | Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria-leila` | sa | DevOps | activo | Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines). |
+| `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar. |
 | `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
@@ -88,8 +145,20 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 ```json
 {
   "realm": "edani",
-  "measured": "2026-09-25",
+  "measured": "2026-10-27",
   "principals": [
+    {
+      "username": "correo@e-dani.com",
+      "type": "humano",
+      "client": null,
+      "owner": "Dani (operador)",
+      "source": "SC-1958/SC-1959 (06-10): alta de la cuenta `correo` «E-dani Correo» en la org Claude Team E-dani; el SSO de claude.ai de la org va por Keycloak (claude-ai-sso), así que su login vive en este realm",
+      "purpose": "Cuenta de correo de la org Claude Team E-dani («E-dani Correo»); su login a claude.ai pasa por el SSO de este realm. Sin roles propios.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
     {
       "username": "daniel.ibanez@alphalinkcrossfit.com",
       "type": "humano",
@@ -119,6 +188,21 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       ]
     },
     {
+      "username": "dom.greco@alphalinkcrossfit.com",
+      "type": "humano",
+      "client": null,
+      "owner": "Dani (operador)",
+      "source": "ninguna: alta en el realm el 2026-10-16 12:36 UTC por la API de admin (auto-registro apagado), sin atributos y sin referencia en ningún repo; adoptada por SC-2522",
+      "purpose": "Usuario de origen desconocido; sin roles propios más allá del compuesto del realm.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo",
+      "flags": [
+        "origen-desconocido"
+      ]
+    },
+    {
       "username": "info@e-dani.com",
       "type": "humano",
       "client": null,
@@ -136,8 +220,9 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Leila",
       "source": "k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml (usuario de Leila, sub medido 21-09)",
-      "purpose": "Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace.",
+      "purpose": "Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace; lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805).",
       "realm_roles": [
+        "agentgateway-read:social",
         "default-roles-edani"
       ],
       "status": "activo"
@@ -148,8 +233,9 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Dani (operador)",
       "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel); agentgateway-write por OWU-80 (veredicto de security de OWU-28, condición (b))",
-      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office y el write global agentgateway-write concedido por OWU-80.",
+      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80 y lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805).",
       "realm_roles": [
+        "agentgateway-read:social",
         "agentgateway-write",
         "cto-office-send",
         "default-roles-edani"
@@ -194,6 +280,43 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "retirement_reason": "Fixture de SC-479 / SC-665 (Done). Ningún criterio de INFRA-219 ni otra épica abierta lo usa (la prueba de drift de C5 usa qa-con-rol). Decisión del CTO; mientras no se decida sigue activo en el realm."
     },
     {
+      "username": "qa-write-sin-vinculo@e-dani.com",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "OWU-28 / historia g (fixture C2 reverso; plan del architect nota-architect-plan.md)",
+      "purpose": "Fixture C2 reverso de OWU-28 (write sin vínculo Atlassian): usuario de prueba con agentgateway-write, sin grupos ni entrada en atlassian-identity-bindings; login scriptado PKCE por /chat-atlassian con el cliente público agentgateway-chat-mcp. Alta, contraseña y retirada por GitOps (agentgateway-write-fixture-user.sh).",
+      "realm_roles": [
+        "agentgateway-write",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "qa-sso-test",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556)",
+      "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "staticduo@gmail.com",
+      "type": "humano",
+      "client": null,
+      "owner": "Dani (operador)",
+      "source": "INFRA-383 M1B (Browser Harness): la propuesta de identidad Keycloak de Jordi Ibáñez (staticduo, relay 2039) aceptada el 03-10 sustituye los tokens compartidos por principals; alta el 05-10",
+      "purpose": "Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
       "username": "uriel",
       "type": "humano",
       "client": null,
@@ -206,24 +329,44 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "status": "activo"
     },
     {
+      "username": "service-account-agentgateway-mac-cb",
+      "type": "sa",
+      "client": "agentgateway-mac-cb",
+      "owner": "Dani (operador)",
+      "source": "ningún ticket ni repo: client creado a mano en el realm (el Mac CloudBlue del paseo SC-2473); declarada por security al cerrar la matriz hindsight (INFRA-974)",
+      "purpose": "client_credentials del Mac CloudBlue para la ruta /hindsight-cloudblue de AgentGateway (banco CloudBlue, solo lectura; contenido que solo puede ir a modelos Anthropic/local, nunca a OpenAI/Alibaba).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-cloudblue",
+        "default-roles-edani"
+      ],
+      "status": "activo",
+      "flags": [
+        "origen-desconocido"
+      ]
+    },
+    {
       "username": "service-account-agentgateway-mcp",
       "type": "sa",
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 21 lecturas agentgateway-read:* y agentgateway-write.",
+      "purpose": "Plano MCP de AgentGateway: las 25 lecturas agentgateway-read:* y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
+        "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
         "agentgateway-read:atlassian",
         "agentgateway-read:brain",
         "agentgateway-read:dgx-control",
         "agentgateway-read:gsc",
+        "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
         "agentgateway-read:offers",
         "agentgateway-read:picqer",
+        "agentgateway-read:plaud",
         "agentgateway-read:shopify",
         "agentgateway-read:shopify-admin",
+        "agentgateway-read:skills",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:social",
         "agentgateway-read:stt",
@@ -235,6 +378,36 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:weight",
         "agentgateway-read:workspace",
         "agentgateway-write",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-analisis",
+      "type": "sa",
+      "client": "analisis",
+      "owner": "Analisis (plataforma SC-2951/SC-2956)",
+      "source": "creado por security por admin API en SC-2967 ([SEC] de la etapa 0 de SC-2951; el rol agentgateway-write:compania-propuestas con el veredicto de SC-2963) sin declaracion en GitOps; adoptado por SC-1282 (keycloak-role-drift), medido en el realm vivo 2026-10-27",
+      "purpose": "Identidad M2M de la plataforma de analisis (los seis revisores de SC-2956): propone por /compania (agentgateway-write:compania-propuestas, nunca :compania), navega por /playwright (agentgateway-write:analisis, seis tools) y lee /atlassian, /social y /synapse.",
+      "realm_roles": [
+        "agentgateway-read:atlassian",
+        "agentgateway-read:social",
+        "agentgateway-read:synapse",
+        "agentgateway-write:analisis",
+        "agentgateway-write:compania-propuestas",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-atlassian-mcp-probe",
+      "type": "sa",
+      "client": "atlassian-mcp-probe",
+      "owner": "DevOps",
+      "source": "SC-1834 (H4 de SC-1728): sonda de salud del plano Atlassian (Deployment atlassian-mcp-probe, ns monitoring, k8s-observability-pocharlies); el binding de su sub a la cuenta `sonda` está en k8s-agentgateway-pocharlies backends/atlassian-mcp/atlassian-identity-bindings.yaml y el contrato en su CONTRACTS.yaml",
+      "purpose": "Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian.",
+      "realm_roles": [
+        "agentgateway-read:atlassian",
         "default-roles-edani"
       ],
       "status": "activo"
@@ -330,6 +503,145 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "status": "activo"
     },
     {
+      "username": "service-account-correo-agente-lectura",
+      "type": "sa",
+      "client": "correo-agente-lectura",
+      "owner": "DevOps",
+      "source": "DGX-1218 (PR-2 de la épica DGX-1209, agente de casos de Postia); condición 3 de security de DGX-1209 (comentarios 37045 y 37075); k8s-agentgateway-pocharlies#221 (reglas del gateway); creado por platform/keycloak-next/correo-agente-clients.yaml, nunca a mano; el secreto lo copia devops a 1Password tras el sync (RUNBOOK sección 19); el binding por sub a los buzones del núcleo en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml va en el mismo cambio de GitOps que el buzón",
+      "purpose": "Identidad de lectura del agente de casos de Postia ante AgentGateway: los agentgateway-read:<ruta> de sus perfiles (brain, picqer, shopify, shopify-admin, skirmshop-plugins, workspace) y ningún agentgateway-write*.",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:picqer",
+        "agentgateway-read:shopify",
+        "agentgateway-read:shopify-admin",
+        "agentgateway-read:skirmshop-plugins",
+        "agentgateway-read:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-correo-ejecutor",
+      "type": "sa",
+      "client": "correo-ejecutor",
+      "owner": "DevOps",
+      "source": "DGX-1218 (PR-2 de la épica DGX-1209, agente de casos de Postia); condición 3 de security de DGX-1209 (comentarios 37045 y 37075); k8s-agentgateway-pocharlies#221 (reglas del gateway); creado por platform/keycloak-next/correo-agente-clients.yaml, nunca a mano; el secreto lo copia devops a 1Password tras el sync (RUNBOOK sección 19)",
+      "purpose": "Ejecutor de las acciones aprobadas de los casos de Postia: agentgateway-write:correo-ejecutor (order_shipping_line_replace, order_returnable_lines_get, return_create, labels_pickup_create) y agentgateway-read:shopify-admin para pasar la puerta de la ruta. Nunca el agentgateway-write pelado ni otro dominio.",
+      "realm_roles": [
+        "agentgateway-read:shopify-admin",
+        "agentgateway-write:correo-ejecutor",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-enviar",
+      "type": "sa",
+      "client": "hermes-enviar",
+      "owner": "DevOps",
+      "source": "INFRA-676 (P4b de INFRA-480, historia hermana de INFRA-642); veredicto de security INFRA-640 (a): client confidencial con solo estos dos roles; k8s-agentgateway-pocharlies#186 (reglas del gateway); creado por platform/keycloak-next/hermes-enviar-client.yaml, nunca a mano; el secreto en 1Password `hermes-kc-enviar` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); el binding por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml es INFRA-677",
+      "purpose": "Identidad MCP del plugin enviar de Hermes ante AgentGateway: el único que envía o borra borradores de Gmail por /workspace con agentgateway-write:workspace-envio (gmail_send, gmail_forward, gmail_send_draft, gmail_delete_draft), más agentgateway-read:workspace para llegar a la ruta. Nunca el agentgateway-write pelado ni otro dominio.",
+      "realm_roles": [
+        "agentgateway-read:workspace",
+        "agentgateway-write:workspace-envio",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-secretaria",
+      "type": "sa",
+      "client": "hermes-secretaria",
+      "owner": "DevOps",
+      "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
+      "purpose": "Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:social",
+        "agentgateway-read:workspace",
+        "agentgateway-write:browser-navegacion",
+        "agentgateway-write:compania",
+        "agentgateway-write:social",
+        "agentgateway-write:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-secretaria-casa",
+      "type": "sa",
+      "client": "hermes-secretaria-casa",
+      "owner": "DevOps",
+      "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-casa de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-casa` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
+      "purpose": "Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:social",
+        "agentgateway-read:workspace",
+        "agentgateway-write:browser-navegacion",
+        "agentgateway-write:compania",
+        "agentgateway-write:social",
+        "agentgateway-write:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-secretaria-dani",
+      "type": "sa",
+      "client": "hermes-secretaria-dani",
+      "owner": "DevOps",
+      "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-dani de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-dani` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
+      "purpose": "Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:social",
+        "agentgateway-read:workspace",
+        "agentgateway-write:browser-navegacion",
+        "agentgateway-write:social",
+        "agentgateway-write:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-secretaria-leila",
+      "type": "sa",
+      "client": "hermes-secretaria-leila",
+      "owner": "DevOps",
+      "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-leila de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-leila` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
+      "purpose": "Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:social",
+        "agentgateway-read:workspace",
+        "agentgateway-write:browser-navegacion",
+        "agentgateway-write:social",
+        "agentgateway-write:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-hermes-secretaria-skirmshop",
+      "type": "sa",
+      "client": "hermes-secretaria-skirmshop",
+      "owner": "DevOps",
+      "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-skirmshop de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-skirmshop` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
+      "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar.",
+      "realm_roles": [
+        "agentgateway-read:brain",
+        "agentgateway-read:picqer",
+        "agentgateway-read:shopify",
+        "agentgateway-read:shopify-admin",
+        "agentgateway-read:skirmshop-plugins",
+        "agentgateway-read:workspace",
+        "agentgateway-write:workspace-borrador",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
       "username": "service-account-jarvis-echo",
       "type": "sa",
       "client": "jarvis-echo",
@@ -364,6 +676,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "realm_roles": [
         "agentgateway-read:gsc",
         "agentgateway-read:offers",
+        "agentgateway-read:plaud",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:studio",
         "agentgateway-read:synapse",

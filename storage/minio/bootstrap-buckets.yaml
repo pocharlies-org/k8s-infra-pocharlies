@@ -35,7 +35,10 @@ spec:
             - |
               set -e
               mc alias set local http://minio-s3:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-              for b in velero-backups loki-chunks harbor-blobs k3s-etcd-snapshots image-cache longhorn-backups langfuse; do
+              # harbor-blobs ya no está: el almacén del registry se fue a Object
+              # Storage de OVH (INFRA-482). El bucket sobrevive en disco hasta que se
+              # borre el contenido tras verificar el corte.
+              for b in velero-backups loki-chunks k3s-etcd-snapshots image-cache longhorn-backups langfuse; do
                 mc mb --ignore-existing local/$b
                 mc anonymous set none local/$b
               done

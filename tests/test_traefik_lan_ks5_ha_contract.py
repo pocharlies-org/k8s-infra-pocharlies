@@ -95,7 +95,21 @@ class TraefikLanKs5HaContractTest(unittest.TestCase):
             server,
         )
         self.assertIn("kubernetes cluster.local in-addr.arpa ip6.arpa", server)
-        self.assertNotIn("192.168.50.240", server)
+        # The IP itself is legitimate for the hosts pins added by INFRA-588
+        # (dgx/s3.e-dani.com); what must not happen is harbor going through
+        # one of those instead of the rewrite above.
+        self.assertNotIn("192.168.50.240 harbor", server)
+
+    def test_libreplay_lan_synthetic_resolves_to_the_cluster_service(self) -> None:
+        # INFRA-889: the in-cluster synthetic probe was flipping to the public
+        # Cloudflare edge (521s, incident LPLY-15053); it must resolve to
+        # traefik-lan like harbor, litellm and argocd do.
+        server = self.coredns["data"]["edani-public-lan.server"]
+        self.assertIn(
+            "rewrite name exact libreplay.e-dani.com "
+            "traefik-lan.traefik-lan.svc.cluster.local",
+            server,
+        )
 
 
 if __name__ == "__main__":

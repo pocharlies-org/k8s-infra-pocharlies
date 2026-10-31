@@ -9,16 +9,36 @@ data:
     e-dani.com:53 {
       errors
       # This more-specific e-dani.com server block wins over the root block.
-      # Rewrite Harbor here, then resolve the service through Kubernetes while
-      # preserving the original hostname in the answer for TLS/SNI.
+      # Names listed here are rewritten to the traefik-lan service: Kubernetes
+      # resolves it while the answer keeps the original hostname, so SNI and the
+      # *.e-dani.com certificate still validate.  A name left out falls through
+      # to `forward` and its answer depends on the resolver of the node hosting
+      # the CoreDNS replica that replies, so in-cluster clients flip between the
+      # LAN and the public edge -- measured on Harbor (SC-2443: a >100 MB image
+      # layer got 413/502 through the Cloudflare proxy, whose body cap also
+      # breaks any large request) and on litellm and argocd (SC-2445).  Add the
+      # name here when an in-cluster client needs it; traefik-lan must already
+      # serve that Host (canonical-hosts-lan.yaml).
       rewrite name exact harbor.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact harbor.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact litellm.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact argocd.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      # INFRA-889: the LibrePlay LAN synthetic probe (VMProbe
+      # libreplay-lan-synthetic, ns monitoring) runs in-cluster and was
+      # flipping to the public Cloudflare edge -- the 521s behind incident
+      # LPLY-15053 and the LibrePlaySyntheticAvailabilityBudgetLow alerts.
+      rewrite name exact libreplay.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa
       }
       hosts {
-        100.83.56.98 dgx.e-dani.com
-        100.83.56.98 s3.e-dani.com
+        # Split-horizon for e-dani.com points at traefik-lan over the LAN
+        # (metallb 192.168.50.240), which terminates TLS for *.e-dani.com.
+        # The old pin to the x86 tailnet IP (100.83.56.98) broke TLS: only
+        # tailscaled listens on that :443 (INFRA-588).
+        192.168.50.240 dgx.e-dani.com
+        192.168.50.240 s3.e-dani.com
         ttl 60
         fallthrough
       }
@@ -33,6 +53,8 @@ data:
       errors
       hosts {
         100.83.56.98 x86.taile0ad27.ts.net
+        100.125.62.10 mac-cb.taile0ad27.ts.net
+        100.85.61.58 mac-casa.taile0ad27.ts.net
         ttl 60
         fallthrough
       }
