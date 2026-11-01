@@ -1,9 +1,12 @@
 ---
-# Explicit, gated rollout for making Atlantic a Longhorn attach/compute node.
-# It deliberately does NOT make Atlantic a replica-storage node.
-# Pattern copied from enable-sauvage-longhorn-attach-only.yml (INFRA-679);
-# opened by INFRA-991 after the correo core landed on Atlantic without the
-# Longhorn CSI driver and stuck in ContainerCreating.
+# Explicit, gated rollout that makes Atlantic a full Longhorn node: it attaches
+# volumes for its pods AND stores replicas on /var/lib/longhorn.
+# History: INFRA-991 (24-10) admitted Atlantic as attach-only after the correo
+# core landed there without the Longhorn CSI driver (pattern copied from
+# enable-sauvage-longhorn-attach-only.yml, INFRA-679). INFRA-1103 (01-11, Dani):
+# Atlantic is prepared and stores replicas; disk `default-disk-atlantic` with 60 %
+# reserved, because the rest of the node (Paseo included) already used 46 % of
+# that filesystem.
 #
 # Required order:
 #   1. Upgrade Longhorn with storage/longhorn/values.yaml.
@@ -11,20 +14,20 @@
 #   3. Run this playbook with the explicit confirmation token.
 #
 # Example:
-#   CONFIRM_ATLANTIC_LONGHORN_ATTACH_ONLY=enable-atlantic-attach-only \
+#   CONFIRM_ATLANTIC_LONGHORN=enable-atlantic-longhorn \
 #     ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
-#     ansible/playbooks/enable-atlantic-longhorn-attach-only.yml
+#     ansible/playbooks/enable-atlantic-longhorn.yml
 
-- name: Confirm the Atlantic attach-only rollout
+- name: Confirm the Atlantic Longhorn rollout
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Require explicit attach-only confirmation
+    - name: Require explicit confirmation
       ansible.builtin.assert:
         that:
-          - lookup('env', 'CONFIRM_ATLANTIC_LONGHORN_ATTACH_ONLY') == 'enable-atlantic-attach-only'
+          - lookup('env', 'CONFIRM_ATLANTIC_LONGHORN') == 'enable-atlantic-longhorn'
         fail_msg: >-
-          Set CONFIRM_ATLANTIC_LONGHORN_ATTACH_ONLY=enable-atlantic-attach-only
+          Set CONFIRM_ATLANTIC_LONGHORN=enable-atlantic-longhorn
           after the Longhorn Helm values have been upgraded and verified.
 
 - name: Install Longhorn attach and encryption prerequisites on Atlantic
@@ -34,7 +37,7 @@
   roles:
     - longhorn_prereqs
 
-- name: Admit Atlantic to Longhorn as attach-only
+- name: Admit Atlantic to Longhorn as attach and replica-storage node
   hosts: localhost
   gather_facts: false
   vars:
@@ -57,7 +60,7 @@
             | list | length == 1
         fail_msg: "Atlantic must be Ready before Longhorn admission."
 
-    - name: Read Longhorn attach-only safety settings
+    - name: Read Longhorn admission safety settings
       ansible.builtin.command:
         argv:
           - kubectl
@@ -149,15 +152,21 @@
           - --timeout=5m
       changed_when: false
 
-    - name: Disable replica scheduling on the node and every discovered disk
-      ansible.builtin.shell: |
-        set -euo pipefail
-        current="$(kubectl -n "{{ longhorn_namespace }}" get nodes.longhorn.io \
-          "{{ longhorn_node }}" -o json)"
-        patch="$(jq -cn --argjson node "$current" \
-          '{spec:{allowScheduling:false,disks:(($node.spec.disks // {}) | with_entries(.value.allowScheduling=false))}}')"
-        kubectl -n "{{ longhorn_namespace }}" patch nodes.longhorn.io \
-          "{{ longhorn_node }}" --type=merge -p "$patch"
+    # 565351383859 B = 60 % of the 877 GiB md3 filesystem (measured 01-11).
+    - name: Enable replica storage on the node and its disk
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - patch
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - --type=merge
+          - -p
+          - >-
+            {"spec":{"allowScheduling":true,"disks":{"default-disk-atlantic":{"allowScheduling":true,
+            "diskDriver":"","diskType":"filesystem","evictionRequested":false,"path":"/var/lib/longhorn",
+            "storageReserved":565351383859,"tags":[]}}}}
       changed_when: true
 
     - name: Wait for Longhorn manager on Atlantic
@@ -237,23 +246,16 @@
       register: longhorn_node_raw
       changed_when: false
 
-    - name: Count replicas placed on Atlantic
-      ansible.builtin.shell: |
-        set -euo pipefail
-        kubectl -n "{{ longhorn_namespace }}" get replicas.longhorn.io -o json \
-          | jq '[.items[] | select(.spec.nodeID == "{{ longhorn_node }}" and .metadata.deletionTimestamp == null)] | length'
-      register: atlantic_replica_count
-      changed_when: false
 
-    - name: Prove Atlantic is attach-only
+    - name: Prove Atlantic accepts replicas
       ansible.builtin.assert:
         that:
-          - not (longhorn_node_raw.stdout | from_json).spec.allowScheduling
+          - (longhorn_node_raw.stdout | from_json).spec.allowScheduling
+          - (longhorn_node_raw.stdout | from_json).spec.disks['default-disk-atlantic'].allowScheduling
           - >-
-            (longhorn_node_raw.stdout | from_json).spec.disks | default({})
-            | dict2items | selectattr('value.allowScheduling', 'equalto', true)
-            | list | length == 0
-          - atlantic_replica_count.stdout | int == 0
+            (longhorn_node_raw.stdout | from_json).status.diskStatus['default-disk-atlantic'].conditions
+            | selectattr('status', 'equalto', 'True') | map(attribute='type') | list
+            is superset(['Ready', 'Schedulable'])
         fail_msg: >-
-          Attach-only invariant failed: the node or one of its disks is
-          schedulable, or a Longhorn replica exists on Atlantic.
+          Atlantic does not accept replicas: the node or default-disk-atlantic is
+          not schedulable, or the disk is not Ready and Schedulable.
