@@ -108,13 +108,15 @@ JARVIS_SA_USERNAME="service-account-jarvis-echo"
 # Deployment in k8s-observability-pocharlies). Same rule as SC-699/INFRA-477:
 # this hook only asserts the extra holders are reviewed and never resolves
 # their clients.
-SECRETARIA_READ_ROLE_NAMES="${SECRETARIA_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:social,agentgateway-read:workspace}"
-EXPECTED_SECRETARIA_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:social,agentgateway-read:workspace"
+# SC-3508 (2026-11-01, Dani: el catálogo de skills para todos los perfiles de Hermes): + agentgateway-read:skills
+# (skill_search y skill_load; skill_propose sigue tras agentgateway-write) en las secretarias y secretaria-skirmshop.
+SECRETARIA_READ_ROLE_NAMES="${SECRETARIA_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:skills,agentgateway-read:social,agentgateway-read:workspace}"
+EXPECTED_SECRETARIA_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:skills,agentgateway-read:social,agentgateway-read:workspace"
 SECRETARIA_SA_USERNAMES="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-hermes-secretaria-dani,service-account-hermes-secretaria-leila"
 # DGX-854: + agentgateway-read:shopify-admin, only for product_stock_status (real stock and preorder/factory order);
 # the Hermes fine server list of secretaria-skirmshop exposes no other tool of that route.
-SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
-EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
+SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
+EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
 SECRETARIA_SKIRMSHOP_SA_USERNAME="service-account-hermes-secretaria-skirmshop"
 PROBE_READ_ROLE_NAMES="${PROBE_READ_ROLE_NAMES:-agentgateway-read:atlassian}"
 EXPECTED_PROBE_READ_ROLE_NAMES="agentgateway-read:atlassian"
