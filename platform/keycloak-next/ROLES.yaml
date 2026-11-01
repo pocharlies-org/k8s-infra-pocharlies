@@ -236,9 +236,14 @@
     {
       "name": "agentgateway-read:skills",
       "status": "active",
-      "meaning": "Lectura de la ruta /skills de AgentGateway (SC-3508, épica SC-1779: MCP del catálogo único de skills; skill_search y skill_load).",
+      "meaning": "Lectura de la ruta /skills de AgentGateway (SC-3508, épica SC-1779: MCP del catálogo único de skills; skill_search y skill_load). 01-11: también las secretarias de Hermes, que salen por su propio client (Dani: el catálogo para todos los perfiles).",
       "grantees": [
-        "service-account-agentgateway-mcp"
+        "service-account-agentgateway-mcp",
+        "service-account-hermes-secretaria",
+        "service-account-hermes-secretaria-casa",
+        "service-account-hermes-secretaria-dani",
+        "service-account-hermes-secretaria-leila",
+        "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a skill_search y skill_load de la ruta /skills de AgentGateway (contrato mcp.skills.tools).",

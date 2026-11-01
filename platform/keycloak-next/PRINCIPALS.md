@@ -557,6 +557,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil general de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:skills",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
@@ -576,6 +577,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil de casa de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social, workspace y compania, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:skills",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
@@ -595,6 +597,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil de Dani de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:skills",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
@@ -613,6 +616,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:skills",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
         "agentgateway-write:browser-navegacion",
@@ -634,6 +638,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:picqer",
         "agentgateway-read:shopify",
         "agentgateway-read:shopify-admin",
+        "agentgateway-read:skills",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:workspace",
         "agentgateway-write:workspace-borrador",
