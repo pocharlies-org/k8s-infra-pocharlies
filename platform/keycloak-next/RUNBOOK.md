@@ -86,6 +86,8 @@ Create:
 - Groups:
   - `/edani-admins`
   - `/edani-operators`
+  - `/dashboard-viewers` — solo ver el panel DGX (01-11-2026): entra por el oauth2-proxy
+    compartido pero ninguna escritura lo admite (el backend pide `/edani-admins`).
 - Google identity provider with callback:
 
 ```text
