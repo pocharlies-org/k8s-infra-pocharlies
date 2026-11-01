@@ -1,0 +1,60 @@
+# NetworkPolicy de ingreso para 1Password Connect (SC-1791).
+#
+# Hasta aquí el ns onepassword-connect no tenía ninguna NetworkPolicy: cualquier
+# pod del cluster podía leer la API de Connect (:8080) —aunque sin token no
+# obtendría secretos, la superficie de ataque (ROLES de connect-api, probes,
+# fuzzing) era todo el cluster. Patrón igual a agentgateway-default-deny-ingress
+# (k8s-agentgateway-pocharlies), sin ipBlocks: Connect solo se consume
+# in-cluster (ESO), nunca por tráfico SNAT de Traefik.
+#
+# El pod hace todo su tráfico interno por localhost (connect-api ↔ connect-sync
+# por 11220/11221, probes httpGet a localhost), así que el default-deny no le
+# afecta en marcha normal. La regla same-namespace existe por si escala a >1
+# replica (hoy replicas: 1 + strategy Recreate).
+---
+# Default-deny ingress para todo el namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: onepassword-connect-default-deny-ingress
+  namespace: onepassword-connect
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Único consumidor: external-secrets-operator (ClusterSecretStore
+# onepassword-connect). Más el propio namespace, por si Connect escala a >1
+# réplica y connect-sync/handoff tiene que hablar entre pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: onepassword-connect-allow-eso
+  namespace: onepassword-connect
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: onepassword-connect
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: external-secrets-operator
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 11220
+        - protocol: TCP
+          port: 11221
+  policyTypes:
+    - Ingress
