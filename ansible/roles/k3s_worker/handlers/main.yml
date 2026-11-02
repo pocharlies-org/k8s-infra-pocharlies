@@ -1,0 +1,8 @@
+---
+# The k3s agent reads registries.yaml only at startup, so a change needs a
+# restart. `sudo -n systemctl` is NOPASSWD on every OVH node (full sudo on
+# sauvage requires a password — INFRA-937), so the restart needs no ansible
+# become anywhere.
+- name: Restart k3s-agent after registries change
+  ansible.builtin.command: sudo -n systemctl restart k3s-agent
+  changed_when: true

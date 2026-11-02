@@ -1,0 +1,15 @@
+---
+# INFRA-1099 — Harbor registries.yaml for the OVH nodes (see
+# ansible/playbooks/apply-registries.yml and the role templates
+# registries.yaml.j2). Home nodes do not get this file: they reach
+# harbor.lan.e-dani.com directly and harbor_registries_enabled stays unset.
+#
+# The password never lives in git: it is read from 1Password on the control
+# host at apply time. The item stores a dockerconfigjson (the runtime pull
+# robot for the private `homelab` project, docs/runbooks/
+# runtime-credential-rotation.md); the role extracts user and password from
+# the auth entry of harbor_registries_auth_host. After rotating that item,
+# re-run the playbook (docs/runbook-harbor-registries-ovh.md).
+harbor_registries_enabled: true
+harbor_registries_lookup_cmd: op-secret "op://k8s-pocharlies/infra-harbor-k8s-runtime-pull/dockerconfigjson"
+harbor_registries_auth_host: harbor.e-dani.com
