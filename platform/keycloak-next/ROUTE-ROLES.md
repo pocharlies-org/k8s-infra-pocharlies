@@ -20,7 +20,9 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
   k8s-agentgateway-pocharlies#197—; el verificador la señala hasta que la ruta
   despliegue). El config vivo trae 77: la
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
-  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). DGX-1218 declara
+  señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). SC-4051 (02-11-2026) declara las dos filas `hindsight-claude-personal` y `hindsight-personal`
+  (rutas de SC-4050, k8s-agentgateway-pocharlies#246, fusionada y viva: banco fijo por path, rol dedicado
+  por banco, sin plano de escritura; grants en ROLES.yaml). DGX-1218 declara
   los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
   del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
@@ -445,6 +447,18 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "hindsight-tienda",
       "path": "/hindsight-tienda",
       "require": ["agentgateway-read:hindsight-tienda"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-claude-personal",
+      "path": "/hindsight-claude-personal",
+      "require": ["agentgateway-read:hindsight-claude-personal"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-personal",
+      "path": "/hindsight-personal",
+      "require": ["agentgateway-read:hindsight-personal"],
       "tools": {}
     },
     {
