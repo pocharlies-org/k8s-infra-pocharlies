@@ -922,3 +922,42 @@ reconciler and let the next PostSync re-apply it. While the manifest stays in
 Kustomize the next PostSync recreates the client with the secret of item A, so
 retire item A through the weekly rotation session only when the reconciler is
 also retired.
+
+
+## 21. Human delete-gate grant (`photos-confirm-delete` → `me@e-dani.com`, INFRA-402)
+
+`photos-confirm-delete-grant-daniel-job.yaml` (PostSync wave 25) is the human
+half of the gestor-de-fotos delete gate (architect ruling G1, epic INFRA-379).
+It owns EXACTLY TWO IdP facts: the realm role `photos-confirm-delete` (realm
+`edani`) and its direct mapping onto the human user of Daniel, pinned by subject
+`e51253a7-c137-4c6c-9fb9-af9cecd3b147` (username `me@e-dani.com`, cross-checked
+at runtime). Unlike the write grant of section 16, this hook CREATES its role
+(there is no other owner for it) but never creates or edits users: an absent
+subject fails the job loud. The role is the only principal that EXECUTES a
+`photos_delete` proposal on the `/photos` route — the gateway stamps the verified
+JWT's realm roles into `x-photos-roles` (k8s-agentgateway-pocharlies#247) and the
+backend is fail-closed (header absent or empty ⇒ the agent only PROPOSES). The
+route role `agentgateway-read:photos` is a different fact, owned by the read-grants
+matrix (section on `agentgateway-read-grants`); this hook must never carry it, and
+the human role must never enter that matrix (granting it to the shared plane would
+let agents delete).
+
+Steady state after sync:
+
+```bash
+kubectl -n keycloak logs job/keycloak-photos-confirm-delete-grant-daniel -c reconcile-photos-confirm-delete-grant-daniel
+# {"realm":"edani","role":"photos-confirm-delete","user_id":"e51253a7-c137-4c6c-9fb9-af9cecd3b147","username":"me@e-dani.com","present":true,"changed":true}
+```
+
+`ROLES.yaml` and `PRINCIPALS.md` declare the grant (the drift sweep of section 15
+is the backstop — expect at most one transient `DRIFT:` between the sync start and
+wave 25 completing).
+
+### State rollback
+
+Apply `manual/photos-confirm-delete-grant-daniel-rollback-job.yaml` (excluded from
+Kustomize). It removes ONLY the human mapping; the role stays (ROLES.yaml: ninguna
+entrada se borra). While `photos-confirm-delete-grant-daniel-job.yaml` stays in
+Kustomize the next PostSync re-applies the mapping; to retire the grant
+permanently, git revert the commit owning the reconciler (which also retires the
+`ROLES.yaml` / `PRINCIPALS.md` declarations) and let the next sync drop it.

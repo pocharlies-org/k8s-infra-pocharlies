@@ -75,7 +75,17 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 # needs agentgateway-write). Holder: service-account-agentgateway-mcp only, as
 # alphalink. The read matrix is 25 roles since then: reviewed MCP token set 26
 # (write + 25 reads).
-READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
+# INFRA-402 (2026-11-02): + agentgateway-read:photos (route /photos, the AI
+# photo manager of epic INFRA-379 — k8s-agentgateway-pocharlies#247; five
+# immutable tools, contract mcp.photos.tools in the gateway registry and
+# mcp.photos.* in k8s-photos-mcp-pocharlies/CONTRACTS.yaml). Holder:
+# service-account-agentgateway-mcp only, as alphalink/merchant. The delete gate
+# is NOT this role: photos_delete only PROPOSES without the human role
+# photos-confirm-delete (owned by
+# photos-confirm-delete-grant-daniel.sh, wave 25 — never in this matrix, which
+# is grants to the shared plane). The read matrix is 26 roles since then:
+# reviewed MCP token set 27 (write + 26 reads).
+READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
 OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools}"
 # SC-699 (2026-09-26): chat-agentgateway holds the shared route role
 # agentgateway-read:studio so its auth-proxy sidecar can pass the /studio
@@ -162,7 +172,7 @@ ANALISIS_SA_USERNAME="service-account-analisis"
 HUMANOS_READ_ROLE_NAMES="${HUMANOS_READ_ROLE_NAMES:-agentgateway-read:social}"
 EXPECTED_HUMANOS_READ_ROLE_NAMES="agentgateway-read:social"
 HUMANOS_USERNAMES="me@e-dani.com,lays84.mv@gmail.com"
-EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
+EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): while agentgateway-mcp has
@@ -743,7 +753,7 @@ rollback_roles() {
     IFS=,
   done
   IFS="${old_ifs}"
-  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":25,"present":false}\n'
+  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":26,"present":false}\n'
 }
 
 login_admin
@@ -760,7 +770,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":25,"created":%s,"grants_agentgateway_mcp":25,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":26,"created":%s,"grants_agentgateway_mcp":26,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)

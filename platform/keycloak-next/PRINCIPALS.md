@@ -118,7 +118,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 25 lecturas agentgateway-read:* y agentgateway-write. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 26 lecturas agentgateway-read:* (INFRA-402: + photos) y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -233,12 +233,13 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Dani (operador)",
       "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel); agentgateway-write por OWU-80 (veredicto de security de OWU-28, condición (b))",
-      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80 y lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805).",
+      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80, lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805) y photos-confirm-delete, el rol humano del gate de borrado del gestor de fotos (INFRA-402 G1; lo concede el PostSync photos-confirm-delete-grant-daniel-job).",
       "realm_roles": [
         "agentgateway-read:social",
         "agentgateway-write",
         "cto-office-send",
-        "default-roles-edani"
+        "default-roles-edani",
+        "photos-confirm-delete"
       ],
       "status": "activo"
     },
@@ -350,7 +351,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 25 lecturas agentgateway-read:* y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
+      "purpose": "Plano MCP de AgentGateway: las 26 lecturas agentgateway-read:* (INFRA-402: + photos) y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -362,6 +363,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:image",
         "agentgateway-read:merchant",
         "agentgateway-read:offers",
+        "agentgateway-read:photos",
         "agentgateway-read:picqer",
         "agentgateway-read:plaud",
         "agentgateway-read:shopify",
