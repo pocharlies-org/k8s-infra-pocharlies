@@ -11,7 +11,9 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **47 rutas, 89 gates** en esta matriz (INFRA-402, 02-11-2026: + fila
+  Hoy: **50 rutas, 92 gates** en esta matriz (SC-4304, 02-11-2026: + fila
+  `hindsight-codigo`, viva en el config desde k8s-agentgateway-pocharlies#248;
+  INFRA-402, 02-11-2026: + fila
   `photos`, declarada por delante del config vivo — pendiente del merge de
   k8s-agentgateway-pocharlies#247; el verificador la señala hasta que la ruta
   despliegue; SC-3508, 28-10-2026: + fila `skills`;
@@ -25,7 +27,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
   señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). SC-4051 (02-11-2026) declara las dos filas `hindsight-claude-personal` y `hindsight-personal`
   (rutas de SC-4050, k8s-agentgateway-pocharlies#246, fusionada y viva: banco fijo por path, rol dedicado
-  por banco, sin plano de escritura; grants en ROLES.yaml). DGX-1218 declara
+  por banco, sin plano de escritura; grants en ROLES.yaml). SC-4304 (02-11-2026) declara la fila `hindsight-codigo` (ruta de k8s-agentgateway-pocharlies#248, fusionada y viva: banco `codigo` — corpus del código de los repos del registro, gitleaks en el ingreso —, rol dedicado, grants en ROLES.yaml). DGX-1218 declara
   los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
   del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
@@ -469,6 +471,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "hindsight-personal",
       "path": "/hindsight-personal",
       "require": ["agentgateway-read:hindsight-personal"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-codigo",
+      "path": "/hindsight-codigo",
+      "require": ["agentgateway-read:hindsight-codigo"],
       "tools": {}
     },
     {

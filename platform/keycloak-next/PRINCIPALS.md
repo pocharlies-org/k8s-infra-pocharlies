@@ -351,7 +351,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; los bancos personales no viajan en el SA compartido; INFRA-402: + photos) y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
+      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos) y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -360,6 +360,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:dgx-control",
         "agentgateway-read:gsc",
         "agentgateway-read:hindsight-claude-personal",
+        "agentgateway-read:hindsight-codigo",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",

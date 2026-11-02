@@ -1,0 +1,84 @@
+---
+# Credential for the DEFAULT Longhorn backup target on Sauvage MinIO (INFRA-1022 P2).
+#
+# The credential itself (1Password item `longhorn-default-backup`, vault
+# k8s-pocharlies) and the MinIO user with the scoped policy
+# storage/minio/longhorn-default-backup-policy.json are provisioned by security
+# (INFRA-1112). This file only projects the credential into longhorn-system and
+# declares the transitional BackupTarget used to verify backup+restore BEFORE
+# the default target is switched (runbook
+# docs/runbook-longhorn-default-backup-minio-cutover.md, phases a-e).
+#
+# Pattern: storage/longhorn/openclaw-sauvage-backup-target.yaml (retired with
+# INFRA-993). Do NOT reuse `backup-user` (its policy is velero-backups/*).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: longhorn-default-backup
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/managed-by: external-secrets
+    app.kubernetes.io/part-of: longhorn
+    backup.e-dani.com/scope: default
+spec:
+  refreshInterval: 24h
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: longhorn-default-backup
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: external-secrets
+          app.kubernetes.io/part-of: longhorn
+          backup.e-dani.com/scope: default
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef:
+        key: longhorn-default-backup/AWS_ACCESS_KEY_ID
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef:
+        key: longhorn-default-backup/AWS_SECRET_ACCESS_KEY
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+    - secretKey: AWS_ENDPOINTS
+      remoteRef:
+        key: longhorn-default-backup/AWS_ENDPOINTS
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Fail
+---
+# Transitional test target (runbook phase a). It points at the same bucket the
+# default will use once the values are set (phase c), so the drill exercises the
+# exact production path. It is inert until a volume is assigned to it; phase (d)
+# of the runbook removes it from the kustomization after the switch.
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: minio-default-test
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: longhorn
+    backup.e-dani.com/scope: default
+    backup.e-dani.com/tier: transitional
+spec:
+  backupTargetURL: s3://longhorn-backups@us-east-1/
+  credentialSecret: longhorn-default-backup
+  pollInterval: 5m0s
