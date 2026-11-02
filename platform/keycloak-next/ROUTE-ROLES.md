@@ -11,7 +11,12 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **46 rutas, 88 gates** en esta matriz (SC-3508, 28-10-2026: + fila `skills`;
+  Hoy: **50 rutas, 92 gates** en esta matriz (SC-4304, 02-11-2026: + fila
+  `hindsight-codigo`, viva en el config desde k8s-agentgateway-pocharlies#248;
+  INFRA-402, 02-11-2026: + fila
+  `photos`, declarada por delante del config vivo — pendiente del merge de
+  k8s-agentgateway-pocharlies#247; el verificador la señala hasta que la ruta
+  despliegue; SC-3508, 28-10-2026: + fila `skills`;
   INFRA-974, 23-10-2026: se declaran
   las dos filas `hindsight-*`, vivas en el config desde INFRA-942 y en el realm
   desde el 22-10; el verificador las señalaba como drift; los conteos de esta
@@ -129,6 +134,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `chat-gsc` | `/chat-gsc` | — | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
 | `gsc` | `/gsc` | `agentgateway-read:gsc` | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
 | `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
+| `photos` | `/photos` | `agentgateway-read:photos` | — |
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
 | `offers` | `/offers` | — | `agentgateway-write` (3), `agentgateway-write:offers` (3) |
 | `company-metrics` | `/company-metrics` | `company-metrics-read` | `company-metrics-read` (5) |
@@ -143,7 +149,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 ```json
 {
   "schema": "agentgateway-route-roles/v1",
-  "measured": "2026-09-24, ConfigMap agentgateway/agentgateway-config resourceVersion 234195236; la ruta plaud declarada el 2026-10-13 por delante del config vivo (INFRA-380)",
+  "measured": "2026-09-24, ConfigMap agentgateway/agentgateway-config resourceVersion 234195236; la ruta plaud declarada el 2026-10-13 por delante del config vivo (INFRA-380); la ruta photos declarada el 2026-11-02 por delante del config vivo (INFRA-402, pendiente del merge de k8s-agentgateway-pocharlies#247)",
   "routes": [
     {
       "route": "sauvage-admin",
@@ -435,6 +441,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "plaud",
       "path": "/plaud",
       "require": ["agentgateway-read:plaud"],
+      "tools": {}
+    },
+    {
+      "route": "photos",
+      "path": "/photos",
+      "require": ["agentgateway-read:photos"],
       "tools": {}
     },
     {

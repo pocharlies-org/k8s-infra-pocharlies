@@ -29,6 +29,7 @@ resources:
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
+  - photos-confirm-delete-grant-daniel-job.yaml
   - agentgateway-write-fixture-user-job.yaml
   - agentgateway-dani-login-client-job.yaml
   - agentgateway-token-smoke-job.yaml
@@ -128,9 +129,18 @@ configMapGenerator:
     files:
       - agentgateway-write-grant-daniel.sh=scripts/agentgateway-write-grant-daniel.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - human-role-grant-daniel-lib.sh=scripts/human-role-grant-daniel-lib.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-write-grant-daniel
+  - name: keycloak-photos-confirm-delete-grant-daniel
+    files:
+      - photos-confirm-delete-grant-daniel.sh=scripts/photos-confirm-delete-grant-daniel.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - human-role-grant-daniel-lib.sh=scripts/human-role-grant-daniel-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: photos-confirm-delete-grant-daniel
   - name: keycloak-agentgateway-write-fixture-user
     files:
       - agentgateway-write-fixture-user.sh=scripts/agentgateway-write-fixture-user.sh

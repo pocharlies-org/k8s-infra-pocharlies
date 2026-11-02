@@ -38,6 +38,13 @@ umask 077
 # (manual/agentgateway-write-grant-daniel-rollback-job.yaml, RUNBOOK section
 # 16) is applied by hand.
 #
+# The reconciler skeleton (identity guard, user resolution, post-ensure
+# assertion, audit and rollback flow) is shared with
+# photos-confirm-delete-grant-daniel.sh via human-role-grant-daniel-lib.sh
+# (INFRA-402 duplicates check; behavior unchanged — the OWU-80 contract tests
+# drive this script end-to-end). This file keeps only its identity pins and
+# its role-existence policy.
+#
 # Runs INSIDE the pinned Keycloak image, which ships no awk (SC-1215). Only
 # kcadm plus sed/grep/tr/wc/rm/sleep are invoked; the contract test audits
 # this. Neither the admin password nor any token is ever printed: the output
@@ -55,45 +62,17 @@ KCADM_OUT=/tmp/kcadm-write-grant-daniel-reply.txt
 
 KCADM_TMP_FILES="${KCADM_OUT}"
 . "${0%/*}/kc-admin-common.sh"
+. "${0%/*}/human-role-grant-daniel-lib.sh"
 
 # The identity of this reconciler is fixed; it cannot be pointed at another
-# realm, role or user through the environment.
-[ "${REALM}" = "edani" ] || fail "REALM is immutable for this reconciler"
-[ "${ROLE_NAME}" = "agentgateway-write" ] || fail "ROLE_NAME is immutable for this reconciler"
-[ "${USER_ID}" = "e51253a7-c137-4c6c-9fb9-af9cecd3b147" ] || fail "USER_ID is immutable for this reconciler"
-[ "${USER_NAME}" = "me@e-dani.com" ] || fail "USER_NAME is immutable for this reconciler"
-case "${MODE}" in
-  ensure|audit|rollback) ;;
-  *) fail "MODE must be ensure, audit, or rollback" ;;
-esac
+# realm, role or user through the environment (guard_human_grant_identity
+# compares against these literals).
+REALM_PIN=edani
+ROLE_PIN=agentgateway-write
+USER_ID_PIN=e51253a7-c137-4c6c-9fb9-af9cecd3b147
+USER_NAME_PIN=me@e-dani.com
 
-user_field() {
-  kget "users/${USER_ID}" --fields "$1" --format csv --noquotes | nonempty_lines
-}
-
-user_exists() {
-  # GET users/<id> answers 404 (kcadm exit != 0) for an unknown id.
-  kget "users/${USER_ID}" --fields id >/dev/null 2>&1
-}
-
-resolve_user() {
-  # OWU-80 limit: if the subject is not in the realm, fail loud. This hook
-  # never creates, edits or enables users.
-  user_exists || fail "user ${USER_ID} does not exist in realm ${REALM}: refusing to create a human user"
-  username="$(user_field username)"
-  [ -n "${username}" ] || fail "user ${USER_ID} resolved with an empty username"
-  [ "${username}" = "${USER_NAME}" ] || \
-    fail "user ${USER_ID} is ${username}, not the pinned ${USER_NAME}: refusing to continue"
-  [ "$(user_field enabled)" = "true" ] || \
-    fail "user ${USER_NAME} is disabled: refusing to grant"
-  sa_client="$(user_field serviceAccountClientId)"
-  case "${sa_client}" in
-    ""|null) ;;
-    *) fail "user ${USER_ID} is the service account of ${sa_client}: this hook grants to the human user only" ;;
-  esac
-}
-
-assert_role_exists() {
+assert_role_present() {
   # The role is owned by agentgateway-write-role.sh (PostSync wave 20, which
   # runs before this hook's wave 25). Missing here means the trunk moved out
   # from under the grant: fail loud, never create the role from this hook.
@@ -101,67 +80,4 @@ assert_role_exists() {
     fail "${ROLE_NAME} is missing from realm ${REALM}: owned by agentgateway-write-role.sh, refusing to create it here"
 }
 
-user_has_direct_role() {
-  kget "users/${USER_ID}/role-mappings/realm" \
-    --fields name --format csv --noquotes | nonempty_lines | grep -Fxq "${ROLE_NAME}"
-}
-
-report() {
-  printf '{"realm":"%s","role":"%s","user_id":"%s","username":"%s","present":%s,"changed":%s}\n' \
-    "${REALM}" "${ROLE_NAME}" "${USER_ID}" "${USER_NAME}" "$1" "$2"
-}
-
-login_admin
-
-case "${MODE}" in
-  ensure)
-    resolve_user
-    assert_role_exists
-    if user_has_direct_role; then
-      report true false
-      exit 0
-    fi
-    # kcadm add-roles is the realm-role path its sibling
-    # agentgateway-write-role.sh uses. Its exit code alone is not trusted
-    # (SC-1215 lesson: kcadm can swallow server answers), so the reply is
-    # captured for the failure message and the post-ensure read below is the
-    # real assertion.
-    if ! "${KCADM}" add-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
-      --uid "${USER_ID}" --rolename "${ROLE_NAME}" > "${KCADM_OUT}" 2>&1; then
-      fail "failed to map ${ROLE_NAME} to ${USER_NAME}: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
-    fi
-    # Post-ensure assertion (OWU-80 spec): re-read the user's direct realm-role
-    # mappings and fail loud if the grant did not land.
-    user_has_direct_role || \
-      fail "post-ensure assertion failed: ${ROLE_NAME} is not in the direct realm-role mappings of ${USER_NAME} after add-roles"
-    report true true
-    ;;
-  audit)
-    resolve_user
-    assert_role_exists
-    user_has_direct_role || \
-      fail "audit: ${USER_NAME} is missing the direct mapping of ${ROLE_NAME}"
-    report true false
-    ;;
-  rollback)
-    # Rollback is idempotent on a deleted user (nothing to remove), but every
-    # other abnormal state fails loud.
-    if ! user_exists; then
-      report false false
-      exit 0
-    fi
-    resolve_user
-    if user_has_direct_role; then
-      if ! "${KCADM}" remove-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
-        --uid "${USER_ID}" --rolename "${ROLE_NAME}" > "${KCADM_OUT}" 2>&1; then
-        fail "failed to remove ${ROLE_NAME} from ${USER_NAME}: server replied [$(tr '\n' ' ' < "${KCADM_OUT}")]"
-      fi
-      if user_has_direct_role; then
-        fail "${ROLE_NAME} remains in the direct realm-role mappings of ${USER_NAME} after rollback"
-      fi
-      report false true
-    else
-      report false false
-    fi
-    ;;
-esac
+reconcile_human_grant
