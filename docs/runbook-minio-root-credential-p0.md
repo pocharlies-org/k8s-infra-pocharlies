@@ -83,13 +83,13 @@ back independently.
 4. Rollback the observability revision. The old ConfigMap values remain usable
    until this consumer has passed and the root cutover begins.
 
-Run `scripts/minio/verify-workload-cutover.sh` after all three migrations. It
+Run `scripts/minio/verify-workload-cutover.sh` after both migrations. It
 compares credentials only in memory, checks runtime references and health, and
 prints a single pass marker.
 
 ## Wave 3: root-v2 projection and singleton cutover
 
-Do not prepare or merge the cutover until all three consumers pass Wave 2.
+Do not prepare or merge the cutover until both consumers pass Wave 2.
 
 1. Generate a root-v2 user/password pair unrelated to every workload user and
    store it at `secret/minio/root-v2`.
