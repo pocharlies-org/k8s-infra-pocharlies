@@ -97,7 +97,7 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 # is grants to the shared plane). The read matrix is 27 roles since then
 # (25 + SC-4051's hindsight-claude-personal + photos): reviewed MCP token set
 # 28 (write + 27 reads).
-READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"}
+READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
 OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools}"
 # SC-699 (2026-09-26): chat-agentgateway holds the shared route role
 # agentgateway-read:studio so its auth-proxy sidecar can pass the /studio
@@ -765,7 +765,7 @@ rollback_roles() {
     IFS=,
   done
   IFS="${old_ifs}"
-  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":26,"present":false}\n'
+  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":27,"present":false}\n'
 }
 
 login_admin
@@ -782,7 +782,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":26,"created":%s,"grants_agentgateway_mcp":26,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":%s,"grants_agentgateway_mcp":27,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -792,7 +792,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":26,"created":0,"grants_agentgateway_mcp":26,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":0,"grants_agentgateway_mcp":27,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles

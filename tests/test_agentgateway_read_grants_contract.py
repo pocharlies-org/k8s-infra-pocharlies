@@ -778,8 +778,8 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, journal, state_files = self.run_reconciler(
             mode="rollback", seed=seed_full_state
         )
-        self.assertIn('"roles_deleted":26,"present":false', result.stdout)
-        self.assertEqual(26, journal.count("delete roles/agentgateway-read:"))
+        self.assertIn('"roles_deleted":27,"present":false', result.stdout)
+        self.assertEqual(27, journal.count("delete roles/agentgateway-read:"))
         self.assertNotIn("delete roles/agentgateway-write", journal)
         self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
         self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
