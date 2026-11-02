@@ -11,6 +11,7 @@ resources:
   - app-databases.yaml
   - agent-transcripts-schema.yaml
   - role-settings.yaml
+  - brain-openwebui-grants.yaml
   - monitoring.yaml
   - aurora-rca-coverage-queries.yaml
   - shared-rabbitmq.yaml

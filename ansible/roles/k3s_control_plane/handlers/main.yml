@@ -6,3 +6,9 @@
   ansible.builtin.service:
     name: k3s
     state: restarted
+
+# registries.yaml is read by the k3s agent only at startup (INFRA-1099).
+# `sudo -n systemctl` is NOPASSWD on the KS-5 nodes, so no ansible become.
+- name: Restart k3s after registries change
+  ansible.builtin.command: sudo -n systemctl restart k3s
+  changed_when: true
