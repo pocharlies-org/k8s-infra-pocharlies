@@ -1,0 +1,135 @@
+---
+# INFRA-1099 — Harbor registries.yaml on the OVH nodes. The k3s agent reads
+# /etc/rancher/k3s/registries.yaml only at startup, so the handler restarts
+# the agent when the file changes. Gated by harbor_registries_enabled
+# (group_vars/ovh_nodes.yml): home nodes reach harbor.lan directly and must
+# not receive this file.
+#
+# The Harbor robot password never lives in git: it is read from 1Password on
+# the control host at apply time (lookup op read via op-secret / in-cluster
+# Connect). Rotation: docs/runbook-harbor-registries-ovh.md.
+
+- name: Read Harbor pull robot credentials from 1Password (control host)
+  ansible.builtin.set_fact:
+    harbor_robot_username: "{{ (_harbor_b64 | b64decode).split(':', 1)[0] }}"
+    harbor_robot_password: "{{ (_harbor_b64 | b64decode).split(':', 1)[1] }}"
+  vars:
+    _harbor_dcfg: "{{ lookup('pipe', harbor_registries_lookup_cmd) | from_json }}"
+    _harbor_b64: "{{ _harbor_dcfg.auths[harbor_registries_auth_host].auth }}"
+  no_log: true
+  when: harbor_registries_enabled | default(false) | bool
+
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - not (registries_write_via_docker | default(false) | bool)
+
+- name: Write k3s registries.yaml (Harbor mirrors to the edge)
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Restart k3s-agent after registries change
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - not (registries_write_via_docker | default(false) | bool)
+
+# --- sudoless write path (sauvage) -----------------------------------------
+# ubuntu@sauvage: full sudo requires a password that is not in 1Password
+# (INFRA-937, "PARA DANI", never resolved) but NOPASSWD `docker` and
+# `systemctl` are granted. The file is rendered on the control host (0600) and
+# pushed through a root container with a bind mount: same content, same
+# permissions, no new privilege. The comparison happens inside the container
+# so the file is only replaced when it actually differs (idempotent handler).
+
+- name: Create control-host render directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ registries_render_dir }}"
+    state: directory
+    mode: "0700"
+  vars:
+    registries_render_dir: "/tmp/infra1099-registries-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Render registries.yaml on the control host
+  delegate_to: localhost
+  become: false
+  ansible.builtin.copy:
+    content: "{{ lookup('template', 'registries.yaml.j2') }}"
+    dest: "{{ registries_render_dir }}/registries.yaml"
+    mode: "0600"
+  vars:
+    registries_render_dir: "/tmp/infra1099-registries-{{ inventory_hostname }}"
+  no_log: true
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Stage rendered registries.yaml on the node
+  ansible.builtin.copy:
+    src: "{{ registries_render_dir }}/registries.yaml"
+    dest: /tmp/infra1099-registries-{{ inventory_hostname }}.yaml
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+  vars:
+    registries_render_dir: "/tmp/infra1099-registries-{{ inventory_hostname }}"
+  no_log: true
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Write registries.yaml on the node via docker (idempotent)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      sudo -n docker run -i --rm -v /etc/rancher/k3s:/out alpine:3.20 sh -c '
+        cat > /out/.registries.new
+        if [ -f /out/registries.yaml ] && cmp -s /out/.registries.new /out/registries.yaml; then
+          rm -f /out/.registries.new; echo registries-unchanged
+        else
+          mv /out/.registries.new /out/registries.yaml
+          chown root:root /out/registries.yaml; chmod 0600 /out/registries.yaml
+          echo registries-changed
+        fi' < '/tmp/infra1099-registries-{{ inventory_hostname }}.yaml'
+  no_log: true
+  register: registries_docker_write
+  changed_when: "'registries-changed' in registries_docker_write.stdout"
+  notify: Restart k3s-agent after registries change
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Remove staged file from the node
+  ansible.builtin.file:
+    path: /tmp/infra1099-registries-{{ inventory_hostname }}.yaml
+    state: absent
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Remove control-host render directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ registries_render_dir }}"
+    state: absent
+  vars:
+    registries_render_dir: "/tmp/infra1099-registries-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool

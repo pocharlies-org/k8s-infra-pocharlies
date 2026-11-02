@@ -1,0 +1,39 @@
+---
+# INFRA-1099 — Harbor registries.yaml on the OVH nodes (ks5-cp-1/2/3, sauvage,
+# atlantic). OVH nodes must not pull images through the house LAN: both
+# registry names mirror to the public edge (networking/traefik-edge/
+# harbor-ingressroute.yaml already serves harbor-core there).
+#
+# Why this is an operational step and not ArgoCD: ArgoCD reconciles the
+# cluster, not /etc on a node. The k3s agent reads /etc/rancher/k3s/
+# registries.yaml only at startup, so applying it runs from the control host.
+# Day-2 inventory (public SSH :22 is closed by the tailscale-only hardening):
+#
+#   ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
+#     ansible/playbooks/apply-registries.yml
+#
+# The Harbor robot password is read from 1Password on the control host at
+# apply time (lookup op read via op-secret / in-cluster Connect) — never in
+# git, never printed. serial: 1 because the handler restarts k3s/k3s-agent
+# per node: the restart rolls one node at a time (precedent: the
+# k3s_control_plane handler comment). Verification and rotation:
+# docs/runbook-harbor-registries-ovh.md.
+- name: Apply Harbor registries.yaml — KS-5 control planes
+  hosts: ks5_control_plane
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Write registries.yaml and restart k3s on change
+      ansible.builtin.include_role:
+        name: k3s_control_plane
+        tasks_from: registries
+
+- name: Apply Harbor registries.yaml — OVH workers
+  hosts: ovh_workers
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Write registries.yaml and restart k3s-agent on change
+      ansible.builtin.include_role:
+        name: k3s_worker
+        tasks_from: registries
