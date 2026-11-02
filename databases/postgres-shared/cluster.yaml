@@ -414,6 +414,24 @@ spec:
         passwordSecret:
           name: analisis-db-credentials
         comment: "Empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies). SC-2956 D2."
+      # INFRA-555 (P2-b): rol de SOLO LECTURA del indexador de Open WebUI (script
+      # ingest_open_webui.py en skirmshop-brain-v2; CronJob en skirmshop-brain-k8s).
+      # Contraseña en 1Password (item `brain-openwebui-db`, campos DB_USER y
+      # DB_PASSWORD, sembrado por security), reconciliada desde
+      # brain-openwebui-db-credentials (ExternalSecret en app-credentials.yaml).
+      # No aplicar hasta que ese item exista (secuencia de merge en el PR).
+      # Los GRANT los concede el Job PostSync brain-openwebui-grants.yaml: SELECT
+      # solo sobre chat, "user" y chat_message de la base chat; cero escrituras.
+      - name: brain_openwebui_ro
+        ensure: present
+        login: true
+        # connectionLimit: el CronJob abre 1 conexión por pasada; 3 deja margen
+        # para verificación manual y corta un pool desbocado (historial de
+        # saturación del clúster, 367/400 el 28-07).
+        connectionLimit: 3
+        passwordSecret:
+          name: brain-openwebui-db-credentials
+        comment: "Indexador de solo lectura de Open WebUI (repo: pocharlies-org/skirmshop-brain-v2; CronJob en skirmshop-brain-k8s). INFRA-555."
 
   # INFRA-942 (2026-10-23): promovido. Se creó como réplica en streaming de
   # postgres-shared (Longhorn) y se promovió en el corte con el viejo cercado.
