@@ -26,10 +26,15 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      # A retry is another vault listing against the daily quota.
+      # A Job retry is another vault listing against the daily quota, so the Job
+      # never restarts: detect.py retries the transient apiserver calls (429/5xx/
+      # timeout, INFRA-1123) in-process, which costs no 1Password quota.
       backoffLimit: 0
       activeDeadlineSeconds: 300
-      ttlSecondsAfterFinished: 3600
+      # Keep a finished (failed) Job 24 h so the logs are still there when the
+      # K8sCronJobFailed alert reaches IT (~40 min later); 1 h let them expire
+      # before anyone could read them (SC-3985).
+      ttlSecondsAfterFinished: 86400
       template:
         metadata:
           labels:
