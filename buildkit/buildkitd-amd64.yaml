@@ -218,6 +218,15 @@ spec:
           # changes is `df` on the volume and the Total in `buildctl du` —
           # NEVER the "Reclaimable" column (v0.31.0 derives it per record as
           # !InUse, so on a busy builder it always reads 0B; SC-285).
+          # INFRA-1014 (2026-11-03): this tmpfs filled 4 times since August with
+          # no warning (INFRA-953). There is now an alert for it: VMRule
+          # pocharlies-buildkit-cache / BuildkitAmd64CacheHigh in
+          # k8s-observability-pocharlies manifests/rules.yaml — fires when
+          # container_memory_working_set_bytes{namespace="buildkit",
+          # pod=~"buildkitd-amd64.*", container="buildkitd"} > 26.1Gi (85 % of
+          # this sizeLimit; tmpfs pages are charged to the container's cgroup)
+          # for 10 minutes, leaving time to `buildctl prune` before ENOSPC.
+          # If the sizeLimit changes, update the threshold in that rule.
           emptyDir:
             medium: Memory
             sizeLimit: 30Gi
