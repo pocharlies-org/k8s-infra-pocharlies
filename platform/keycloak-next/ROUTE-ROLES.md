@@ -27,7 +27,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
   señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). SC-4051 (02-11-2026) declara las dos filas `hindsight-claude-personal` y `hindsight-personal`
   (rutas de SC-4050, k8s-agentgateway-pocharlies#246, fusionada y viva: banco fijo por path, rol dedicado
-  por banco, sin plano de escritura; grants en ROLES.yaml). SC-4304 (02-11-2026) declara la fila `hindsight-codigo` (ruta de k8s-agentgateway-pocharlies#248, fusionada y viva: banco `codigo` — corpus del código de los repos del registro, gitleaks en el ingreso —, rol dedicado, grants en ROLES.yaml). DGX-1218 declara
+  por banco, sin plano de escritura; grants en ROLES.yaml). SC-4304 (02-11-2026) declara la fila `hindsight-codigo` (ruta de k8s-agentgateway-pocharlies#248, fusionada y viva: banco `codigo` — corpus del código de los repos del registro, gitleaks en el ingreso —, rol dedicado, grants en ROLES.yaml). SC-4304 S6 (03-11-2026) declara la fila `chat-hindsight-personal` (gemela de chat de /hindsight-personal para Open WebUI, k8s-agentgateway-pocharlies#257, fusionada y viva: mismo banco `personal` fijo por path y mismo rol de ruta; el token lo emite el client público dedicado agentgateway-chat-hindsight-mcp y los titulares son los dos humanos de la decisión de Dani de 03-11 más las dos SAs de las secretarias, grants en ROLES.yaml). DGX-1218 declara
   los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
   del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
@@ -470,6 +470,12 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
     {
       "route": "hindsight-personal",
       "path": "/hindsight-personal",
+      "require": ["agentgateway-read:hindsight-personal"],
+      "tools": {}
+    },
+    {
+      "route": "chat-hindsight-personal",
+      "path": "/chat-hindsight-personal",
       "require": ["agentgateway-read:hindsight-personal"],
       "tools": {}
     },
