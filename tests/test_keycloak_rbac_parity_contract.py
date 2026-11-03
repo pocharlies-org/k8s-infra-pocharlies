@@ -38,6 +38,11 @@ CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
 # SC-3805: the two reviewed human holders of agentgateway-read:social
 # (granted by admin API in the SC-1144 C4 session, outside the reconciler).
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
+# SC-4304 S6: the two reviewed holders of agentgateway-read:hindsight-tienda
+# (voice plane and synapse-tools-mcp lookup_supplier_history), grants owned by
+# hindsight-reader-client.sh (wave 24).
+JARVIS_HINDSIGHT_SA = "service-account-jarvis-hindsight"
+SYNAPSE_HINDSIGHT_SA = "service-account-synapse-hindsight-tienda"
 
 
 def shell_list(path, variable, sep=","):
@@ -69,8 +74,12 @@ class RoleCatalogParityTest(unittest.TestCase):
         correo_ejecutor = shell_list(READ_GRANTS, "EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES")
         analisis = shell_list(READ_GRANTS, "EXPECTED_ANALISIS_READ_ROLE_NAMES")
         humanos = shell_list(READ_GRANTS, "EXPECTED_HUMANOS_READ_ROLE_NAMES")
+        jarvis_hindsight = shell_list(READ_GRANTS, "EXPECTED_JARVIS_HINDSIGHT_READ_ROLE_NAMES")
+        synapse_hindsight = shell_list(READ_GRANTS, "EXPECTED_SYNAPSE_HINDSIGHT_READ_ROLE_NAMES")
         self.assertTrue(set(correo_lectura) <= set(reads))
         self.assertTrue(set(humanos) <= set(reads))
+        self.assertTrue(set(jarvis_hindsight) <= set(reads))
+        self.assertTrue(set(synapse_hindsight) <= set(reads))
         self.assertTrue(set(correo_ejecutor) <= set(reads))
         self.assertTrue(set(analisis) <= set(reads))
         self.assertTrue(set(openclaw) <= set(reads))
@@ -110,6 +119,11 @@ class RoleCatalogParityTest(unittest.TestCase):
                 # by admin API in the SC-1144 C4 session, outside this
                 # reconciler).
                 | (set(HUMANOS_USERNAMES) if role in humanos else set())
+                # SC-4304 S6: the two reviewed grantees of hindsight-tienda
+                # (voice plane and synapse-tools-mcp), grants owned by
+                # hindsight-reader-client.sh (wave 24).
+                | ({JARVIS_HINDSIGHT_SA} if role in jarvis_hindsight else set())
+                | ({SYNAPSE_HINDSIGHT_SA} if role in synapse_hindsight else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
