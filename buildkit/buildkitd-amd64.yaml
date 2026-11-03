@@ -50,6 +50,16 @@ spec:
           value: edge
           effect: NoSchedule
       automountServiceAccountToken: false
+      # INFRA-1015 (experimento contra INFRA-953, 2026-11-03): los builds cancelados
+      # dejan procesos hijos de rootlesskit (PID 1 del contenedor) que nadie recoge:
+      # 5 zombis medidos el 03-11 y 7,8 G de registros "en uso" sin build corriendo
+      # el 19-10 (SC-2759), que solo se soltaban borrando el pod. Con
+      # shareProcessNamespace el proceso pause del pod pasa a ser PID 1 del namespace
+      # compartido y hace de init: recoge los zombis y suelta las referencias.
+      # Ojo: expone los procesos del pod entre contenedores — este pod tiene un solo
+      # contenedor, así que no hay nada más que exponer. Si el experimento falla,
+      # retirar esta línea por PR y dejar la medición en INFRA-953.
+      shareProcessNamespace: true
       # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
       # setup. The container-level override alone is insufficient because k3s/runc
       # applies the seccomp profile before the container securityContext is merged.
