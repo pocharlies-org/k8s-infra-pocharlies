@@ -176,6 +176,22 @@ CORREO_LECTURA_SA_USERNAME="service-account-correo-agente-lectura"
 CORREO_EJECUTOR_READ_ROLE_NAMES="${CORREO_EJECUTOR_READ_ROLE_NAMES:-agentgateway-read:shopify-admin}"
 EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES="agentgateway-read:shopify-admin"
 CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"
+# SC-4304 S6 (02-11-2026): jarvis-hindsight (voice plane, ns jarvis) and
+# synapse-hindsight-tienda (synapse-tools-mcp lookup_supplier_history, tenant
+# skirmshop) are reviewed holders of the shared route role
+# agentgateway-read:hindsight-tienda (security's verdict on the epic's S6:
+# bank tienda only, read-only, cutover gated on the tienda<->skirmshop parity).
+# Same rule as INFRA-676: this reconciler only widens the HOLDER ALLOWLIST; the
+# grants and the client scope mapping are owned by hindsight-reader-client.sh
+# (sync-wave 24), and the clients are never resolved here. (The third S6
+# identity, socialmedia-hindsight, holds agentgateway-read:hindsight-personal,
+# which is not in this matrix — documented in PRINCIPALS.md and RUNBOOK §22.)
+JARVIS_HINDSIGHT_READ_ROLE_NAMES="${JARVIS_HINDSIGHT_READ_ROLE_NAMES:-agentgateway-read:hindsight-tienda}"
+EXPECTED_JARVIS_HINDSIGHT_READ_ROLE_NAMES="agentgateway-read:hindsight-tienda"
+JARVIS_HINDSIGHT_SA_USERNAME="service-account-jarvis-hindsight"
+SYNAPSE_HINDSIGHT_READ_ROLE_NAMES="${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES:-agentgateway-read:hindsight-tienda}"
+EXPECTED_SYNAPSE_HINDSIGHT_READ_ROLE_NAMES="agentgateway-read:hindsight-tienda"
+SYNAPSE_HINDSIGHT_SA_USERNAME="service-account-synapse-hindsight-tienda"
 # SC-1282: the analysis platform (SC-2951/SC-2956) reads /atlassian, /social
 # and /synapse. The grants were made by security in SC-2967 (admin API, outside
 # this reconciler); the holder lands in the reviewed allowlist so the catalog
@@ -237,6 +253,10 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "ENVIAR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CORREO_LECTURA_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES}" ] || \
   fail "CORREO_LECTURA_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${JARVIS_HINDSIGHT_READ_ROLE_NAMES}" = "${EXPECTED_JARVIS_HINDSIGHT_READ_ROLE_NAMES}" ] || \
+  fail "JARVIS_HINDSIGHT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" = "${EXPECTED_SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" ] || \
+  fail "SYNAPSE_HINDSIGHT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CORREO_EJECUTOR_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES}" ] || \
   fail "CORREO_EJECUTOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${ANALISIS_READ_ROLE_NAMES}" = "${EXPECTED_ANALISIS_READ_ROLE_NAMES}" ] || \
@@ -371,6 +391,15 @@ role_allowed_users() {
   # this hook never re-issues a human grant).
   if printf '%s\n' "${HUMANOS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${HUMANOS_USERNAMES}" | tr ',' '\n'
+  fi
+  # SC-4304 S6: same rule for the two reviewed holders of
+  # agentgateway-read:hindsight-tienda (granted by hindsight-reader-client.sh,
+  # wave 24).
+  if printf '%s\n' "${JARVIS_HINDSIGHT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${JARVIS_HINDSIGHT_SA_USERNAME}"
+  fi
+  if printf '%s\n' "${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${SYNAPSE_HINDSIGHT_SA_USERNAME}"
   fi
 }
 

@@ -961,3 +961,45 @@ entrada se borra). While `photos-confirm-delete-grant-daniel-job.yaml` stays in
 Kustomize the next PostSync re-applies the mapping; to retire the grant
 permanently, git revert the commit owning the reconciler (which also retires the
 `ROLES.yaml` / `PRINCIPALS.md` declarations) and let the next sync drop it.
+
+## 22. Hindsight read identities (`jarvis-hindsight`, `synapse-hindsight-tienda`, `socialmedia-hindsight`, SC-4304 S6)
+
+`hindsight-reader-clients.yaml` (three PostSync Jobs, sync-wave 24) reconciles
+the read-only Hindsight identities with one script,
+`scripts/hindsight-reader-client.sh`, whose reviewed role set is fixed per
+`CLIENT_ID`; the flow is `keycloak-scoped-client-lib.sh`, shared with
+`hermes-enviar` and `correo-agente`:
+
+- `jarvis-hindsight`: `agentgateway-read:hindsight-tienda` only — the voice
+  plane (jarvis-backend / jarvis-alexa, ns jarvis) reads bank `tienda` for
+  `brain_search`/`brain_chat`. Security's verdict (SC-4304 S6, 02-11): tienda
+  only, never a personal bank, ≤5 results; the cutover from Brain waits for
+  the tienda↔skirmshop parity check and for the voice layer to strip
+  key-bearing URLs (`order_status_url` and the like) from tool results before
+  the LLM sees them.
+- `synapse-hindsight-tienda`: `agentgateway-read:hindsight-tienda` only —
+  synapse-tools-mcp (ns synapse) `lookup_supplier_history`, tenant
+  skirmshop. Cutover waits for supplier invoices to land in the bank
+  (measured 02-11: `tienda` holds orders and products only).
+- `socialmedia-hindsight`: `agentgateway-read:hindsight-personal` only — the
+  whatsappmcp mcp-server (ns whatsapp-mcp) semantic message search over the
+  conversation memory it already retains into that bank.
+
+One principal per (service, bank): a leaked credential opens exactly one bank.
+The roles are owned by `agentgateway-read-grants.sh` (wave 20); its holder
+allowlist reviews `service-account-jarvis-hindsight` and
+`service-account-synapse-hindsight-tienda` on `hindsight-tienda`
+(`hindsight-personal` is not in that matrix — these entries and
+`PRINCIPALS.md` document the socialmedia grant).
+
+### Secret hand-off (security, after the first sync)
+
+Keycloak generates each secret on creation. `security` copies each one into
+the 1Password item `agentgateway-prod` (vault `k8s-pocharlies`), fields
+`jarvis_hindsight_client_secret`, `synapse_hindsight_tienda_client_secret`
+and `socialmedia_hindsight_client_secret` — never printed, never committed.
+Consumers mount their own ExternalSecret against the same fields (Connect
+form, `key: agentgateway-prod/<campo>`), same idiom as the chat and
+synapse-sre clients. Rotation (weekly session, not on the spot): new value in
+1Password, set it on the client through the admin API, force-sync the
+consumer ExternalSecrets.

@@ -62,6 +62,17 @@ committed in SC-2522. Adopted as it arrived, measured against the live realm
 on 2026-10-27; the six roles it holds are catalogued in `ROLES.yaml` in the
 same PR, and `keycloak-role-drift` clears on its first run after the sync.
 
+SC-4304 S6 (02-11-2026) adds the next three, `service-account-jarvis-hindsight`,
+`service-account-synapse-hindsight-tienda` and
+`service-account-socialmedia-hindsight`: the read-only Hindsight identities of
+the voice plane (bank `tienda`), synapse-tools-mcp `lookup_supplier_history`
+(bank `tienda`) and the whatsappmcp semantic message search (bank `personal`),
+one principal per (service, bank) by security's verdict on the epic's S6. Like
+`hermes-enviar` and `correo-agente` they are NOT adopted: their PostSync
+(`hindsight-reader-clients.yaml`, `scripts/hindsight-reader-client.sh`) creates
+them in the same sync that ships these entries, and `keycloak-role-drift`
+reports them until the hooks finish.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -722,6 +733,45 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "cto-office-send",
         "default-roles-edani",
         "synapse-sre-m2m"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-jarvis-hindsight",
+      "type": "sa",
+      "client": "jarvis-hindsight",
+      "owner": "DevOps",
+      "source": "SC-4304 S6 (veredicto de security 02-11: banco tienda solo, solo lectura, ≤5 resultados, sin bancos personales; corte condicionado a la paridad tienda↔skirmshop y a retirar las URLs con clave del contexto de voz); platform/keycloak-next/hindsight-reader-clients.yaml",
+      "purpose": "Identidad M2M del plano de voz jarvis (ns jarvis): lectura de la memoria Hindsight (brain_search/brain_chat) por AgentGateway /hindsight-tienda. Solo lectura: agentgateway-read:hindsight-tienda; nunca un banco personal ni agentgateway-write.",
+      "realm_roles": [
+        "agentgateway-read:hindsight-tienda",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-synapse-hindsight-tienda",
+      "type": "sa",
+      "client": "synapse-hindsight-tienda",
+      "owner": "DevOps",
+      "source": "SC-4304 S6 (veredicto de security 02-11; corte condicionado a que las facturas de proveedor entren en el banco — medido 02-11: tienda solo tiene pedidos y productos); platform/keycloak-next/hindsight-reader-clients.yaml",
+      "purpose": "Identidad M2M de synapse-tools-mcp (ns synapse): lookup_supplier_history (tenant skirmshop) sobre la memoria Hindsight por AgentGateway /hindsight-tienda. Solo lectura: agentgateway-read:hindsight-tienda.",
+      "realm_roles": [
+        "agentgateway-read:hindsight-tienda",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-socialmedia-hindsight",
+      "type": "sa",
+      "client": "socialmedia-hindsight",
+      "owner": "DevOps",
+      "source": "SC-4304 S6 (veredicto de security 02-11); platform/keycloak-next/hindsight-reader-clients.yaml",
+      "purpose": "Identidad M2M del mcp-server de whatsappmcp (ns whatsapp-mcp): búsqueda semántica de mensajes sobre el banco `personal` de Hindsight (la memoria de conversaciones que el propio servicio retiene) por AgentGateway /hindsight-personal. Solo lectura: agentgateway-read:hindsight-personal.",
+      "realm_roles": [
+        "agentgateway-read:hindsight-personal",
+        "default-roles-edani"
       ],
       "status": "activo"
     }
