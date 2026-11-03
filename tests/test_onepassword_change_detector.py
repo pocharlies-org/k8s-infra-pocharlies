@@ -8,11 +8,15 @@ baseline. Stdlib only: the Kubernetes API is replaced by an in-memory fake.
 """
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import runpy
+import shutil
 import tempfile
 import unittest
+import urllib.error
+from email.message import Message
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -203,6 +207,94 @@ class ChangeDetectorTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
 
+class ApiCallRetryTest(unittest.TestCase):
+    """INFRA-1123: the apiserver throttles with API Priority & Fairness (429) and
+    can answer 5xx or drop a connection during a WATCH-reconnect storm. call()
+    retries those (3 attempts, backoff 2 s/4 s, Retry-After wins); a persistent
+    one still raises so the Job fails and K8sCronJobFailed fires. The retry is
+    only against the API server, so it costs no 1Password quota and never
+    re-lists the vault."""
+
+    def setUp(self):
+        self.detector = load_detector()
+        self.tmp = tempfile.mkdtemp()
+        with open(os.path.join(self.tmp, "token"), "w") as f:
+            f.write("token")
+        self.detector.SA = self.tmp
+        self.sleeps = []
+        mock.patch.object(self.detector.time, "sleep", side_effect=self.sleeps.append).start()
+        mock.patch.object(self.detector.ssl, "create_default_context", return_value=object()).start()
+        self.addCleanup(mock.patch.stopall)
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def err(self, code, headers=None):
+        return urllib.error.HTTPError("https://kubernetes.default.svc/x", code, "err", headers, None)
+
+    def resp(self, payload=b"{}"):
+        class R:
+            def read(self):
+                return payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        return R()
+
+    def run_urlopen(self, side_effect):
+        with mock.patch.object(self.detector.urllib.request, "urlopen", side_effect=side_effect) as u:
+            result = self.detector.call("GET", "/x")
+        return result, u
+
+    def test_429_then_200_is_retried_and_succeeds(self):
+        result, u = self.run_urlopen([self.err(429), self.resp(b'{"ok": true}')])
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(u.call_count, 2)
+        self.assertEqual(self.sleeps, [2])
+
+    def test_persistent_429_still_fails(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_urlopen(self.err(429))
+        # 3 attempts, sleeping 2 s then 4 s between them
+        self.assertEqual(self.sleeps, [2, 4])
+
+    def test_5xx_is_retried(self):
+        result, u = self.run_urlopen([self.err(503), self.resp(b'{"a": 1}')])
+        self.assertEqual(result, {"a": 1})
+        self.assertEqual(u.call_count, 2)
+
+    def test_timeout_is_retried(self):
+        result, u = self.run_urlopen([urllib.error.URLError("timed out"), self.resp(b'{"a": 1}')])
+        self.assertEqual(result, {"a": 1})
+        self.assertEqual(u.call_count, 2)
+        self.assertEqual(self.sleeps, [2])
+
+    def test_persistent_timeout_still_fails(self):
+        with self.assertRaises(urllib.error.URLError):
+            self.run_urlopen(urllib.error.URLError("timed out"))
+        self.assertEqual(self.sleeps, [2, 4])
+
+    def test_retry_after_header_wins_over_backoff(self):
+        headers = Message()
+        headers["Retry-After"] = "7"
+        result, _ = self.run_urlopen([self.err(429, headers), self.resp(b"{}")])
+        self.assertEqual(result, {})
+        self.assertEqual(self.sleeps, [7])
+
+    def test_non_transient_4xx_fails_at_once_without_retrying(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_urlopen(self.err(403))
+        self.assertEqual(self.sleeps, [])
+
+    def test_404_on_get_still_returns_none(self):
+        result, u = self.run_urlopen(self.err(404))
+        self.assertIsNone(result)
+        self.assertEqual(u.call_count, 1)
+        self.assertEqual(self.sleeps, [])
+
+
 class CronJobManifestTest(unittest.TestCase):
     """Quota guards on the CronJob: one vault listing per run, no retries."""
 
@@ -212,6 +304,11 @@ class CronJobManifestTest(unittest.TestCase):
     def test_no_retry_and_no_overlap(self):
         self.assertRegex(self.manifest, r"\n\s+backoffLimit: 0\n")
         self.assertRegex(self.manifest, r"\n\s+concurrencyPolicy: Forbid\n")
+
+    def test_failed_job_logs_survive_24h(self):
+        # INFRA-1123: IT reads the failed run ~40 min after the alert; 1 h let
+        # the logs expire before anyone could read them (SC-3985).
+        self.assertRegex(self.manifest, r"\n\s+ttlSecondsAfterFinished: 86400\n")
 
     def test_op_image_pinned_by_digest(self):
         self.assertRegex(self.manifest, r"image: docker\.io/1password/op:[\d.]+@sha256:[0-9a-f]{64}")
