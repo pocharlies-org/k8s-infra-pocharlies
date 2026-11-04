@@ -85,6 +85,7 @@ resources:
   - platform/external-secrets/cluster-secret-store-correo-hermes.yaml
   - platform/external-secrets/cluster-secret-store-correo-synapse.yaml
   - platform/external-secrets/change-detector
+  - platform/external-secrets/x86-1password-master.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
   - platform/velero/schedules.yaml
