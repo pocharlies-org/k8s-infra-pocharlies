@@ -50,6 +50,16 @@ spec:
           value: edge
           effect: NoSchedule
       automountServiceAccountToken: false
+      # INFRA-1015 (experimento contra INFRA-953, 2026-11-03): los builds cancelados
+      # dejan procesos hijos de rootlesskit (PID 1 del contenedor) que nadie recoge:
+      # 5 zombis medidos el 03-11 y 7,8 G de registros "en uso" sin build corriendo
+      # el 19-10 (SC-2759), que solo se soltaban borrando el pod. Con
+      # shareProcessNamespace el proceso pause del pod pasa a ser PID 1 del namespace
+      # compartido y hace de init: recoge los zombis y suelta las referencias.
+      # Ojo: expone los procesos del pod entre contenedores — este pod tiene un solo
+      # contenedor, así que no hay nada más que exponer. Si el experimento falla,
+      # retirar esta línea por PR y dejar la medición en INFRA-953.
+      shareProcessNamespace: true
       # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
       # setup. The container-level override alone is insufficient because k3s/runc
       # applies the seccomp profile before the container securityContext is merged.
@@ -218,6 +228,15 @@ spec:
           # changes is `df` on the volume and the Total in `buildctl du` —
           # NEVER the "Reclaimable" column (v0.31.0 derives it per record as
           # !InUse, so on a busy builder it always reads 0B; SC-285).
+          # INFRA-1014 (2026-11-03): this tmpfs filled 4 times since August with
+          # no warning (INFRA-953). There is now an alert for it: VMRule
+          # pocharlies-buildkit-cache / BuildkitAmd64CacheHigh in
+          # k8s-observability-pocharlies manifests/rules.yaml — fires when
+          # container_memory_working_set_bytes{namespace="buildkit",
+          # pod=~"buildkitd-amd64.*", container="buildkitd"} > 26.1Gi (85 % of
+          # this sizeLimit; tmpfs pages are charged to the container's cgroup)
+          # for 10 minutes, leaving time to `buildctl prune` before ENOSPC.
+          # If the sizeLimit changes, update the threshold in that rule.
           emptyDir:
             medium: Memory
             sizeLimit: 30Gi

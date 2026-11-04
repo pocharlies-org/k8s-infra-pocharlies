@@ -31,8 +31,13 @@ defaultSettings:
   # Soft anti-affinity so replicas spread but won't fail to schedule
   replicaSoftAntiAffinity: true
   replicaZoneSoftAntiAffinity: true
-  # Backup target — will configure post-MinIO
-  # backupTarget: s3://longhorn-backups@us-east-1/
+  # Backup target — MinIO on sauvage (INFRA-1100, fase c del corte; NO aplicar
+  # hasta tener la fase (b) verde: backup de volumen de prueba → restore a
+  # volumen nuevo → lectura md5, y el veredicto de security en la PR).
+  # Credencial: ExternalSecret longhorn-default-backup (ns longhorn-system, fase a, PR #441).
+  # Runbook: docs/runbook-longhorn-default-backup-minio-cutover.md
+  backupTarget: s3://longhorn-backups@us-east-1/
+  backupTargetCredentialSecret: longhorn-default-backup
   # System-managed pods (CSI plugin, engine image, instance manager) must be
   # able to run on the current role=edge taint. The legacy bulk taint remains
   # tolerated until node-taint normalization is complete.

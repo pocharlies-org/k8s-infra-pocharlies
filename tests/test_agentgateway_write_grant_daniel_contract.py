@@ -21,6 +21,7 @@ from keycloak_hook_testlib import (BASE, COMMON, DANIEL_FAKE_KCADM, FIXTURE, ROO
                                    hook_code, run_hook)
 
 SCRIPT = BASE / "scripts" / "agentgateway-write-grant-daniel.sh"
+LIB = BASE / "scripts" / "human-role-grant-daniel-lib.sh"
 JOB = BASE / "agentgateway-write-grant-daniel-job.yaml"
 ROLLBACK_JOB = BASE / "manual" / "agentgateway-write-grant-daniel-rollback-job.yaml"
 
@@ -161,11 +162,20 @@ class WriteGrantDanielStaticTest(BootstrapSourceContractMixin, unittest.TestCase
         self.assertIn(f'ROLE_NAME="${{ROLE_NAME:-{ROLE}}}"', script)
         self.assertIn(f'USER_ID="${{USER_ID:-{SUBJECT}}}"', script)
         self.assertIn(f'USER_NAME="${{USER_NAME:-{USERNAME}}}"', script)
-        self.assertIn(f'[ "${{USER_ID}}" = "{SUBJECT}" ]', script)
-        self.assertIn(f'[ "${{USER_NAME}}" = "{USERNAME}" ]', script)
+        # The guard comparison lives in the shared skeleton (extracted by the
+        # INFRA-402 duplicates check); the literals it compares against are
+        # plain assignments in this script, so the environment cannot move
+        # them: the pin stays here.
+        self.assertIn(f"USER_ID_PIN={SUBJECT}", script)
+        self.assertIn(f"USER_NAME_PIN={USERNAME}", script)
+        lib = LIB.read_text()
+        self.assertIn('[ "${USER_ID}" = "${USER_ID_PIN}" ]', lib)
+        self.assertIn('[ "${USER_NAME}" = "${USER_NAME_PIN}" ]', lib)
 
     def test_script_never_mutates_users_or_the_role(self):
-        code = hook_code(SCRIPT, COMMON)
+        # The add-roles/remove-roles calls live in the shared skeleton since
+        # the INFRA-402 extraction: audit script + bootstrap + skeleton.
+        code = hook_code(SCRIPT, COMMON, LIB)
         # Only add-roles / remove-roles touch the realm, and only for the
         # pinned uid and role: no create, update or delete of any resource.
         self.assertNotIn('"${KCADM}" create', code)

@@ -70,6 +70,8 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-grant-daniel.sh
+          sh -n platform/keycloak-next/scripts/human-role-grant-daniel-lib.sh
+          sh -n platform/keycloak-next/scripts/photos-confirm-delete-grant-daniel.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-fixture-user.sh
           sh -n platform/keycloak-next/scripts/agentgateway-dani-login-client.sh
           sh -n platform/keycloak-next/scripts/kc-admin-common.sh

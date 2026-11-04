@@ -109,6 +109,33 @@ spec:
     customRequestHeaders:
       Authorization: ""
 ---
+# OWU-116 (S1 de OWU-95): la regla bearer de la app nativa (abajo) NO lleva
+# sso-chat-chain, asi que ninguna cadena fiable pone estas cabeceras: las del
+# cliente son hostiles por construccion. Borra las X-Auth-Request-* que traiga
+# la peticion: sin esto, un POST /api/v1/auths/signin con
+# X-Auth-Request-Email forjada autenticaria como cualquier usuario (OWU-115,
+# cota no negociable). Traefik no borra por comodin: se enumeran las que
+# inyecta oauth2-proxy y las tres que OWUI lee (WEBUI_AUTH_TRUSTED_* del
+# deployment de dgx-infra). Declarada DOS veces a proposito (patron
+# chat-drop-authorization, duplicado abajo): el edge solo vigila su namespace;
+# la hermana vive en dgx-infra k8s/apps/chat/middleware.yaml (ns chat).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: chat-strip-auth-request
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-chat-public
+    app.kubernetes.io/part-of: traefik-edge-cutover
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-Email: ""
+      X-Auth-Request-User: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Auth-Request-Access-Token: ""
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -137,6 +164,25 @@ spec:
       priority: 100
       services:
         - name: edge-chat-aasa
+          port: 80
+    # OWU-116 (S1 de OWU-95): ruta bearer de la app nativa (openwebui-ios), con
+    # el MISMO match literal que la hermana LAN (dgx-infra
+    # k8s/apps/chat/ingressroute.yaml) — contrato entre repos: un prefijo nuevo
+    # que necesite S3 = una entrada mas aqui Y alli, nunca un renombrado. Los
+    # prefijos son las rutas REALES de OWUI v0.11.4: SIN StripPrefix ni
+    # reescritura. HeaderRegexp(`^Bearer `) deja «sin token → 302 por la cadena
+    # generica» (criterio 1.3). priority 100 (precedente SC-2732). Solo
+    # chat-strip-auth-request: SIN sso-chat-chain (la app autentica con su JWT
+    # propio de OWUI, obtenido por el exchange nativo — OWU-115) y SIN
+    # chat-drop-authorization (aqui el Authorization SÍ hace falta).
+    - kind: Rule
+      match: Host(`chat.e-dani.com`) && HeaderRegexp(`Authorization`, `^Bearer `) && ( PathPrefix(`/api/models`) || PathPrefix(`/api/chat/completions`) || PathPrefix(`/api/v1/chats`) || PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/auths/oauth`) )
+      priority: 100
+      middlewares:
+        - name: chat-strip-auth-request
+          namespace: traefik-edge
+      services:
+        - name: edge-chat-public
           port: 80
     - kind: Rule
       match: Host(`chat.e-dani.com`)
