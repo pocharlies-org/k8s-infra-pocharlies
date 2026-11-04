@@ -62,6 +62,19 @@ committed in SC-2522. Adopted as it arrived, measured against the live realm
 on 2026-10-27; the six roles it holds are catalogued in `ROLES.yaml` in the
 same PR, and `keycloak-role-drift` clears on its first run after the sync.
 
+OWU-116 (S1 de OWU-95, 2026-11-03) adds the 38th and 39th,
+`qa-owu95@e-dani.com` and `service-account-openwebui-ios-owui`: the human
+fixture of the native app's bearer route on chat.e-dani.com (group
+`/edani-users`, no direct realm role; it must sign in once through the web —
+the OWUI token exchange does not auto-register, OWU-115) and the service
+account derived from the confidential client `openwebui-ios-owui`, the
+identity Open WebUI uses to validate the user's token (userinfo /
+introspection) in that exchange (no realm role beyond the default). Like
+`hermes-enviar` they are NOT adopted: their PostSync
+(`openwebui-ios-client.yaml`) creates them in the same sync that ships this
+entry, so until those hooks finish `keycloak-role-drift` reports them; it
+clears on the first run after, with no action.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -114,11 +127,12 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
 | `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
+| `qa-owu95@e-dani.com` | humano | QA | activo | Fixture de OWU-116 (S1 de OWU-95): usuaria de la ruta bearer de la app nativa en chat.e-dani.com; grupo /edani-users, sin roles directos. Alta y contraseña por GitOps (openwebui-ios-client.sh + ítem 1Password keycloak-next-qa-owu95, lo escribe security); entra una vez por la web antes de probar (el exchange no auto-registra); retirada al cerrar la épica. |
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui) y agentgateway-write. |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui; INFRA-402: + photos) y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -137,6 +151,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
+| `service-account-openwebui-ios-owui` | sa | DevOps | activo | SA derivada del cliente confidencial `openwebui-ios-owui` (OWU-116, S1 de OWU-95): la identidad con la que Open WebUI se autentica ante Keycloak para validar el token del usuario (userinfo/introspección) en el exchange nativo de la app. Sin roles de realm. |
 | `service-account-synapse-draft-orchestrator` | sa | DevOps | activo | M2M de los borradores de Synapse; porta synapse-draft-m2m. |
 | `service-account-synapse-sre-orchestrator` | sa | DevOps | activo | M2M del orquestador SRE de Synapse; porta synapse-sre-m2m y cto-office-send. |
 
@@ -233,12 +248,13 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Dani (operador)",
       "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel); agentgateway-write por OWU-80 (veredicto de security de OWU-28, condición (b))",
-      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80 y lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805).",
+      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80, lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805) y photos-confirm-delete, el rol humano del gate de borrado del gestor de fotos (INFRA-402 G1; lo concede el PostSync photos-confirm-delete-grant-daniel-job).",
       "realm_roles": [
         "agentgateway-read:social",
         "agentgateway-write",
         "cto-office-send",
-        "default-roles-edani"
+        "default-roles-edani",
+        "photos-confirm-delete"
       ],
       "status": "activo"
     },
@@ -288,6 +304,18 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Fixture C2 reverso de OWU-28 (write sin vínculo Atlassian): usuario de prueba con agentgateway-write, sin grupos ni entrada en atlassian-identity-bindings; login scriptado PKCE por /chat-atlassian con el cliente público agentgateway-chat-mcp. Alta, contraseña y retirada por GitOps (agentgateway-write-fixture-user.sh).",
       "realm_roles": [
         "agentgateway-write",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "qa-owu95@e-dani.com",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "OWU-116 (S1 de OWU-95; spec adjunto id 30611, plan del architect nota-architect-plan.md id 30602, cota de security OWU-115 id 30461)",
+      "purpose": "Fixture de la ruta bearer de la app nativa openwebui-ios (chat.e-dani.com): usuaria con la que se mide 1.1/1.2/1.3 y de la que qa acuña la API key del guardrail s1-bearer-check.sh (secret de Actions OWU95_TEST_API_KEY). Grupo /edani-users, sin roles directos; entra una vez por la web antes de probar (el exchange de OWUI no auto-registra). Alta, re-aplicación de contraseña y retirada por GitOps (openwebui-ios-client.sh; contraseña en el ítem 1Password keycloak-next-qa-owu95, lo escribe security).",
+      "realm_roles": [
         "default-roles-edani"
       ],
       "status": "activo"
@@ -350,7 +378,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; los bancos personales no viajan en el SA compartido) y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
+      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos) y agentgateway-write (la escritura del planificador va con el write pelado; SC-2726).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -359,10 +387,12 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:dgx-control",
         "agentgateway-read:gsc",
         "agentgateway-read:hindsight-claude-personal",
+        "agentgateway-read:hindsight-codigo",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
         "agentgateway-read:offers",
+        "agentgateway-read:photos",
         "agentgateway-read:picqer",
         "agentgateway-read:plaud",
         "agentgateway-read:shopify",
@@ -691,6 +721,18 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:synapse",
         "agentgateway-read:synapse-tools",
         "cto-office-send",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-openwebui-ios-owui",
+      "type": "sa",
+      "client": "openwebui-ios-owui",
+      "owner": "DevOps",
+      "source": "OWU-116 (S1 de OWU-95); cota de security OWU-115 (nota id 30461); creado por platform/keycloak-next/openwebui-ios-client.yaml, nunca a mano; el secreto en 1Password `keycloak-next-openwebui-ios-owui` (campo client_secret, lo escribe security) vía ExternalSecret openwebui-ios-owui-client (ns keycloak) y su gemelo en dgx-infra (k8s/apps/chat/externalsecret-oauth.yaml → Secret chat-oauth-client, ns chat)",
+      "purpose": "SA derivada del cliente confidencial `openwebui-ios-owui`: la identidad con la que Open WebUI (ns chat) se autentica ante Keycloak para validar el token del usuario (userinfo/introspección) en el token exchange nativo que usa la app openwebui-ios. Sin roles de realm: no consume AgentGateway ni ninguna ruta.",
+      "realm_roles": [
         "default-roles-edani"
       ],
       "status": "activo"

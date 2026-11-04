@@ -428,10 +428,15 @@ PyYAML.
   (`uuid:<id>`); the verifier checks the map against the realm by default
   (needs `view-clients`), and `--skip-client-uuid-check` (prints `SKIP:`)
   leaves that out for the auditor CronJob, which has no `view-clients`.
-- A new role, grant or revoke lands in `ROLES.yaml` in the same PR as the
-  reconciler change. The roles owned by `agentgateway-read-grants.sh` and
-  `agentgateway-domain-roles.sh` must match those scripts' `EXPECTED_*`
-  matrices (`tests/test_keycloak_rbac_parity_contract.py`).
+- No se crea ni concede ningún rol o principal en el realm edani por Admin API
+  antes de que su entrada en `ROLES.yaml` o `PRINCIPALS.md` esté fusionada y
+  sincronizada: la concesión la aplica el job reconciler de la misma PR.
+  Excepción: revocaciones de emergencia de security, declaradas en la PR
+  siguiente en menos de 24 h. (SC-4414; the CI guard is
+  `tests/test_keycloak_rbac_grant_declaration_contract.py`.) The roles owned
+  by `agentgateway-read-grants.sh` and `agentgateway-domain-roles.sh` must
+  match those scripts' `EXPECTED_*` matrices
+  (`tests/test_keycloak_rbac_parity_contract.py`).
 - No catalogued role may be mapped to a group (R2).
 - `default-roles-edani` lists every user and service account: Keycloak grants
   it on creation, so a new principal shows up as drift until it is added.
