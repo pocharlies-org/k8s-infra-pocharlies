@@ -90,8 +90,12 @@ user_field_by_id() {
 
 resolve_user_id_by_username() {
   # Exactly one user with this username (the SAs are singletons by convention
-  # service-account-<clientId>; anything else fails closed).
-  rows="$(kget users -q "username=$1" --fields id --format csv --noquotes | nonempty_lines)"
+  # service-account-<clientId>; anything else fails closed). Keycloak's
+  # username search is a SUBSTRING match by default: without exact=true,
+  # username=service-account-hermes-secretaria also matched -casa and the
+  # other hermes-secretaria-* and the PostSync failed with "found 5"
+  # (measured 2026-11-04). exact=true keeps the single-match guard real.
+  rows="$(kget users -q "username=$1" -q exact=true --fields id --format csv --noquotes | nonempty_lines)"
   [ "$(printf '%s\n' "${rows}" | line_count)" = "1" ] || \
     fail "expected exactly one user ${1}, found $(printf '%s\n' "${rows}" | line_count)"
   printf '%s' "${rows}"
