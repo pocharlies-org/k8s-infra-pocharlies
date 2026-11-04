@@ -4,7 +4,7 @@ namespace: databases
 resources:
   - namespace.yaml
   - priorityclass.yaml
-  - minio-credentials.yaml
+  - ovh-credentials.yaml
   - app-credentials.yaml
   - cluster.yaml
   - services-alias.yaml

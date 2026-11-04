@@ -120,7 +120,7 @@ kubectl -n argocd get applications.argoproj.io -o json | jq -e '
 kubectl -n velero get backupstoragelocations.velero.io -o json | jq -e '
   (.items | length) == 2 and all(.items[]; .status.phase == "Available") and
   ([.items[] | select(.metadata.name == "default") |
-    .spec.credential.name] == ["velero-minio-creds"]) and
+    .spec.credential.name] == ["velero-ovh-creds"]) and
   ([.items[] | select(.metadata.name == "x86-backup-minio") |
     .spec.credential.name] == ["cloud-credentials-backup-minio"])
 ' >/dev/null
