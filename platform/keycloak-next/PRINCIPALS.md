@@ -121,8 +121,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `daniel.ibanez@cloudblue.com` | humano | Dani (operador) (origen-desconocido) | activo | Cuenta Google de trabajo de Dani (CloudBlue); SSO del realm, sin roles propios. |
 | `dom.greco@alphalinkcrossfit.com` | humano | Dani (operador) (origen-desconocido) | activo | Usuario de origen desconocido (alta por API de admin el 16-10, SC-2522); sin atributos ni roles propios. |
 | `info@e-dani.com` | humano | Dani (operador) | activo | Buzón del negocio (Skirmshop Spain); SSO del realm, grupos edani-operators y skirmbooks-users. |
-| `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users), su buzón en /workspace y la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805). |
-| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80 y la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805). |
+| `lays84.mv@gmail.com` | humano | Leila | activo | Cuenta Google de Leila; SSO del realm (grupo edani-users), su buzón en /workspace, la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805) y la lectura de la memoria personal de Hindsight concedida el 03-11 por decisión de Dani (SC-4304 S6). |
+| `me@e-dani.com` | humano | Dani (operador) | activo | Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80, la lectura de /social concedida el 30-10 (SC-1144 C4, SC-3805) y la lectura de la memoria personal de Hindsight concedida el 03-11 por decisión de Dani (SC-4304 S6). |
 | `pocharlies@gmail.com` | humano | Dani (operador) | activo | Cuenta Google de administración de la plataforma (Plataforma Admin); grupos edani-admins y company-operator. |
 | `qa-con-rol@e-dani.com` | humano | QA | activo | Usuario de prueba autenticado CON el grupo company-operator; fixture de la prueba de drift de C5 (INFRA-219). |
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
@@ -134,7 +134,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
 | `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui; INFRA-402: + photos) y agentgateway-write. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
-| `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). |
+| `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). Desde SC-4304 S6 no lee la memoria personal: perdió el grant de SC-4051 para cerrar la vía del sidecar (veredicto security 03-11-2026). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
 | `service-account-claude-sessions-other` | sa | QA | retirada-propuesta | Segundo sub con claude-sessions: el 403 de propiedad entre sesiones de otro usuario. |
 | `service-account-claude-sessions-test` | sa | QA | retirada-propuesta | Client de prueba con claude-sessions y agentgateway-read/write:claude-sessions: el camino feliz de /claude-sessions. |
@@ -235,8 +235,9 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Leila",
       "source": "k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml (usuario de Leila, sub medido 21-09)",
-      "purpose": "Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace; lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805).",
+      "purpose": "Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace; lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805); lectura de la memoria personal de Hindsight (agentgateway-read:hindsight-personal, rutas /hindsight-personal y /chat-hindsight-personal) por la decisión de Dani de 03-11-2026, concedida por el PostSync agentgateway-hindsight-personal-grants-job (SC-4304 S6).",
       "realm_roles": [
+        "agentgateway-read:hindsight-personal",
         "agentgateway-read:social",
         "default-roles-edani"
       ],
@@ -248,8 +249,9 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": null,
       "owner": "Dani (operador)",
       "source": "SC-320 (alias SC-100), criterio 6 de SC-44: el usuario main; identity-bindings.yaml (usuario humano de Daniel); agentgateway-write por OWU-80 (veredicto de security de OWU-28, condición (b))",
-      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80, lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805) y photos-confirm-delete, el rol humano del gate de borrado del gestor de fotos (INFRA-402 G1; lo concede el PostSync photos-confirm-delete-grant-daniel-job).",
+      "purpose": "Usuario principal del operador; admin del realm por grupos, cto-office-send para /cto-office, el write global agentgateway-write concedido por OWU-80, lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805), photos-confirm-delete, el rol humano del gate de borrado del gestor de fotos (INFRA-402 G1; lo concede el PostSync photos-confirm-delete-grant-daniel-job), y lectura de la memoria personal de Hindsight (agentgateway-read:hindsight-personal, rutas /hindsight-personal y /chat-hindsight-personal) por la decisión de Dani de 03-11-2026, concedida por el PostSync agentgateway-hindsight-personal-grants-job (SC-4304 S6).",
       "realm_roles": [
+        "agentgateway-read:hindsight-personal",
         "agentgateway-read:social",
         "agentgateway-write",
         "cto-office-send",
@@ -449,9 +451,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "chat-agentgateway",
       "owner": "DevOps",
       "source": "platform/keycloak-next/chat-agentgateway-client.yaml (SC-490; contrato v2 de dominios, PR #142; SC-699 anade la puerta de ruta read:studio)",
-      "purpose": "Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas agentgateway-read:studio, el rol de ruta que /studio exige desde INFRA-143; desde SC-4051 lee el banco personal de Hindsight (agentgateway-read:hindsight-personal, con scope mapping explicito en su client por fullScope=false).",
+      "purpose": "Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas agentgateway-read:studio, el rol de ruta que /studio exige desde INFRA-143. SC-4304 S6 (03-11-2026): pierde el grant de agentgateway-read:hindsight-personal que SC-4051 le dio y su scope mapping manual en el client chat-agentgateway — el sidecar del pod chat reenvía CUALQUIER ruta al gateway con el token de este SA (medido 03-11: única conexión real por el sidecar es /studio, cero consumidores del grant), y la memoria personal queda reservada a los dos humanos de la decisión de Dani de 03-11, que la leen por su propio token OAuth con el client dedicado agentgateway-chat-hindsight-mcp.",
       "realm_roles": [
-        "agentgateway-read:hindsight-personal",
         "agentgateway-read:studio",
         "agentgateway-write:gsc",
         "agentgateway-write:hermes",

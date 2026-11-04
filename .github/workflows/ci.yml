@@ -68,6 +68,8 @@ jobs:
           sh -n platform/keycloak-next/scripts/agentgateway-read-grants.sh
           sh -n platform/keycloak-next/scripts/agentgateway-social-mcp-client.sh
           sh -n platform/keycloak-next/scripts/agentgateway-chat-mcp-client.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-chat-hindsight-mcp-client.sh
+          sh -n platform/keycloak-next/scripts/agentgateway-hindsight-personal-grants.sh
           sh -n platform/keycloak-next/scripts/admin-keycloack-impersonation-grant.sh
           sh -n platform/keycloak-next/scripts/agentgateway-write-grant-daniel.sh
           sh -n platform/keycloak-next/scripts/human-role-grant-daniel-lib.sh
@@ -88,6 +90,7 @@ jobs:
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \
+            tests/test_agentgateway_chat_hindsight_personal_contract.py \
             tests/test_admin_keycloack_impersonation_grant_contract.py \
             tests/test_agentgateway_write_grant_daniel_contract.py \
             tests/test_agentgateway_write_fixture_user_contract.py \
