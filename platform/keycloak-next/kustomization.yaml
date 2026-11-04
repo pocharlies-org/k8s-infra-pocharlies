@@ -90,6 +90,7 @@ configMapGenerator:
   - name: keycloak-agentgateway-chat-hindsight-mcp-client
     files:
       - agentgateway-chat-hindsight-mcp-client.sh=scripts/agentgateway-chat-hindsight-mcp-client.sh
+      - agentgateway-chat-mcp-client.sh=scripts/agentgateway-chat-mcp-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
       - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:

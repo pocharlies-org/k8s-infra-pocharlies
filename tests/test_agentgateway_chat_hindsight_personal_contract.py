@@ -48,6 +48,7 @@ HOLDERS = {
 CHAT_SA = "service-account-chat-agentgateway"
 
 CLIENT_SCRIPT = BASE / "scripts" / "agentgateway-chat-hindsight-mcp-client.sh"
+CLIENT_ENGINE = BASE / "scripts" / "agentgateway-chat-mcp-client.sh"
 CLIENT_JOB = BASE / "agentgateway-chat-hindsight-mcp-client.yaml"
 CLIENT_ROLLBACK = BASE / "manual" / "agentgateway-chat-hindsight-mcp-client-rollback-job.yaml"
 GRANTS_SCRIPT = BASE / "scripts" / "agentgateway-hindsight-personal-grants.sh"
@@ -56,47 +57,66 @@ GRANTS_ROLLBACK = BASE / "manual" / "agentgateway-hindsight-personal-grants-roll
 
 
 class ChatHindsightMcpClientContractTest(unittest.TestCase):
-    def test_reconciler_is_a_public_pkce_client_with_one_exact_role(self):
+    def test_wrapper_carries_the_identity_and_execs_the_shared_engine(self):
+        # #452 (jscpd dedup): this client is the shared chat engine driven by a
+        # thin wrapper that carries ONLY its identity. Identity on the wrapper,
+        # behavior on the engine (shared with agentgateway-chat-mcp).
         script = CLIENT_SCRIPT.read_text()
         self.assertIn('CLIENT_ID="${CLIENT_ID:-agentgateway-chat-hindsight-mcp}"', script)
-        self.assertIn('REALM="${REALM:-edani}"', script)
-        self.assertIn('MAPPER_NAME="${MAPPER_NAME:-aud-mcp}"', script)
-        self.assertIn('PKCE_METHOD="${PKCE_METHOD:-S256}"', script)
+        self.assertIn('EXPECTED_CLIENT_ID="agentgateway-chat-hindsight-mcp"', script)
         self.assertIn(
             'REDIRECT_URIS="${REDIRECT_URIS:-https://chat.e-dani.com/oauth/clients/mcp:hindsight-personal/callback}"',
             script,
         )
-        self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', script)
         self.assertIn(
             'REALM_SCOPE_ROLE_NAMES="${REALM_SCOPE_ROLE_NAMES:-agentgateway-read:hindsight-personal}"',
             script,
         )
         self.assertIn('EXPECTED_REALM_SCOPE_ROLE_NAMES="agentgateway-read:hindsight-personal"', script)
-        self.assertIn("REALM_SCOPE_ROLE_NAMES is immutable", script)
-        self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"', script)
+        # the role is owned by the catalog, never created here
+        self.assertIn('ROLE_OWNER="the catalog"', script)
+        # the scope comparison is EXACT, never a subset (read-grants precedent)
+        self.assertIn('SCOPE_AUDIT="exact"', script)
+        self.assertIn(
+            'ADMIN_CONFIG="${ADMIN_CONFIG:-/tmp/kcadm-agentgateway-chat-hindsight-admin.config}"',
+            script,
+        )
+        self.assertIn('exec /bin/sh "${0%/*}/agentgateway-chat-mcp-client.sh"', script)
+        self.assertNotIn("set -x", script)
+        self.assertNotIn("CLIENT_SECRET", script)
+
+    def test_engine_is_a_public_pkce_client_with_the_exact_scope_audit(self):
+        engine = CLIENT_ENGINE.read_text()
+        self.assertIn('REALM="${REALM:-edani}"', engine)
+        self.assertIn('MAPPER_NAME="${MAPPER_NAME:-aud-mcp}"', engine)
+        self.assertIn('PKCE_METHOD="${PKCE_METHOD:-S256}"', engine)
+        self.assertIn('AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"', engine)
+        self.assertIn("REALM_SCOPE_ROLE_NAMES is immutable", engine)
+        self.assertIn('RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"', engine)
         # public browser client: auth-code + PKCE only, no secret, no service
         # account, no direct access, no implicit; the scope is explicit.
-        self.assertIn("publicClient=true", script)
-        self.assertIn("standardFlowEnabled=true", script)
-        self.assertIn("directAccessGrantsEnabled=false", script)
-        self.assertIn("implicitFlowEnabled=false", script)
-        self.assertIn("serviceAccountsEnabled=false", script)
-        self.assertIn("fullScopeAllowed=false", script)
-        self.assertIn('attributes.\\"pkce.code.challenge.method\\"', script)
-        # the scope comparison is EXACT, never a subset (read-grants precedent):
-        # a role slipped into this client's scope would end the isolation.
-        self.assertIn('actual="$(scope_names)"', script)
-        self.assertIn('fail "client realm scope mapping must be exactly', script)
-        # the role is owned by the catalog: never created here.
-        self.assertIn("refusing to create it here", script)
+        self.assertIn("publicClient=true", engine)
+        self.assertIn("standardFlowEnabled=true", engine)
+        self.assertIn("directAccessGrantsEnabled=false", engine)
+        self.assertIn("implicitFlowEnabled=false", engine)
+        self.assertIn("serviceAccountsEnabled=false", engine)
+        self.assertIn("fullScopeAllowed=false", engine)
+        self.assertIn('attributes.\\"pkce.code.challenge.method\\"', engine)
+        # the exact branch of the shared engine: fullScopeAllowed asserted and
+        # the scope compared as a whole, never as a subset.
+        self.assertIn('assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false', engine)
+        self.assertIn('actual="$(scope_names)"', engine)
+        self.assertIn('fail "client realm scope mapping must be exactly', engine)
+        # the role is never created here, whatever ROLE_OWNER the wrapper sets.
+        self.assertIn("refusing to create it here", engine)
         # INFRA-197 regression: PKCE check reads the client without --fields.
-        self.assertIn('kget "clients/${CLIENT_UUID}" --format json', script)
-        self.assertIn("oidc-audience-mapper", script)
-        self.assertIn('config."userinfo.token.claim"=false', script)
-        self.assertNotIn("mint", script)
-        self.assertNotIn("CLIENT_SECRET", script)
-        self.assertIn("rollback_identity", script)
-        self.assertNotIn("set -x", script)
+        self.assertIn('kget "clients/${CLIENT_UUID}" --format json', engine)
+        self.assertIn("oidc-audience-mapper", engine)
+        self.assertIn('config."userinfo.token.claim"=false', engine)
+        self.assertNotIn("mint", engine)
+        self.assertNotIn("CLIENT_SECRET", engine)
+        self.assertIn("rollback_identity", engine)
+        self.assertNotIn("set -x", engine)
 
     def test_manifest_is_a_hardened_postsync_job_with_no_secret(self):
         manifest = CLIENT_JOB.read_text()
@@ -181,6 +201,12 @@ class WiringContractTest(unittest.TestCase):
         self.assertRegex(
             kustomization,
             r"keycloak-reconcile-lib\.sh=scripts/keycloak-reconcile-lib\.sh\n\s*options:\n\s*labels:\n\s*app\.kubernetes\.io/component: agentgateway-chat-hindsight-mcp-client",
+        )
+        # the wrapper execs the shared engine: the engine file must be mounted
+        # in the hindsight ConfigMap too, next to the wrapper (#452 dedup)
+        self.assertRegex(
+            kustomization,
+            r"keycloak-agentgateway-chat-hindsight-mcp-client\n\s*files:\n\s*-\s*agentgateway-chat-hindsight-mcp-client\.sh=\S+\n\s*-\s*agentgateway-chat-mcp-client\.sh=scripts/agentgateway-chat-mcp-client\.sh",
         )
         self.assertNotIn("manual/agentgateway-chat-hindsight-mcp-client-rollback-job.yaml", kustomization)
         self.assertNotIn("manual/agentgateway-hindsight-personal-grants-rollback-job.yaml", kustomization)
