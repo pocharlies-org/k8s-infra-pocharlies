@@ -1,0 +1,16 @@
+# Instalado en /etc/systemd/system/alphalink-backup.service del droplet alphalink.
+# INFRA-1086: After=docker.service -> k3s-agent.service (el WordPress ya no corre
+# en docker del host).
+[Unit]
+Description=Backup incremental restic de alphalinkcrossfit.com
+Wants=network-online.target
+After=network-online.target k3s-agent.service
+OnFailure=alphalink-backup-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/usr/local/sbin/alphalink-backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3h

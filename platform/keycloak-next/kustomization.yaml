@@ -36,6 +36,8 @@ resources:
   - agentgateway-dani-login-client-job.yaml
   - agentgateway-token-smoke-job.yaml
   - keycloak-rbac-auditor-client.yaml
+  # OWU-116 (S1 de OWU-95): clientes de la app nativa + fixture qa-owu95.
+  - openwebui-ios-client.yaml
   - keycloak-role-drift-cron.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
@@ -203,6 +205,16 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: keycloak-rbac-auditor-client
+  # OWU-116: patron dgx-messages-client (solo kc-admin-common.sh; el hook define
+  # su propio resolve_client_exact porque `openwebui-ios` es prefijo de
+  # `openwebui-ios-owui` y el filtro -q del servidor es de subcadena).
+  - name: keycloak-openwebui-ios-client
+    files:
+      - openwebui-ios-client.sh=scripts/openwebui-ios-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+    options:
+      labels:
+        app.kubernetes.io/component: openwebui-ios-client
   - name: keycloak-role-drift
     files:
       - keycloak-role-drift.sh=scripts/keycloak-role-drift.sh

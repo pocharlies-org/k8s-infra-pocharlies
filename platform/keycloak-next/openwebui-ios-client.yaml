@@ -1,0 +1,187 @@
+# OWU-116 (S1 de OWU-95): los clientes del realm `edani` que abre la ruta
+# bearer de la app nativa openwebui-ios (chat.e-dani.com) y el usuario fixture
+# qa-owu95@e-dani.com. Mecanismo cerrado por security en OWU-115 (nota id
+# 30461); detalles fijados por el architect (nota-architect-plan.md id 30602).
+# Forma: ExternalSecrets + Job PostSync (patron dgx-messages-client.yaml /
+# agentgateway-write-fixture-user-job.yaml; librerias kc-admin-common.sh — el
+# hook no llama a kcadm a mano desde el YAML).
+#
+# Dos secretos, ambos en 1Password (vault k8s-pocharlies), forma Connect, y
+# ambos los escribe `security` (regla comun: solo security escribe en
+# 1Password):
+#   - item `keycloak-next-openwebui-ios-owui`, campo `client_secret`: el
+#     secreto del cliente confidencial que usa Open WebUI para validar el token
+#     del usuario. Mismo valor que consume el ExternalSecret de dgx-infra
+#     (k8s/apps/chat/externalsecret-oauth.yaml → Secret chat-oauth-client, ns
+#     chat): un valor, dos consumidores; se rota en 1Password y ambos lo
+#     recogen (patrón chat-agentgateway).
+#   - item `keycloak-next-qa-owu95`, campo `password`: contrasena del fixture
+#     (qa la recibe; no se commitea; rotacion → tarea con etiqueta
+#     rotacion-semanal). El fixture entra una vez por la web antes de probar:
+#     el exchange NO auto-registra.
+# Mientras los items no existan, los ExternalSecrets quedan en error y el Job
+# falla en seco con mensaje explícito: es repara-ya (security siembra y
+# force-sync), no rotacion.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: openwebui-ios-owui-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openwebui-ios-client
+spec:
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: openwebui-ios-owui-client
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client_secret
+      remoteRef:
+        # Forma Connect: key = item, property = campo.
+        key: keycloak-next-openwebui-ios-owui
+        property: client_secret
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: openwebui-ios-fixture-credentials
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openwebui-ios-client
+spec:
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: openwebui-ios-fixture-credentials
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: FIXTURE_PASSWORD
+      remoteRef:
+        key: keycloak-next-qa-owu95
+        property: password
+---
+# Reconciler PostSync: los clientes tienen que existir (publico PKCE con su
+# redirect EXACTO y sus mappers; confidencial con el secreto de 1Password) y el
+# fixture estar en /edani-users antes de que la app (OWU-117) intente el
+# exchange. Falla y deja el hook en rojo si algo no casa — verifica booleanos,
+# redirect exacto, PKCE S256, mappers y las claims del token de ejemplo del
+# fixture (access + userinfo: azp, email, groups /edani-users).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-openwebui-ios-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openwebui-ios-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Wave 21: la misma ola de los clientes SSO hermanos (dgx-messages); hechos
+    # disjuntos con ellos. No depende de los roles agentgateway (olas 19-20).
+    argocd.argoproj.io/sync-wave: "21"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: openwebui-ios-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-openwebui-ios-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/openwebui-ios-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            # El secreto del confidencial (se re-aplica en cada sync: Keycloak
+            # == 1Password) y la contrasena del fixture (KC_CLI_PASSWORD dentro
+            # del hook, nunca argv). Ninguno se imprime.
+            - name: OWUI_IOS_OWUI_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-ios-owui-client
+                  key: client_secret
+            - name: FIXTURE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui-ios-fixture-credentials
+                  key: FIXTURE_PASSWORD
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-openwebui-ios-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-openwebui-ios-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: openwebui-ios-client
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: openwebui-ios-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: keycloak }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
