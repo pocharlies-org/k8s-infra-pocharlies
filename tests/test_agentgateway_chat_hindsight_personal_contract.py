@@ -171,7 +171,86 @@ class HindsightPersonalGrantsContractTest(unittest.TestCase):
         self.assertIn("refusing to create it here", script)
         # rollback touches only the two human grants
         self.assertIn("Removes ONLY the two human grants", GRANTS_ROLLBACK.read_text())
+        # Keycloak's username search is a SUBSTRING match: without exact=true
+        # username=service-account-hermes-secretaria also matched -casa and the
+        # other hermes-secretaria-* (measured 2026-11-04: the PostSync failed
+        # with "expected exactly one user ..., found 5").
+        self.assertIn('kget users -q "username=$1" -q exact=true', script)
         self.assertNotIn("set -x", script)
+
+    def test_prefix_username_resolves_to_exactly_one_user(self):
+        # Behavior regression (PostSync failure of 2026-11-04): a username that
+        # is a prefix of others must still resolve to ONE user. The fake kcadm
+        # below reproduces Keycloak's search: without exact=true a username
+        # query returns every user whose name CONTAINS it (5 for
+        # service-account-hermes-secretaria), with exact=true only the exact
+        # match. A script that drops exact=true fails this audit run.
+        import os
+        import stat
+        import subprocess
+        import tempfile
+
+        stub = """#!/bin/sh
+ROLE=agentgateway-read:hindsight-personal
+line="$*"
+case "$line" in
+  *"config credentials"*) exit 0 ;;
+  *"roles/$ROLE/groups --fields path"*) exit 0 ;;
+  *"roles/$ROLE/users -q first=0"*)
+    printf 'e51253a7-c137-4c6c-9fb9-af9cecd3b147,me@e-dani.com\\n'
+    printf '66ec6f4f-5f2c-44f6-a3db-0dccba6e1748,lays84.mv@gmail.com\\n'
+    printf 'id-secretaria,service-account-hermes-secretaria\\n'
+    printf 'id-casa,service-account-hermes-secretaria-casa\\n'
+    exit 0 ;;
+  *"roles/$ROLE --fields id"*) echo role-uuid; exit 0 ;;
+  *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/66ec6f4f-5f2c-44f6-a3db-0dccba6e1748/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/id-secretaria/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/id-casa/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/id-chat/role-mappings/realm"*) exit 0 ;;
+  *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields username"*) echo me@e-dani.com; exit 0 ;;
+  *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields enabled"*) echo true; exit 0 ;;
+  *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields serviceAccountClientId"*) exit 0 ;;
+  *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields id"*) echo e51253a7-c137-4c6c-9fb9-af9cecd3b147; exit 0 ;;
+  *"users/66ec6f4f-5f2c-44f6-a3db-0dccba6e1748 --fields username"*) echo lays84.mv@gmail.com; exit 0 ;;
+  *"users/66ec6f4f-5f2c-44f6-a3db-0dccba6e1748 --fields enabled"*) echo true; exit 0 ;;
+  *"users/66ec6f4f-5f2c-44f6-a3db-0dccba6e1748 --fields serviceAccountClientId"*) exit 0 ;;
+  *"users/66ec6f4f-5f2c-44f6-a3db-0dccba6e1748 --fields id"*) echo 66ec6f4f-5f2c-44f6-a3db-0dccba6e1748; exit 0 ;;
+  *"get users -q username=service-account-hermes-secretaria-casa"*) echo id-casa; exit 0 ;;
+  *"get users -q username=service-account-hermes-secretaria"*)
+    case "$line" in
+      *exact=true*) echo id-secretaria ;;
+      *) printf 'id-secretaria\\nid-casa\\nid-studio\\nid-hogar\\nid-jarvis\\n' ;;
+    esac
+    exit 0 ;;
+  *"get users -q username=service-account-chat-agentgateway"*) echo id-chat; exit 0 ;;
+  *"get clients -q clientId=chat-agentgateway"*) echo chat-uuid; exit 0 ;;
+  *"clients/chat-uuid/scope-mappings/realm"*) exit 0 ;;
+esac
+echo "fake kcadm: unexpected call: $line" >&2
+exit 1
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            kcadm = os.path.join(tmp, "kcadm")
+            with open(kcadm, "w") as handle:
+                handle.write(stub)
+            os.chmod(kcadm, os.stat(kcadm).st_mode | stat.S_IXUSR)
+            env = dict(
+                os.environ,
+                KCADM=kcadm,
+                MODE="audit",
+                KC_BOOTSTRAP_ADMIN_USERNAME="a",
+                KC_BOOTSTRAP_ADMIN_PASSWORD="b",
+            )
+            proc = subprocess.run(
+                ["/bin/sh", str(GRANTS_SCRIPT)],
+                env=env, capture_output=True, text=True, timeout=60,
+            )
+        self.assertEqual(
+            proc.returncode, 0,
+            "audit failed with the prefix-colliding realm: " + proc.stderr,
+        )
+        self.assertIn('"holders_reviewed":4', proc.stdout)
 
     def test_manifest_is_a_hardened_postsync_job(self):
         manifest = GRANTS_JOB.read_text()
