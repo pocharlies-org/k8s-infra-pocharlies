@@ -126,37 +126,26 @@ user_has_direct_role() {
 upsert_client() {
   progress "${CLIENT_ID}" upsert
   uuid="$(resolve_client_optional)"
+  endpoint=clients
+  action=create
   if [ -n "${uuid}" ]; then
-    "${KCADM}" update "clients/${uuid}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
-      -s "clientId=${CLIENT_ID}" \
-      -s enabled=true \
-      -s publicClient=true \
-      -s standardFlowEnabled=true \
-      -s implicitFlowEnabled=false \
-      -s directAccessGrantsEnabled=false \
-      -s serviceAccountsEnabled=false \
-      -s fullScopeAllowed=false \
-      -s protocol=openid-connect \
-      -s "redirectUris=[\"${REDIRECT_URI}\"]" \
-      -s 'webOrigins=[]' \
-      -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null 2>&1 || \
-      fail "failed to update client ${CLIENT_ID}"
-  else
-    "${KCADM}" create clients --config "${ADMIN_CONFIG}" -r "${REALM}" \
-      -s "clientId=${CLIENT_ID}" \
-      -s enabled=true \
-      -s publicClient=true \
-      -s standardFlowEnabled=true \
-      -s implicitFlowEnabled=false \
-      -s directAccessGrantsEnabled=false \
-      -s serviceAccountsEnabled=false \
-      -s fullScopeAllowed=false \
-      -s protocol=openid-connect \
-      -s "redirectUris=[\"${REDIRECT_URI}\"]" \
-      -s 'webOrigins=[]' \
-      -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null 2>&1 || \
-      fail "failed to create client ${CLIENT_ID}"
+    endpoint="clients/${uuid}"
+    action=update
   fi
+  "${KCADM}" "${action}" "${endpoint}" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+    -s "clientId=${CLIENT_ID}" \
+    -s enabled=true \
+    -s publicClient=true \
+    -s standardFlowEnabled=true \
+    -s implicitFlowEnabled=false \
+    -s directAccessGrantsEnabled=false \
+    -s serviceAccountsEnabled=false \
+    -s fullScopeAllowed=false \
+    -s protocol=openid-connect \
+    -s "redirectUris=[\"${REDIRECT_URI}\"]" \
+    -s 'webOrigins=[]' \
+    -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null 2>&1 || \
+    fail "failed to ${action} client ${CLIENT_ID}"
   CLIENT_UUID="$(require_client)"
   # Patron de audience de la casa (MAPPER_NAME + AGENTGATEWAY_AUDIENCE).
   upsert_audience_mapper
