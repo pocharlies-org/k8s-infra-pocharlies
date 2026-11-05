@@ -11,6 +11,16 @@ cierra con la fase (e) de este runbook).
 Plantilla: `docs/openclaw-sauvage-backup-target.md` (retirado con INFRA-993; el
 fichero vive en el historial de git, commit `15bd25475^`).
 
+## Estado de las fases (actualizado 2026-11-05, fase (d) de esta PR)
+
+| fase | estado | evidencia |
+|---|---|---|
+| (a) | Hecha — PR #441 fusionada 2026-11-02 | `ExternalSecret/longhorn-default-backup` `Ready=True` (medido 2026-11-05, last sync 2d13h); veredicto security INFRA-1121 (Done) |
+| (b) | Hecha — 2026-11-04 (INFRA-1158, operador IT) | md5 original y restaurado coincidentes: `58bc7d03e9e1b871f0741feec8d549f9`; backup conservado en MinIO como evidencia: `backup-c8b57ec0b72a483e` (`state=Completed`, target `minio-default-test`) |
+| (c) | Hecha — PR #442 fusionada 2026-11-04 | `values.yaml` `defaultSettings` a MinIO; veredicto security INFRA-1170 (Done). Estado live medido 2026-11-05: el CR `default` aún `nfs://100.83.56.98:/srv/longhorn-backups` — la aplicación del corte sigue en curso (diagnóstico aparte); se cierra cuando `kubectl -n longhorn-system get backuptarget default -o jsonpath='{.spec.backupTargetURL}'` devuelva la URL de MinIO |
+| (d) | En esta PR | Retira `BackupTarget/minio-default-test` del fichero; la entrada de la kustomization se conserva (el fichero sigue proyectando el ExternalSecret). ArgoCD poda el CR vivo al sync |
+| (e) | Pendiente del operador | `exportfs -u` del `/srv/longhorn-backups` en el nodo `ubuntu`; la salida vacía de `exportfs -v` es la evidencia del punto 3 de INFRA-980 |
+
 ## Límite de lo que esto es
 
 MinIO en sauvage es un solo StatefulSet sobre `/srv/minio/data`: quita a `ubuntu`
@@ -114,14 +124,17 @@ kubectl -n longhorn-system get backuptarget default -o jsonpath='{.spec.backupTa
 kubectl -n longhorn-system get backuptarget default -o jsonpath='{.status.available}'      # true
 ```
 
-y completar un backup de prueba contra `default`. Con esto en verde se abre la
-fase (d); mientras, la PR k8s-infra#459 (retirada de `minio-default-test`) no
-se fusiona.
+y completar un backup de prueba contra `default`. La PR k8s-infra#459 (retirada
+de `minio-default-test`) se fusionó el 2026-11-05 sin esperar a ese verde: el
+webhook validator de Longhorn rechazaba el sync mientras los dos targets
+compartían `s3://longhorn-backups@us-east-1/`, así que la verificación de esta
+fase se hace ya con `default` como único target de esa URL.
 
 ### (d) Retirar el CR temporal
 
-Quitar `BackupTarget/minio-default-test` del fichero y de la kustomization (PR del
-corte o siguiente). El ExternalSecret se queda: es la credencial del default.
+Quitar `BackupTarget/minio-default-test` del fichero (PR del corte o siguiente;
+hecha en esta PR, 2026-11-05). La entrada del fichero en la kustomization raíz se
+conserva: sigue proyectando el ExternalSecret, que es la credencial del default.
 
 ### (e) `exportfs -u` del NFS del x86 — solo tras (b) verificada
 

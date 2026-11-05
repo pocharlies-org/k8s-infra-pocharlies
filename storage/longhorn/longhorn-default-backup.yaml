@@ -4,12 +4,13 @@
 # The credential itself (1Password item `longhorn-default-backup`, vault
 # k8s-pocharlies) and the MinIO user with the scoped policy
 # storage/minio/longhorn-default-backup-policy.json are provisioned by security
-# (INFRA-1112). This file projects the credential into longhorn-system, declares
-# the transitional BackupTarget used to verify backup+restore, and owns the
-# `default` BackupTarget CR — the single source of truth for the default backup
+# (INFRA-1112). This file projects the credential into longhorn-system and owns
+# the `default` BackupTarget CR — the single source of truth for the default backup
 # target in Longhorn 1.13 (it is not a Setting and the values.yaml of this repo
 # are not rendered: the longhorn app reads its values from
-# k8s-gitops-pocharlies@deploy/prod). See runbook
+# k8s-gitops-pocharlies@deploy/prod). The transitional BackupTarget/minio-default-test
+# that lived here for the phase (b) drill was removed in phase (d) (2026-11-05);
+# ArgoCD prunes the live CR on sync. See runbook
 # docs/runbook-longhorn-default-backup-minio-cutover.md, phases a-e.
 #
 # Pattern: storage/longhorn/openclaw-sauvage-backup-target.yaml (retired with
@@ -66,32 +67,13 @@ spec:
         metadataPolicy: None
         nullBytePolicy: Fail
 ---
-# Transitional test target (runbook phase a). It points at the same bucket the
-# default will use once the values are set (phase c), so the drill exercises the
-# exact production path. It is inert until a volume is assigned to it; phase (d)
-# of the runbook removes it from the kustomization after the switch.
-apiVersion: longhorn.io/v1beta2
-kind: BackupTarget
-metadata:
-  name: minio-default-test
-  namespace: longhorn-system
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-  labels:
-    app.kubernetes.io/part-of: longhorn
-    backup.e-dani.com/scope: default
-    backup.e-dani.com/tier: transitional
-spec:
-  backupTargetURL: s3://longhorn-backups@us-east-1/
-  credentialSecret: longhorn-default-backup
-  pollInterval: 5m0s
----
 # Default backup target (runbook phase c). In Longhorn 1.13 the default target is
 # this CR, not a Setting: it is the only mechanism that moves it (the values of
 # this repo are not rendered for it). The tracking-id adopts the live object,
 # which was created by Longhorn itself and carries none; ArgoCD then owns it.
-# Before phase (d) removes minio-default-test, verify after sync:
-# `kubectl -n longhorn-system get backuptarget default -o
+# Phase (d) removed minio-default-test, so this CR is the only target carrying
+# this URL and the Longhorn webhook validator stops rejecting the sync. Verify
+# after sync: `kubectl -n longhorn-system get backuptarget default -o
 # jsonpath='{.spec.backupTargetURL}'` returns the s3 URL, status.available is
 # true, and a test backup to `default` completes.
 apiVersion: longhorn.io/v1beta2
