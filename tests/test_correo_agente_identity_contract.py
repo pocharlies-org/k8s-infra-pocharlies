@@ -156,8 +156,9 @@ class CorreoAgenteCatalogContractTest(unittest.TestCase):
         self.assertIn('CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"', script)
         self.assertIn("CORREO_LECTURA_READ_ROLE_NAMES is immutable", script)
         self.assertIn("CORREO_EJECUTOR_READ_ROLE_NAMES is immutable", script)
-        # Nine reviewed holders of agentgateway-read:workspace now: the bound must exceed them.
-        self.assertIn("-q max=10", script)
+        # Ten reviewed holders of agentgateway-read:workspace since INFRA-1189:
+        # the bound must exceed them.
+        self.assertIn("-q max=11", script)
 
 
 if __name__ == "__main__":

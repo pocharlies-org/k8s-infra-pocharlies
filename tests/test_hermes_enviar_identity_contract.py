@@ -419,9 +419,10 @@ class HermesEnviarCatalogContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
         self.assertIn('ENVIAR_SA_USERNAME="service-account-hermes-enviar"', script)
         self.assertIn("ENVIAR_READ_ROLE_NAMES is immutable", script)
-        # Nine reviewed holders of agentgateway-read:workspace since DGX-1218:
-        # the bound of the holder listing must exceed them so a tenth shows up.
-        self.assertIn("-q max=10", script)
+        # Ten reviewed holders of agentgateway-read:workspace since INFRA-1189
+        # (the smoke fixture is the tenth): the bound of the holder listing must
+        # exceed them so an eleventh shows up.
+        self.assertIn("-q max=11", script)
 
 
 if __name__ == "__main__":
