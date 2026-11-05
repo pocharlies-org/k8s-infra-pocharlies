@@ -43,6 +43,20 @@ vida de sus objetos, y la retención de 14 días del chart no se toca.
 5. `BackupTarget/default` (el NFS actual) sigue disponible: las fases (a) y (b)
    nunca lo editan.
 
+## Estado de las fases (2026-11-05)
+
+- (a) y (b) ejecutadas y verificadas. Evidencia: backup de prueba
+  `backup-c8b57ec0b72a483e` completado contra `minio-default-test` (URL bajo
+  `s3://longhorn-backups@us-east-1/`) y restauración a volumen nuevo con md5
+  coincidente `58bc7d03e9e1b871f0741feec8d549f9`. El backup de prueba se
+  conserva.
+- (c) pendiente: el CR `BackupTarget/default` (sección (c)) espera sync de
+  ArgoCD + verificación (URL s3, `status.available` en `true`, backup de
+  prueba a `default` completado).
+- (d) PR k8s-infra#459 abierta: NO fusionar hasta (c) verificada.
+- (e) pendiente: operativa `exportfs -u` en el nodo `ubuntu`, solo con (c) en
+  verde.
+
 ## Orden del corte (fases a–e)
 
 ### (a) ExternalSecret + BackupTarget de prueba temporal
@@ -80,15 +94,29 @@ Sobre un volumen de prueba (no de producción):
 Con (b) en verde queda cubierto el punto 3 de INFRA-980 (backup y restauración
 probados); la evidencia va al PR del corte.
 
-### (c) Fijar los values (segunda PR, el corte)
+### (c) Fijar el CR `BackupTarget/default` (segunda PR, el corte)
 
-En `storage/longhorn/values.yaml`, `defaultSettings`: descomentar/fijar
-`backupTarget: s3://longhorn-backups@us-east-1/` y añadir
-`backupTargetCredentialSecret: longhorn-default-backup`. El CR
-`BackupTarget/default` pasa a MinIO al aplicar ArgoCD. La retención de 14 días y la
-StorageClass por defecto no se tocan. Verificar que los backups nuevos salen a S3 y
-que `kubectl -n longhorn-system get backuptarget default -o jsonpath='{.spec.backupTargetURL}'`
-devuelve la URL de MinIO.
+**En Longhorn 1.13 el destino default NO es un Setting y no se fija por
+`values.yaml`.** La fuente de verdad es el CR `BackupTarget/default` (ns
+`longhorn-system`) — hoy en `nfs://100.83.56.98:/srv/longhorn-backups`, creado
+por el propio Longhorn y sin tracking-id de ArgoCD. Y los `values.yaml` de este
+repo no se renderizan para esto: la app longhorn los lee de
+`k8s-gitops-pocharlies@deploy/prod`. El corte fija por tanto el CR, declarado
+en `storage/longhorn/longhorn-default-backup.yaml` con
+`backupTargetURL: s3://longhorn-backups@us-east-1/`,
+`credentialSecret: longhorn-default-backup`, sync-wave -1 y el tracking-id
+`k8s-infra:longhorn.io/BackupTarget:longhorn-system/default` (adopta el objeto
+vivo). La retención de 14 días y la StorageClass por defecto no se tocan. Tras
+el sync de ArgoCD, verificar:
+
+```
+kubectl -n longhorn-system get backuptarget default -o jsonpath='{.spec.backupTargetURL}'  # s3://longhorn-backups@us-east-1/
+kubectl -n longhorn-system get backuptarget default -o jsonpath='{.status.available}'      # true
+```
+
+y completar un backup de prueba contra `default`. Con esto en verde se abre la
+fase (d); mientras, la PR k8s-infra#459 (retirada de `minio-default-test`) no
+se fusiona.
 
 ### (d) Retirar el CR temporal
 
@@ -112,8 +140,9 @@ una decisión aparte, no parte de este corte.
 
 - Si (a) o (b) fallan: retirar `BackupTarget/minio-default-test` (quitar de la
   kustomization); `default` no se ha tocado, no hay nada que revertir en Longhorn.
-- Si (c) falla tras aplicar los values: revertir el commit de `values.yaml` (el CR
-  `default` vuelve al NFS al reconciliar) y volver a (b) antes de reintentar.
+- Si (c) falla tras el sync del CR: revertir el commit de `BackupTarget/default`
+  (el CR `default` vuelve al NFS al reconciliar) y volver a (b) antes de
+  reintentar.
 - (e) es reversible con `exportfs -o ... && exportfs -ra` desde el `/etc/exports`
   del x86, que no se borra hasta cerrar la historia.
 
