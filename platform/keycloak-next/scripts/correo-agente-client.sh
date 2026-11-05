@@ -67,12 +67,7 @@ case "${CLIENT_ID}" in
     ;;
   *) fail "unsupported immutable client" ;;
 esac
-EXPECTED_TOKEN_ROLES="$(printf '%s' "${REVIEWED_ROLES}" | tr ' ' ',')"
-[ "${MAPPER_NAME}" = "aud-mcp" ] || fail "MAPPER_NAME is immutable"
-case "${MODE}" in
-  ensure|audit|rollback) ;;
-  *) fail "MODE must be ensure, audit or rollback" ;;
-esac
+validate_scoped_client_guards
 
 login_admin
 progress authenticated

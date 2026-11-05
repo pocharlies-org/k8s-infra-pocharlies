@@ -7,13 +7,29 @@
 # keycloak-reconcile-lib.sh by hermes-enviar-client.sh and
 # correo-agente-client.sh, mounted in their ConfigMaps. The sourcing script
 # owns the policy and sets, before calling run_scoped_client:
-#   CLIENT_ID, REVIEWED_ROLES (space-separated, sorted), EXPECTED_TOKEN_ROLES
-#   (the same set, comma-separated), WRITE_ROLE_NAME (its one scoped write
-#   role, or empty), MODE, plus the globals keycloak-reconcile-lib.sh reads.
+#   CLIENT_ID, REVIEWED_ROLES (space-separated, sorted), WRITE_ROLE_NAME (its
+#   one scoped write role, or empty), MODE, plus the globals
+#   keycloak-reconcile-lib.sh reads. EXPECTED_TOKEN_ROLES (the same set,
+#   comma-separated) is derived by validate_scoped_client_guards, which every
+#   caller runs after its CLIENT_ID case.
 # Roles are never created here: a write role is owned by
 # agentgateway-domain-roles, a read role by agentgateway-read-grants.
 #
 # Definitions only; nothing runs at source time.
+
+# The guard block every scoped-client script runs after its CLIENT_ID case and
+# BEFORE login_admin (INFRA-1189: the block lived verbatim in each script and
+# the duplicados check caught the copy; the immutability of MAPPER_NAME and the
+# MODE domain are properties of this flow, not of any one client, so they are
+# checked here). Call it right after the case that sets REVIEWED_ROLES.
+validate_scoped_client_guards() {
+  EXPECTED_TOKEN_ROLES="$(printf '%s' "${REVIEWED_ROLES}" | tr ' ' ',')"
+  [ "${MAPPER_NAME}" = "aud-mcp" ] || fail "MAPPER_NAME is immutable"
+  case "${MODE}" in
+    ensure|audit|rollback) ;;
+    *) fail "MODE must be ensure, audit or rollback" ;;
+  esac
+}
 
 upsert_client() {
   # Neither branch carries a secret: create lets Keycloak generate one, and
