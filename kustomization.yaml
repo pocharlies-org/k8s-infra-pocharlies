@@ -67,8 +67,10 @@ resources:
   - storage/longhorn/metrics-and-alerts.yaml
   - storage/longhorn/orphan-watch.yaml
   # INFRA-1100 (INFRA-1022 P2): credencial del destino default de copias a MinIO
-  # (item 1Password longhorn-default-backup, INFRA-1112) + BackupTarget de prueba
-  # transitorio. Corte y retirada del CR: docs/runbook-longhorn-default-backup-minio-cutover.md
+  # (item 1Password longhorn-default-backup, INFRA-1112). El BackupTarget de prueba
+  # transitorio se retiró en la fase (d) del corte (2026-11-05); la entrada se
+  # conserva porque el fichero sigue proyectando el ExternalSecret. Corte y
+  # retirada: docs/runbook-longhorn-default-backup-minio-cutover.md
   - storage/longhorn/longhorn-default-backup.yaml
   - kubernetes/storage/longhorn-openclaw-encrypted.yaml
   - kubernetes/storage/longhorn-strict-local.yaml
@@ -85,6 +87,7 @@ resources:
   - platform/external-secrets/cluster-secret-store-correo-hermes.yaml
   - platform/external-secrets/cluster-secret-store-correo-synapse.yaml
   - platform/external-secrets/change-detector
+  - platform/external-secrets/x86-1password-master.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
   - platform/velero/schedules.yaml

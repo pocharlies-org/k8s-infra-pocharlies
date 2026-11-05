@@ -1,0 +1,12 @@
+# Instalado en /etc/systemd/system/alphalink-backup.timer del droplet alphalink.
+[Unit]
+Description=Backup diario de alphalinkcrossfit.com
+
+[Timer]
+# 01:30 UTC = 03:30 en Madrid (verano)
+OnCalendar=*-*-* 01:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,14 +1,17 @@
-"""SC-4304 S6: las tres identidades de lectura de bancos Hindsight.
+"""SC-4304 S6: la identidad de lectura de bancos Hindsight que queda.
 
-jarvis-hindsight y synapse-hindsight-tienda leen el banco `tienda`
-(agentgateway-read:hindsight-tienda); socialmedia-hindsight lee el banco
-`personal` (agentgateway-read:hindsight-personal). Un principal por (servicio,
-banco) por veredicto de security de 02-11: una credencial filtrada abre
-exactamente un banco. Ninguna identidad lleva rol de escritura alguno (las
-rutas hindsight son de solo lectura por diseño). El esqueleto del contrato es
-el compartido de los scoped-clients (tests/keycloak_scoped_client_testlib.py,
-el mismo que usan hermes-enviar y correo-agente); aquí solo la política
-propia: la tabla de roles sin escritura y los catálogos.
+socialmedia-hindsight lee el banco `personal` (agentgateway-read:hindsight-personal).
+Un principal por (servicio, banco) por veredicto de security de 02-11: una
+credencial filtrada abre exactamente un banco. La identidad no lleva rol de
+escritura alguno (las rutas hindsight son de solo lectura por diseño). El
+veredicto de 05-11 retiró las otras dos que este PR traía: jarvis-hindsight
+(banco `tienda`: pedidos y correo de clientes con datos personales; el TTS de
+Alexa los diría a Amazon y un correo hostil podría dirigir al agente de voz) y
+synapse-hindsight-tienda (lookup_supplier_history lee de Skirmbooks): el test
+fija que no existen en ninguna parte. El esqueleto del contrato es el
+compartido de los scoped-clients (tests/keycloak_scoped_client_testlib.py, el
+mismo que usan hermes-enviar y correo-agente); aquí solo la política propia:
+la tabla de roles sin escritura y los catálogos.
 """
 import importlib.util, pathlib, shutil, subprocess, sys, unittest
 
@@ -30,10 +33,10 @@ _spec.loader.exec_module(verify_principals)
 TIENDA_ROLE = "agentgateway-read:hindsight-tienda"
 PERSONAL_ROLE = "agentgateway-read:hindsight-personal"
 CLIENTS = {
-    "jarvis-hindsight": [TIENDA_ROLE],
-    "synapse-hindsight-tienda": [TIENDA_ROLE],
     "socialmedia-hindsight": [PERSONAL_ROLE],
 }
+# Retiradas por el veredicto de security de 05-11-2026: no deben existir.
+REFUSED_CLIENTS = ("jarvis-hindsight", "synapse-hindsight-tienda")
 
 
 class HindsightReaderReconcilerTest(ScopedClientContractMixin, unittest.TestCase):
@@ -41,21 +44,19 @@ class HindsightReaderReconcilerTest(ScopedClientContractMixin, unittest.TestCase
     SCRIPTS = SCRIPTS
     CLIENTS = CLIENTS
     GUARD_CASES = [
-        ("jarvis-hindsight", {"CLIENT_ID": "jarvis-hindsight-escritura"}, "unsupported immutable client"),
+        ("socialmedia-hindsight", {"CLIENT_ID": "socialmedia-hindsight-escritura"}, "unsupported immutable client"),
+        ("socialmedia-hindsight", {"CLIENT_ID": "jarvis-hindsight"}, "unsupported immutable client"),
+        ("socialmedia-hindsight", {"CLIENT_ID": "synapse-hindsight-tienda"}, "unsupported immutable client"),
         ("socialmedia-hindsight", {"MAPPER_NAME": "other"}, "MAPPER_NAME is immutable"),
     ]
     MISSING_CASES = [
-        ("jarvis-hindsight", TIENDA_ROLE, "the agentgateway-read-grants hook owns it"),
         ("socialmedia-hindsight", PERSONAL_ROLE, "the agentgateway-read-grants hook owns it"),
     ]
     UNREVIEWED_CASES = [
-        ("jarvis-hindsight", "agentgateway-write"),
-        ("jarvis-hindsight", PERSONAL_ROLE),
-        ("synapse-hindsight-tienda", "agentgateway-write:workspace-borrador"),
         ("socialmedia-hindsight", "agentgateway-write"),
         ("socialmedia-hindsight", TIENDA_ROLE),
     ]
-    AUDIT_NO_MAPPER_CLIENT = "jarvis-hindsight"
+    AUDIT_NO_MAPPER_CLIENT = "socialmedia-hindsight"
     ROLLBACK_CLIENT = "socialmedia-hindsight"
 
     def fixed_scope_extra_checks(self, own, script):
@@ -73,12 +74,19 @@ class HindsightReaderManifestContractTest(unittest.TestCase):
         for client_id in CLIENTS:
             self.assertIn(f"name: keycloak-{client_id}-client", manifest)
             self.assertIn(f"name: CLIENT_ID, value: {client_id}", manifest)
-        self.assertEqual(3, manifest.count("argocd.argoproj.io/hook: PostSync"))
-        self.assertEqual(3, manifest.count('argocd.argoproj.io/sync-wave: "24"'))
-        self.assertEqual(3, manifest.count("automountServiceAccountToken: false"))
-        self.assertEqual(3, manifest.count("readOnlyRootFilesystem: true"))
-        self.assertEqual(3, manifest.count('synapse.e-dani.com/agentgateway-m2m-client: "true"'))
+        self.assertEqual(len(CLIENTS), manifest.count("argocd.argoproj.io/hook: PostSync"))
+        self.assertEqual(len(CLIENTS), manifest.count('argocd.argoproj.io/sync-wave: "24"'))
+        self.assertEqual(len(CLIENTS), manifest.count("automountServiceAccountToken: false"))
+        self.assertEqual(len(CLIENTS), manifest.count("readOnlyRootFilesystem: true"))
+        self.assertEqual(len(CLIENTS), manifest.count('synapse.e-dani.com/agentgateway-m2m-client: "true"'))
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
+
+    def test_hook_limits_are_the_two_cpu_of_the_other_keycloak_hooks(self):
+        # SC-4611 (#455): kcadm in a 500m Job is throttled to 99% and drags the
+        # k8s-infra sync out by tens of minutes. Every client hook gets 2 CPU.
+        manifest = (BASE / "hindsight-reader-clients.yaml").read_text()
+        self.assertEqual(len(CLIENTS), manifest.count('limits: { cpu: "2", memory: 512Mi }'))
+        self.assertNotIn("cpu: 500m", manifest)
 
     def test_kustomization_owns_jobs_and_script(self):
         kustomization = (BASE / "kustomization.yaml").read_text()
@@ -113,12 +121,33 @@ class HindsightReaderCatalogContractTest(unittest.TestCase):
             granted = sorted(name for name, role in self.catalog.items() if sa in role["grantees"])
             self.assertEqual(sorted(entry["realm_roles"]), granted)
 
-    def test_read_grants_hook_reviews_the_two_tienda_holders(self):
-        script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertIn('JARVIS_HINDSIGHT_SA_USERNAME="service-account-jarvis-hindsight"', script)
-        self.assertIn('SYNAPSE_HINDSIGHT_SA_USERNAME="service-account-synapse-hindsight-tienda"', script)
-        self.assertIn("JARVIS_HINDSIGHT_READ_ROLE_NAMES is immutable", script)
-        self.assertIn("SYNAPSE_HINDSIGHT_READ_ROLE_NAMES is immutable", script)
+    def test_personal_grants_hook_reviews_the_socialmedia_holder(self):
+        # The role's COMPLETE direct holder set belongs to the wave-25 hook; an
+        # SA outside its reviewed set would be revoked on every sync.
+        script = (BASE / "scripts" / "agentgateway-hindsight-personal-grants.sh").read_text()
+        self.assertIn("service-account-socialmedia-hindsight", script.split("REVIEWED_SERVICE_ACCOUNTS=", 1)[1].split("\n", 1)[0])
+
+    def test_refused_identities_exist_nowhere(self):
+        # Security's ruling of 05-11-2026: `tienda` holds customer orders and
+        # email with personal data; the voice surface does not read it, and
+        # synapse-tools-mcp reads Skirmbooks instead of a bank.
+        live = [
+            BASE / "hindsight-reader-clients.yaml",
+            BASE / "scripts" / "hindsight-reader-client.sh",
+            BASE / "scripts" / "agentgateway-read-grants.sh",
+            BASE / "kustomization.yaml",
+        ]
+        for path in live:
+            text = path.read_text()
+            for client_id in REFUSED_CLIENTS:
+                for line in text.splitlines():
+                    if client_id in line:
+                        self.assertTrue(line.lstrip().startswith("#"), f"{client_id} outside a comment in {path.name}: {line}")
+        for client_id in REFUSED_CLIENTS:
+            sa = f"service-account-{client_id}"
+            self.assertNotIn(sa, self.principals)
+            for name, role in self.catalog.items():
+                self.assertNotIn(sa, role["grantees"], name)
 
 
 if __name__ == "__main__":

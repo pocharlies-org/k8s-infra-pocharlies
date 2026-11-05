@@ -23,10 +23,22 @@ PKCE_METHOD="${PKCE_METHOD:-S256}"
 # agentgateway-write-grant-daniel.sh). Keep the list sorted; the pin below is
 # order-sensitive.
 REALM_SCOPE_ROLE_NAMES="${REALM_SCOPE_ROLE_NAMES:-agentgateway-write}"
-EXPECTED_REALM_SCOPE_ROLE_NAMES="agentgateway-write"
+# The identity pins below carry THIS script's own defaults. A thin wrapper
+# (agentgateway-chat-hindsight-mcp-client.sh, SC-4304 S6) exports its own
+# EXPECTED_CLIENT_ID, EXPECTED_REALM_SCOPE_ROLE_NAMES, ROLE_OWNER, SCOPE_AUDIT
+# and ADMIN_CONFIG and execs this reconciler, so the public-PKCE engine exists
+# once (jscpd dedup, #452) and both clients share every behavior check.
+EXPECTED_REALM_SCOPE_ROLE_NAMES="${EXPECTED_REALM_SCOPE_ROLE_NAMES:-agentgateway-write}"
+EXPECTED_CLIENT_ID="${EXPECTED_CLIENT_ID:-agentgateway-chat-mcp}"
+# Who owns the realm role named in REALM_SCOPE_ROLE_NAMES (never created here).
+ROLE_OWNER="${ROLE_OWNER:-the agentgateway-write-role hook}"
+# subset: every reviewed role must sit in the client's realm scope (OWU-28 C2).
+# exact: the scope must be EXACTLY the reviewed set (agentgateway-read-grants
+# precedent; the hindsight-personal client's isolation depends on it).
+SCOPE_AUDIT="${SCOPE_AUDIT:-subset}"
 RECONCILE_CONTRACT_VERSION="${RECONCILE_CONTRACT_VERSION:-1}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
-ADMIN_CONFIG=/tmp/kcadm-agentgateway-chat-admin.config
+ADMIN_CONFIG="${ADMIN_CONFIG:-/tmp/kcadm-agentgateway-chat-admin.config}"
 
 . "${0%/*}/kc-admin-common.sh"
 
@@ -49,7 +61,7 @@ ADMIN_CONFIG=/tmp/kcadm-agentgateway-chat-admin.config
 # only becomes emittable by this client for users who already hold it.
 # Pinning these keeps a future edit from silently widening a browser client
 # into a confidential or direct-grant one.
-[ "${CLIENT_ID}" = "agentgateway-chat-mcp" ] || fail "CLIENT_ID is immutable"
+[ "${CLIENT_ID}" = "${EXPECTED_CLIENT_ID}" ] || fail "CLIENT_ID is immutable"
 [ "${REALM}" = "edani" ] || fail "REALM is immutable"
 [ "${MAPPER_NAME}" = "aud-mcp" ] || fail "MAPPER_NAME is immutable"
 [ "${PKCE_METHOD}" = "S256" ] || fail "PKCE_METHOD is immutable"
@@ -59,6 +71,10 @@ ADMIN_CONFIG=/tmp/kcadm-agentgateway-chat-admin.config
 case "${MODE}" in
   ensure|audit|rollback) ;;
   *) fail "unsupported MODE=${MODE}" ;;
+esac
+case "${SCOPE_AUDIT}" in
+  subset|exact) ;;
+  *) fail "unsupported SCOPE_AUDIT=${SCOPE_AUDIT}" ;;
 esac
 # Every URI must be an exact https chat.e-dani.com callback: reject wildcards
 # and anything that would widen the client beyond its own app origin.
@@ -138,10 +154,11 @@ upsert_audience_mapper() {
 }
 
 verify_realm_roles() {
-  # The realm role is owned by agentgateway-write-role.sh; a missing role
-  # means that hook has not run for this commit, never a reason to create it.
+  # The realm role is owned by ${ROLE_OWNER} (default agentgateway-write-role.sh;
+  # the catalog for the hindsight-personal wrapper); a missing role means that
+  # owner has not run for this commit, never a reason to create it here.
   for role in ${REALM_SCOPE_ROLE_NAMES}; do
-    role_exists "${role}" || fail "${role} is missing; the agentgateway-write-role hook owns it"
+    role_exists "${role}" || fail "${role} is missing; owned by ${ROLE_OWNER}, refusing to create it here"
   done
 }
 
@@ -166,6 +183,11 @@ ensure_realm_scope_mapping() {
     fi
     role_scope_has_direct_role "${role}" || fail "client role scope is missing ${role}"
   done
+}
+
+scope_names() {
+  kget "clients/${CLIENT_UUID}/scope-mappings/realm" \
+    --fields name --format csv --noquotes | nonempty_lines | sort | tr '\n' ',' | sed 's/,$//'
 }
 
 verify_client() {
@@ -193,12 +215,22 @@ verify_client() {
     fail "client PKCE challenge method is missing"
   [ -n "$(mapper_uuid_optional)" ] || fail "audience mapper missing"
   # Post-ensure/audit assertion (OWU-28 C2): every reviewed realm role must sit
-  # in the client's realm scope mapping, or the gateway's write rules can
-  # never see it in jwt.realm_access.roles and the chat's write case is dead.
-  for role in ${REALM_SCOPE_ROLE_NAMES}; do
-    role_scope_has_direct_role "${role}" || \
-      fail "client realm scope mapping is missing ${role}"
-  done
+  # in the client's realm scope mapping, or the gateway's rules can never see
+  # it in jwt.realm_access.roles and the route's case is dead. SCOPE_AUDIT=exact
+  # additionally forbids anything outside the reviewed set: a role slipped into
+  # this client's scope would become emittable for every holder of it and the
+  # isolation that client exists for would be gone.
+  if [ "${SCOPE_AUDIT}" = "exact" ]; then
+    assert_client_boolean "${CLIENT_UUID}" fullScopeAllowed false
+    actual="$(scope_names)"
+    [ "${actual}" = "${REALM_SCOPE_ROLE_NAMES}" ] || \
+      fail "client realm scope mapping must be exactly ${REALM_SCOPE_ROLE_NAMES}, found [${actual}]"
+  else
+    for role in ${REALM_SCOPE_ROLE_NAMES}; do
+      role_scope_has_direct_role "${role}" || \
+        fail "client realm scope mapping is missing ${role}"
+    done
+  fi
 }
 
 rollback_identity() {

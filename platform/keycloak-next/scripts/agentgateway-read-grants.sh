@@ -176,22 +176,6 @@ CORREO_LECTURA_SA_USERNAME="service-account-correo-agente-lectura"
 CORREO_EJECUTOR_READ_ROLE_NAMES="${CORREO_EJECUTOR_READ_ROLE_NAMES:-agentgateway-read:shopify-admin}"
 EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES="agentgateway-read:shopify-admin"
 CORREO_EJECUTOR_SA_USERNAME="service-account-correo-ejecutor"
-# SC-4304 S6 (02-11-2026): jarvis-hindsight (voice plane, ns jarvis) and
-# synapse-hindsight-tienda (synapse-tools-mcp lookup_supplier_history, tenant
-# skirmshop) are reviewed holders of the shared route role
-# agentgateway-read:hindsight-tienda (security's verdict on the epic's S6:
-# bank tienda only, read-only, cutover gated on the tienda<->skirmshop parity).
-# Same rule as INFRA-676: this reconciler only widens the HOLDER ALLOWLIST; the
-# grants and the client scope mapping are owned by hindsight-reader-client.sh
-# (sync-wave 24), and the clients are never resolved here. (The third S6
-# identity, socialmedia-hindsight, holds agentgateway-read:hindsight-personal,
-# which is not in this matrix — documented in PRINCIPALS.md and RUNBOOK §22.)
-JARVIS_HINDSIGHT_READ_ROLE_NAMES="${JARVIS_HINDSIGHT_READ_ROLE_NAMES:-agentgateway-read:hindsight-tienda}"
-EXPECTED_JARVIS_HINDSIGHT_READ_ROLE_NAMES="agentgateway-read:hindsight-tienda"
-JARVIS_HINDSIGHT_SA_USERNAME="service-account-jarvis-hindsight"
-SYNAPSE_HINDSIGHT_READ_ROLE_NAMES="${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES:-agentgateway-read:hindsight-tienda}"
-EXPECTED_SYNAPSE_HINDSIGHT_READ_ROLE_NAMES="agentgateway-read:hindsight-tienda"
-SYNAPSE_HINDSIGHT_SA_USERNAME="service-account-synapse-hindsight-tienda"
 # SC-1282: the analysis platform (SC-2951/SC-2956) reads /atlassian, /social
 # and /synapse. The grants were made by security in SC-2967 (admin API, outside
 # this reconciler); the holder lands in the reviewed allowlist so the catalog
@@ -210,6 +194,19 @@ ANALISIS_SA_USERNAME="service-account-analisis"
 HUMANOS_READ_ROLE_NAMES="${HUMANOS_READ_ROLE_NAMES:-agentgateway-read:social}"
 EXPECTED_HUMANOS_READ_ROLE_NAMES="agentgateway-read:social"
 HUMANOS_USERNAMES="me@e-dani.com,lays84.mv@gmail.com"
+# INFRA-1180 (2026-11-05, Request de la sesión tech-lead de INFRA-403): the
+# human holder of the shared route role agentgateway-read:photos — Daniel
+# (me@e-dani.com), the user of the native app photos-ios: its Authorization
+# Code + PKCE token on the public client photos-app must carry the /photos
+# route role (the delete gate adds photos-confirm-delete, owned by
+# photos-confirm-delete-grant-daniel.sh). The grant is applied by
+# photos-app-client.sh (sync-wave 25) — this hook never re-issues a human
+# grant (SC-3805 precedent); the holder lands in the reviewed allowlist so
+# the catalog and the matrix stay in parity and the exclusivity guard accepts
+# him on the next sync instead of failing the whole PostSync closed.
+PHOTOS_HUMAN_READ_ROLE_NAMES="${PHOTOS_HUMAN_READ_ROLE_NAMES:-agentgateway-read:photos}"
+EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES="agentgateway-read:photos"
+PHOTOS_HUMAN_USERNAMES="me@e-dani.com"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -253,16 +250,14 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "ENVIAR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CORREO_LECTURA_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES}" ] || \
   fail "CORREO_LECTURA_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
-[ "${JARVIS_HINDSIGHT_READ_ROLE_NAMES}" = "${EXPECTED_JARVIS_HINDSIGHT_READ_ROLE_NAMES}" ] || \
-  fail "JARVIS_HINDSIGHT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
-[ "${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" = "${EXPECTED_SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" ] || \
-  fail "SYNAPSE_HINDSIGHT_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${CORREO_EJECUTOR_READ_ROLE_NAMES}" = "${EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES}" ] || \
   fail "CORREO_EJECUTOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${ANALISIS_READ_ROLE_NAMES}" = "${EXPECTED_ANALISIS_READ_ROLE_NAMES}" ] || \
   fail "ANALISIS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${HUMANOS_READ_ROLE_NAMES}" = "${EXPECTED_HUMANOS_READ_ROLE_NAMES}" ] || \
   fail "HUMANOS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${PHOTOS_HUMAN_READ_ROLE_NAMES}" = "${EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES}" ] || \
+  fail "PHOTOS_HUMAN_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -392,14 +387,11 @@ role_allowed_users() {
   if printf '%s\n' "${HUMANOS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${HUMANOS_USERNAMES}" | tr ',' '\n'
   fi
-  # SC-4304 S6: same rule for the two reviewed holders of
-  # agentgateway-read:hindsight-tienda (granted by hindsight-reader-client.sh,
-  # wave 24).
-  if printf '%s\n' "${JARVIS_HINDSIGHT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
-    printf '%s\n' "${JARVIS_HINDSIGHT_SA_USERNAME}"
-  fi
-  if printf '%s\n' "${SYNAPSE_HINDSIGHT_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
-    printf '%s\n' "${SYNAPSE_HINDSIGHT_SA_USERNAME}"
+  # INFRA-1180: same rule for the reviewed human holder of
+  # agentgateway-read:photos (granted by photos-app-client.sh, wave 25; this
+  # hook never re-issues a human grant).
+  if printf '%s\n' "${PHOTOS_HUMAN_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${PHOTOS_HUMAN_USERNAMES}" | tr ',' '\n'
   fi
 }
 
