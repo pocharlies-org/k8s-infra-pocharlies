@@ -16,7 +16,8 @@ data:
         action:
           type: skip
       # CNPG volumes are backed up by CNPG itself, not by Velero: barman does a
-      # daily base backup plus continuous WAL archiving to s3://cnpg-backups,
+      # daily base backup plus continuous WAL archiving to
+      # s3://cnpg-backups-pocharlies (OVH, INFRA-1175),
       # which is a real PITR. A Velero file-system backup of a running Postgres
       # is only crash-consistent — no checkpoint or fsfreeze coordination — so
       # it would cost ~32 GiB nightly to produce something strictly worse than

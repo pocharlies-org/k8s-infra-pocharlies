@@ -1,4 +1,7 @@
-# Velero — cluster backups to MinIO (S3-compatible)
+# Velero — cluster backups to Object Storage de OVH (S3). INFRA-1175: era la MinIO de
+# sauvage; el values que aplica ArgoCD esta en k8s-gitops@deploy/prod (infra/velero/
+# values.yaml) y este es el del `helm upgrade` puntual de los runbooks: se cambian los
+# dos juntos para que no haya dos destinos de backup en git.
 initContainers:
   - name: velero-plugin-for-aws
     # v1.14.x is the supported AWS plugin line for Velero 1.18.x. Pin the
@@ -12,15 +15,14 @@ configuration:
   backupStorageLocation:
     - name: default
       provider: aws
-      bucket: velero-backups
+      bucket: velero-backups-pocharlies
       default: true
       config:
-        region: us-east-1
+        region: sbg
         s3ForcePathStyle: true
-        s3Url: http://minio-s3.minio.svc.cluster.local:9000
-        publicUrl: https://minio-s3.e-dani.com
+        s3Url: https://s3.sbg.io.cloud.ovh.net
       credential:
-        name: velero-minio-creds
+        name: velero-ovh-creds
         key: cloud
 
   volumeSnapshotLocation:
@@ -97,10 +99,11 @@ resources:
   limits:
     memory: 512Mi
 
-# Don't create the credential secret via chart — we'll apply it separately
+# Don't create the credential secret via chart — la materializa el ExternalSecret
+# platform/velero/ovh-credentials.yaml (INFRA-1175)
 credentials:
   useSecret: true
-  existingSecret: velero-minio-creds
+  existingSecret: velero-ovh-creds
 
 snapshotsEnabled: true
 backupsEnabled: true

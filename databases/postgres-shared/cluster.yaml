@@ -476,23 +476,30 @@ spec:
       value: "30"
 
   backup:
-    # 2026-10-25: 7d -> 2d (Dani, INFRA-993). El store de MinIO vive en el disco de
-    # sauvage y hindsight genera ~80 GB/dia de WAL: con 7d la ruta iba a ~750 GB y
-    # sauvage ya llego al 97 %. PITR de 2 dias; el dump logico diario y la foto
-    # semanal -> OVH (retencion 30d) cubren lo de mas atras.
+    # 2026-10-25: 7d -> 2d (Dani, INFRA-993). Se acoto porque el store era el disco de
+    # sauvage (md3) y hindsight genera ~80 GB/dia de WAL: con 7d la ruta iba a ~750 GB y
+    # sauvage ya llego al 97 %. Desde INFRA-1175 el store es Object Storage de OVH, sin
+    # ese tope de disco (~0,0071 EUR/GiB y mes); la retencion sigue en 2d porque la fijo
+    # Dani y ampliarla es decision suya, no del corte. PITR de 2 dias; el dump logico
+    # diario y la foto semanal cubren lo de mas atras.
     retentionPolicy: "2d"
     # INFRA-942: carpeta propia (serverName = postgres-shared-nvme). La del cluster
     # viejo (s3://cnpg-backups/postgres-shared/postgres-shared) se queda intacta como
     # vía de recuperación anterior al corte: nunca dos escritores en el mismo archivo.
+    # INFRA-1175 (2026-11-04): el store pasa a Object Storage de OVH. Lo copiado de la
+    # MinIO de sauvage vive en cnpg-backups-pocharlies bajo el MISMO prefijo, así que la
+    # historia anterior al corte (base + WAL) sigue siendo recuperable sin tocar nada.
+    # boto3 acepta firma v4 con region `us-east-1` y `sbg` contra s3.sbg.io.cloud.ovh.net
+    # (medido el 04-11: LIST 200 con ambas), por eso barman no necesita fijar region.
     barmanObjectStore:
-      destinationPath: "s3://cnpg-backups/postgres-shared"
-      endpointURL: "http://minio-s3.minio.svc.cluster.local:9000"
+      destinationPath: "s3://cnpg-backups-pocharlies/postgres-shared"
+      endpointURL: "https://s3.sbg.io.cloud.ovh.net"
       s3Credentials:
         accessKeyId:
-          name: postgres-shared-minio
+          name: postgres-shared-ovh
           key: ACCESS_KEY_ID
         secretAccessKey:
-          name: postgres-shared-minio
+          name: postgres-shared-ovh
           key: ACCESS_SECRET_KEY
       wal:
         compression: gzip

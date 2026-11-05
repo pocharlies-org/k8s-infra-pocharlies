@@ -91,6 +91,7 @@ resources:
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
   - platform/velero/schedules.yaml
+  - platform/velero/ovh-credentials.yaml
   - storage/minio/minio.yaml
   - platform/harbor/s3-credentials.yaml
   - platform/harbor/generated-keys.yaml
