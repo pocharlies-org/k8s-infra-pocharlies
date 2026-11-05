@@ -38,6 +38,9 @@ resources:
   - keycloak-rbac-auditor-client.yaml
   # OWU-116 (S1 de OWU-95): clientes de la app nativa + fixture qa-owu95.
   - openwebui-ios-client.yaml
+  # INFRA-1180: client publico photos-app (app nativa photos-ios, INFRA-403) +
+  # el grant humano agentgateway-read:photos que su token exige.
+  - photos-app-client.yaml
   - keycloak-role-drift-cron.yaml
 configMapGenerator:
   - name: keycloak-agentgateway-write-role
@@ -215,6 +218,16 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: openwebui-ios-client
+  # INFRA-1180: patron openwebui-ios-client (solo kc-admin-common.sh; el hook
+  # define su propio resolve_client_exact). Sin ExternalSecret: el client es
+  # PUBLICO, no tiene secreto que sembrar.
+  - name: keycloak-photos-app-client
+    files:
+      - photos-app-client.sh=scripts/photos-app-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+    options:
+      labels:
+        app.kubernetes.io/component: photos-app-client
   - name: keycloak-role-drift
     files:
       - keycloak-role-drift.sh=scripts/keycloak-role-drift.sh

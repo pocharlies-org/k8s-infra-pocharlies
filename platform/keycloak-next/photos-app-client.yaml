@@ -1,0 +1,124 @@
+# INFRA-1180 (Request de la sesión tech-lead de INFRA-403; desbloquea la pasada
+# de producción de C2, INFRA-616): el cliente PUBLICO `photos-app` del realm
+# `edani` que abre la app nativa photos-ios (pocharlies-org/photos-ios) y el
+# grant humano que su contrato de token exige (INFRA-402/INFRA-403):
+#   - Authorization Code + PKCE S256, redirect EXACTO y unico
+#     dgx://oauth/callback (el esquema que ya usa dgx-app; la app fija
+#     clientID/redirectURI en PhotosAuth.swift);
+#   - mapper `aud-mcp` → aud = mcp.lan.e-dani.com (la audience que verifica el
+#     AgentGateway en la ruta /photos, k8s-agentgateway-pocharlies#247);
+#   - scope de roles del cliente: agentgateway-read:photos +
+#     photos-confirm-delete (fullScopeAllowed=false: solo viajan los mapeados);
+#   - grant directo de agentgateway-read:photos a Daniel (subject
+#     e51253a7-c137-4c6c-9fb9-af9cecd3b147), el usuario de la app.
+# Sin secreto: client publico, no hay ExternalSecret (a diferencia de
+# openwebui-ios-client.yaml).
+# Forma: Job PostSync (patron openwebui-ios-client.yaml /
+# photos-confirm-delete-grant-daniel-job.yaml; libreria kc-admin-common.sh — el
+# hook no llama a kcadm a mano desde el YAML).
+# Declarado en ROLES.yaml y PRINCIPALS.md en esta misma PR (SC-4414); hasta que
+# este hook corre, keycloak-role-drift da DRIFT a proposito (patrón INFRA-402).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-photos-app-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: photos-app-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Wave 25: same tier as the photos delete-gate grant (after the wave-20
+    # read-grants matrix, which owns the route role agentgateway-read:photos —
+    # this hook requires both scoped roles to exist and never creates them).
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  backoffLimit: 1
+  # A handful of kcadm calls (resolve client, upsert client + mapper, read and
+  # map scope roles, one grant, verify reads + one evaluate-scopes mint). Same
+  # production-safe margin as the sibling client reconcilers.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: photos-app-client
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reconcile-photos-app-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/photos-app-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-photos-app-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-photos-app-client-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: photos-app-client
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: photos-app-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

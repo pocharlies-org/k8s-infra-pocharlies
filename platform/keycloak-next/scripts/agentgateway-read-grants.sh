@@ -194,6 +194,19 @@ ANALISIS_SA_USERNAME="service-account-analisis"
 HUMANOS_READ_ROLE_NAMES="${HUMANOS_READ_ROLE_NAMES:-agentgateway-read:social}"
 EXPECTED_HUMANOS_READ_ROLE_NAMES="agentgateway-read:social"
 HUMANOS_USERNAMES="me@e-dani.com,lays84.mv@gmail.com"
+# INFRA-1180 (2026-11-05, Request de la sesión tech-lead de INFRA-403): the
+# human holder of the shared route role agentgateway-read:photos — Daniel
+# (me@e-dani.com), the user of the native app photos-ios: its Authorization
+# Code + PKCE token on the public client photos-app must carry the /photos
+# route role (the delete gate adds photos-confirm-delete, owned by
+# photos-confirm-delete-grant-daniel.sh). The grant is applied by
+# photos-app-client.sh (sync-wave 25) — this hook never re-issues a human
+# grant (SC-3805 precedent); the holder lands in the reviewed allowlist so
+# the catalog and the matrix stay in parity and the exclusivity guard accepts
+# him on the next sync instead of failing the whole PostSync closed.
+PHOTOS_HUMAN_READ_ROLE_NAMES="${PHOTOS_HUMAN_READ_ROLE_NAMES:-agentgateway-read:photos}"
+EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES="agentgateway-read:photos"
+PHOTOS_HUMAN_USERNAMES="me@e-dani.com"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -243,6 +256,8 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "ANALISIS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${HUMANOS_READ_ROLE_NAMES}" = "${EXPECTED_HUMANOS_READ_ROLE_NAMES}" ] || \
   fail "HUMANOS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${PHOTOS_HUMAN_READ_ROLE_NAMES}" = "${EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES}" ] || \
+  fail "PHOTOS_HUMAN_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -371,6 +386,12 @@ role_allowed_users() {
   # this hook never re-issues a human grant).
   if printf '%s\n' "${HUMANOS_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${HUMANOS_USERNAMES}" | tr ',' '\n'
+  fi
+  # INFRA-1180: same rule for the reviewed human holder of
+  # agentgateway-read:photos (granted by photos-app-client.sh, wave 25; this
+  # hook never re-issues a human grant).
+  if printf '%s\n' "${PHOTOS_HUMAN_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${PHOTOS_HUMAN_USERNAMES}" | tr ',' '\n'
   fi
 }
 
