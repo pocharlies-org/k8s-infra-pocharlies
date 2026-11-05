@@ -14,8 +14,9 @@
 # Sin secreto: client publico, no hay ExternalSecret (a diferencia de
 # openwebui-ios-client.yaml).
 # Forma: Job PostSync (patron openwebui-ios-client.yaml /
-# photos-confirm-delete-grant-daniel-job.yaml; libreria kc-admin-common.sh — el
-# hook no llama a kcadm a mano desde el YAML).
+# photos-confirm-delete-grant-daniel-job.yaml; librerias de la casa
+# kc-admin-common.sh + keycloak-reconcile-lib.sh — el hook no llama a kcadm a
+# mano desde el YAML ni copia helpers que la libreria ya tiene).
 # Declarado en ROLES.yaml y PRINCIPALS.md en esta misma PR (SC-4414); hasta que
 # este hook corre, keycloak-role-drift da DRIFT a proposito (patrón INFRA-402).
 apiVersion: batch/v1

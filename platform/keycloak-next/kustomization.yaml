@@ -218,13 +218,15 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: openwebui-ios-client
-  # INFRA-1180: patron openwebui-ios-client (solo kc-admin-common.sh; el hook
-  # define su propio resolve_client_exact). Sin ExternalSecret: el client es
-  # PUBLICO, no tiene secreto que sembrar.
+  # INFRA-1180: patron openwebui-ios-client sobre las librerias de la casa
+  # (kc-admin-common.sh + keycloak-reconcile-lib.sh: resolucion de client,
+  # mapper de audience y scope de roles, no copias locales). Sin ExternalSecret:
+  # el client es PUBLICO, no tiene secreto que sembrar.
   - name: keycloak-photos-app-client
     files:
       - photos-app-client.sh=scripts/photos-app-client.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
     options:
       labels:
         app.kubernetes.io/component: photos-app-client
