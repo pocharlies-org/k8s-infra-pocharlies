@@ -167,12 +167,14 @@ grant_daniel_read_role() {
 # Redirect EXACTO, webOrigins vacío y PKCE se casan sobre la representación
 # COMPLETA del cliente (sin --fields): el filtro de kcadm pinta `attributes`
 # vacío sin subcampos (dgx-messages-client.sh). NUNCA se imprime, solo se
-# grep-a.
+# grep-a. OJO: kcadm imprime los arrays con espacios dentro de los corchetes
+# (`[ "valor" ]`), como documenta read_list_field en dgx-messages/openwebui:
+# los patrones de lista admiten ese espacio.
 verify_client_list_fields() {
   client="$(kget "clients/${CLIENT_UUID}" --format json | tr -d '\n')"
-  printf '%s' "${client}" | grep -Eq "\"redirectUris\"[[:space:]]*:[[:space:]]*\[\"${REDIRECT_URI}\"\]" || \
+  printf '%s' "${client}" | grep -Eq "\"redirectUris\"[[:space:]]*:[[:space:]]*\[[[:space:]]*\"${REDIRECT_URI}\"[[:space:]]*\]" || \
     { unset client; fail "client redirectUris is not exactly [\"${REDIRECT_URI}\"]"; }
-  printf '%s' "${client}" | grep -Eq '"webOrigins"[[:space:]]*:[[:space:]]*\[\]' || \
+  printf '%s' "${client}" | grep -Eq '"webOrigins"[[:space:]]*:[[:space:]]*\[[[:space:]]*\]' || \
     { unset client; fail "client webOrigins must be empty"; }
   printf '%s' "${client}" | grep -Eq '"pkce\.code\.challenge\.method"[[:space:]]*:[[:space:]]*"S256"' || \
     { unset client; fail "client pkce.code.challenge.method is not S256"; }
