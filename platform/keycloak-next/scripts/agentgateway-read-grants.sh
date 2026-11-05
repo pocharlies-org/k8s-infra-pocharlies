@@ -207,6 +207,19 @@ HUMANOS_USERNAMES="me@e-dani.com,lays84.mv@gmail.com"
 PHOTOS_HUMAN_READ_ROLE_NAMES="${PHOTOS_HUMAN_READ_ROLE_NAMES:-agentgateway-read:photos}"
 EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES="agentgateway-read:photos"
 PHOTOS_HUMAN_USERNAMES="me@e-dani.com"
+# INFRA-1189 (2026-11-05, Request de la sesión tech-lead de INFRA-218): the
+# read-only fixture of the AgentGateway write-role smoke
+# (scripts/smoke-write-role.sh in k8s-agentgateway-pocharlies, C7 of epic
+# INFRA-218). Its OPERATOR_TOKEN must hold exactly the reads the smoke's route
+# gates demand — /social and /workspace — and nothing from the write family;
+# no principal of the realm had that shape (every holder of both reads also
+# holds a write). Same rule as INFRA-676/DGX-1218: this reconciler only widens
+# the HOLDER ALLOWLIST; the grants and the client scope are owned by
+# agentgateway-smoke-operator-client.sh (sync-wave 24) and the client is never
+# resolved here.
+SMOKE_OPERATOR_READ_ROLE_NAMES="${SMOKE_OPERATOR_READ_ROLE_NAMES:-agentgateway-read:social,agentgateway-read:workspace}"
+EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES="agentgateway-read:social,agentgateway-read:workspace"
+SMOKE_OPERATOR_SA_USERNAME="service-account-agentgateway-smoke-operator"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -258,6 +271,8 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "HUMANOS_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${PHOTOS_HUMAN_READ_ROLE_NAMES}" = "${EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES}" ] || \
   fail "PHOTOS_HUMAN_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${SMOKE_OPERATOR_READ_ROLE_NAMES}" = "${EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES}" ] || \
+  fail "SMOKE_OPERATOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -393,6 +408,11 @@ role_allowed_users() {
   if printf '%s\n' "${PHOTOS_HUMAN_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${PHOTOS_HUMAN_USERNAMES}" | tr ',' '\n'
   fi
+  # INFRA-1189: same rule for the smoke fixture service account (granted by
+  # agentgateway-smoke-operator-client.sh, wave 24).
+  if printf '%s\n' "${SMOKE_OPERATOR_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${SMOKE_OPERATOR_SA_USERNAME}"
+  fi
 }
 
 assert_role_exclusivity() {
@@ -400,13 +420,13 @@ assert_role_exclusivity() {
   # Bounded role-member endpoints (same idiom as the SRE reconciler): at most
   # the allowed holders (service accounts; since SC-3805 also the two reviewed
   # humans of agentgateway-read:social), never a group. The bound is the
-  # widest reviewed holder set plus one — since DGX-1218 that is nine
+  # widest reviewed holder set plus one — since INFRA-1189 that is ten
   # service accounts on agentgateway-read:workspace (agentgateway-mcp,
-  # jarvis-echo, hermes-enviar, correo-agente-lectura and the five
-  # hermes-secretaria profiles), so max=10 is what makes an extra,
-  # unauthorized holder visible (social: six service accounts plus the two
-  # reviewed humans, eight).
-  users="$(kget "roles/${role}/users" -q first=0 -q max=10 \
+  # jarvis-echo, hermes-enviar, correo-agente-lectura, the five
+  # hermes-secretaria profiles and the smoke fixture), so max=11 is what makes
+  # an extra, unauthorized holder visible (social: seven service accounts plus
+  # the two reviewed humans, nine).
+  users="$(kget "roles/${role}/users" -q first=0 -q max=11 \
     --fields username --format csv --noquotes | nonempty_lines)"
   groups="$(kget "roles/${role}/groups" -q first=0 -q max=9 \
     --fields path --format csv --noquotes | nonempty_lines)"

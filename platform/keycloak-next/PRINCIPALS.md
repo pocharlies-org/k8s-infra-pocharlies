@@ -90,6 +90,16 @@ and that a hostile customer email could use to steer the voice agent; and
 reads Skirmbooks (SC-4304 comment 47013) and needs no bank at all. This PR was
 never merged, so the hook never ran and neither client exists to revoke.
 
+INFRA-1189 (05-11-2026, Request de la sesión tech-lead de INFRA-218) adds the
+41st, `service-account-agentgateway-smoke-operator`: the read-only fixture of
+the AgentGateway write-role smoke (`scripts/smoke-write-role.sh`, C7 of epic
+INFRA-218) — the OPERATOR_TOKEN shape, exactly `agentgateway-read:social` and
+`agentgateway-read:workspace` with no write role, which no other principal of
+the realm holds. Like `hermes-enviar` and `correo-agente` it is NOT adopted:
+its PostSync (`agentgateway-smoke-operator-client.yaml`) creates it in the same
+sync that ships this entry, and `keycloak-role-drift` reports it until the
+hook finishes.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -148,6 +158,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
 | `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui; INFRA-402: + photos) y agentgateway-write. |
+| `service-account-agentgateway-smoke-operator` | sa | DevOps | activo | Fixture de solo lectura del smoke de la frontera de escritura del AgentGateway (INFRA-1189, C7 de la épica INFRA-218): el OPERATOR_TOKEN de `scripts/smoke-write-role.sh` — exactamente agentgateway-read:social y agentgateway-read:workspace y ningún agentgateway-write*. Creado por su PostSync, nunca a mano. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). Desde SC-4304 S6 no lee la memoria personal: perdió el grant de SC-4051 para cerrar la vía del sidecar (veredicto security 03-11-2026). |
 | `service-account-claude-sessions-norol` | sa | QA | retirada-propuesta | Client de prueba SIN el rol claude-sessions: el 403 de /claude-sessions. |
@@ -790,6 +801,20 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad M2M del mcp-server de whatsappmcp (ns whatsapp-mcp): búsqueda semántica de mensajes sobre el banco `personal` de Hindsight (la memoria de conversaciones que el propio servicio retiene) por AgentGateway /hindsight-personal. Solo lectura: agentgateway-read:hindsight-personal.",
       "realm_roles": [
         "agentgateway-read:hindsight-personal",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-agentgateway-smoke-operator",
+      "type": "sa",
+      "client": "agentgateway-smoke-operator",
+      "owner": "DevOps",
+      "source": "INFRA-1189 (Request de la sesión tech-lead de INFRA-218, 05-11-2026); fixture del smoke de la frontera de escritura scripts/smoke-write-role.sh (C7 de la épica INFRA-218); creado por platform/keycloak-next/agentgateway-smoke-operator-client.yaml, nunca a mano; el secreto lo leen sus consumidores por la admin API (clients/<uuid>/client-secret), sin item de 1Password: solo dos lecturas revisadas",
+      "purpose": "El OPERATOR_TOKEN del smoke: principal que pasa las puertas de ruta de /social y /workspace (agentgateway-read:social y agentgateway-read:workspace) y NO tiene ningún agentgateway-write*, que es justo la ausencia que el smoke prueba (la herramienta de moderación ausente de su tools/list y su tools/call denegado).",
+      "realm_roles": [
+        "agentgateway-read:social",
+        "agentgateway-read:workspace",
         "default-roles-edani"
       ],
       "status": "activo"

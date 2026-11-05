@@ -35,6 +35,9 @@ PROBE_SA = "service-account-atlassian-mcp-probe"
 CORREO_LECTURA_SA = "service-account-correo-agente-lectura"
 ANALISIS_SA = "service-account-analisis"
 CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
+# INFRA-1189: the read-only fixture of the write-boundary smoke (granted by
+# agentgateway-smoke-operator-client.sh, wave 24, reviewed in this allowlist).
+SMOKE_OPERATOR_SA = "service-account-agentgateway-smoke-operator"
 # SC-3805: the two reviewed human holders of agentgateway-read:social
 # (granted by admin API in the SC-1144 C4 session, outside the reconciler).
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
@@ -74,6 +77,7 @@ class RoleCatalogParityTest(unittest.TestCase):
         analisis = shell_list(READ_GRANTS, "EXPECTED_ANALISIS_READ_ROLE_NAMES")
         humanos = shell_list(READ_GRANTS, "EXPECTED_HUMANOS_READ_ROLE_NAMES")
         photos_human = shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES")
+        smoke_operator = shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES")
         self.assertTrue(set(correo_lectura) <= set(reads))
         self.assertTrue(set(humanos) <= set(reads))
         self.assertTrue(set(photos_human) <= set(reads))
@@ -120,6 +124,9 @@ class RoleCatalogParityTest(unittest.TestCase):
                 # the native app photos-ios; grant owned by
                 # photos-app-client.sh, wave 25, outside this reconciler).
                 | (set(PHOTOS_HUMAN_USERNAMES) if role in photos_human else set())
+                # INFRA-1189: the smoke fixture grantee, grant owned by
+                # agentgateway-smoke-operator-client.sh.
+                | ({SMOKE_OPERATOR_SA} if role in smoke_operator else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -143,6 +150,8 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES"), ["agentgateway-read:photos"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES"),
+                         ["agentgateway-read:social", "agentgateway-read:workspace"])
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 4)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 7)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
