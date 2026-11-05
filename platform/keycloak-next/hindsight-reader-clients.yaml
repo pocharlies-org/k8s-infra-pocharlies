@@ -1,0 +1,92 @@
+# The read-only Hindsight identity of SC-4304 S6 that is left after security's
+# re-ruling of 05-11-2026, reconciled by scripts/hindsight-reader-client.sh with
+# the reviewed role set fixed per CLIENT_ID:
+#   - socialmedia-hindsight: agentgateway-read:hindsight-personal only
+#     (whatsappmcp mcp-server, ns whatsapp-mcp; semantic search over the
+#     conversation memory it already retains into that bank).
+# The two other identities this file first carried are NOT created:
+# jarvis-hindsight (voice plane, bank `tienda`) is refused, because `tienda`
+# holds customer orders and customer email with personal data, and
+# synapse-hindsight-tienda is dropped, because lookup_supplier_history now reads
+# Skirmbooks and needs no bank.
+# One principal per (service, bank): a leaked credential opens exactly one
+# bank. Same hardening as hermes-enviar and correo-agente: GitOps-declared,
+# service account only, fullScopeAllowed=false, audience mcp.lan.e-dani.com,
+# exact token verified. No ExternalSecret here: Keycloak generates the secret
+# and security copies it to the 1Password item agentgateway-prod after the
+# first sync (RUNBOOK section 22); the consumer reads it from 1Password through
+# its own ExternalSecret.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-socialmedia-hindsight-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: socialmedia-hindsight-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the roles and before the
+    # hindsight-personal grants hook (25), whose reviewed holder set includes
+    # this service account and so needs it to exist.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: socialmedia-hindsight-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: socialmedia-hindsight }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

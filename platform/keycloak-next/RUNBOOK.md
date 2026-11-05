@@ -969,3 +969,42 @@ entrada se borra). While `photos-confirm-delete-grant-daniel-job.yaml` stays in
 Kustomize the next PostSync re-applies the mapping; to retire the grant
 permanently, git revert the commit owning the reconciler (which also retires the
 `ROLES.yaml` / `PRINCIPALS.md` declarations) and let the next sync drop it.
+
+## 22. Hindsight read identity (`socialmedia-hindsight`, SC-4304 S6)
+
+`hindsight-reader-clients.yaml` (one PostSync Job, sync-wave 24) reconciles the
+read-only Hindsight identity with `scripts/hindsight-reader-client.sh`, whose
+reviewed role set is fixed per `CLIENT_ID`; the flow is
+`keycloak-scoped-client-lib.sh`, shared with `hermes-enviar` and
+`correo-agente`:
+
+- `socialmedia-hindsight`: `agentgateway-read:hindsight-personal` only — the
+  whatsappmcp mcp-server (ns whatsapp-mcp) semantic message search over the
+  conversation memory it already retains into bank `personal`.
+
+One principal per (service, bank): a leaked credential opens exactly one bank.
+`agentgateway-read:hindsight-personal` is created by security (SC-4051) and its
+complete direct holder set is owned by the wave-25 hook
+`agentgateway-hindsight-personal-grants`, whose reviewed set includes
+`service-account-socialmedia-hindsight`: without that entry the hook would
+revoke the grant on every sync.
+
+Refused on 05-11-2026 (security, SC-4304 S6): `jarvis-hindsight` and
+`synapse-hindsight-tienda` are NOT provisioned. `tienda` holds customer orders
+and customer email with personal data: the voice plane (jarvis/Alexa) does not
+read it (Alexa's TTS sends the spoken text to Amazon, and a hostile customer
+email would reach the voice agent through the bank), and synapse-tools-mcp
+`lookup_supplier_history` reads Skirmbooks, not a bank. A future reader of
+`tienda` needs its own security verdict and, first, a bank without customer
+personal data.
+
+### Secret hand-off (security, after the first sync)
+
+Keycloak generates the secret on creation. `security` copies it into the
+1Password item `agentgateway-prod` (vault `k8s-pocharlies`), field
+`socialmedia_hindsight_client_secret` — never printed, never committed. The
+consumer mounts its own ExternalSecret against the same field (Connect form,
+`key: agentgateway-prod`, `property: socialmedia_hindsight_client_secret`), same
+idiom as the chat and synapse-sre clients. Rotation (weekly session, not on
+the spot): new value in 1Password, set it on the client through the admin API,
+force-sync the consumer ExternalSecret.

@@ -27,6 +27,7 @@ resources:
   - jarvis-echo-client.yaml
   - hermes-enviar-client.yaml
   - correo-agente-clients.yaml
+  - hindsight-reader-clients.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
   - agentgateway-write-grant-daniel-job.yaml
@@ -134,6 +135,15 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: correo-agente-client
+  - name: keycloak-hindsight-reader-client
+    files:
+      - hindsight-reader-client.sh=scripts/hindsight-reader-client.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - keycloak-reconcile-lib.sh=scripts/keycloak-reconcile-lib.sh
+      - keycloak-scoped-client-lib.sh=scripts/keycloak-scoped-client-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: hindsight-reader-client
   - name: keycloak-agentgateway-mcp-token-ttl
     files:
       - agentgateway-mcp-token-ttl.sh=scripts/agentgateway-mcp-token-ttl.sh

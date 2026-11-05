@@ -75,6 +75,21 @@ introspection) in that exchange (no realm role beyond the default). Like
 entry, so until those hooks finish `keycloak-role-drift` reports them; it
 clears on the first run after, with no action.
 
+SC-4304 S6 (02-11-2026, narrowed 05-11-2026) adds the 40th,
+`service-account-socialmedia-hindsight`: the read-only Hindsight identity of the
+whatsappmcp semantic message search (bank `personal`), by security's verdict on
+the epic's S6. Like `hermes-enviar` and `correo-agente` it is NOT adopted: its
+PostSync (`hindsight-reader-clients.yaml`, `scripts/hindsight-reader-client.sh`)
+creates it in the same sync that ships this entry, and `keycloak-role-drift`
+reports it until the hook finishes. Security's re-ruling of 05-11-2026 on the
+other two identities this PR first carried: `jarvis-hindsight` (voice plane,
+bank `tienda`) is REFUSED, because `tienda` holds customer orders and customer
+email with personal data that the voice surface would read aloud through Amazon
+and that a hostile customer email could use to steer the voice agent; and
+`synapse-hindsight-tienda` is dropped, because `lookup_supplier_history` now
+reads Skirmbooks (SC-4304 comment 47013) and needs no bank at all. This PR was
+never merged, so the hook never ran and neither client exists to revoke.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -763,6 +778,19 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "cto-office-send",
         "default-roles-edani",
         "synapse-sre-m2m"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-socialmedia-hindsight",
+      "type": "sa",
+      "client": "socialmedia-hindsight",
+      "owner": "DevOps",
+      "source": "SC-4304 S6 (veredicto de security 02-11); platform/keycloak-next/hindsight-reader-clients.yaml",
+      "purpose": "Identidad M2M del mcp-server de whatsappmcp (ns whatsapp-mcp): búsqueda semántica de mensajes sobre el banco `personal` de Hindsight (la memoria de conversaciones que el propio servicio retiene) por AgentGateway /hindsight-personal. Solo lectura: agentgateway-read:hindsight-personal.",
+      "realm_roles": [
+        "agentgateway-read:hindsight-personal",
+        "default-roles-edani"
       ],
       "status": "activo"
     }
