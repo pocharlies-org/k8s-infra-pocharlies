@@ -4,10 +4,11 @@
 # The credential itself (1Password item `longhorn-default-backup`, vault
 # k8s-pocharlies) and the MinIO user with the scoped policy
 # storage/minio/longhorn-default-backup-policy.json are provisioned by security
-# (INFRA-1112). This file only projects the credential into longhorn-system and
-# declares the transitional BackupTarget used to verify backup+restore BEFORE
-# the default target is switched (runbook
-# docs/runbook-longhorn-default-backup-minio-cutover.md, phases a-e).
+# (INFRA-1112). This file only projects the credential into longhorn-system:
+# it is the credential of the DEFAULT target once the cutover lands (runbook
+# docs/runbook-longhorn-default-backup-minio-cutover.md). The transitional
+# BackupTarget/minio-default-test that lived here for the phase (b) drill was
+# removed in phase (d) (2026-11-05); ArgoCD prunes the live CR on sync.
 #
 # Pattern: storage/longhorn/openclaw-sauvage-backup-target.yaml (retired with
 # INFRA-993). Do NOT reuse `backup-user` (its policy is velero-backups/*).
@@ -62,23 +63,3 @@ spec:
         decodingStrategy: None
         metadataPolicy: None
         nullBytePolicy: Fail
----
-# Transitional test target (runbook phase a). It points at the same bucket the
-# default will use once the values are set (phase c), so the drill exercises the
-# exact production path. It is inert until a volume is assigned to it; phase (d)
-# of the runbook removes it from the kustomization after the switch.
-apiVersion: longhorn.io/v1beta2
-kind: BackupTarget
-metadata:
-  name: minio-default-test
-  namespace: longhorn-system
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-  labels:
-    app.kubernetes.io/part-of: longhorn
-    backup.e-dani.com/scope: default
-    backup.e-dani.com/tier: transitional
-spec:
-  backupTargetURL: s3://longhorn-backups@us-east-1/
-  credentialSecret: longhorn-default-backup
-  pollInterval: 5m0s
