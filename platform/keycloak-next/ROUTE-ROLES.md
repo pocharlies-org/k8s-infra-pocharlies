@@ -11,7 +11,9 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **50 rutas, 92 gates** en esta matriz (SC-4304, 02-11-2026: + fila
+  Hoy: **50 rutas, 92 gates** en esta matriz (DGX-1478, 06-11-2026: `:workspace-borrador`
+  suma `gmail_mark_read` en `workspace` y `chat-workspace`, k8s-agentgateway-pocharlies#264;
+  SC-4304, 02-11-2026: + fila
   `hindsight-codigo`, viva en el config desde k8s-agentgateway-pocharlies#248;
   INFRA-402, 02-11-2026: + fila
   `photos`, declarada por delante del config vivo — pendiente del merge de
@@ -129,8 +131,8 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `chat-studio` | `/chat-studio` | — | `agentgateway-write` (5), `agentgateway-write:media` (5) |
 | `studio` | `/studio` | `agentgateway-read:studio` | `agentgateway-write` (5), `agentgateway-write:media` (5) |
 | `grok` | `/grok` | — | `agentgateway-write` (2), `agentgateway-write:media` (2) |
-| `workspace` | `/workspace` | `agentgateway-read:workspace` | `agentgateway-write` (17), `agentgateway-write:workspace` (13), `agentgateway-write:workspace-borrador` (2), `agentgateway-write:workspace-envio` (4) |
-| `chat-workspace` | `/chat-workspace` | — | `agentgateway-write` (17), `agentgateway-write:workspace` (13), `agentgateway-write:workspace-borrador` (2), `agentgateway-write:workspace-envio` (4) |
+| `workspace` | `/workspace` | `agentgateway-read:workspace` | `agentgateway-write` (17), `agentgateway-write:workspace` (13), `agentgateway-write:workspace-borrador` (3), `agentgateway-write:workspace-envio` (4) |
+| `chat-workspace` | `/chat-workspace` | — | `agentgateway-write` (17), `agentgateway-write:workspace` (13), `agentgateway-write:workspace-borrador` (3), `agentgateway-write:workspace-envio` (4) |
 | `chat-gsc` | `/chat-gsc` | — | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
 | `gsc` | `/gsc` | `agentgateway-read:gsc` | `agentgateway-write` (1), `agentgateway-write:gsc` (1) |
 | `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
@@ -395,7 +397,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {
         "agentgateway-write": ["calendar_create_event", "drive_create_file", "gmail_apply_labels", "gmail_archive", "gmail_batch_modify", "gmail_bulk_label_matching", "gmail_create_draft", "gmail_create_label", "gmail_delete_draft", "gmail_forward", "gmail_mark_read", "gmail_mark_unread", "gmail_send", "gmail_send_draft", "gmail_trash", "gmail_untrash", "gmail_update_draft"],
         "agentgateway-write:workspace": ["calendar_create_event", "drive_create_file", "gmail_apply_labels", "gmail_archive", "gmail_batch_modify", "gmail_bulk_label_matching", "gmail_create_draft", "gmail_create_label", "gmail_mark_read", "gmail_mark_unread", "gmail_trash", "gmail_untrash", "gmail_update_draft"],
-        "agentgateway-write:workspace-borrador": ["gmail_create_draft", "gmail_update_draft"],
+        "agentgateway-write:workspace-borrador": ["gmail_create_draft", "gmail_mark_read", "gmail_update_draft"],
         "agentgateway-write:workspace-envio": ["gmail_delete_draft", "gmail_forward", "gmail_send", "gmail_send_draft"]
       }
     },
@@ -406,7 +408,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {
         "agentgateway-write": ["calendar_create_event", "drive_create_file", "gmail_apply_labels", "gmail_archive", "gmail_batch_modify", "gmail_bulk_label_matching", "gmail_create_draft", "gmail_create_label", "gmail_delete_draft", "gmail_forward", "gmail_mark_read", "gmail_mark_unread", "gmail_send", "gmail_send_draft", "gmail_trash", "gmail_untrash", "gmail_update_draft"],
         "agentgateway-write:workspace": ["calendar_create_event", "drive_create_file", "gmail_apply_labels", "gmail_archive", "gmail_batch_modify", "gmail_bulk_label_matching", "gmail_create_draft", "gmail_create_label", "gmail_mark_read", "gmail_mark_unread", "gmail_trash", "gmail_untrash", "gmail_update_draft"],
-        "agentgateway-write:workspace-borrador": ["gmail_create_draft", "gmail_update_draft"],
+        "agentgateway-write:workspace-borrador": ["gmail_create_draft", "gmail_mark_read", "gmail_update_draft"],
         "agentgateway-write:workspace-envio": ["gmail_delete_draft", "gmail_forward", "gmail_send", "gmail_send_draft"]
       }
     },
