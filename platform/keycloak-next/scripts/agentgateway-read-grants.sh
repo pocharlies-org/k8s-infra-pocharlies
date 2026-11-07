@@ -147,8 +147,12 @@ EXPECTED_SECRETARIA_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:s
 SECRETARIA_SA_USERNAMES="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-hermes-secretaria-dani,service-account-hermes-secretaria-leila"
 # DGX-854: + agentgateway-read:shopify-admin, only for product_stock_status (real stock and preorder/factory order);
 # the Hermes fine server list of secretaria-skirmshop exposes no other tool of that route.
-SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
-EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
+# SC-4304 (2026-11-07, veredicto de security, fase 1 del apagado del Brain): + agentgateway-read:hindsight-tienda en
+# secretaria-skirmshop, la secretaria de info@ (sucesora de Postia): solo lectura de su ruta /hindsight-tienda, en su SA
+# dedicada (el rol ya viaja en el plano compartido; esto no abre nada a otro perfil). Sustituye a su lectura de la
+# instancia skirmshop del Brain. El grant lo hace security por la API de admin (como SC-2967); este hook solo lo admite.
+SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
+EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
 SECRETARIA_SKIRMSHOP_SA_USERNAME="service-account-hermes-secretaria-skirmshop"
 PROBE_READ_ROLE_NAMES="${PROBE_READ_ROLE_NAMES:-agentgateway-read:atlassian}"
 EXPECTED_PROBE_READ_ROLE_NAMES="agentgateway-read:atlassian"
