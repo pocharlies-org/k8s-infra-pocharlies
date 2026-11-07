@@ -694,9 +694,10 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "hermes-secretaria-skirmshop",
       "owner": "DevOps",
       "source": "INFRA-494 (épica INFRA-479): client client_credentials del perfil hermes-secretaria-skirmshop de Hermes, creado por devops el 04-10; el secreto en 1Password `hermes-kc-secretaria-skirmshop` vía ExternalSecret hermes-kc-secretarias (k8s-openclaw-qwen36-pocharlies); bindings por sub en k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml",
-      "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar.",
+      "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, desde el 07-11-2026 (SC-4304 fase 1, veredicto de security), la memoria de la tienda en solo lectura (hindsight-tienda: la secretaria de info@ la lee en vez de la instancia skirmshop del Brain) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar.",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:hindsight-tienda",
         "agentgateway-read:picqer",
         "agentgateway-read:shopify",
         "agentgateway-read:shopify-admin",

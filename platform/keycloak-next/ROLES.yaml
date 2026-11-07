@@ -125,13 +125,14 @@
       "status": "active",
       "meaning": "Lectura de la ruta /hindsight-tienda de AgentGateway (INFRA-942: banco de memoria `tienda` del MCP integrado de Hindsight — catálogo de la tienda, sin restricción de proveedor; 15 lecturas, solo lectura por diseño; el banco queda fijo por la ruta).",
       "grantees": [
-        "service-account-agentgateway-mcp"
+        "service-account-agentgateway-mcp",
+        "service-account-hermes-secretaria-skirmshop"
       ],
       "privilege": {
         "allows": "Llamar a las 15 tools de solo lectura de la ruta /hindsight-tienda de AgentGateway (contrato exacto mcp.hindsight.reads).",
         "denies": "Cualquier escritura (retain/sync_retain y delete_/clear_/create_/update_ están excluidos del ledger por contrato), la lectura de otros bancos y cualquier otra ruta."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; alta en la matriz R2 por INFRA-974, 23-10-2026: el mapeo existía manual en el scope y los grants del plano compartido desde el 22-10, y su consumidor es vivo — medidos 26 requests de service-account-agentgateway-mcp a /hindsight-tienda en 4.5 h)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; alta en la matriz R2 por INFRA-974, 23-10-2026: el mapeo existía manual en el scope y los grants del plano compartido desde el 22-10, y su consumidor es vivo — medidos 26 requests de service-account-agentgateway-mcp a /hindsight-tienda en 4.5 h). SC-4304 fase 1 (07-11-2026): veredicto de security — segundo titular, service-account-hermes-secretaria-skirmshop (la secretaria de info@, sucesora de Postia), solo lectura de esta ruta en su SA dedicada, sustituyendo a su lectura de la instancia skirmshop del Brain; lo concede security por la API de admin y este hook lo admite en SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES. NOTA: desde el 05-11 el banco lleva pedidos y correos de clientes con datos personales (comentario 47313 de SC-4304), no solo el catálogo de la premisa de INFRA-974; su titular compartido sigue como estaba y queda para revisión aparte"
     },
     {
       "name": "agentgateway-read:hindsight-claude-personal",
