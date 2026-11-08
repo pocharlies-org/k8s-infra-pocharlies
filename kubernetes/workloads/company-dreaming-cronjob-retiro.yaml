@@ -6,7 +6,7 @@
 # El annotation sync-options Prune=true permite podarlo A PESAR de prune:false;
 # suspend:true evita que dispare esta noche mientras se aplica. Se retira el fichero
 # en la PR siguiente (segundo sync) y ArgoCD lo poda.
-apiVersion: batch/v1apiVersion: batch/v1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: company-dreaming
