@@ -11,8 +11,8 @@ ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
 # is created inert: the gateway already gates compute_mode_set and
 # refusal_lambda_set on it, and it has no entry in
 # ALLOWED_SERVICE_ACCOUNTS, so nobody may hold it and those tools stay denied.
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor}"
-EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor"
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda}"
+EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda"
 # Dedicated confidential clients reviewed to hold exactly one domain role each,
 # as "<role>=<service-account-username>". The client itself is reconciled by a
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
@@ -43,6 +43,11 @@ EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentga
 # order_returnable_lines_get, return_create y labels_pickup_create,
 # k8s-agentgateway-pocharlies#221). Un único titular, el client
 # correo-ejecutor (correo-agente-client.sh, sync-wave 24), que es quien lo concede.
+# SC-5065: agentgateway-write:hindsight-tienda es inerte (mismo patron): la ruta
+# /hindsight-tienda-admin del adaptador hindsight-tienda-writer-mcp se gateara con
+# regla dual (write pelado o este rol) cuando la registre la PR del consumidor
+# (SC-5064) en k8s-agentgateway-pocharlies; el auth-proxy identifica la maquina, no
+# el workspace, y el SA compartido del gateway no recibe roles de dominio.
 # SC-2726: agentgateway-write:alphalink es inerte (patrón dgx-control): la ruta
 # /alphalink acepta el write pelado o el rol de dominio (regla dual), y el SA
 # compartido del gateway no recibe roles de dominio. Si el realm lo concede, el
@@ -144,5 +149,5 @@ for role in ${ROLE_NAMES}; do
 done
 IFS="${old_ifs}"
 
-printf '{"role_family":"agentgateway-write-domain","roles":16,"created":%s,"human_assigned":false,"service_account_grants":%s,"grants_revoked":%s}\n' \
+printf '{"role_family":"agentgateway-write-domain","roles":17,"created":%s,"human_assigned":false,"service_account_grants":%s,"grants_revoked":%s}\n' \
   "${created}" "${granted}" "${revoked}"
