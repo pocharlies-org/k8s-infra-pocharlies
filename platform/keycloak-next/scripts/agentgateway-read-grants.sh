@@ -106,7 +106,7 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 # photos-confirm-delete-grant-daniel.sh, wave 25 — never in this matrix, which
 # is grants to the shared plane). The read matrix is 28 roles since then
 # (26 + SC-4304's hindsight-codigo + INFRA-402's photos): reviewed MCP token
-# SC-4304 F3: + hindsight-shopify-contenido (editorial only), 29 reads / 30 token roles.
+# set 29 (write + 28 reads); SC-4304 F3: + hindsight-shopify-contenido (editorial only): 29 reads, token set 30.
 READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
 OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools}"
 # SC-699 (2026-09-26): chat-agentgateway holds the shared route role

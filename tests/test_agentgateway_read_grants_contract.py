@@ -386,7 +386,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_matrix_is_immutable_and_exactly_the_reviewed_routes(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertEqual(29, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo; INFRA-402: + photos
+        self.assertEqual(29, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
@@ -430,7 +430,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_ensure_from_empty_creates_roles_maps_grants_and_verifies_tokens(self):
         result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
-        self.assertIn('"roles":29,"created":29', result.stdout)  # matrix 28 (SC-4304 + INFRA-402)
+        self.assertIn('"roles":29,"created":29', result.stdout)  # matrix 29 (SC-4304 + INFRA-402)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertIn('"tokens_verified":true', result.stdout)
         self.assertEqual(29, journal.count("create roles "))
@@ -440,7 +440,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + 28 reads (SC-4304 + INFRA-402)
+        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + 29 reads (SC-4304 + INFRA-402)
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
