@@ -263,6 +263,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "source": "k8s-agentgateway-pocharlies backends/workspace/identity-bindings.yaml (usuario de Leila, sub medido 21-09)",
       "purpose": "Cuenta Google de Leila; SSO del realm (grupo edani-users) y su buzón en /workspace; lectura de /social concedida el 30-10 como prerrequisito C4 de P1 de SC-705/SC-1144 (SC-3805); lectura de la memoria personal de Hindsight (agentgateway-read:hindsight-personal, rutas /hindsight-personal y /chat-hindsight-personal) por la decisión de Dani de 03-11-2026, concedida por el PostSync agentgateway-hindsight-personal-grants-job (SC-4304 S6).",
       "realm_roles": [
+        "agentgateway-read:hindsight-leila",
         "agentgateway-read:hindsight-personal",
         "agentgateway-read:social",
         "default-roles-edani"
@@ -417,6 +418,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:gsc",
         "agentgateway-read:hindsight-claude-personal",
         "agentgateway-read:hindsight-codigo",
+        "agentgateway-read:hindsight-shopify-contenido",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
@@ -678,6 +680,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil de Leila de las secretarias de Hermes ante AgentGateway: lee brain/social/workspace y escribe en social y workspace, con su propio sub (sustituye al sub compartido operator-machines).",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:hindsight-leila",
         "agentgateway-read:skills",
         "agentgateway-read:social",
         "agentgateway-read:workspace",
@@ -697,6 +700,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, desde el 07-11-2026 (SC-4304 fase 1, veredicto de security), la memoria de la tienda en solo lectura (hindsight-tienda: la secretaria de info@ la lee en vez de la instancia skirmshop del Brain) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar.",
       "realm_roles": [
         "agentgateway-read:brain",
+        "agentgateway-read:hindsight-shopify-contenido",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:picqer",
         "agentgateway-read:shopify",

@@ -89,6 +89,7 @@ jobs:
             tests/test_hermes_enviar_identity_contract.py \
             tests/test_correo_agente_identity_contract.py \
             tests/test_hindsight_reader_identity_contract.py \
+            tests/test_hindsight_leila_grants.py \
             tests/test_agentgateway_read_grants_contract.py \
             tests/test_agentgateway_social_mcp_identity_contract.py \
             tests/test_agentgateway_chat_mcp_identity_contract.py \

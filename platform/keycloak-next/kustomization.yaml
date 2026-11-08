@@ -28,6 +28,7 @@ resources:
   - hermes-enviar-client.yaml
   - correo-agente-clients.yaml
   - hindsight-reader-clients.yaml
+  - hindsight-leila-grants.yaml
   - agentgateway-smoke-operator-client.yaml
   - agentgateway-mcp-token-ttl-job.yaml
   - admin-keycloack-impersonation-grant-job.yaml
@@ -45,6 +46,10 @@ resources:
   - photos-app-client.yaml
   - keycloak-role-drift-cron.yaml
 configMapGenerator:
+  - name: keycloak-hindsight-leila-grants
+    files:
+      - hindsight-leila-grants.py=scripts/hindsight-leila-grants.py
+      - kc_rbac.py=scripts/kc_rbac.py
   - name: keycloak-agentgateway-write-role
     files:
       - agentgateway-write-role.sh=scripts/agentgateway-write-role.sh
