@@ -610,6 +610,17 @@
       "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
     },
     {
+      "name": "agentgateway-write:hindsight-tienda",
+      "status": "active",
+      "meaning": "Escritura del dominio hindsight-tienda en AgentGateway (SC-5065): retener memoria en el banco `tienda` por la ruta /hindsight-tienda-admin del adaptador hindsight-tienda-writer-mcp (banco fijo, retain-only, credencial propia claude-tienda del escritor 8443). Alta inerte (patron alphalink/dgx-control, regla dual en la ruta): el plano MCP compartido entra con el write pelado que ya porta — el auth-proxy identifica la maquina, no el workspace —; sin concesionarios hasta un client dedicado por workspace.",
+      "grantees": [],
+      "privilege": {
+        "allows": "Las tools de escritura de la ruta /hindsight-tienda-admin (retain al banco tienda) con GATEWAY_WRITE activo; hoy nadie lo tiene — el plano MCP de las sesiones entra por la regla dual con el write pelado.",
+        "denies": "Otros bancos (el banco lo fija el adaptador), el borrado, las escrituras de otros dominios y cualquier otra ruta."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; SC-5065, 08-11-2026: declaracion GitOps SC-4414; la ruta y su regla dual las registra la PR del consumidor (SC-5064) en k8s-agentgateway-pocharlies)"
+    },
+    {
       "name": "agentgateway-write:media",
       "status": "active",
       "meaning": "Escrituras enumeradas del dominio media en AgentGateway (write por dominio).",
