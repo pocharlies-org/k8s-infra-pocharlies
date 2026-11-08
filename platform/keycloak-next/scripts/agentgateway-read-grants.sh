@@ -106,8 +106,8 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 # photos-confirm-delete-grant-daniel.sh, wave 25 — never in this matrix, which
 # is grants to the shared plane). The read matrix is 28 roles since then
 # (26 + SC-4304's hindsight-codigo + INFRA-402's photos): reviewed MCP token
-# set 29 (write + 28 reads).
-READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
+# SC-4304 F3: + hindsight-shopify-contenido (editorial only), 29 reads / 30 token roles.
+READ_ROLE_NAMES="${READ_ROLE_NAMES:-agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace}"
 OPENCLAW_READ_ROLE_NAMES="${OPENCLAW_READ_ROLE_NAMES:-agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools}"
 # SC-699 (2026-09-26): chat-agentgateway holds the shared route role
 # agentgateway-read:studio so its auth-proxy sidecar can pass the /studio
@@ -151,8 +151,8 @@ SECRETARIA_SA_USERNAMES="service-account-hermes-secretaria,service-account-herme
 # secretaria-skirmshop, la secretaria de info@ (sucesora de Postia): solo lectura de su ruta /hindsight-tienda, en su SA
 # dedicada (el rol ya viaja en el plano compartido; esto no abre nada a otro perfil). Sustituye a su lectura de la
 # instancia skirmshop del Brain. El grant lo hace security por la API de admin (como SC-2967); este hook solo lo admite.
-SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
-EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
+SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="${SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES:-agentgateway-read:brain,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace}"
+EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES="agentgateway-read:brain,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:picqer,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:workspace"
 SECRETARIA_SKIRMSHOP_SA_USERNAME="service-account-hermes-secretaria-skirmshop"
 PROBE_READ_ROLE_NAMES="${PROBE_READ_ROLE_NAMES:-agentgateway-read:atlassian}"
 EXPECTED_PROBE_READ_ROLE_NAMES="agentgateway-read:atlassian"
@@ -224,7 +224,7 @@ PHOTOS_HUMAN_USERNAMES="me@e-dani.com"
 SMOKE_OPERATOR_READ_ROLE_NAMES="${SMOKE_OPERATOR_READ_ROLE_NAMES:-agentgateway-read:social,agentgateway-read:workspace}"
 EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES="agentgateway-read:social,agentgateway-read:workspace"
 SMOKE_OPERATOR_SA_USERNAME="service-account-agentgateway-smoke-operator"
-EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
+EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): while agentgateway-mcp has
@@ -820,7 +820,7 @@ rollback_roles() {
     IFS=,
   done
   IFS="${old_ifs}"
-  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":28,"present":false}\n'
+  printf '{"reconciler":"agentgateway-read-grants","roles_deleted":29,"present":false}\n'
 }
 
 login_admin
@@ -837,7 +837,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":28,"created":%s,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":%s,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -847,7 +847,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":28,"created":0,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":0,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles

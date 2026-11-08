@@ -35,6 +35,10 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
   Ninguno se retira desde aquí.
 
+SC-4304 F3 (08-11-2026): declara por delante del despliegue `hindsight-leila`,
+`chat-hindsight-leila` y `hindsight-shopify-contenido`. Los sujetos y azp de Leila se validan
+ademas del rol; no se anaden lectores `personal`.
+
 ## Comprobarlo
 
 ```bash
@@ -533,6 +537,24 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {
         "agentgateway-write": ["item_archive", "item_delete", "item_edit", "note_create", "password_create", "password_generate", "password_generate_memorable", "password_update"]
       }
+    },
+    {
+      "route": "hindsight-leila",
+      "path": "/hindsight-leila",
+      "require": ["agentgateway-read:hindsight-leila"],
+      "tools": {}
+    },
+    {
+      "route": "chat-hindsight-leila",
+      "path": "/chat-hindsight-leila",
+      "require": ["agentgateway-read:hindsight-leila"],
+      "tools": {}
+    },
+    {
+      "route": "hindsight-shopify-contenido",
+      "path": "/hindsight-shopify-contenido",
+      "require": ["agentgateway-read:hindsight-shopify-contenido"],
+      "tools": {}
     },
     {
       "route": "claude-sessions-read",

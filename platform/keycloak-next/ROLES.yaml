@@ -916,6 +916,34 @@
         "denies": "Cualquier autorización de aplicación."
       },
       "origin": "keycloak-builtin (llega por el compuesto default-roles-edani)"
+    },
+    {
+      "name": "agentgateway-read:hindsight-leila",
+      "status": "active",
+      "meaning": "SC-4304 F3: lectura privada del banco leila; identidad humana o Hermes dedicada, nunca SA compartida.",
+      "grantees": [
+        "lays84.mv@gmail.com",
+        "service-account-hermes-secretaria-leila"
+      ],
+      "privilege": {
+        "allows": "Lecturas MCP del banco leila con issuer/audience/sub/azp validados; humano OWUI OAuth PKCE dedicado. Hermes exige ademas remitente autenticado en listener privado.",
+        "denies": "Escritura, otros bancos, identidades compartidas y autorizacion por texto. No concede personal."
+      },
+      "origin": "SC-4304: hindsight-leila-grants.yaml PostSync wave22; sujetos verificados 08-11-2026, sin rotar credencial Hermes existente."
+    },
+    {
+      "name": "agentgateway-read:hindsight-shopify-contenido",
+      "status": "active",
+      "meaning": "SC-4304 F3: contenido editorial Shopify aislado de pedidos/clientes; banco fijo shopify-contenido.",
+      "grantees": [
+        "service-account-agentgateway-mcp",
+        "service-account-hermes-secretaria-skirmshop"
+      ],
+      "privilege": {
+        "allows": "Lecturas MCP del banco shopify-contenido; no escritura.",
+        "denies": "Cualquier otro banco o ruta; retain y mutaciones no se exponen."
+      },
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml); SC-4304: mismo lector de negocio y client dedicado de secretaria-skirmshop, sin nuevos lectores personal."
     }
   ]
 }
