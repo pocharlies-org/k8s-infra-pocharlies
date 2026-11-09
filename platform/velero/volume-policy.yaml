@@ -147,3 +147,19 @@ data:
             app: gliner2-extract
         action:
           type: skip
+      #   restore-drill: lo que mide la copia semanal. `weekly-all-20261108050009`
+      #   movió 11 volúmenes / ~12,2 GiB, y 12,2 GiB de ellos son los PVCs del
+      #   taladro de restauración (drill-source 4,4 GiB + drill-restored-c/-d
+      #   2,6 GiB cada uno): dato que el propio taladro vuelve a crear restaurando
+      #   una copia. Es copia de una copia. `drill-restored` y `drill-restored-b`
+      #   no llevan etiqueta, así que se siguen copiando (fail-closed).
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: sc80-restore-drill
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: drill-restore
+        action:
+          type: skip

@@ -89,7 +89,7 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # entero con `field pvcName not found in type
         # resourcepolicies.volumeCondition`, y un CM inválido tumba todas las
         # schedules, así que ninguna regla puede inventarse otra clave.
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 18)
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 20)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
                           "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio",
@@ -97,7 +97,9 @@ class VeleroOperabilityContractTest(unittest.TestCase):
                           "app: nfs-subdir-external-provisioner",
                           "app.kubernetes.io/name: grafana", "app.kubernetes.io/name: vmsingle-rca",
                           "app.kubernetes.io/name: skirmshop-drive-mirror", "component: trivy",
-                          "app: ollaya", "app: bge", "app: stt-turbo", "app: gliner2-extract"):
+                          "app: ollaya", "app: bge", "app: stt-turbo", "app: gliner2-extract",
+                          "app.kubernetes.io/name: sc80-restore-drill",
+                          "app.kubernetes.io/name: drill-restore"):
             self.assertIn(no_backup, VOLUME_POLICY)
         for condicion_prohibida in ("pvcName", "usedByPods", "csiDrivers", "pvCFolumeAttributes"):
             self.assertNotIn(
