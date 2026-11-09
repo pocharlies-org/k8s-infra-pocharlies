@@ -98,28 +98,34 @@ class PagosSSOContract(unittest.TestCase):
         self.assertNotIn("ClientIP", route["match"])
         self.assertIn("sso-chain", [m["name"] for m in route["middlewares"]])
 
-    def test_api_alarma_de_maquina_cae_en_el_bypass_y_fuera_en_sso(self):
-        """/api/alarma* (HMAC) no tiene regla propia: ninguna ruta por encima del bypass lo
-        captura, asi que desde LAN/tailnet/cluster llega al backend por la 200/300 (que exige
-        HMAC) y desde internet por la 100 (sso-chain)."""
+    def test_api_alarma_de_maquina_cae_en_el_bypass_lan_y_en_sso_por_el_borde(self):
+        """/api/alarma* (HMAC) no tiene regla propia: desde LAN/tailnet/cluster llega al backend
+        por la 300 de la LAN (LAN = Dani, DGX-1314; la guarda pide HMAC). DGX-809 (spec PM
+        04-11): el borde ya no tiene bypass de casa (fuera la 200), asi que por el borde
+        /api/alarma pide sesion desde cualquier IP; la maquina de casa llama por AdGuard ->
+        traefik-lan o por el Service interno."""
         path = "/api/alarma/estado"
-        for docs, name, bypass in ((_docs(LAN), "lan-dgx-dashboard-public-host", 300),
-                                   (_docs(EDGE), "edge-dgx-dashboard-public", 200)):
-            self.assertNotIn("Path", _route(docs, name, bypass)["match"], f"{name}@{bypass} is the open bypass")
-            for doc in docs:
-                if doc.get("kind") != "IngressRoute" or doc["metadata"]["name"] != name:
+        docs, name, bypass = _docs(LAN), "lan-dgx-dashboard-public-host", 300
+        self.assertNotIn("Path", _route(docs, name, bypass)["match"], f"{name}@{bypass} is the open bypass")
+        for doc in docs:
+            if doc.get("kind") != "IngressRoute" or doc["metadata"]["name"] != name:
+                continue
+            for route in doc["spec"]["routes"]:
+                if route.get("priority", 0) <= bypass:
                     continue
-                for route in doc["spec"]["routes"]:
-                    if route.get("priority", 0) <= bypass:
-                        continue
-                    m = route["match"]
-                    for prefix in re.findall(r"PathPrefix\(`([^`]+)`\)", m):
-                        self.assertFalse(path.startswith(prefix),
-                                         f"{name}@{route['priority']} captures {path} via {prefix}")
-                    for exact in re.findall(r"\bPath\(`([^`]+)`\)", m):
-                        self.assertNotEqual(path, exact, f"{name}@{route['priority']} captures {path}")
-                    for rx in re.findall(r"PathRegexp\(`([^`]+)`\)", m):
-                        self.assertIsNone(re.search(rx, path), f"{name}@{route['priority']} captures {path}")
+                m = route["match"]
+                for prefix in re.findall(r"PathPrefix\(`([^`]+)`\)", m):
+                    self.assertFalse(path.startswith(prefix),
+                                     f"{name}@{route['priority']} captures {path} via {prefix}")
+                for exact in re.findall(r"\bPath\(`([^`]+)`\)", m):
+                    self.assertNotEqual(path, exact, f"{name}@{route['priority']} captures {path}")
+                for rx in re.findall(r"PathRegexp\(`([^`]+)`\)", m):
+                    self.assertIsNone(re.search(rx, path), f"{name}@{route['priority']} captures {path}")
+        # DGX-809: en el borde no queda ninguna regla de bypass y la ganadora es la 100 con sso-chain.
+        for doc in _docs(EDGE):
+            if doc.get("kind") == "IngressRoute" and doc["metadata"]["name"] == "edge-dgx-dashboard-public":
+                self.assertNotIn(200, [r.get("priority") for r in doc["spec"]["routes"]],
+                                 "DGX-809: el borde ya no tiene bypass de casa (200)")
 
     def test_sso_forward_auth_estampa_email_y_strip_la_vacia(self):
         docs = _docs(ROUTING)
