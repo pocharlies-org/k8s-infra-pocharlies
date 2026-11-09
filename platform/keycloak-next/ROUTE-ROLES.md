@@ -462,6 +462,15 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {}
     },
     {
+      "route": "hindsight-tienda-admin",
+      "path": "/hindsight-tienda-admin",
+      "require": ["agentgateway-write", "agentgateway-write:hindsight-tienda"],
+      "tools": {
+        "agentgateway-write": ["tienda_retain"],
+        "agentgateway-write:hindsight-tienda": ["tienda_retain"]
+      }
+    },
+    {
       "route": "hindsight-tienda",
       "path": "/hindsight-tienda",
       "require": ["agentgateway-read:hindsight-tienda"],
@@ -578,8 +587,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
     {"role": "agentgateway-write:compania", "disposition": "reservado", "purpose": "Medido en el realm vivo el 16-10 (SC-2522): concedido por admin API a service-account-hermes-secretaria y -casa sin declaracion en GitOps; ninguna ruta de k8s-agentgateway-pocharlies lo exige todavia. Entra en unrouted como llego (precedente INFRA-380); cuando la ruta /compania se declare, sale de aqui y pasa a su fila de la matriz."},
     {"role": "agentgateway-write:analisis", "disposition": "reservado", "purpose": "Medido en el realm vivo el 27-10 (SC-1282): creado y concedido por security a service-account-analisis en SC-2967 ([SEC] de SC-2951) con limite de tools (navigate, resize, screenshot, snapshot, console_messages, evaluate) para /playwright; la regla del gateway para ese limite queda pendiente (devops). Entra en unrouted como llego (precedente SC-2522); cuando la ruta lo declare, sale de aqui y pasa a su fila de la matriz."},
     {"role": "agentgateway-write:compania-propuestas", "disposition": "reservado", "purpose": "Medido en el realm vivo el 27-10 (SC-1282): creado y concedido por security a service-account-analisis en SC-2967 con el veredicto de SC-2963 (SC-2955 P4): solo propuesta_crear y propuestas_rechazadas de /compania, nunca compania_responder. La regla del gateway para la ruta queda pendiente. Entra en unrouted como llego (precedente SC-2522); cuando la ruta lo declare, sale de aqui y pasa a su fila de la matriz."},
-    {"role": "claude-sessions", "disposition": "aplicacion", "purpose": "Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions."},
-    {"role": "agentgateway-write:hindsight-tienda", "disposition": "reservado", "purpose": "Alta inerte SC-5065 (patron alphalink): creado por agentgateway-domain-roles.sh sin concesionarios. La ruta /hindsight-tienda-admin del adaptador hindsight-tienda-writer-mcp (SC-5064) se gateara con regla dual (write pelado o este rol, como /alphalink) cuando la registre la PR de k8s-agentgateway-pocharlies: esa PR mueve esta fila a su gate. El auth-proxy identifica la maquina, no el workspace; el limite real lo pone el adaptador (banco tienda fijo, retain-only, credencial propia)."}
+    {"role": "claude-sessions", "disposition": "aplicacion", "purpose": "Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions."}
   ]
 }
 ```
