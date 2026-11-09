@@ -11,7 +11,11 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **50 rutas, 92 gates** en esta matriz (DGX-1478, 06-11-2026: `:workspace-borrador`
+  Hoy: **51 rutas, 93 gates** en esta matriz (INFRA-1234, 09-11-2026: + fila `nova`,
+  declarada por delante del config vivo — pendiente del merge de
+  k8s-agentgateway-pocharlies#272; el rol ya existe en el realm por
+  agentgateway-domain-roles.sh y viaja en el plano compartido por
+  agentgateway-read-grants.sh; DGX-1478, 06-11-2026: `:workspace-borrador`
   suma `gmail_mark_read` en `workspace` y `chat-workspace`, k8s-agentgateway-pocharlies#264;
   SC-4304, 02-11-2026: + fila
   `hindsight-codigo`, viva en el config desde k8s-agentgateway-pocharlies#248;
@@ -114,6 +118,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `synapse` | `/synapse` | `agentgateway-read:synapse` | `agentgateway-write` (3), `agentgateway-write:synapse` (3) |
 | `chat-stt` | `/chat-stt` | — | — |
 | `stt` | `/stt` | `agentgateway-read:stt` | — |
+| `nova` | `/nova` | `agentgateway-write:nova` | `agentgateway-write:nova` (3) |
 | `picqer` | `/picqer` | `agentgateway-read:picqer` | `agentgateway-write` (36), `agentgateway-write:picqer` (36) |
 | `skirmshop-plugins-admin` | `/skirmshop-plugins-admin` | `agentgateway-write`, `agentgateway-write:correo-ejecutor`, `agentgateway-write:skirmshop-plugins` | `agentgateway-write` (35), `agentgateway-write:correo-ejecutor` (1), `agentgateway-write:skirmshop-plugins` (35) |
 | `skills` | `/skills` | `agentgateway-read:skills` | — |
@@ -225,6 +230,14 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/stt",
       "require": ["agentgateway-read:stt"],
       "tools": {}
+    },
+    {
+      "route": "nova",
+      "path": "/nova",
+      "require": ["agentgateway-write:nova"],
+      "tools": {
+        "agentgateway-write:nova": ["estado", "nueva_sesion", "salir"]
+      }
     },
     {
       "route": "picqer",

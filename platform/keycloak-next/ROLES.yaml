@@ -634,6 +634,19 @@
       "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
     },
     {
+      "name": "agentgateway-write:nova",
+      "status": "active",
+      "meaning": "Ruta /nova de AgentGateway (INFRA-1224): Nova, el agente de voz que entra en un Google Meet o hace una llamada telefónica REAL. Ninguna herramienta en el plano normal: la ruta entera exige este rol (jwtAuth strict literal, también en staging). estado son las transcripciones de la sesión (lectura PRIVADA, PII) y nueva_sesion y salir son mutaciones que hablan en nombre de la casa y pagan además GATEWAY_WRITE.",
+      "grantees": [
+        "service-account-agentgateway-mcp"
+      ],
+      "privilege": {
+        "allows": "Llamar a las 3 tools de /nova (estado, nueva_sesion, salir) con el JWT del plano MCP de las sesiones de Claude; las dos mutaciones solo con GATEWAY_WRITE activo.",
+        "denies": "Escrituras de otros dominios, el write global agentgateway-write (no pasa el gate de /nova: es el rol literal) y cualquier otra ruta."
+      },
+      "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml; INFRA-1224)"
+    },
+    {
       "name": "agentgateway-write:offers",
       "status": "active",
       "meaning": "Escrituras enumeradas del dominio offers en AgentGateway (write por dominio).",

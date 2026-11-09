@@ -54,8 +54,8 @@ HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
 # so after INFRA-45's flip the
 # exact expected agentgateway-mcp set is the reviewed 23.
 TOKEN_DEFAULT_ROLES = ["default-roles-edani", "offline_access", "uma_authorization"]
-MCP_TOKEN_ON_ROLES = READ_ROLE_NAMES + ["agentgateway-write"] + TOKEN_DEFAULT_ROLES
-MCP_TOKEN_OFF_ROLES = ["agentgateway-write"] + READ_ROLE_NAMES
+MCP_TOKEN_ON_ROLES = READ_ROLE_NAMES + ["agentgateway-write", "agentgateway-write:nova"] + TOKEN_DEFAULT_ROLES
+MCP_TOKEN_OFF_ROLES = ["agentgateway-write", "agentgateway-write:nova"] + READ_ROLE_NAMES
 DEFAULT_OC_ROLES = ["cto-office-send"] + OPENCLAW_ROLE_NAMES
 
 
@@ -193,6 +193,14 @@ FAKE_KCADM = textwrap.dedent(
                 id) printf 'id-write\\n' ;;
                 composite) printf 'false\\n' ;;
               esac
+            elif [ "$role" = agentgateway-write:nova ]; then
+              # INFRA-1224/INFRA-1234: pre-existing role owned by
+              # agentgateway-domain-roles.sh (wave 19): always resolvable,
+              # never created or deleted by this script.
+              case "$fields" in
+                id) printf 'id-nova\\n' ;;
+                composite) printf 'false\\n' ;;
+              esac
             elif [ -f "$state/roles" ] && grep -Fxq "$role,false" "$state/roles"; then
               case "$fields" in
                 id) printf 'id-%s\\n' "$role" ;;
@@ -302,13 +310,15 @@ def seed_full_state(state):
     # Post-INFRA-45 steady state: the mcp client scope carries
     # agentgateway-write plus the 22 read roles and fullScopeAllowed is false.
     (state / "scope-mcp").write_text(
-        "agentgateway-write\n" + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+        "agentgateway-write\nagentgateway-write:nova\n"
+        + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
     )
     (state / "scope-oc").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
     )
     (state / "grants-mcp-sa").write_text(
-        "agentgateway-write\n" + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+        "agentgateway-write\nagentgateway-write:nova\n"
+        + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
     )
     (state / "grants-oc-sa").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
@@ -390,6 +400,9 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
+        # INFRA-1224/INFRA-1234: the literal /nova route role rides the shared plane.
+        self.assertIn("NOVA_WRITE_ROLE_NAME is immutable", script)
+        self.assertIn("agentgateway-write:nova", script)
         self.assertIn("OPENCLAW_READ_ROLE_NAMES is immutable", script)
         # SC-699: the chat holder allowlist is its own reviewed constant.
         self.assertIn("CHAT_READ_ROLE_NAMES is immutable", script)
@@ -440,13 +453,13 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + 29 reads (SC-4304 + INFRA-402)
+        self.assertEqual(31, len(state_files["scope-mcp"].split()))  # write + nova + 29 reads (INFRA-1234)
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its seven reviewed roles on that client.
         self.assertEqual(7, len(state_files["scope-oc"].split()))
-        self.assertEqual(29, len(state_files["grants-mcp-sa"].split()))
+        self.assertEqual(30, len(state_files["grants-mcp-sa"].split()))  # write + nova + 29 reads (INFRA-1234)
         self.assertEqual(7, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
@@ -786,7 +799,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
         # The write surface predates this reconciler and stays: while
         # fullScopeAllowed=false it is what keeps write traffic alive.
-        self.assertEqual("agentgateway-write\n", state_files["scope-mcp"])
+        self.assertEqual("agentgateway-write\nagentgateway-write:nova\n", state_files["scope-mcp"])
         self.assertEqual("false\n", state_files["fullscope-mcp"])
 
     def test_job_is_postsync_nonroot_pinned_and_network_limited(self):

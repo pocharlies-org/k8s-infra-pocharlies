@@ -45,6 +45,12 @@ CLIENT_ID="${CLIENT_ID:-agentgateway-mcp}"
 OPENCLAW_CLIENT_ID="${OPENCLAW_CLIENT_ID:-openclaw-readonly-agentgateway}"
 AGENTGATEWAY_AUDIENCE="${AGENTGATEWAY_AUDIENCE:-mcp.lan.e-dani.com}"
 WRITE_ROLE_NAME="${WRITE_ROLE_NAME:-agentgateway-write}"
+# INFRA-1224/INFRA-1234 (2026-11-09, veredicto security INFRA-1234): el rol de ruta
+# literal de /nova viaja en el plano compartido (el gate de la ruta no acepta el write
+# global; k8s-agentgateway-pocharlies#272). El rol lo CREA agentgateway-domain-roles.sh
+# (wave 19); este hook lo concede al SA compartido y lo mapea en el client scope, como
+# hizo INFRA-45 con agentgateway-write.
+NOVA_WRITE_ROLE_NAME="${NOVA_WRITE_ROLE_NAME:-agentgateway-write:nova}"
 OPENCLAW_BASE_ROLE="${OPENCLAW_BASE_ROLE:-cto-office-send}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-read-grants-admin.config
@@ -248,6 +254,7 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
 [ "${CLIENT_ID}" = "agentgateway-mcp" ] || fail "CLIENT_ID is immutable"
 [ "${OPENCLAW_CLIENT_ID}" = "openclaw-readonly-agentgateway" ] || fail "OPENCLAW_CLIENT_ID is immutable"
 [ "${WRITE_ROLE_NAME}" = "agentgateway-write" ] || fail "WRITE_ROLE_NAME is immutable"
+[ "${NOVA_WRITE_ROLE_NAME}" = "agentgateway-write:nova" ] || fail "NOVA_WRITE_ROLE_NAME is immutable"
 [ "${OPENCLAW_BASE_ROLE}" = "cto-office-send" ] || fail "OPENCLAW_BASE_ROLE is immutable"
 [ "${READ_ROLE_NAMES}" = "${EXPECTED_READ_ROLE_NAMES}" ] || \
   fail "READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
@@ -535,11 +542,11 @@ mcp_wanted_scope() {
   # travelling in tokens once fullScopeAllowed is off. The service account has
   # held the grant since the write-role reconciler; only the mapping was
   # missing (SC-100 defect 6 family).
-  printf '%s,%s' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}"
+  printf '%s,%s,%s' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}"
 }
 
 mcp_wanted_scope_lines() {
-  printf '%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | tr ',' '\n'
+  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | tr ',' '\n'
 }
 
 ensure_client_scopes() {
@@ -558,14 +565,14 @@ verify_client_scopes() {
 }
 
 ensure_sa_grants() {
-  grant_missing_roles "users/${MCP_SA_ID}/role-mappings/realm" "$(grant_names "${MCP_SA_ID}")" "${READ_ROLE_NAMES}"
+  grant_missing_roles "users/${MCP_SA_ID}/role-mappings/realm" "$(grant_names "${MCP_SA_ID}")" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME}"
   grant_missing_roles "users/${OC_SA_ID}/role-mappings/realm" "$(grant_names "${OC_SA_ID}")" "${OPENCLAW_READ_ROLE_NAMES}"
 }
 
 verify_sa_grants() {
   mcp_grants="$(grant_names "${MCP_SA_ID}")"
-  assert_wanted_mapped "${mcp_grants}" "${READ_ROLE_NAMES}"
-  assert_mapped_within "${mcp_grants}" "$(printf '%s\n%s\n%s\n' default-roles-edani "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | tr ',' '\n')"
+  assert_wanted_mapped "${mcp_grants}" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME}"
+  assert_mapped_within "${mcp_grants}" "$(printf '%s\n%s\n%s\n%s\n' default-roles-edani "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | tr ',' '\n')"
 
   oc_grants="$(grant_names "${OC_SA_ID}")"
   assert_wanted_mapped "${oc_grants}" "${OPENCLAW_READ_ROLE_NAMES}"
@@ -608,7 +615,7 @@ mint_claims() {
 mcp_token_expected_on() {
   # fullScopeAllowed=true: the reviewed 24 plus the three measured defaults,
   # which pass the scope filter while the flag is on (INFRA-46 measurement).
-  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" \
+  printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" \
     | comma_list_sorted
 }
 
@@ -616,7 +623,7 @@ mcp_token_expected_off() {
   # fullScopeAllowed=false: the defaults do not travel (measured on
   # openclaw-readonly-agentgateway: exactly its reviewed set), so the exact
   # expected set is the reviewed 24 alone.
-  printf '%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" | comma_list_sorted
+  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | comma_list_sorted
 }
 
 check_mcp_token() {
@@ -743,7 +750,7 @@ fullscope_rollback() {
       fail "minted token is missing the measured realm default ${default_role} while fullScopeAllowed=true"
   done
   assert_mapped_within "$(printf '%s\n' "${actual}" | tr ',' '\n')" \
-    "$(printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' '\n')"
+    "$(printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' '\n')"
   unset claims actual
   printf '{"reconciler":"agentgateway-read-grants","mode":"fullscope-rollback","fullscope_allowed_agentgateway_mcp":true,"tokens_verified":true}\n'
 }
@@ -837,7 +844,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":%s,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":%s,"grants_agentgateway_mcp":30,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -847,7 +854,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":0,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":29,"created":0,"grants_agentgateway_mcp":30,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles
