@@ -113,6 +113,26 @@ spec:
       services:
         - name: edge-static-server
           port: 8080
+    # paseo-sync (11-2026): POST/GET máquina-a-máquina de los Macs
+    # (repo ~/Workspace/paseo-sync). La credencial es la cabecera X-API-Key que
+    # valida el backend (api/routes_paseo.py); no lleva identidad, por eso no va
+    # tras sso-chain: sin esta regla cae en la pública (100) → sso-chain → 302 a
+    # Keycloak y el curl de los Macs no puede iniciar sesión. Prioridad 460: por
+    # debajo de /api/interno (500), que debe seguir respondiendo 404 en el borde,
+    # y por encima de /messages (450). dgx-edge-proof estampa la prueba (el
+    # forwardAuth siempre responde 200) para cumplir el contrato DGX-729.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && PathPrefix(`/api/paseo-sync`)
+      priority: 460
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: dgx-edge-proof
+          namespace: traefik-edge
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # Consola de mensajería (página, assets propios, API y SSE
     # /api/messages/stream) → dgx-messages, para TODO origen y siempre tras
     # sso-chain: la identidad X-Auth-Request-User la estampa el forwardAuth
