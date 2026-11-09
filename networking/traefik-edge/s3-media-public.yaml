@@ -1,15 +1,18 @@
 ---
 # Public media URL for DGX/AI Studio artifacts stored in MinIO.
 # Cloudflare -> traefik-edge -> dgx-dashboard-ui -> dashboard S3 media gateway.
-# LAN/Tailscale/cluster source ranges bypass Keycloak so OpenClaw/Codex/Claude
-# agents can read generated media directly; internet callers use Keycloak SSO.
 #
 # SC-702 (SC-1191/SC-1192): this host shares the dashboard backend, so the
 # bypass route here exposed the same control API as dgx.e-dani.com. H1 strips
 # the 7 identity headers on every route (before sso-chain where present); H2
 # puts the approved control set behind sso-chain with higher-priority routes.
-# Media reads (the purpose of this bypass) stay open. dgx-strip-identity-headers
-# is defined once per Traefik instance — see dgx-dashboard-public.yaml.
+# DGX-809 (spec PM 04-11): the ClientIP bypass (prio 200) is GONE — on the edge
+# a home-range IP is external (100.64.0.0/10 = whole tailnet and carrier CGNAT,
+# DGX-1429) and this host shares the dashboard backend. Agents at home read
+# media through AdGuard -> traefik-lan (bypass unchanged); from the cloud they
+# already reached the edge as non-home IPs and used SSO or the internal Service.
+# dgx-strip-identity-headers is defined once per Traefik instance — see
+# dgx-dashboard-public.yaml.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -79,18 +82,6 @@ spec:
     - kind: Rule
       match: Host(`s3.e-dani.com`) && PathPrefix(`/dgx-studio/media/images/cine/refs/`)
       priority: 300
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-edge
-        - name: dgx-edge-proof
-          namespace: traefik-edge
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      priority: 200
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-edge
