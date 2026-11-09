@@ -74,7 +74,7 @@ class VeleroOperabilityContractTest(unittest.TestCase):
             },
         )
 
-    def test_fsb_policy_skips_only_ephemeral_emptydir(self):
+    def test_fsb_policy_skips_ephemerals_and_derived_data(self):
         self.assertIn("name: velero-fsb-volume-policy", VOLUME_POLICY)
         self.assertIn("volumeTypes:\n            - emptyDir", VOLUME_POLICY)
         # 66c8717 added the second skip: CNPG-managed PVCs, which CNPG/barman
@@ -82,11 +82,36 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # below remain forbidden; the CNPG rule matches by pvcLabels only.
         # INFRA-993 adds four more pvcLabels skips: VictoriaMetrics, Loki and
         # Langfuse carry no backup by decision (Dani, 26-10).
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 6)
+        # INFRA-1222 (Dani, 09-11) suma 12: analítica derivada (aiops), caché
+        # (buildkit, trivy, pesos de modelo con etiqueta), el export NFS —que es
+        # recursión del contenido que ya se copia PVC a PVC— y el mirror de un
+        # bucket. Solo `volumeTypes` y `pvcLabels`: velero v1.18 rechaza el CM
+        # entero con `field pvcName not found in type
+        # resourcepolicies.volumeCondition`, y un CM inválido tumba todas las
+        # schedules, así que ninguna regla puede inventarse otra clave.
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 18)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
-                          "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio"):
+                          "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio",
+                          "app: aiops-qdrant-ks5", "app: aiops-falkordb-ks5", "app: buildkitd",
+                          "app: nfs-subdir-external-provisioner",
+                          "app.kubernetes.io/name: grafana", "app.kubernetes.io/name: vmsingle-rca",
+                          "app.kubernetes.io/name: skirmshop-drive-mirror", "component: trivy",
+                          "app: ollaya", "app: bge", "app: stt-turbo", "app: gliner2-extract"):
             self.assertIn(no_backup, VOLUME_POLICY)
+        for condicion_prohibida in ("pvcName", "usedByPods", "csiDrivers", "pvCFolumeAttributes"):
+            self.assertNotIn(
+                f"          {condicion_prohibida}:", VOLUME_POLICY.split("policies.yaml: |")[1]
+            )
+        # lo que sí es dato único no se salta: lo entrenado en el ns llm (comparte
+        # etiqueta omnivoice-tts-dgx2 entre el modelo descargable y las voces, así
+        # que ninguna de las tres PVCs se salta), y el media de whatsapp, que es
+        # chat que no se vuelve a descargar
+        # en forma de regla (12 espacios), no de prosa: el comentario explica
+        # justamente por qué omnivoice-tts-dgx2 NO puede ir en la lista
+        for still_protected in ("app: omnivoice-tts-dgx2", "app: omnivoice-tts-trained",
+                                "app: voicelab", "app: whatsapp"):
+            self.assertNotIn(f"            {still_protected}\n", VOLUME_POLICY)
         for durable_selector in ("persistentVolumeClaim", "csi:", "nfs:"):
             self.assertNotIn(durable_selector, VOLUME_POLICY)
 

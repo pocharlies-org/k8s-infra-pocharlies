@@ -53,3 +53,97 @@ data:
             app: langfuse-events-minio
         action:
           type: skip
+      # INFRA-1222 (Dani, 09-11): el mismo criterio para el resto que no es dato
+      # único. Se salta la COPIA DE CONTENIDO, no el manifiesto: estos namespaces
+      # siguen en su schedule, así que si algo revienta hay dónde restaurar la
+      # config. Criterio: si se pierde y no pasa nada, o se regenera solo, fuera.
+      # Medido en velero-backups-pocharlies (09-11): 600,1 GiB, de los que 599,8
+      # GiB son `kopia/` (contenido de PVCs) y solo 358 MiB los tarballs de
+      # manifiestos.
+      # Solo valen las condiciones `volumeTypes` y `pvcLabels`: velero v1.18
+      # rechaza el ConfigMap entero con `field pvcName not found in type
+      # resourcepolicies.volumeCondition` (probado el 09-11 con un Backup CR de
+      # prueba). Un CM inválido rompe TODAS las schedules, así que lo que no
+      # lleva etiqueta no se salta aquí: primero se etiqueta en su propio repo.
+      #   aiops ~138 GiB: qdrant + falkordb, analítica derivada de lo que ya sale
+      #   de VictoriaMetrics y de loki (24 h). No hay nada que restaurar aquí.
+      - conditions:
+          pvcLabels:
+            app: aiops-qdrant-ks5
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app: aiops-falkordb-ks5
+        action:
+          type: skip
+      #   buildkit ~31 GiB: caché de compilación (INFRA-953 es esta misma caché
+      #   llenándose y el GC sin liberar). No es dato.
+      - conditions:
+          pvcLabels:
+            app: buildkitd
+        action:
+          type: skip
+      #   nfs-provisioner ~103 GiB: el export es EL CONTENIDO de los PVCs de otros
+      #   namespaces, que ya se copian cada uno por su cuenta. Recursión pura. La
+      #   etiqueta solo la lleva el PVC del propio servidor (1 en todo el cluster).
+      - conditions:
+          pvcLabels:
+            app: nfs-subdir-external-provisioner
+        action:
+          type: skip
+      #   backup-hub ~25 GiB: skirmshop-drive-mirror es copia de un bucket de OVH.
+      #   Backup de un backup.
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: skirmshop-drive-mirror
+        action:
+          type: skip
+      #   monitoring que INFRA-993 dejó fuera por ser de otro chart: grafana (los
+      #   dashboards viven en este repo) y vmsingle-rca (métricas derivadas).
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: grafana
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: vmsingle-rca
+        action:
+          type: skip
+      #   harbor: la base de datos de vulnerabilidades de trivy es caché
+      #   descargable. La base de datos de harbor (usuarios, proyectos, robot
+      #   accounts) sigue copiándose.
+      - conditions:
+          pvcLabels:
+            component: trivy
+        action:
+          type: skip
+      #   pesos de modelo que sí llevan etiqueta: se vuelven a bajar. Se quedan
+      #   fuera de esta lista, a propósito, las dos cachés grandes sin etiquetas
+      #   (hf-cache-nvidia-dgx-ro y hf-cache-dgx1-dgx3-llm-ro, ReadOnlyMany de 512
+      #   Gi) y todo lo que comparte etiqueta con algo irrepetible: `app:
+      #   omnivoice-tts-dgx2` es a la vez omnivoice-model (descargable) y
+      #   omnivoice-voices / omnivoice-voices-nfs (voces entrenadas), así que no se
+      #   salta ninguna de las tres. voicelab-data, omnivoice-models-lora y
+      #   sugiere-auditoria se siguen copiando: irrepetibles.
+      - conditions:
+          pvcLabels:
+            app: ollaya
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app: bge
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app: stt-turbo
+        action:
+          type: skip
+      - conditions:
+          pvcLabels:
+            app: gliner2-extract
+        action:
+          type: skip
