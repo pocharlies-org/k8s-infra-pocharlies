@@ -1,66 +1,56 @@
 # company-dreaming — el pase diario que audita las memorias de Claude Code contra
 # el código que corre (épica SC-711, núcleo SC-1208, despliegue original SC-1209).
 #
-# Migrado del timer systemd --user del x86 al cluster PARA VISIBILIDAD: historial de
-# Jobs en `kubectl`, métricas de CronJob/Job vía kube-state-metrics -> Prometheus, y
-# ArgoCD como dueño del estado deseado. El trabajo sigue siendo del host.
+# INFRA-349 (08-11): el CronJob se traslada de kube-system (disparador que entraba al
+# host ubuntu con nsenter+privileged) a ns paseo, sobre el PVC paseo-home. Desde la
+# migración de la compañía al pod company-0 (SC-3961, 07-11) las memorias
+# (~/.claude/projects), los clones que se miden (~/k8s, ~/src) y el runtime
+# (~/.local/libexec/x86-host-runtime, que sincroniza el sidecar company-cron con
+# origin/main cada 2 min) viven EN ESE PVC; el host ya no tenía nada que auditar y
+# cada pasada abortaba con check-links rc=2 → job Failed → app k8s-infra Degraded.
+# El pod ya no es el disparador: es el entorno de ejecución — cero privileged, cero
+# nsenter, cero hostPID.
 #
-# Por qué el pod entra en el host en vez de llevarse el trabajo dentro: la pasada está
-# casada con esta máquina — lee y reescribe ~/.claude/projects/*/memory, mide con grep
-# contra ~/src y ~/k8s, consulta `systemctl --user cat` para las afirmaciones de
-# unidades, invoca `claude -p` (binario nativo del home) contra el router local
-# (127.0.0.1:18791) y respalda en ~/.company/dreaming. Un contenedor con fragmentos
-# montados replicaría mal esas dependencias (p. ej. el `systemctl --user` por dbus o
-# la versión del claude del home). Así que el pod NO es el entorno de ejecución: es el
-# disparador. `nsenter -t 1` (hostPID + privileged) entra en los namespaces del host y
-# ejecuta EXACTAMENTE el mismo comando que ejecutaba la unidad, como dibanez, con su
-# sesión systemd-user viva. Cero duplicación de runtime: el script desplegado por
-# install.sh en ~/.local/libexec/x86-host-runtime es la fuente, igual que antes.
+# Por qué ya no hace falta entrar al host (el argumento del manifiesto viejo, muerto):
+#   - el clasificador no lanza `claude -p` desde v14: llamada HTTP directa a LiteLLM
+#     (company_env.abrir_litellm), alcanzable desde el clúster;
+#   - `systemctl --user` no existe en el pod: cada claim de unidad queda SIN-DATO con
+#     el motivo (el Medidor lo tolera por claim desde el defecto qa del 24-09) — no
+#     aborta; medir unidades desde aquí es pérdida acotada y conocida del pase.
+#   - nodeSelector atlantic: paseo-home es RWO (local-path) y company-0 lo tiene
+#     montado; el Job ha de caer en el mismo nodo (co-mount RWO permitido).
+#   - imagen: la misma que la sts company (k8s-paseo-pocharlies) — python3, bash, grep
+#     y el home completo. Si la sts sube de imagen, subir aquí el digest a la par.
 #
-# Patrón de host-ops del repo: sauvage-zombie-watchdog / sauvage-pod-reaper (hostPID +
-# nodeName + kube-system).
+# Visibilidad (lo que justificó el paso a k8s en SC-1209, intacto): historial de Jobs
+# en kubectl, métricas de CronJob/Job vía kube-state-metrics y ArgoCD dueño del
+# estado deseado.
 #
-# Equivalencias con la unidad systemd que se retira (x86-host-runtime-pocharlies, PR
-# hermana):
-#   OnCalendar=*-*-* 03:30 + Persistent  -> startingDeadlineSeconds 43200 (12 h: si
-#     el node estuvo caído a esa hora, el pase se corre al volver, no se pierde el
-#     día — mismo espíritu del Persistent=true). HORA: 01:30 desde 28-09 (antes
-#     03:30, como la unidad; ver el porqué abajo, junto al schedule).
-#   TimeoutStartSec=21600 (6 h)          -> activeDeadlineSeconds 21600.
-#   MemoryHigh=2G / MemoryMax=4G         -> requests 512Mi / limits 4Gi.
-#   oneshot, dueño único el timer         -> concurrencyPolicy Forbid + backoffLimit 0
-#     (el script ya reintenta el clasificador dentro de la pasada; un segundo intento
-#     completo la misma noche doblaría la carga del router local y escribiría dos veces
-#     sobre los mismos ficheros).
-#   --aplicar con guarda estado.json      -> intacto en el comando: la primera pasada y
-#     cualquier cambio de criterio siguen forzándose en seco dentro del script.
+# Equivalencias con la unidad systemd que se retiró (x86-host-runtime-pocharlies, PR
+# hermana #401) — intactas:
+#   OnCalendar + Persistent   -> startingDeadlineSeconds 43200 (12 h).
+#   TimeoutStartSec=21600     -> activeDeadlineSeconds 21600 (la pasada dura 3-5,5 h).
+#   MemoryHigh/Max            -> requests 512Mi / limits 4Gi.
+#   oneshot dueño único       -> concurrencyPolicy Forbid + backoffLimit 0.
+#   --aplicar con guarda      -> intacto: la primera pasada y cualquier cambio de
+#                                criterio siguen forzándose en seco dentro del script.
 #
-# La aleatorización de ±5 min del timer no tiene equivalente directo: se asume — el
-# conflicto de hora era con blog-daily (05:00) y el informe del VP (08:00).
+# HORA — 01:30 Europe/Madrid (desde 28-09): la ventana 03:00-04:00 está atestada de
+# CronJobs y 01:30 es la hora más limpia; la pasada acaba antes del informe del VP
+# (08:00) y mantiene la invariante de arrancar antes que blog-daily (05:00).
 #
-# HORA — 01:30 Europe/Madrid (movida desde 03:30 el 28-09): la ventana 03:00-04:00
-# está atestada en el cluster (picker-ga4-refresh a las 03:30 clavados, y alrededor
-# affiliate-gdpr-prune, skirmbooks-classifier-sweep, brain-knowledge-pages,
-# banking-klarna/paypal, product-relations-projector, dlq-archive-purge,
-# keepsvc-maintenance, litellm-spendlogs...). 01:30 es la hora más limpia (nada
-# hasta el snapshot longhorn de las 02:00, y ese no toca el router). No 05:30: la
-# pasada dura 3-5,5 h y su clasificador ocupa el router local de punta a punta; a
-# las 05:30 acabaría 08:30-11:00, solapando con el informe del VP (08:00) y con las
-# sesiones de mañana — la saturación del router (11 en vuelo) es justo lo que abortó
-# la pasada del 27-09. 01:30 además mantiene la invariante de arrancar antes que
-# blog-daily (05:00).
-#
-# Verificación (hecha el 28-09, antes de armar):
-#   1. Job manual de un lote en seco (company-dreaming-verify, --lote sesiones_rc
-#      --dry-run): wiring nsenter->runuser->script->informe probado; el abort del
-#      clasificador fue el residente caído (fail-safe del script, no tocó nada).
-#   2. Timer del host retirado por install.sh (x86-host-runtime-pocharlies #401)
-#      ANTES de quitar suspend — nunca dos planificadores a las 03:30.
+# Verificación (INFRA-349, 08-11, en el home real del pod company-0):
+#   1. Pasada seca del lote synapse con el runtime arreglado: exit 0, 70 fuentes,
+#      clasificador por LiteLLM (2011/710 tokens), 108 afirmaciones medidas, informe
+#      en ~/.company/dreaming/informes/2026-11-08.md.
+#   2. Sin árbol de memorias (CLAUDE_PROJECTS_DIR inexistente): exit 0 con «nada que
+#      auditar» en el informe (antes: abort exit 2). Test en ci/test_dreaming_nucleo.py
+#      de x86-host-runtime-pocharlies (INFRA-349).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: company-dreaming
-  namespace: kube-system
+  namespace: paseo
   labels:
     app.kubernetes.io/name: company-dreaming
     app.kubernetes.io/part-of: x86-host-runtime
@@ -72,15 +62,6 @@ spec:
   startingDeadlineSeconds: 43200
   successfulJobsHistoryLimit: 5
   failedJobsHistoryLimit: 5
-  # ARMADO desde 28-09. La condición por la que nació suspendido —no dejar el
-  # hueco de un día sin planificador mientras se retiraba el timer del host— se
-  # cerró en orden: el timer y el service fueron deshabilitados y borrados por
-  # install.sh (x86-host-runtime-pocharlies #401, desplegada el 28-09 ~10:12), y
-  # el wiring de este CronJob lo validó el Job company-dreaming-verify el 28-09
-  # (nsenter->runuser->script: midió las 56 fuentes y escribió el informe; el
-  # abort posterior fue el clasificador con el residente caído — fail-safe del
-  # script funcionando, ortogonal al planificador). La pasada completa de esa
-  # madrugada (03:31, aún bajo systemd) salió en exito:true en estado.json.
   suspend: false
   jobTemplate:
     spec:
@@ -92,30 +73,41 @@ spec:
           labels:
             app.kubernetes.io/name: company-dreaming
         spec:
-          hostPID: true
-          nodeName: ubuntu
           restartPolicy: Never
           enableServiceLinks: false
+          nodeSelector:
+            kubernetes.io/hostname: atlantic
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          volumes:
+            - name: home
+              persistentVolumeClaim:
+                claimName: paseo-home
           containers:
             - name: dreaming
-              image: ubuntu:24.04
+              image: harbor.lan.e-dani.com/homelab/paseo-atlantic@sha256:e8f28fe9c08c9274bc9c1f28ac0c5c0776d806604f87df4bdfb6adc26f3bc8e3
               imagePullPolicy: IfNotPresent
               securityContext:
-                privileged: true
+                allowPrivilegeEscalation: false
               resources:
                 requests:
                   cpu: 100m
                   memory: 512Mi
                 limits:
                   memory: 4Gi
-              command: ["/bin/sh", "-c"]
+              env:
+                - name: HOME
+                  value: /home/dibanez
+                - name: PATH
+                  value: "/home/dibanez/.npm-global/bin:/home/dibanez/.local/bin:/usr/local/bin:/usr/bin:/bin"
+                - name: LANG
+                  value: C.UTF-8
+              command: ["/usr/bin/python3"]
               args:
-                - |
-                  set -eu
-                  exec nsenter -t 1 -m -u -i -n -p -- \
-                    runuser -u dibanez -- env \
-                      HOME=/home/dibanez USER=dibanez LOGNAME=dibanez \
-                      XDG_RUNTIME_DIR=/run/user/1000 \
-                      DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-                      PATH=/home/dibanez/.local/bin:/usr/local/bin:/usr/bin:/bin \
-                      /usr/bin/python3 /home/dibanez/.local/libexec/x86-host-runtime/company-dreaming.py --aplicar
+                - /home/dibanez/.local/libexec/x86-host-runtime/company-dreaming.py
+                - --aplicar
+              volumeMounts:
+                - name: home
+                  mountPath: /home/dibanez

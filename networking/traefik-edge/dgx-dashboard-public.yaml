@@ -4,11 +4,16 @@
 # Service dgx-dashboard-ui.control-nexus:80 (nginx UI pod) → host backend.
 # Replaces the old docker api-gateway + oauth2-proxy path (home IP 83.46.66.146).
 #
-# SC-702 (SC-1191/SC-1192): the ClientIP bypass route (prio 200) used to serve
-# the backend with no middlewares, so a tailnet/cluster caller could forge the
+# SC-702 (SC-1191/SC-1192): the ClientIP bypass route used to serve the backend
+# with no middlewares, so a tailnet/cluster caller could forge the
 # X-Auth-Request-* identity headers the backend trusts. H1 strips the 7 identity
 # headers on every route (before sso-chain where present); H2 puts the approved
 # control set behind sso-chain with higher-priority routes.
+# DGX-809 (spec PM 04-11): the ClientIP bypass (prio 200) is GONE. On the edge a
+# home-range IP is external — 100.64.0.0/10 is the whole tailnet and
+# indistinguishable from carrier CGNAT (DGX-1429) — so every edge request falls
+# to the prio-100 sso-chain. "LAN = Dani" (DGX-1314) lives only in traefik-lan,
+# where the ranges are real and AdGuard routes home devices to the LAN VIP.
 # dgx-strip-identity-headers is defined once per Traefik instance — this copy
 # serves traefik-edge; the twin lives in networking/traefik-lan/.
 apiVersion: traefik.io/v1alpha1
@@ -176,18 +181,6 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
-        - name: dgx-edge-proof
-          namespace: traefik-edge
-      services:
-        - name: dgx-dashboard-ui
-          namespace: control-nexus
-          port: 80
-    - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      priority: 200
-      middlewares:
-        - name: dgx-strip-identity-headers
-          namespace: traefik-edge
         - name: dgx-edge-proof
           namespace: traefik-edge
       services:

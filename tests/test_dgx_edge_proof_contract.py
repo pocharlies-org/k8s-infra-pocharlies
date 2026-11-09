@@ -123,8 +123,9 @@ class DgxEdgeProofContract(unittest.TestCase):
                     self.assertIn("dgx-edge-proof", nombres,
                                   f"{path.name}@{doc['metadata']['name']} prio {route.get('priority')}: "
                                   "ruta al dashboard sin prueba de borde (DGX-729)")
-        # DGX-1314 quitó las 6 del control set y escrituras de LAN (dgx, s3, jarvis)
-        self.assertGreaterEqual(vistas, 16, "se esperaban al menos las 16 rutas medidas del dashboard")
+        # DGX-1314 quitó las 6 del control set y escrituras de LAN (dgx, s3, jarvis);
+        # DGX-809 quitó las 2 de bypass de casa del borde (dgx y s3 regla 200).
+        self.assertGreaterEqual(vistas, 14, "se esperaban al menos las 14 rutas medidas del dashboard")
 
     def test_la_prueba_solo_la_pide_traefik(self):
         """El servicio que publica el proof no puede ser alcanzable desde cualquier pod (leerlo

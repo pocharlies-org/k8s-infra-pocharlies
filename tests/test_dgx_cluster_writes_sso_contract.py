@@ -55,5 +55,28 @@ class EscriturasDeClusterPorSSO(unittest.TestCase):
                 self.assertNotIn("PathPrefix(`/api/cluster/apply`)", ruta["match"])
 
 
+class SinBypassDeCasaEnElBorde(unittest.TestCase):
+    """DGX-809 (spec PM 04-11, decisión tomada): en el borde, una IP de los rangos de casa se
+    trata como externa: ninguna regla del panel con gate ClientIP puede servirse sin sso-chain.
+
+    Motivo: 100.64.0.0/10 en el borde es el rango por defecto de Tailscale (cualquier aparato de
+    la tailnet) e indistinguible del CGNAT de las operadoras (DGX-1429). «LAN = Dani» (DGX-1314)
+    vive solo en traefik-lan, donde los rangos son reales; aquí todo cae a la regla 100. La mitad
+    jarvis de esta política la fija scripts/verify-jarvis-routes.sh en k8s-jarvis-pocharlies.
+    """
+
+    def test_ninguna_regla_con_clientip_sin_sso_chain(self):
+        vistas = set()
+        for f, ruta in _rutas():
+            if "ClientIP(" not in ruta["match"]:
+                continue
+            vistas.add((f, ruta.get("priority")))
+            with self.subTest(fichero=f, priority=ruta.get("priority")):
+                self.assertIn("sso-chain", _middlewares(ruta),
+                              f"regla con gate de casa sin sso-chain: {ruta['match']}")
+        # Las reglas de casa del panel son las del control set y las escrituras (400/350 por host).
+        self.assertEqual(len(vistas), 4, sorted(vistas))
+
+
 if __name__ == "__main__":
     unittest.main()
