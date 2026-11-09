@@ -188,6 +188,10 @@ class RoleCatalogParityTest(unittest.TestCase):
             "agentgateway-write:workspace-envio=service-account-hermes-enviar",
             "agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop",
             "agentgateway-write:correo-ejecutor=service-account-correo-ejecutor",
+            # INFRA-1224/INFRA-1234: the literal /nova route role, held by the
+            # shared session-plane SA (grant and client scope ride
+            # agentgateway-read-grants.sh; the chat hook never inspects it).
+            "agentgateway-write:nova=service-account-agentgateway-mcp",
         }, guarded_elsewhere)
 
 

@@ -166,6 +166,7 @@ class RoleCatalogShapeTest(unittest.TestCase):
         reads = {name for name in held if name.startswith("agentgateway-read:")}
         self.assertEqual(len(reads), 29)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos
         self.assertEqual(held - reads, {"agentgateway-write",
+                                        "agentgateway-write:nova",
                                         "default-roles-edani"})
         # OWU-80 (2026-09-25): the reviewed holders of agentgateway-write are
         # the privileged service account plus exactly one human, pinned by
