@@ -1,24 +1,19 @@
 ---
-# Public ingress for the Jira → CTO trigger that runs on the x86 host.
+# Public ingress for the Jira → company supervisor webhook.
 #
-# Jira Cloud POSTs `jira:issue_updated` for epics of project SC to
-#   https://jira-webhook.e-dani.com/jira/epic?token=…
-# and the receiver (`jira-epic-trigger.service`, systemd --user on x86, tailnet
-# 100.83.56.98:19911, repo x86-host-runtime) launches a headless company-cto
-# session when the epic has just moved to In Progress. It lives on the host,
-# not in a pod, because it runs `claude` with the operator's config, router and
-# skills; the cluster only tunnels to it over Tailscale.
+# Jira Cloud POSTs to https://jira-webhook.e-dani.com/jira/epic?token=… and the
+# supervisor (`jira-epic-trigger.py`, repo x86-host-runtime) answers it. Since
+# SC-3961 it runs in pod paseo/company-0 behind Service paseo/company :19911
+# (SC-5091: no longer through the x86 relay).
 #
-# ExternalName, not Service+EndpointSlice: ArgoCD excludes EndpointSlice and
-# Endpoints (`resource.exclusions` in argocd-cm), so a slice in Git is never
-# applied (a hand-applied slice is invisible to ArgoCD). `x86.taile0ad27.ts.net` resolves
-# in-cluster through networking/dns/coredns-custom.yaml (hosts entry →
-# 100.83.56.98), which is the same mechanism oficinas-public.yaml relies on.
+# ExternalName to the Service's cluster DNS name, not a cross-namespace service
+# reference: traefik-edge already allows ExternalName services, and ArgoCD
+# excludes Endpoints/EndpointSlice (`resource.exclusions` in argocd-cm).
 #
 # No SSO middleware here: Jira cannot complete a Keycloak dance. The gate is the
 # shared token in the URL (or an HMAC over the raw body), verified by the
-# receiver, and only the two paths Jira needs are published — /state stays on
-# the tailnet.
+# receiver, and only the paths Jira and Hermes need are published — /state stays
+# inside the cluster.
 apiVersion: v1
 kind: Service
 metadata:
@@ -29,7 +24,7 @@ metadata:
     app.kubernetes.io/part-of: company
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: company.paseo.svc.cluster.local
   ports:
     - name: http
       port: 19911
