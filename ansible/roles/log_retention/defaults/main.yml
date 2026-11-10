@@ -1,0 +1,10 @@
+---
+# journald keeps the whole journal up to this size (INFRA-1260: the 1G cap held
+# only ~5 days, so the 2026-10-16 window was already gone when INFRA-1006 asked
+# for it). MaxRetentionSec still trims anything older than the retention.
+journald_system_max_use: "4G"
+journald_max_retention: "14day"
+
+# rsyslog files: daily with 14 generations (was weekly with 4; syslog.1 alone
+# was 549 MB on ks5-cp-1, so daily+compress keeps the footprint bounded).
+logrotate_rotate: 14

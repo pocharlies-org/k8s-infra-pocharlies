@@ -1,0 +1,29 @@
+---
+- name: Ensure journald drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write journald disk-cap drop-in
+  ansible.builtin.template:
+    src: journald-90-disk-cap.conf.j2
+    dest: /etc/systemd/journald.conf.d/90-disk-cap.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart systemd-journald
+
+- name: Write rsyslog logrotate config (daily, {{ logrotate_rotate }} generations)
+  ansible.builtin.template:
+    src: rsyslog.logrotate.j2
+    dest: /etc/logrotate.d/rsyslog
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Verify logrotate parses the config (dry run)
+  ansible.builtin.command: logrotate -d -s /var/lib/logrotate/status /etc/logrotate.d/rsyslog
+  changed_when: false

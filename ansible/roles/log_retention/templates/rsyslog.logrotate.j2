@@ -1,0 +1,22 @@
+# Managed by Ansible (k8s-infra-pocharlies, role log_retention — INFRA-1260).
+# Replaces the rsyslog package default (weekly, rotate 4) with daily and
+# {{ logrotate_rotate }} generations so a two-week incident window is
+# recoverable from /var/log. Same file set as the package default.
+/var/log/syslog
+/var/log/mail.log
+/var/log/kern.log
+/var/log/auth.log
+/var/log/user.log
+/var/log/cron.log
+{
+	rotate {{ logrotate_rotate }}
+	daily
+	missingok
+	notifempty
+	compress
+	delaycompress
+	sharedscripts
+	postrotate
+		/usr/lib/rsyslog/rsyslog-rotate
+	endscript
+}

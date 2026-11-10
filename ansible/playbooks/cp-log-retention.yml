@@ -1,0 +1,17 @@
+---
+# INFRA-1260: raise the log retention of the KS-5 control planes (journald
+# SystemMaxUse 1G -> 4G with 14d max retention, rsyslog logrotate weekly/4 ->
+# daily/14). One cp at a time; journald restart does not disturb k3s.
+#
+#   cd ansible
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/cp-log-retention.yml --limit ks5-cp-1 --check --diff
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/cp-log-retention.yml --limit ks5-cp-1
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/cp-log-retention.yml
+- name: Raise log retention on the KS-5 control planes
+  hosts: ks5_control_plane
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - log_retention
