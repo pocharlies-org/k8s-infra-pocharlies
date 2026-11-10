@@ -82,13 +82,14 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # below remain forbidden; the CNPG rule matches by pvcLabels only.
         # INFRA-993 adds four more pvcLabels skips: VictoriaMetrics, Loki and
         # Langfuse carry no backup by decision (Dani, 26-10).
-        # INFRA-1222 (Dani, 09-11) suma 12: analítica derivada (aiops), caché
+        # INFRA-1222 (Dani, 09-11) suma 14: analítica derivada (aiops), caché
         # (buildkit, trivy, pesos de modelo con etiqueta), el export NFS —que es
         # recursión del contenido que ya se copia PVC a PVC— y el mirror de un
-        # bucket. Solo `volumeTypes` y `pvcLabels`: velero v1.18 rechaza el CM
-        # entero con `field pvcName not found in type
-        # resourcepolicies.volumeCondition`, y un CM inválido tumba todas las
-        # schedules, así que ninguna regla puede inventarse otra clave.
+        # bucket. Lo que velero v1.18 rechaza del CM entero, con `field X not found
+        # in type resourcepolicies.volumeCondition`: las cuatro claves de abajo.
+        # Hay más admitidas (`capacity` existe, probado 10-11), así que una clave
+        # nueva se prueba con un Backup CR antes de fiarse de esta lista; un CM
+        # inválido tumba las 5 schedules vivas.
         self.assertEqual(VOLUME_POLICY.count("type: skip"), 20)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
