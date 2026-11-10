@@ -577,11 +577,16 @@ kubectl logs -n keycloak job/keycloak-agentgateway-read-grants   # agentgateway-
 
 ## 15. Realm drift sweep (`keycloak-role-drift`, INFRA-250)
 
-The rule that keeps this sweep green (SC-4414): No se crea ni concede ningún
-rol o principal en el realm edani por Admin API antes de que su entrada en
-`ROLES.yaml` o `PRINCIPALS.md` esté fusionada y sincronizada: la concesión la
-aplica el job reconciler de la misma PR. Excepción: revocaciones de emergencia
-de security, declaradas en la PR siguiente en menos de 24 h. The CI guard is
+The rule that keeps this sweep green (SC-4414, forma operativa SC-5171): la
+emisión de cualquier client, rol o principal del realm edani ocurre dentro del
+job reconciler de la PR que lo declara — la llamada a la Admin API ocurre
+dentro del job, nunca en una consola interactiva antes del merge. security
+emite la credencial del client en 1Password (vault `k8s-pocharlies`), el
+ExternalSecret del job la monta y kcadm la consume: el job es el único emisor
+(patrón `synapse-sre-client.yaml` y hermanos: credencial montada por
+ExternalSecret, kcadm dentro del job, wave PostSync). La creación interactiva
+por consola queda reservada a revocaciones de emergencia de security,
+declaradas en la PR siguiente en menos de 24 h. The CI guard is
 `tests/test_keycloak_rbac_grant_declaration_contract.py`; a grant applied by
 Admin API before its declaration merged is what makes this CronJob red.
 
