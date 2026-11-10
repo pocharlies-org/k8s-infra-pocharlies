@@ -1,5 +1,5 @@
 """INFRA-1284: the shared dashboard oauth2-proxy (`keycloak/oauth2-proxy`) must refresh the
-session before the access token it passes on in `Authorization` expires.
+session before the token it passes on in `Authorization` (ID token, 300 s) expires.
 
 Realm edani: accessTokenLifespan=300 s. With `cookie_refresh = "1h"` the dashboard backend
 (DGX-807) got an expired JWT ~55 of every 60 min and answered 403 ExpiredSignatureError.

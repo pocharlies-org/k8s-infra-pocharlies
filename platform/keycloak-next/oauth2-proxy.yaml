@@ -72,7 +72,7 @@ data:
     # round -- refresh every 1h against a session that idled out after 30min --
     # which is what forced a full re-login on every visit.
     # INFRA-1284: and below the realm's accessTokenLifespan (300 s) too. With 1h the
-    # access token passed on in Authorization was expired ~55 of every 60 min and the
+    # token passed on in Authorization (the ID token, same 300 s) was expired ~55 of every 60 min and the
     # dashboard backend (DGX-807) answered 403 ExpiredSignatureError. Same as
     # oauth2-proxy-messages: lifespan minus one minute.
     cookie_refresh = "4m"
