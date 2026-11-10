@@ -38,12 +38,14 @@ CONTROL_SET = [("GET", p) for p in (
 # Escrituras del backend (regla 350): solo por POST; los GET de esas rutas se compran abajo, abiertos.
 ESCRITURAS = [("POST", p) for p in (
     "/api/cluster/apply", "/api/cluster/refresh", "/api/compute/mode", "/api/activity/power",
-    "/api/llm/uncensored", "/api/llm/dgx3/mode",
+    "/api/llm/uncensored", "/api/llm/dgx3/mode", "/api/kiosco/vista",
     "/api/litellm/background-consumers/aurora-rca/block",
     "/api/litellm/background-consumers/aurora-rca/unblock",
 )]
 # Máquina a máquina con HMAC propio: debe seguir cayendo en el bypass en los dos hosts.
 MAQUINA = [
+    ("POST", "/api/kiosco/vista/machine"),
+    ("POST", "/api/kiosco/observed/machine"),
     ("POST", "/api/secretaria/despacho/escalar"),
     ("POST", "/api/secretaria/despacho/secretaria-dani/escalar"),
     ("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),
@@ -52,7 +54,7 @@ MAQUINA = [
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/activity", "/api/activity/stream", "/api/compute/mode", "/api/llm/uncensored",
-    "/api/llm/dgx3/mode",
+    "/api/llm/dgx3/mode", "/api/kiosco/state",
     "/api/litellm/consumers", "/api/litellm/models",
     "/api/litellm/background-consumers", "/api/cluster/llm/resident-profile",
     "/api/hud/jarvis", "/api/jarvis/latency", "/api/service-health",
