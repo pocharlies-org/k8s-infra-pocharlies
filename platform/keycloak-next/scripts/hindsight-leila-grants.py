@@ -95,6 +95,10 @@ def reconcile(admin):
     mapper = {'name': 'aud-mcp', 'protocol': 'openid-connect', 'protocolMapper': 'oidc-audience-mapper',
               'config': {'included.custom.audience': AUDIENCE, 'access.token.claim': 'true',
                          'id.token.claim': 'false', 'introspection.token.claim': 'true', 'userinfo.token.claim': 'false'}}
+    if audience:
+        # Keycloak's updateProtocolMapper takes the mapping id from the BODY, not the path:
+        # a PUT without it dies with ModelException "mapping with id null does not exist" (HTTP 500).
+        mapper['id'] = audience[0]['id']
     admin.write('PUT' if audience else 'POST', path + '/protocol-mappers/models' +
                 ('/' + audience[0]['id'] if audience else ''), mapper)
     current = admin.get(path)

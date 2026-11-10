@@ -72,7 +72,13 @@ class Fake:
         elif bits[2] == 'scope-mappings':
             self.scopes.setdefault(bits[1], []).extend(body)
         elif bits[2] == 'protocol-mappers':
-            self.mappers = [{'id': 'audience', **body}]
+            if method == 'PUT':
+                # Keycloak reads the mapping id from the BODY (ClientAdapter.updateProtocolMapper):
+                # a PUT whose body lacks it answers HTTP 500, it does not take it from the path.
+                assert body.get('id') == bits[4], (body.get('id'), bits[4])
+                self.mappers = [dict(body)]
+            else:
+                self.mappers = [{'id': 'audience', **body}]
         else:
             raise AssertionError(path)
 
