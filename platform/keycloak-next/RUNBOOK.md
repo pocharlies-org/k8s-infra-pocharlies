@@ -970,10 +970,10 @@ Kustomize the next PostSync re-applies the mapping; to retire the grant
 permanently, git revert the commit owning the reconciler (which also retires the
 `ROLES.yaml` / `PRINCIPALS.md` declarations) and let the next sync drop it.
 
-## 22. Hindsight read identity (`socialmedia-hindsight`, SC-4304 S6)
+## 22. Hindsight read identities (`socialmedia-hindsight` + the five of Nova, SC-4304 S6 / INFRA-1245)
 
-`hindsight-reader-clients.yaml` (one PostSync Job, sync-wave 24) reconciles the
-read-only Hindsight identity with `scripts/hindsight-reader-client.sh`, whose
+`hindsight-reader-clients.yaml` (six PostSync Jobs, sync-wave 24) reconciles the
+read-only Hindsight identities with `scripts/hindsight-reader-client.sh`, whose
 reviewed role set is fixed per `CLIENT_ID`; the flow is
 `keycloak-scoped-client-lib.sh`, shared with `hermes-enviar` and
 `correo-agente`:
@@ -981,30 +981,63 @@ reviewed role set is fixed per `CLIENT_ID`; the flow is
 - `socialmedia-hindsight`: `agentgateway-read:hindsight-personal` only — the
   whatsappmcp mcp-server (ns whatsapp-mcp) semantic message search over the
   conversation memory it already retains into bank `personal`.
+- the five read-only identities of Nova (the voice agent, ns `nova`), granted by
+  security's verdict INFRA-1248 (INFRA-1245, 10-11-2026), each with ONLY its own
+  read role and nothing from the write family (verdict C2):
+  `nova-hindsight-tienda` (`agentgateway-read:hindsight-tienda`),
+  `nova-hindsight-claude-personal` (`:hindsight-claude-personal`),
+  `nova-hindsight-personal` (`:hindsight-personal`),
+  `nova-hindsight-cloudblue` (`:hindsight-cloudblue`) and `nova-atlassian`
+  (`agentgateway-read:atlassian`, its Jira/Confluence reads). The verdict's
+  binding condition C1 lives in Nova, not in Keycloak: while the session
+  carries the bank profile, no model outside the cluster runs the turn
+  (k8s-nova-pocharlies#40) — which is what admits `tienda` and what satisfies
+  `cloudblue`'s provider restriction (Anthropic/local).
 
 One principal per (service, bank): a leaked credential opens exactly one bank.
+Ownership of each grant (verdict C4 — a grant whose holder-set owner does not
+review it gets revoked): every wave-24 Job grants its reviewed role to its own
+service account (`run_scoped_client` → `ensure_role_mapping`), and —
 `agentgateway-read:hindsight-personal` is created by security (SC-4051) and its
 complete direct holder set is owned by the wave-25 hook
 `agentgateway-hindsight-personal-grants`, whose reviewed set includes
-`service-account-socialmedia-hindsight`: without that entry the hook would
-revoke the grant on every sync.
+`service-account-socialmedia-hindsight` and
+`service-account-nova-hindsight-personal`: without that entry the hook would
+revoke the grant on every sync; — `hindsight-tienda`,
+`hindsight-claude-personal` and `atlassian` are shared route roles owned by the
+wave-20 hook `agentgateway-read-grants`, which widens the holder ALLOWLIST of
+each one for the Nova service account (SC-699/INFRA-477 precedent) so its
+exclusivity assertion accepts it on the next sync; — `hindsight-cloudblue` has
+no holder-set reconciler at all (INFRA-974 left it out of the matrix on
+purpose; its first holder `service-account-agentgateway-mac-cb` was manual): the
+wave-24 Job grants it and nothing revokes it, declared in `ROLES.yaml`.
 
 Refused on 05-11-2026 (security, SC-4304 S6): `jarvis-hindsight` and
 `synapse-hindsight-tienda` are NOT provisioned. `tienda` holds customer orders
 and customer email with personal data: the voice plane (jarvis/Alexa) does not
 read it (Alexa's TTS sends the spoken text to Amazon, and a hostile customer
 email would reach the voice agent through the bank), and synapse-tools-mcp
-`lookup_supplier_history` reads Skirmbooks, not a bank. A future reader of
-`tienda` needs its own security verdict and, first, a bank without customer
-personal data.
+`lookup_supplier_history` reads Skirmbooks, not a bank. The sentence «a future
+reader of `tienda` needs its own security verdict and, first, a bank without
+customer personal data» is SUPERSEDED FOR NOVA by security's verdict INFRA-1248
+(10-11-2026): no bank without personal data is demanded — what is demanded is
+that the data never leaves the cluster (C1, k8s-nova-pocharlies#40), and Nova's
+TTS and STT are local, so the Amazon leg of the refusal does not exist here.
+The 05-11 verdict STILL STANDS for jarvis/Alexa.
 
 ### Secret hand-off (security, after the first sync)
 
 Keycloak generates the secret on creation. `security` copies it into the
 1Password item `agentgateway-prod` (vault `k8s-pocharlies`), field
-`socialmedia_hindsight_client_secret` — never printed, never committed. The
-consumer mounts its own ExternalSecret against the same field (Connect form,
-`key: agentgateway-prod`, `property: socialmedia_hindsight_client_secret`), same
-idiom as the chat and synapse-sre clients. Rotation (weekly session, not on
-the spot): new value in 1Password, set it on the client through the admin API,
-force-sync the consumer ExternalSecret.
+`socialmedia_hindsight_client_secret` and, for the five Nova identities,
+`nova_hindsight_tienda_client_secret`,
+`nova_hindsight_claude_personal_client_secret`,
+`nova_hindsight_personal_client_secret`,
+`nova_hindsight_cloudblue_client_secret` and `nova_atlassian_client_secret` —
+never printed, never committed. The consumer mounts its own ExternalSecret
+against the same field (Connect form, `key: agentgateway-prod`,
+`property: <field>`), same idiom as the chat and synapse-sre clients; Nova's
+ExternalSecret (`nova-herramientas`, ns `nova`) is its own PR in
+k8s-nova-pocharlies, merged once these clients exist. Rotation (weekly session,
+not on the spot): new value in 1Password, set it on the client through the admin
+API, force-sync the consumer ExternalSecret.
