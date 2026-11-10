@@ -11,6 +11,9 @@
 {
 	rotate {{ logrotate_rotate }}
 	daily
+	# /var/log es root:syslog y escribible por grupo: sin `su` logrotate
+	# rechaza rotar (el config global de Ubuntu usa `su root adm`).
+	su syslog adm
 	missingok
 	notifempty
 	compress
