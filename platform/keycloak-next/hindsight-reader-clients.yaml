@@ -1,21 +1,37 @@
-# The read-only Hindsight identity of SC-4304 S6 that is left after security's
-# re-ruling of 05-11-2026, reconciled by scripts/hindsight-reader-client.sh with
-# the reviewed role set fixed per CLIENT_ID:
+# The read-only Hindsight identities, reconciled by
+# scripts/hindsight-reader-client.sh with the reviewed role set fixed per
+# CLIENT_ID:
 #   - socialmedia-hindsight: agentgateway-read:hindsight-personal only
 #     (whatsappmcp mcp-server, ns whatsapp-mcp; semantic search over the
-#     conversation memory it already retains into that bank).
-# The two other identities this file first carried are NOT created:
-# jarvis-hindsight (voice plane, bank `tienda`) is refused, because `tienda`
-# holds customer orders and customer email with personal data, and
-# synapse-hindsight-tienda is dropped, because lookup_supplier_history now reads
-# Skirmbooks and needs no bank.
+#     conversation memory it already retains into that bank). Left after
+#     security's re-ruling of 05-11-2026 on SC-4304 S6.
+#   - the five read-only identities of Nova (the voice agent, ns `nova`),
+#     granted by security's verdict INFRA-1248 (INFRA-1245, 10-11-2026), each
+#     with ONLY its own read role and no agentgateway-write of any kind (C2):
+#       nova-hindsight-tienda          agentgateway-read:hindsight-tienda
+#       nova-hindsight-claude-personal agentgateway-read:hindsight-claude-personal
+#       nova-hindsight-personal        agentgateway-read:hindsight-personal
+#       nova-hindsight-cloudblue       agentgateway-read:hindsight-cloudblue
+#       nova-atlassian                 agentgateway-read:atlassian
+#     C1 of the verdict is binding and lives in Nova, not here: with a bank
+#     profile loaded, no model outside the cluster runs the turn
+#     (k8s-nova-pocharlies#40).
+# The two identities this file first carried are still NOT created:
+# jarvis-hindsight (voice plane, bank `tienda`) is refused for jarvis/Alexa,
+# because `tienda` holds customer orders and customer email with personal data
+# and Alexa's TTS speaks the text through Amazon — that ruling stands for
+# jarvis; Nova reads `tienda` only because INFRA-1248 verified its TTS/STT are
+# local and imposed C1. synapse-hindsight-tienda is dropped, because
+# lookup_supplier_history now reads Skirmbooks and needs no bank.
 # One principal per (service, bank): a leaked credential opens exactly one
-# bank. Same hardening as hermes-enviar and correo-agente: GitOps-declared,
-# service account only, fullScopeAllowed=false, audience mcp.lan.e-dani.com,
-# exact token verified. No ExternalSecret here: Keycloak generates the secret
-# and security copies it to the 1Password item agentgateway-prod after the
-# first sync (RUNBOOK section 22); the consumer reads it from 1Password through
-# its own ExternalSecret.
+# bank (nova-atlassian is the one non-bank of the set: the Jira/Confluence
+# reads of the voice agent, verdict INFRA-1248). Same hardening as
+# hermes-enviar and correo-agente: GitOps-declared, service account only,
+# fullScopeAllowed=false, audience mcp.lan.e-dani.com, exact token verified.
+# No ExternalSecret here: Keycloak generates the secret and security copies it
+# to the 1Password item agentgateway-prod after the first sync (RUNBOOK
+# section 22); the consumer reads it from 1Password through its own
+# ExternalSecret.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -70,6 +86,403 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - { name: CLIENT_ID, value: socialmedia-hindsight }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# Nova (INFRA-1245, verdict INFRA-1248): the voice agent's read of bank
+# `tienda`. The grant is owned by this hook; agentgateway-read-grants (wave 20)
+# admits service-account-nova-hindsight-tienda in the role's holder allowlist.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-nova-hindsight-tienda-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: nova-hindsight-tienda-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the shared route roles and
+    # before the hindsight-personal grants hook (25).
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: nova-hindsight-tienda-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: nova-hindsight-tienda }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# Nova (INFRA-1245, verdict INFRA-1248): the voice agent's read of bank
+# `claude-personal`. The grant is owned by this hook; agentgateway-read-grants
+# (wave 20) admits service-account-nova-hindsight-claude-personal in the role's
+# holder allowlist.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-nova-hindsight-claude-personal-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: nova-hindsight-claude-personal-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the shared route roles and
+    # before the hindsight-personal grants hook (25).
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: nova-hindsight-claude-personal-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: nova-hindsight-claude-personal }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# Nova (INFRA-1245, verdict INFRA-1248): the voice agent's read of bank
+# `personal`, through the wave-25 door (Dani's 03-11 decision bounds the human
+# readers, not dedicated service identities). The grant is owned by this hook
+# and by agentgateway-hindsight-personal-grants (wave 25), whose reviewed
+# holder set gains service-account-nova-hindsight-personal — without that
+# entry wave 25 would revoke it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-nova-hindsight-personal-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: nova-hindsight-personal-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the roles and before the
+    # hindsight-personal grants hook (25), whose reviewed holder set includes
+    # this service account and so needs it to exist.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: nova-hindsight-personal-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: nova-hindsight-personal }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# Nova (INFRA-1245, verdict INFRA-1248): the voice agent's read of bank
+# `cloudblue`. C1 (resident-only while a bank is loaded) is exactly the role's
+# declared provider restriction (Anthropic/local, never OpenAI/Alibaba). The
+# role has no holder-set reconciler (INFRA-974 left it out of the matrix on
+# purpose; its first holder service-account-agentgateway-mac-cb was manual):
+# this hook grants it and nothing revokes it — declared in ROLES.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-nova-hindsight-cloudblue-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: nova-hindsight-cloudblue-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the shared route roles and
+    # before the hindsight-personal grants hook (25).
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: nova-hindsight-cloudblue-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: nova-hindsight-cloudblue }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# Nova (INFRA-1245, verdict INFRA-1248): the voice agent's Jira/Confluence
+# reads (jira_get_issue, jira_search, confluence_search, confluence_get_page)
+# on the /atlassian route. The grant is owned by this hook;
+# agentgateway-read-grants (wave 20) admits service-account-nova-atlassian in
+# the role's holder allowlist. The gateway-side identity-binding of this sub
+# goes in the k8s-agentgateway config PR (INFRA-1248, precedent jarvis-echo,
+# k8s-agentgateway-pocharlies#170).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-nova-atlassian-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: nova-atlassian-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the shared route roles and
+    # before the hindsight-personal grants hook (25).
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: nova-atlassian-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: nova-atlassian }
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: MAPPER_NAME, value: aud-mcp }
             - { name: HOME, value: /tmp }

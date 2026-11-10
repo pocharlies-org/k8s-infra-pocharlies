@@ -12,13 +12,14 @@ Three pieces, one frontier:
   agentgateway-read:hindsight-personal, never creates the role, no secret.
 * agentgateway-hindsight-personal-grants.sh — owns the COMPLETE direct holder
   set of the role: the two humans pinned by subject (OWU-80 discipline), the
-  reviewed service accounts (the two Hermes secretarias and, from SC-4304 S6
-  of 05-11-2026, the whatsappmcp message-search principal), revocation of
+  reviewed service accounts (the two Hermes secretarias, from SC-4304 S6
+  of 05-11-2026 the whatsappmcp message-search principal, and from
+  INFRA-1245/INFRA-1248 of 10-11-2026 Nova's voice-agent identity), revocation of
   every other holder (the chat SA
   bypass of SC-4051 is what this closes), no group mappings, and revoke of the
   manual scope mapping in the chat-agentgateway client. Rollback removes only
   the two human grants.
-* the catalog declarations (ROLES.yaml grantees == the five holders,
+* the catalog declarations (ROLES.yaml grantees == the six holders,
   PRINCIPALS.md realm_roles in parity, ROUTE-ROLES.md row for the new route),
   which the keycloak-role-drift sweep checks against the live realm and the
   SC-4414 guard checks against the grant surface.
@@ -47,6 +48,7 @@ HOLDERS = {
     "service-account-hermes-secretaria",
     "service-account-hermes-secretaria-casa",
     "service-account-socialmedia-hindsight",
+    "service-account-nova-hindsight-personal",
 }
 CHAT_SA = "service-account-chat-agentgateway"
 
@@ -159,7 +161,7 @@ class HindsightPersonalGrantsContractTest(unittest.TestCase):
         # reviewed SA holders: asserted and re-granted, never revoked
         self.assertIn(
             'REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,'
-            'service-account-socialmedia-hindsight"',
+            'service-account-socialmedia-hindsight,service-account-nova-hindsight-personal"',
             script,
         )
         # the chat SA is the revoked holder (sidecar bypass closure) and its
@@ -206,6 +208,7 @@ case "$line" in
     printf 'id-secretaria,service-account-hermes-secretaria\\n'
     printf 'id-casa,service-account-hermes-secretaria-casa\\n'
     printf 'id-social,service-account-socialmedia-hindsight\\n'
+    printf 'id-nova,service-account-nova-hindsight-personal\\n'
     exit 0 ;;
   *"roles/$ROLE --fields id"*) echo role-uuid; exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
@@ -213,6 +216,7 @@ case "$line" in
   *"users/id-secretaria/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-casa/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-social/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/id-nova/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-chat/role-mappings/realm"*) exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields username"*) echo me@e-dani.com; exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields enabled"*) echo true; exit 0 ;;
@@ -230,6 +234,7 @@ case "$line" in
     esac
     exit 0 ;;
   *"get users -q username=service-account-socialmedia-hindsight"*) echo id-social; exit 0 ;;
+  *"get users -q username=service-account-nova-hindsight-personal"*) echo id-nova; exit 0 ;;
   *"get users -q username=service-account-chat-agentgateway"*) echo id-chat; exit 0 ;;
   *"get clients -q clientId=chat-agentgateway"*) echo chat-uuid; exit 0 ;;
   *"clients/chat-uuid/scope-mappings/realm"*) exit 0 ;;
@@ -257,7 +262,7 @@ exit 1
             proc.returncode, 0,
             "audit failed with the prefix-colliding realm: " + proc.stderr,
         )
-        self.assertIn('"holders_reviewed":5', proc.stdout)
+        self.assertIn('"holders_reviewed":6', proc.stdout)
 
     def test_manifest_is_a_hardened_postsync_job(self):
         manifest = GRANTS_JOB.read_text()
@@ -299,7 +304,7 @@ class WiringContractTest(unittest.TestCase):
 
 
 class CatalogDeclarationContractTest(unittest.TestCase):
-    def test_roles_yaml_grantees_are_exactly_the_five_holders(self):
+    def test_roles_yaml_grantees_are_exactly_the_six_holders(self):
         catalog = json.loads((BASE / "ROLES.yaml").read_text())
         entry = {r["name"]: r for r in catalog["roles"]}[ROLE]
         self.assertEqual(set(entry["grantees"]), HOLDERS)

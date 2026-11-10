@@ -37,6 +37,21 @@ umask 077
 # owned by jarvis-echo-client.sh (wave 24); same rule as SC-699: this hook
 # only asserts the extra holder is reviewed, and never resolves the jarvis
 # client (a wave-20 hook must not depend on a wave-24 client existing).
+#
+# INFRA-1245 (2026-11-10, security verdict INFRA-1248): the holder ALLOWLIST
+# widens to three of the five read-only identities of Nova (the voice agent,
+# ns nova), each holding exactly one shared route role:
+# service-account-nova-hindsight-tienda on agentgateway-read:hindsight-tienda,
+# service-account-nova-hindsight-claude-personal on
+# agentgateway-read:hindsight-claude-personal and service-account-nova-atlassian
+# on agentgateway-read:atlassian. Their grants and client scope mappings are
+# owned by hindsight-reader-client.sh (wave 24, one PostSync Job per client);
+# same rule as SC-699/INFRA-477: this hook only asserts the extra holders are
+# reviewed and never resolves the Nova clients. The other two Nova identities
+# ride roles that are NOT in this matrix: hindsight-personal belongs to the
+# wave-25 holder-set hook (agentgateway-hindsight-personal-grants) and
+# hindsight-cloudblue has no holder-set reconciler at all (INFRA-974 left it
+# out of the matrix on purpose; declared in ROLES.yaml).
 
 MODE="${MODE:-ensure}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://keycloak.keycloak.svc.cluster.local}"
@@ -230,6 +245,20 @@ PHOTOS_HUMAN_USERNAMES="me@e-dani.com"
 SMOKE_OPERATOR_READ_ROLE_NAMES="${SMOKE_OPERATOR_READ_ROLE_NAMES:-agentgateway-read:social,agentgateway-read:workspace}"
 EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES="agentgateway-read:social,agentgateway-read:workspace"
 SMOKE_OPERATOR_SA_USERNAME="service-account-agentgateway-smoke-operator"
+# INFRA-1245 (2026-11-10, security verdict INFRA-1248): the three Nova holders
+# of shared route roles (grants and client scopes owned by
+# hindsight-reader-client.sh, sync-wave 24). Same rule as INFRA-477: this
+# reconciler only widens the HOLDER ALLOWLIST, one reviewed role per reviewed
+# SA, and the Nova clients are never resolved here.
+NOVA_TIENDA_READ_ROLE_NAMES="${NOVA_TIENDA_READ_ROLE_NAMES:-agentgateway-read:hindsight-tienda}"
+EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES="agentgateway-read:hindsight-tienda"
+NOVA_TIENDA_SA_USERNAME="service-account-nova-hindsight-tienda"
+NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES="${NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES:-agentgateway-read:hindsight-claude-personal}"
+EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES="agentgateway-read:hindsight-claude-personal"
+NOVA_CLAUDE_PERSONAL_SA_USERNAME="service-account-nova-hindsight-claude-personal"
+NOVA_ATLASSIAN_READ_ROLE_NAMES="${NOVA_ATLASSIAN_READ_ROLE_NAMES:-agentgateway-read:atlassian}"
+EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES="agentgateway-read:atlassian"
+NOVA_ATLASSIAN_SA_USERNAME="service-account-nova-atlassian"
 EXPECTED_READ_ROLE_NAMES="agentgateway-read:alphalink,agentgateway-read:analytics,agentgateway-read:atlassian,agentgateway-read:brain,agentgateway-read:dgx-control,agentgateway-read:gsc,agentgateway-read:hindsight-claude-personal,agentgateway-read:hindsight-codigo,agentgateway-read:hindsight-shopify-contenido,agentgateway-read:hindsight-tienda,agentgateway-read:image,agentgateway-read:merchant,agentgateway-read:offers,agentgateway-read:photos,agentgateway-read:picqer,agentgateway-read:plaud,agentgateway-read:shopify,agentgateway-read:shopify-admin,agentgateway-read:skills,agentgateway-read:skirmshop-plugins,agentgateway-read:social,agentgateway-read:stt,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-sre,agentgateway-read:synapse-tools,agentgateway-read:tts,agentgateway-read:weight,agentgateway-read:workspace"
 EXPECTED_OPENCLAW_READ_ROLE_NAMES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 
@@ -284,6 +313,12 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
   fail "PHOTOS_HUMAN_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 [ "${SMOKE_OPERATOR_READ_ROLE_NAMES}" = "${EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES}" ] || \
   fail "SMOKE_OPERATOR_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${NOVA_TIENDA_READ_ROLE_NAMES}" = "${EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES}" ] || \
+  fail "NOVA_TIENDA_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES}" = "${EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES}" ] || \
+  fail "NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
+[ "${NOVA_ATLASSIAN_READ_ROLE_NAMES}" = "${EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES}" ] || \
+  fail "NOVA_ATLASSIAN_READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
 case "${MODE}" in
   ensure|audit|rollback|fullscope-rollback) ;;
   *) fail "MODE must be ensure, audit, rollback, or fullscope-rollback" ;;
@@ -423,6 +458,17 @@ role_allowed_users() {
   # agentgateway-smoke-operator-client.sh, wave 24).
   if printf '%s\n' "${SMOKE_OPERATOR_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
     printf '%s\n' "${SMOKE_OPERATOR_SA_USERNAME}"
+  fi
+  # INFRA-1245: same rule for the three Nova holders of shared route roles
+  # (granted by hindsight-reader-client.sh, wave 24; verdict INFRA-1248).
+  if printf '%s\n' "${NOVA_TIENDA_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${NOVA_TIENDA_SA_USERNAME}"
+  fi
+  if printf '%s\n' "${NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${NOVA_CLAUDE_PERSONAL_SA_USERNAME}"
+  fi
+  if printf '%s\n' "${NOVA_ATLASSIAN_READ_ROLE_NAMES}" | tr ',' '\n' | grep -Fxq "${role}"; then
+    printf '%s\n' "${NOVA_ATLASSIAN_SA_USERNAME}"
   fi
 }
 

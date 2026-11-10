@@ -44,6 +44,16 @@ ENVIAR_SA = "service-account-hermes-enviar"
 # SC-705/SC-1144 P1 prerequisite C4 session; this hook only widens the
 # allowlist, it never re-issues a human grant.
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
+# INFRA-1245 (2026-11-10, security verdict INFRA-1248): three of the five
+# read-only identities of Nova (the voice agent, ns nova) are reviewed holders
+# of shared route roles, each of exactly one (granted by
+# hindsight-reader-client.sh, wave 24; this hook only widens the allowlist).
+NOVA_TIENDA_SA = "service-account-nova-hindsight-tienda"
+NOVA_TIENDA_SHARED_ROLES = ["agentgateway-read:hindsight-tienda"]
+NOVA_CLAUDE_PERSONAL_SA = "service-account-nova-hindsight-claude-personal"
+NOVA_CLAUDE_PERSONAL_SHARED_ROLES = ["agentgateway-read:hindsight-claude-personal"]
+NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
+NOVA_ATLASSIAN_SHARED_ROLES = ["agentgateway-read:atlassian"]
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): agentgateway-mcp with
 # fullScopeAllowed=true carries the reviewed 23 PLUS the flattened composites
@@ -416,6 +426,14 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         # agentgateway-read:workspace) plus one.
         self.assertIn("ENVIAR_READ_ROLE_NAMES is immutable", script)
         self.assertIn("service-account-hermes-enviar", script)
+        # INFRA-1245 (verdict INFRA-1248): the three Nova holder allowlists are
+        # their own reviewed constants, one reviewed role per reviewed SA.
+        self.assertIn("NOVA_TIENDA_READ_ROLE_NAMES is immutable", script)
+        self.assertIn("service-account-nova-hindsight-tienda", script)
+        self.assertIn("NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES is immutable", script)
+        self.assertIn("service-account-nova-hindsight-claude-personal", script)
+        self.assertIn("NOVA_ATLASSIAN_READ_ROLE_NAMES is immutable", script)
+        self.assertIn("service-account-nova-atlassian", script)
         self.assertIn('kget "roles/${role}/users" -q first=0 -q max=11', script)
         self.assertNotIn('kget "roles/${role}/users" -q first=0 -q max=9', script)
         self.assertIn("group role-mapping is forbidden (SC-44 C6)", script)
@@ -592,6 +610,76 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("mapped to an unauthorized user me@e-dani.com", result.stderr)
+
+    def test_nova_tienda_holder_on_the_tienda_role_passes(self):
+        # INFRA-1245 (verdict INFRA-1248): service-account-nova-hindsight-tienda
+        # is a reviewed holder of agentgateway-read:hindsight-tienda (granted by
+        # hindsight-reader-client.sh, wave 24). The exclusivity assertion must
+        # accept it without this hook ever resolving the Nova client.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                for role in NOVA_TIENDA_SHARED_ROLES:
+                    handle.write(f"{role}|{NOVA_TIENDA_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_nova_tienda_holder_on_any_other_read_role_fails_closed(self):
+        # The allowlist entry is EXACTLY agentgateway-read:hindsight-tienda: the
+        # same service account on any other read route is drift or an attack.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{NOVA_TIENDA_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user service-account-nova-hindsight-tienda", result.stderr)
+
+    def test_nova_claude_personal_holder_on_the_claude_personal_role_passes(self):
+        # INFRA-1245: same rule for service-account-nova-hindsight-claude-personal
+        # on agentgateway-read:hindsight-claude-personal.
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                for role in NOVA_CLAUDE_PERSONAL_SHARED_ROLES:
+                    handle.write(f"{role}|{NOVA_CLAUDE_PERSONAL_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_nova_claude_personal_holder_on_any_other_read_role_fails_closed(self):
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{NOVA_CLAUDE_PERSONAL_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user service-account-nova-hindsight-claude-personal", result.stderr)
+
+    def test_nova_atlassian_holder_on_the_atlassian_role_passes(self):
+        # INFRA-1245: same rule for service-account-nova-atlassian on
+        # agentgateway-read:atlassian (SC-1282 analisis precedent).
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                for role in NOVA_ATLASSIAN_SHARED_ROLES:
+                    handle.write(f"{role}|{NOVA_ATLASSIAN_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed)
+        self.assertIn('"tokens_verified":true', result.stdout)
+
+    def test_nova_atlassian_holder_on_any_other_read_role_fails_closed(self):
+        def seed(state):
+            seed_full_state(state)
+            with (state / "users").open("a") as handle:
+                handle.write(f"agentgateway-read:brain|{NOVA_ATLASSIAN_SA}\n")
+
+        result, _, _ = self.run_reconciler(mode="audit", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("mapped to an unauthorized user service-account-nova-atlassian", result.stderr)
 
     def test_unauthorized_token_roles_fail_closed(self):
         # A minted agentgateway-mcp token missing agentgateway-write (the 22

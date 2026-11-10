@@ -38,6 +38,12 @@ CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
 # INFRA-1189: the read-only fixture of the write-boundary smoke (granted by
 # agentgateway-smoke-operator-client.sh, wave 24, reviewed in this allowlist).
 SMOKE_OPERATOR_SA = "service-account-agentgateway-smoke-operator"
+# INFRA-1245 (verdict INFRA-1248): three of the five Nova identities are
+# reviewed holders of shared route roles (grants owned by
+# hindsight-reader-client.sh, wave 24; reviewed in this allowlist).
+NOVA_TIENDA_SA = "service-account-nova-hindsight-tienda"
+NOVA_CLAUDE_PERSONAL_SA = "service-account-nova-hindsight-claude-personal"
+NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
 # SC-3805: the two reviewed human holders of agentgateway-read:social
 # (granted by admin API in the SC-1144 C4 session, outside the reconciler).
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
@@ -78,6 +84,9 @@ class RoleCatalogParityTest(unittest.TestCase):
         humanos = shell_list(READ_GRANTS, "EXPECTED_HUMANOS_READ_ROLE_NAMES")
         photos_human = shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES")
         smoke_operator = shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES")
+        nova_tienda = shell_list(READ_GRANTS, "EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES")
+        nova_claude_personal = shell_list(READ_GRANTS, "EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES")
+        nova_atlassian = shell_list(READ_GRANTS, "EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES")
         self.assertTrue(set(correo_lectura) <= set(reads))
         self.assertTrue(set(humanos) <= set(reads))
         self.assertTrue(set(photos_human) <= set(reads))
@@ -87,6 +96,9 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
         self.assertTrue(set(enviar) <= set(reads))
+        self.assertTrue(set(nova_tienda) <= set(reads))
+        self.assertTrue(set(nova_claude_personal) <= set(reads))
+        self.assertTrue(set(nova_atlassian) <= set(reads))
         owned = owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
@@ -127,6 +139,12 @@ class RoleCatalogParityTest(unittest.TestCase):
                 # INFRA-1189: the smoke fixture grantee, grant owned by
                 # agentgateway-smoke-operator-client.sh.
                 | ({SMOKE_OPERATOR_SA} if role in smoke_operator else set())
+                # INFRA-1245 (verdict INFRA-1248): the three Nova grantees of
+                # shared route roles, grants owned by
+                # hindsight-reader-client.sh (wave 24).
+                | ({NOVA_TIENDA_SA} if role in nova_tienda else set())
+                | ({NOVA_CLAUDE_PERSONAL_SA} if role in nova_claude_personal else set())
+                | ({NOVA_ATLASSIAN_SA} if role in nova_atlassian else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -155,6 +173,11 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 4)
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 9)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
+        # INFRA-1245 (verdict INFRA-1248): one reviewed role per Nova holder.
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES"), ["agentgateway-read:hindsight-tienda"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES"),
+                         ["agentgateway-read:hindsight-claude-personal"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
         self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 14)
         self.assertEqual(
             len([pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")

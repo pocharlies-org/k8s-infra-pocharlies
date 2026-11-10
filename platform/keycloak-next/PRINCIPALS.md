@@ -100,6 +100,31 @@ its PostSync (`agentgateway-smoke-operator-client.yaml`) creates it in the same
 sync that ships this entry, and `keycloak-role-drift` reports it until the
 hook finishes.
 
+INFRA-1245 (10-11-2026, security's verdict INFRA-1248) adds the 42nd through
+the 46th, `service-account-nova-hindsight-tienda`,
+`service-account-nova-hindsight-claude-personal`,
+`service-account-nova-hindsight-personal`,
+`service-account-nova-hindsight-cloudblue` and `service-account-nova-atlassian`:
+the five read-only identities of Nova (the voice agent, ns nova), one per bank
+plus the Jira/Confluence reads, each holding exactly its own route role and
+nothing from the write family (verdict C2). Like `hermes-enviar`,
+`correo-agente` and `socialmedia-hindsight` they are NOT adopted: their
+PostSync (`hindsight-reader-clients.yaml`, `scripts/hindsight-reader-client.sh`)
+creates them in the same sync that ships these entries, and
+`keycloak-role-drift` reports them until the hook finishes. The verdict's
+binding condition C1 lives in Nova, not in Keycloak: while the session carries
+the bank profile, no model outside the cluster runs the turn
+(k8s-nova-pocharlies#40) — which is what admits `tienda` (customer orders and
+email with personal data: the RUNBOOK §22 demand of a bank without PII is
+superseded for Nova by the verdict; what is demanded is that the PII never
+leaves the cluster) and what satisfies `cloudblue`'s declared provider
+restriction (Anthropic/local). Nova's TTS and STT are local
+(omnivoice-tts / stt-turbo): the Amazon leg that refused `jarvis-hindsight` on
+05-11 does not exist here, and that refusal STILL STANDS for jarvis/Alexa. The
+identity-binding of `service-account-nova-atlassian` on the gateway side goes
+in the k8s-agentgateway config PR (precedent jarvis-echo,
+k8s-agentgateway-pocharlies#170).
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -176,6 +201,11 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, brain, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar. |
 | `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
+| `service-account-nova-atlassian` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: sus lecturas de Jira/Confluence por /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page). Exactamente agentgateway-read:atlassian y ningún agentgateway-write (veredicto INFRA-1248). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
+| `service-account-nova-hindsight-claude-personal` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: búsqueda semántica del banco `claude-personal` por /hindsight-claude-personal. Exactamente agentgateway-read:hindsight-claude-personal y ningún agentgateway-write (veredicto INFRA-1248; C1: con banco cargado ningún modelo fuera del clúster corre el turno, k8s-nova-pocharlies#40). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
+| `service-account-nova-hindsight-cloudblue` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: banco `cloudblue` por /hindsight-cloudblue. Exactamente agentgateway-read:hindsight-cloudblue y ningún agentgateway-write (veredicto INFRA-1248; su C1 satisface la restricción de proveedor del rol: Anthropic/local, nunca OpenAI/Alibaba). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
+| `service-account-nova-hindsight-personal` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: banco `personal` por /hindsight-personal en sus propias llamadas (la decisión de Dani del 03-11 acota los lectores humanos, no las identidades de servicio dedicadas). Exactamente agentgateway-read:hindsight-personal y ningún agentgateway-write (veredicto INFRA-1248; C1, k8s-nova-pocharlies#40). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
+| `service-account-nova-hindsight-tienda` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: banco `tienda` por /hindsight-tienda (veredicto INFRA-1248: la PII de clientes no sale del clúster — C1, k8s-nova-pocharlies#40 — y el TTS/STT de Nova son locales; la denegación del 05-11 sigue en pie para jarvis/Alexa). Exactamente agentgateway-read:hindsight-tienda y ningún agentgateway-write. Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
 | `service-account-openwebui-ios-owui` | sa | DevOps | activo | SA derivada del cliente confidencial `openwebui-ios-owui` (OWU-116, S1 de OWU-95): la identidad con la que Open WebUI se autentica ante Keycloak para validar el token del usuario (userinfo/introspección) en el exchange nativo de la app. Sin roles de realm. |
 | `service-account-synapse-draft-orchestrator` | sa | DevOps | activo | M2M de los borradores de Synapse; porta synapse-draft-m2m. |
@@ -821,6 +851,71 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "realm_roles": [
         "agentgateway-read:social",
         "agentgateway-read:workspace",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-nova-hindsight-tienda",
+      "type": "sa",
+      "client": "nova-hindsight-tienda",
+      "owner": "DevOps",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; condición vinculante C1 del veredicto: con banco cargado ningún modelo fuera del clúster corre el turno (k8s-nova-pocharlies#40)",
+      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova): búsqueda semántica sobre el banco `tienda` de Hindsight por AgentGateway /hindsight-tienda, en sus propias llamadas. Solo lectura: agentgateway-read:hindsight-tienda, ningún agentgateway-write (C2). El veredicto INFRA-1248 admite el banco con PII de clientes porque el TTS/STT de Nova son locales (sin pata Amazon) y C1 mantiene el contenido dentro del clúster; la denegación del 05-11 sigue en pie para jarvis/Alexa.",
+      "realm_roles": [
+        "agentgateway-read:hindsight-tienda",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-nova-hindsight-claude-personal",
+      "type": "sa",
+      "client": "nova-hindsight-claude-personal",
+      "owner": "DevOps",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; condición vinculante C1 del veredicto: con banco cargado ningún modelo fuera del clúster corre el turno (k8s-nova-pocharlies#40)",
+      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova): búsqueda semántica sobre el banco `claude-personal` de Hindsight por AgentGateway /hindsight-claude-personal (mismo vector de salida que tienda, misma condición C1). Solo lectura: agentgateway-read:hindsight-claude-personal, ningún agentgateway-write (C2).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-claude-personal",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-nova-hindsight-personal",
+      "type": "sa",
+      "client": "nova-hindsight-personal",
+      "owner": "DevOps",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; condición vinculante C1 del veredicto: con banco cargado ningún modelo fuera del clúster corre el turno (k8s-nova-pocharlies#40)",
+      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova): banco `personal` de Hindsight por AgentGateway /hindsight-personal, en sus propias llamadas (el perfil personal existe para las llamadas de Dani, decisión 09/10-11; la decisión del 03-11 acota los lectores humanos, no las identidades de servicio dedicadas — precedente secretarias y socialmedia-hindsight). Solo lectura: agentgateway-read:hindsight-personal, ningún agentgateway-write (C2); titular revisado del PostSync agentgateway-hindsight-personal-grants (wave 25).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-personal",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-nova-hindsight-cloudblue",
+      "type": "sa",
+      "client": "nova-hindsight-cloudblue",
+      "owner": "DevOps",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; condición vinculante C1 del veredicto: con banco cargado ningún modelo fuera del clúster corre el turno (k8s-nova-pocharlies#40)",
+      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova): banco `cloudblue` de Hindsight por AgentGateway /hindsight-cloudblue. Solo lectura: agentgateway-read:hindsight-cloudblue, ningún agentgateway-write (C2); C1 satisface la restricción de proveedor declarada del rol (contenido CloudBlue solo a identidades Anthropic/local). El grant lo posee su propio Job wave 24: el rol no tiene reconciliador de titulares (INFRA-974 lo dejó fuera de la matriz a propósito; precedente service-account-agentgateway-mac-cb).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-cloudblue",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-nova-atlassian",
+      "type": "sa",
+      "client": "nova-atlassian",
+      "owner": "DevOps",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; falta el identity-binding del sub en el gateway (k8s-agentgateway, precedente jarvis-echo k8s-agentgateway-pocharlies#170)",
+      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova) para sus lecturas de Jira/Confluence por AgentGateway /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page). Solo lectura: agentgateway-read:atlassian, ningún agentgateway-write (C2).",
+      "realm_roles": [
+        "agentgateway-read:atlassian",
         "default-roles-edani"
       ],
       "status": "activo"
