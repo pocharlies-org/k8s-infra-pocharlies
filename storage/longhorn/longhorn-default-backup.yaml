@@ -1,20 +1,26 @@
 ---
-# Credential for the DEFAULT Longhorn backup target on Sauvage MinIO (INFRA-1022 P2).
+# Credential for the DEFAULT Longhorn backup target on OVH Object Storage (INFRA-1175).
 #
-# The credential itself (1Password item `longhorn-default-backup`, vault
-# k8s-pocharlies) and the MinIO user with the scoped policy
-# storage/minio/longhorn-default-backup-policy.json are provisioned by security
-# (INFRA-1112). This file projects the credential into longhorn-system and owns
-# the `default` BackupTarget CR — the single source of truth for the default backup
-# target in Longhorn 1.13 (it is not a Setting and the values.yaml of this repo
-# are not rendered: the longhorn app reads its values from
-# k8s-gitops-pocharlies@deploy/prod). The transitional BackupTarget/minio-default-test
-# that lived here for the phase (b) drill was removed in phase (d) (2026-11-05);
-# ArgoCD prunes the live CR on sync. See runbook
-# docs/runbook-longhorn-default-backup-minio-cutover.md, phases a-e.
+# Cortado desde la MinIO de sauvage el 2026-11-10 al mismo almacen al que van Velero
+# (platform/velero/ovh-credentials.yaml) y Harbor (INFRA-482): region sbg, path-style,
+# usuario compartido `k8s-objectstore`. La credencial es el item de 1Password
+# `ovh-object-storage-s3` (vault k8s-pocharlies, campos access_key/secret_key);
+# AWS_ENDPOINTS no es un secreto: va literal en el template. Rotar = item nuevo del
+# lote semanal de security + reinicio del sync del BackupTarget (lee la credencial en
+# cada operacion).
 #
-# Pattern: storage/longhorn/openclaw-sauvage-backup-target.yaml (retired with
-# INFRA-993). Do NOT reuse `backup-user` (its policy is velero-backups/*).
+# This file projects the credential into longhorn-system and owns the `default`
+# BackupTarget CR — the single source of truth for the default backup target in
+# Longhorn 1.13 (it is not a Setting and the values.yaml of this repo are not
+# rendered: the longhorn app reads its values from
+# k8s-gitops-pocharlies@deploy/prod).
+#
+# Historia: INFRA-1022 P2 corto el default de NFS(x86) a MinIO con el item dedicado
+# `longhorn-default-backup` y el usuario acotado de
+# storage/minio/longhorn-default-backup-policy.json (runbook
+# docs/runbook-longhorn-default-backup-minio-cutover.md, fases a-e). Ese item y ese
+# usuario MinIO quedan vivos hasta que security los retire; el bucket
+# `longhorn-backups` de casa se conserva como evidencia historica — no borrar.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -26,11 +32,12 @@ metadata:
     app.kubernetes.io/managed-by: external-secrets
     app.kubernetes.io/part-of: longhorn
     backup.e-dani.com/scope: default
+    security.e-dani.com/rotation-class: object-storage
 spec:
   refreshInterval: 24h
   refreshPolicy: OnChange
   secretStoreRef:
-    name: onepassword
+    name: onepassword-connect
     kind: ClusterSecretStore
   target:
     name: longhorn-default-backup
@@ -44,38 +51,28 @@ spec:
           app.kubernetes.io/managed-by: external-secrets
           app.kubernetes.io/part-of: longhorn
           backup.e-dani.com/scope: default
+      data:
+        AWS_ACCESS_KEY_ID: "{{ .accessKey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .secretKey }}"
+        AWS_ENDPOINTS: "https://s3.sbg.io.cloud.ovh.net"
   data:
-    - secretKey: AWS_ACCESS_KEY_ID
+    - secretKey: accessKey
       remoteRef:
-        key: longhorn-default-backup/AWS_ACCESS_KEY_ID
-        conversionStrategy: Default
-        decodingStrategy: None
-        metadataPolicy: None
-        nullBytePolicy: Fail
-    - secretKey: AWS_SECRET_ACCESS_KEY
+        key: ovh-object-storage-s3
+        property: access_key
+    - secretKey: secretKey
       remoteRef:
-        key: longhorn-default-backup/AWS_SECRET_ACCESS_KEY
-        conversionStrategy: Default
-        decodingStrategy: None
-        metadataPolicy: None
-        nullBytePolicy: Fail
-    - secretKey: AWS_ENDPOINTS
-      remoteRef:
-        key: longhorn-default-backup/AWS_ENDPOINTS
-        conversionStrategy: Default
-        decodingStrategy: None
-        metadataPolicy: None
-        nullBytePolicy: Fail
+        key: ovh-object-storage-s3
+        property: secret_key
 ---
-# Default backup target (runbook phase c). In Longhorn 1.13 the default target is
-# this CR, not a Setting: it is the only mechanism that moves it (the values of
-# this repo are not rendered for it). The tracking-id adopts the live object,
-# which was created by Longhorn itself and carries none; ArgoCD then owns it.
-# Phase (d) removed minio-default-test, so this CR is the only target carrying
-# this URL and the Longhorn webhook validator stops rejecting the sync. Verify
-# after sync: `kubectl -n longhorn-system get backuptarget default -o
-# jsonpath='{.spec.backupTargetURL}'` returns the s3 URL, status.available is
-# true, and a test backup to `default` completes.
+# Default backup target. In Longhorn 1.13 the default target is this CR, not a
+# Setting: it is the only mechanism that moves it. The tracking-id adopts the live
+# object, which was created by Longhorn itself and carries none; ArgoCD then owns
+# it. The URL is unique among BackupTargets — the Longhorn webhook validator
+# rejects a sync while two targets share one URL (learned with minio-default-test,
+# phase d). Verify after sync: `kubectl -n longhorn-system get backuptarget default
+# -o jsonpath='{.spec.backupTargetURL}'` returns the s3 URL, status.available is
+# true, Unavailable=False, and a test backup to `default` completes.
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
 metadata:
@@ -88,6 +85,6 @@ metadata:
     app.kubernetes.io/part-of: longhorn
     backup.e-dani.com/scope: default
 spec:
-  backupTargetURL: s3://longhorn-backups@us-east-1/
+  backupTargetURL: s3://longhorn-backups-pocharlies@sbg/
   credentialSecret: longhorn-default-backup
   pollInterval: 5m0s

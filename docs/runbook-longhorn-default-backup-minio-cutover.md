@@ -1,5 +1,10 @@
 # Corte del backup-target default de Longhorn a MinIO (sauvage)
 
+> 2026-11-10 (INFRA-1175): el default se cortó después de MinIO a Object Storage de
+> OVH (`s3://longhorn-backups-pocharlies@sbg/`, credencial `ovh-object-storage-s3`).
+> Este runbook queda como el registro del corte a MinIO y de su método de verificación
+> (fases a–e), que la PR de OVH repite.
+
 Historia: INFRA-1100 (épica INFRA-1022, P2). Sustituye el destino default de copias
 de Longhorn — hoy el NFS `/srv/longhorn-backups` del nodo `ubuntu` — por
 `s3://longhorn-backups@us-east-1/` en la MinIO de `sauvage`, con credencial S3
