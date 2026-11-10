@@ -5,12 +5,19 @@ umask 077
 
 # Dedicated confidential client for the READ-ONLY Hindsight routes of
 # AgentGateway (SC-4304 S6, security's provisioning of 02-11-2026, narrowed on
-# 05-11-2026, widened for Nova on 10-11-2026). One script, the reviewed role
-# set fixed per CLIENT_ID from the immutable table below; the table has six
-# entries:
+# 05-11-2026, widened for Nova on 10-11-2026, widened for synapse on 10-11-2026).
+# One script, the reviewed role set fixed per CLIENT_ID from the immutable table
+# below; the table has seven entries:
 #   - socialmedia-hindsight: agentgateway-read:hindsight-personal — the
 #     whatsappmcp mcp-server (ns whatsapp-mcp) semantic search over the
 #     conversation memory it already retains into bank `personal`.
+#   - synapse-hindsight-personal: agentgateway-read:hindsight-personal — the
+#     dedicated reader identity of synapse-adapter-brain-summary (ns synapse):
+#     brain.summarize of tenant family reads bank `personal` through the fixed
+#     MCP route of synapse_shared.hindsight_reader (synapse#337), by security's
+#     verdict SC-5237 lifting the SC-4823/SC-4304 containment. Same door as
+#     socialmedia-hindsight and nova-hindsight-personal: the wave-25 grants hook
+#     owns the complete holder set and reviews this SA.
 #   - the five read-only identities of Nova (the voice agent, ns `nova`), each
 #     with ONLY its own read role, granted by security's verdict INFRA-1248
 #     (INFRA-1245, 10-11-2026):
@@ -50,8 +57,9 @@ umask 077
 #   - agentgateway-read:hindsight-personal is created by security (SC-4051)
 #     and its COMPLETE direct holder set is owned by
 #     agentgateway-hindsight-personal-grants (wave 25), whose reviewed set
-#     includes service-account-socialmedia-hindsight and, since INFRA-1245,
-#     service-account-nova-hindsight-personal (neither is in the read-grants
+#     includes service-account-socialmedia-hindsight, since INFRA-1245
+#     service-account-nova-hindsight-personal and, since SC-5237,
+#     service-account-synapse-hindsight-personal (none is in the read-grants
 #     matrix);
 #   - agentgateway-read:hindsight-tienda, :hindsight-claude-personal and
 #     :atlassian are shared route roles owned by agentgateway-read-grants
@@ -71,11 +79,13 @@ umask 077
 #
 # The client SECRET is not managed here: Keycloak generates it on creation and
 # security copies it to the 1Password item agentgateway-prod (vault
-# k8s-pocharlies), field socialmedia_hindsight_client_secret and, for the five
-# Nova identities, nova_hindsight_tienda_client_secret,
+# k8s-pocharlies), field socialmedia_hindsight_client_secret, for the five
+# Nova identities nova_hindsight_tienda_client_secret,
 # nova_hindsight_claude_personal_client_secret,
 # nova_hindsight_personal_client_secret, nova_hindsight_cloudblue_client_secret
-# and nova_atlassian_client_secret (RUNBOOK section 22). The consumer reads it
+# and nova_atlassian_client_secret, and for synapse
+# synapse_hindsight_personal_client_secret (RUNBOOK section 22). The consumer
+# reads it
 # from 1Password through its own ExternalSecret, never from this Job. The
 # token-mint verification reads it through the admin API and never prints it.
 
@@ -107,6 +117,9 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
 # empty: no identity here holds a write role at all.
 case "${CLIENT_ID}" in
   socialmedia-hindsight)
+    REVIEWED_ROLES="agentgateway-read:hindsight-personal"
+    ;;
+  synapse-hindsight-personal)
     REVIEWED_ROLES="agentgateway-read:hindsight-personal"
     ;;
   nova-hindsight-tienda)

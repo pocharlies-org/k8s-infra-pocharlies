@@ -10,7 +10,7 @@ umask 077
 # me@e-dani.com and lays84.mv@gmail.com, those two and nobody else; the other
 # seven Open WebUI users do not hold it.
 #
-# The reviewed holder set (the six grantees of ROLES.yaml):
+# The reviewed holder set (the seven grantees of ROLES.yaml):
 #   * service-account-hermes-secretaria and service-account-hermes-secretaria-
 #     casa — the Hermes secretarias read the personal bank (granted by the
 #     SC-4051 ruling; asserted here and re-granted if drift removed them);
@@ -27,6 +27,14 @@ umask 077
 #     k8s-nova-pocharlies#40). Same door as socialmedia-hindsight: the client
 #     is created at wave 24 by hindsight-reader-client.sh, so the account
 #     exists when this wave runs;
+#   * service-account-synapse-hindsight-personal — synapse-adapter-brain-summary
+#     (ns synapse): brain.summarize of tenant family reads the personal bank
+#     through the fixed MCP route of synapse_shared.hindsight_reader
+#     (synapse#337), by security's verdict SC-5237 of 10-11-2026 lifting the
+#     SC-4823/SC-4304 containment (the reader is read-only by construction:
+#     Literal URL and client_id, no tenant key, no write plane). Same door as
+#     socialmedia-hindsight: the client is created at wave 24 by
+#     hindsight-reader-client.sh, so the account exists when this wave runs;
 #   * the two humans, pinned by their immutable Keycloak subject (the `sub`
 #     every consumer binds on, OWU-80 precedent) with the username, the
 #     enabled flag and human-ness cross-checked before any write.
@@ -64,7 +72,7 @@ EXPECTED_ROLE_NAME="agentgateway-read:hindsight-personal"
 HUMAN_GRANTEE_IDS="e51253a7-c137-4c6c-9fb9-af9cecd3b147=me@e-dani.com 66ec6f4f-5f2c-44f6-a3db-0dccba6e1748=lays84.mv@gmail.com"
 # The reviewed service-account holders (SC-4051): asserted present, re-granted
 # if missing, never revoked by this hook.
-REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-socialmedia-hindsight,service-account-nova-hindsight-personal"
+REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-socialmedia-hindsight,service-account-nova-hindsight-personal,service-account-synapse-hindsight-personal"
 # The chat service account lost the grant in SC-4304 S6 (sidecar bypass,
 # header above). Its client's manual scope mapping is revoked with it.
 REVOKED_SERVICE_ACCOUNTS="service-account-chat-agentgateway"
@@ -225,7 +233,7 @@ reconcile_holders() {
   IFS="${old_ifs}"
   # 3. Exclusivity: every direct holder outside the reviewed set is revoked.
   # Bounded listing (same idiom as the read-grants hook): the reviewed set is
-  # six, so max=10 makes an extra, unauthorized holder visible.
+  # seven, so max=10 makes an extra, unauthorized holder visible.
   holders="$(kget "roles/${ROLE_NAME}/users" -q first=0 -q max=10 \
     --fields id,username --format csv --noquotes | nonempty_lines)"
   allowed="$(allowed_holder_ids)"
@@ -284,7 +292,7 @@ revoke_chat_client_scope_mapping() {
 }
 
 report() {
-  printf '{"realm":"%s","role":"%s","holders_reviewed":6,"changed":%s}\n' \
+  printf '{"realm":"%s","role":"%s","holders_reviewed":7,"changed":%s}\n' \
     "${REALM}" "${ROLE_NAME}" "$1"
 }
 

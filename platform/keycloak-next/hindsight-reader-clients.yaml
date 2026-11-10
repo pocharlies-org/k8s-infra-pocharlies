@@ -5,6 +5,13 @@
 #     (whatsappmcp mcp-server, ns whatsapp-mcp; semantic search over the
 #     conversation memory it already retains into that bank). Left after
 #     security's re-ruling of 05-11-2026 on SC-4304 S6.
+#   - synapse-hindsight-personal: agentgateway-read:hindsight-personal only
+#     (synapse-adapter-brain-summary, ns synapse; brain.summarize of tenant
+#     family reads bank `personal` through the fixed MCP route of
+#     synapse_shared.hindsight_reader, synapse#337), by security's verdict
+#     SC-5237 of 10-11-2026 lifting the SC-4823/SC-4304 containment. The
+#     consumer mounts its own ExternalSecret (k8s-synapse PR) once this Job
+#     has created the client and security has copied the secret to 1Password.
 #   - the five read-only identities of Nova (the voice agent, ns `nova`),
 #     granted by security's verdict INFRA-1248 (INFRA-1245, 10-11-2026), each
 #     with ONLY its own read role and no agentgateway-write of any kind (C2):
@@ -86,6 +93,92 @@ spec:
             - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
             - { name: REALM, value: edani }
             - { name: CLIENT_ID, value: socialmedia-hindsight }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-hindsight-reader-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# SC-5237 (security verdict, 10-11-2026): the dedicated reader identity of
+# synapse-adapter-brain-summary (ns synapse). brain.summarize of tenant family
+# reads bank `personal` through the fixed MCP route of
+# synapse_shared.hindsight_reader (synapse#337); the reader is read-only by
+# construction (Literal URL and client_id, no tenant key, no write plane) and
+# this credential opens exactly that bank. Through the wave-25 door: Dani's
+# 03-11 decision bounds the human readers, not dedicated service identities
+# (precedent socialmedia-hindsight, nova-hindsight-personal). The grant is
+# owned by this hook and by agentgateway-hindsight-personal-grants (wave 25),
+# whose reviewed holder set gains service-account-synapse-hindsight-personal —
+# without that entry wave 25 would revoke it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-synapse-hindsight-personal-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: synapse-hindsight-personal-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (20) that owns the roles and before the
+    # hindsight-personal grants hook (25), whose reviewed holder set includes
+    # this service account and so needs it to exist.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: synapse-hindsight-personal-client
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/hindsight-reader-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: synapse-hindsight-personal }
             - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
             - { name: MAPPER_NAME, value: aud-mcp }
             - { name: HOME, value: /tmp }

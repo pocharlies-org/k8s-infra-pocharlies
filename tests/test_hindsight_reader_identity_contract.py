@@ -49,9 +49,14 @@ CLIENTS = {
     "nova-hindsight-personal": [PERSONAL_ROLE],
     "nova-hindsight-cloudblue": [CLOUDBLUE_ROLE],
     "nova-atlassian": [ATLASSIAN_ROLE],
+    # SC-5237 (veredicto de security, 10-11-2026): la identidad de lectura de
+    # synapse-adapter-brain-summary (brain.summarize de family sobre el banco
+    # personal, synapse#337), misma puerta personal que socialmedia-hindsight.
+    "synapse-hindsight-personal": [PERSONAL_ROLE],
 }
 # Alta declarada ANTES de crear: socialmedia por el epic de SC-4304, las cinco
-# de Nova por INFRA-1245 (veredicto INFRA-1248).
+# de Nova por INFRA-1245 (veredicto INFRA-1248) y la de synapse por SC-5237
+# (veredicto de security que levanta la contención SC-4823/SC-4304).
 SOURCES = {
     "socialmedia-hindsight": "SC-4304",
     "nova-hindsight-tienda": "INFRA-1245",
@@ -59,6 +64,7 @@ SOURCES = {
     "nova-hindsight-personal": "INFRA-1245",
     "nova-hindsight-cloudblue": "INFRA-1245",
     "nova-atlassian": "INFRA-1245",
+    "synapse-hindsight-personal": "SC-5237",
 }
 # Retiradas por el veredicto de security de 05-11-2026: no deben existir.
 REFUSED_CLIENTS = ("jarvis-hindsight", "synapse-hindsight-tienda")
