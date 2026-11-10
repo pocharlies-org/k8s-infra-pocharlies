@@ -975,9 +975,9 @@ Kustomize the next PostSync re-applies the mapping; to retire the grant
 permanently, git revert the commit owning the reconciler (which also retires the
 `ROLES.yaml` / `PRINCIPALS.md` declarations) and let the next sync drop it.
 
-## 22. Hindsight read identities (`socialmedia-hindsight` + the five of Nova, SC-4304 S6 / INFRA-1245)
+## 22. Hindsight read identities (`socialmedia-hindsight` + the five of Nova + `synapse-hindsight-personal`, SC-4304 S6 / INFRA-1245 / SC-5237)
 
-`hindsight-reader-clients.yaml` (six PostSync Jobs, sync-wave 24) reconciles the
+`hindsight-reader-clients.yaml` (seven PostSync Jobs, sync-wave 24) reconciles the
 read-only Hindsight identities with `scripts/hindsight-reader-client.sh`, whose
 reviewed role set is fixed per `CLIENT_ID`; the flow is
 `keycloak-scoped-client-lib.sh`, shared with `hermes-enviar` and
@@ -986,6 +986,15 @@ reviewed role set is fixed per `CLIENT_ID`; the flow is
 - `socialmedia-hindsight`: `agentgateway-read:hindsight-personal` only — the
   whatsappmcp mcp-server (ns whatsapp-mcp) semantic message search over the
   conversation memory it already retains into bank `personal`.
+- `synapse-hindsight-personal`: `agentgateway-read:hindsight-personal` only —
+  synapse-adapter-brain-summary (ns synapse): `brain.summarize` of tenant
+  family reads bank `personal` through the fixed MCP route of
+  `synapse_shared.hindsight_reader` (synapse#337), by security's verdict
+  SC-5237 (10-11-2026), which lifts the fail-closed containment the SC-4304
+  manifest set until «autorización expresa de security»; the reader is
+  read-only by construction (Literal URL and client_id, no tenant key, no
+  write plane) and the consumer mounts its own ExternalSecret (k8s-synapse PR)
+  once this identity exists and the secret is in 1Password.
 - the five read-only identities of Nova (the voice agent, ns `nova`), granted by
   security's verdict INFRA-1248 (INFRA-1245, 10-11-2026), each with ONLY its own
   read role and nothing from the write family (verdict C2):
@@ -1038,8 +1047,9 @@ Keycloak generates the secret on creation. `security` copies it into the
 `nova_hindsight_tienda_client_secret`,
 `nova_hindsight_claude_personal_client_secret`,
 `nova_hindsight_personal_client_secret`,
-`nova_hindsight_cloudblue_client_secret` and `nova_atlassian_client_secret` —
-never printed, never committed. The consumer mounts its own ExternalSecret
+`nova_hindsight_cloudblue_client_secret`, `nova_atlassian_client_secret` and,
+for synapse, `synapse_hindsight_personal_client_secret` — never printed, never
+committed. The consumer mounts its own ExternalSecret
 against the same field (Connect form, `key: agentgateway-prod`,
 `property: <field>`), same idiom as the chat and synapse-sre clients; Nova's
 ExternalSecret (`nova-herramientas`, ns `nova`) is its own PR in

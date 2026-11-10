@@ -125,6 +125,21 @@ identity-binding of `service-account-nova-atlassian` on the gateway side goes
 in the k8s-agentgateway config PR (precedent jarvis-echo,
 k8s-agentgateway-pocharlies#170).
 
+SC-5237 (10-11-2026, security's verdict on the Request opened by the IT session
+of SC-5224) adds the 47th, `service-account-synapse-hindsight-personal`: the
+dedicated read-only identity of synapse-adapter-brain-summary (ns synapse).
+`brain.summarize` of tenant family reads bank `personal` through the fixed MCP
+route of `synapse_shared.hindsight_reader` (synapse#337); the reader is
+read-only by construction (Literal URL and client_id, no tenant key, no write
+plane) and the credential opens exactly that bank. Security's verdict lifts
+the fail-closed containment the SC-4304 manifest set until «autorización
+expresa de security» (SC-4823 Done alone did not); Dani's 03-11 decision bounds
+the human readers, not dedicated service identities (precedent
+socialmedia-hindsight, nova-hindsight-personal). Like the other readers it is
+NOT adopted: its PostSync (`hindsight-reader-clients.yaml`,
+`scripts/hindsight-reader-client.sh`) creates it in the same sync that ships
+this entry, and `keycloak-role-drift` reports it until the hook finishes.
+
 ## Rules
 
 - **One entry per live principal, and no entry without one.** A new user or
@@ -209,6 +224,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-openclaw-readonly-agentgateway` | sa | DevOps | activo | Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send. |
 | `service-account-openwebui-ios-owui` | sa | DevOps | activo | SA derivada del cliente confidencial `openwebui-ios-owui` (OWU-116, S1 de OWU-95): la identidad con la que Open WebUI se autentica ante Keycloak para validar el token del usuario (userinfo/introspección) en el exchange nativo de la app. Sin roles de realm. |
 | `service-account-synapse-draft-orchestrator` | sa | DevOps | activo | M2M de los borradores de Synapse; porta synapse-draft-m2m. |
+| `service-account-synapse-hindsight-personal` | sa | DevOps | activo | Identidad de solo lectura de synapse-adapter-brain-summary (ns synapse) ante AgentGateway: brain.summarize del tenant family lee el banco `personal` por /hindsight-personal (ruta MCP fija de synapse_shared.hindsight_reader, synapse#337), veredicto SC-5237 que levanta la contención SC-4823/SC-4304. Exactamente agentgateway-read:hindsight-personal y ningún agentgateway-write. Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
 | `service-account-synapse-sre-orchestrator` | sa | DevOps | activo | M2M del orquestador SRE de Synapse; porta synapse-sre-m2m y cto-office-send. |
 
 ## Contract block
@@ -916,6 +932,19 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova) para sus lecturas de Jira/Confluence por AgentGateway /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page). Solo lectura: agentgateway-read:atlassian, ningún agentgateway-write (C2).",
       "realm_roles": [
         "agentgateway-read:atlassian",
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "service-account-synapse-hindsight-personal",
+      "type": "sa",
+      "client": "synapse-hindsight-personal",
+      "owner": "DevOps",
+      "source": "SC-5237 (veredicto de security, 10-11-2026, Request de la sesión it de SC-5224); platform/keycloak-next/hindsight-reader-clients.yaml; contención SC-4823/SC-4304 del manifiesto deployment-adapter-brain-summary.yaml (k8s-synapse-pocharlies@deploy/prod)",
+      "purpose": "Identidad M2M de solo lectura de synapse-adapter-brain-summary (ns synapse): brain.summarize del tenant family lee el banco `personal` de Hindsight por la ruta MCP fija /hindsight-personal de synapse_shared.hindsight_reader (synapse#337), levantando la contención fail-closed que SC-4304 dejó puesta hasta autorización expresa de security. El reader es de solo lectura por construcción (URL y client literales, sin clave de tenant, sin plano de escritura). Solo lectura: agentgateway-read:hindsight-personal, ningún agentgateway-write; titular revisado del PostSync agentgateway-hindsight-personal-grants (wave 25). La credencial la copia security a 1Password (item agentgateway-prod, campo synapse_hindsight_personal_client_secret) tras el primer sync; el consumidor la monta con su propio ExternalSecret (PR de k8s-synapse).",
+      "realm_roles": [
+        "agentgateway-read:hindsight-personal",
         "default-roles-edani"
       ],
       "status": "activo"
