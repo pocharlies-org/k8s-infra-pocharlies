@@ -45,7 +45,14 @@ kubelet-arg:
   # thresholds competed with the control-plane processes.
   - system-reserved=cpu=1,memory=6Gi
   - kube-reserved=cpu=500m,memory=1Gi
-  - eviction-hard=memory.available<1Gi
+  # Setting eviction-hard replaces the kubelet's whole default map, so a
+  # memory-only value silently drops the disk thresholds: since dbebbe8da a
+  # full / on these nodes evicts nothing and never sets DiskPressure (INFRA-1006:
+  # ks5-cp-3 filled up on 16/10, image-GC freed 0 bytes and shared-rabbitmq
+  # pods could not reschedule for 7 h). Restore the kubelet default disk
+  # thresholds next to the memory reservation; the NodeRootDiskLowOrFilling
+  # alert (INFRA-1025) still fires first, at 20 % free.
+  - eviction-hard=nodefs.available<10%,imagefs.available<15%,memory.available<1Gi
 node-label:
   - ingress=true
   - workload=core
