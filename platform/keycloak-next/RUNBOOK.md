@@ -577,6 +577,15 @@ kubectl logs -n keycloak job/keycloak-agentgateway-read-grants   # agentgateway-
 
 ## 15. Realm drift sweep (`keycloak-role-drift`, INFRA-250)
 
+**Triaje (SC-5217):** antes de tratar una ejecución roja del drift como
+problema del realm, comprobar si el sync está bloqueado:
+`kubectl get jobs -n keycloak --sort-by=.metadata.creationTimestamp | grep -i failed`
+y el estado de la app `k8s-infra` en ArgoCD. Un hook PostSync fallido
+(wave 22) bloquea los jobs wave-24 que crean las identidades declaradas
+en `PRINCIPALS.md`: el drift es el síntoma, no la causa. Instancia
+conocida (SC-5217, 10/11): PUT del mapper sin `id` en el cuerpo →
+HTTP 500; arreglado en k8s-infra#487.
+
 The rule that keeps this sweep green (SC-4414, forma operativa SC-5171): la
 emisión de cualquier client, rol o principal del realm edani ocurre dentro del
 job reconciler de la PR que lo declara — la llamada a la Admin API ocurre
