@@ -127,6 +127,23 @@ spec:
         - name: dgx-messages
           namespace: messages
           port: http
+    # DGX-1539: /api/identidad (con qué usuario está la sesión) solo lee el Bearer verificado
+    # (DGX-807) y la 300 de DGX-1314 estampa cabeceras, que el backend no cree: sin sso-chain el
+    # chip de la app diría «cuenta» siempre. Como Nova (420): strip + sso-chain + prueba de borde.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && Path(`/api/identidad`)
+      priority: 430
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # INFRA-1247 (Dani, 10-11): el panel de Nova sí pide Keycloak en LAN y tailnet, a diferencia del resto (DGX-1314).
     # Su backend (/api/nova, ESCRITURA_CLUSTER) solo cree en el JWT (DGX-807) y la 300 no lo trae; sso-chain lo pone.
     # Va la página (/nova, la pantalla Expo) para que la carga lleve al login, y la API entera (todos los métodos):
