@@ -127,6 +127,25 @@ spec:
         - name: dgx-messages
           namespace: messages
           port: http
+    # INFRA-1247 (Dani, 10-11): el panel de Nova sí pide Keycloak en LAN y tailnet, a diferencia del resto (DGX-1314).
+    # Su backend (/api/nova, ESCRITURA_CLUSTER) solo cree en el JWT (DGX-807) y la 300 no lo trae; sso-chain lo pone.
+    # Va la página (/nova, la pantalla Expo) para que la carga lleve al login, y la API entera (todos los métodos):
+    # crea un pod que entra en un Meet con la cuenta de Google de Nova y el estado es la transcripción (security).
+    # La app del iPhone manda su propio Bearer (cliente dgx-app), que oauth2-proxy acepta.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`))
+      priority: 420
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # dgx.lan.e-dani.com resolves publicly to the LAN VIP (DoH-proof, unlike the
     # AdGuard rewrite of dgx.e-dani.com that DoH clients skip), so LAN/Tailscale
     # browsers land here without Cloudflare/Keycloak. Same ClientIP gate.
