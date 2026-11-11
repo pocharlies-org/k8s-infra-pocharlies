@@ -40,7 +40,7 @@ spec:
       # INFRA-942 (2026-10-26): 4GB -> 6GB y effective_cache_size 7GB -> 18GB con el límite a 24Gi. Los índices
       # HNSW por banco de Hindsight (personal 6,2 GB, claude-personal 2,5 GB…) no cabían en 10Gi y el recall leía de
       # disco (IO/DataFileRead de 11 s por consulta). Lo que no es shared_buffers queda como caché de páginas del SO.
-      max_connections: "400"
+      max_connections: "500"
       shared_buffers: "6GB"
       effective_cache_size: "18GB"
       work_mem: "32MB"
