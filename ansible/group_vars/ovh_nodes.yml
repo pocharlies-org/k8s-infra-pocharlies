@@ -13,3 +13,20 @@
 harbor_registries_enabled: true
 harbor_registries_lookup_cmd: op-secret "op://k8s-pocharlies/infra-harbor-k8s-runtime-pull/dockerconfigjson"
 harbor_registries_auth_host: harbor.e-dani.com
+
+# INFRA-1099 ronda 2 (INFRA-1022 C1 · INFRA-1276): el espejo del registries
+# apunta a https://harbor.e-dani.com, pero el DNS del tailnet (MagicDNS ->
+# AdGuard de casa) responde 192.168.50.240 (el Traefik LAN de la casa)
+# tambien por ese nombre: con la casa inaccesible el pull de una imagen no
+# cacheada cae en dial tcp 192.168.50.240 (salida literal en INFRA-1276).
+# Las tareas del rol fijan el nombre del destino del espejo al borde publico
+# en /etc/hosts de los nodos del grupo (bloque marcado
+# "# BEGIN/END INFRA-1099 harbor-publico", idempotente por las dos vias de
+# escritura). Las IPs son las del proxy de Cloudflare que sirve e-dani.com
+# (medidas 2026-11-11 con `dig +short harbor.e-dani.com @1.1.1.1`);
+# Cloudflare puede rotarlas: re-verificar y actualizar la lista tras una
+# incidencia de pull (docs/runbook-harbor-registries-ovh.md).
+harbor_public_hostname: harbor.e-dani.com
+harbor_public_edge_ips:
+  - 104.21.78.58
+  - 172.67.217.54

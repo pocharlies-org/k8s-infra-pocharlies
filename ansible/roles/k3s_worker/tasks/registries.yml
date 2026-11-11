@@ -133,3 +133,121 @@
   when:
     - harbor_registries_enabled | default(false) | bool
     - registries_write_via_docker | default(false) | bool
+
+# --- /etc/hosts pin to the public edge (INFRA-1099 ronda 2 · INFRA-1276) ----
+# The mirror separates the name from the destination, but the destination is
+# resolved by DNS: tailnet DNS (MagicDNS -> AdGuard de casa) answers
+# 192.168.50.240 (the house Traefik LAN) also for harbor.e-dani.com, so with
+# the house unreachable an uncached pull dies in dial tcp 192.168.50.240
+# (literal output in INFRA-1276). This block pins the mirror destination name
+# to the public edge in /etc/hosts, marker-managed. containerd resolves on
+# every pull, so changing the pin needs no k3s/k3s-agent restart (unlike
+# registries.yaml). The IPs live in harbor_public_edge_ips
+# (ansible/playbooks/group_vars/ovh_nodes.yml).
+
+- name: Compose the harbor hosts pin lines
+  ansible.builtin.set_fact:
+    harbor_hosts_pin_lines: >-
+      {{ harbor_public_edge_ips | product([harbor_public_hostname])
+         | map('join', ' ') | join('\n') }}
+  when: harbor_registries_enabled | default(false) | bool
+
+- name: Pin harbor.e-dani.com to the public edge in /etc/hosts
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} INFRA-1099 harbor-publico"
+    block: "{{ harbor_hosts_pin_lines }}"
+    create: false
+  become: true
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - not (registries_write_via_docker | default(false) | bool)
+
+# Pin for the sudoless path (sauvage, INFRA-937): same render/stage/docker
+# pattern as registries.yaml. /etc/hosts arrives as a file bind mount, so the
+# replacement is written in place (mv onto a file mount point gives EBUSY).
+
+- name: Create control-host harbor hosts render directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ harbor_hosts_render_dir }}"
+    state: directory
+    mode: "0700"
+  vars:
+    harbor_hosts_render_dir: "/tmp/infra1099-hosts-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Render harbor hosts pin on the control host
+  delegate_to: localhost
+  become: false
+  ansible.builtin.copy:
+    content: |
+      # BEGIN INFRA-1099 harbor-publico
+      {{ harbor_hosts_pin_lines }}
+      # END INFRA-1099 harbor-publico
+    dest: "{{ harbor_hosts_render_dir }}/pin"
+    mode: "0600"
+  vars:
+    harbor_hosts_render_dir: "/tmp/infra1099-hosts-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Stage rendered harbor hosts pin on the node
+  ansible.builtin.copy:
+    src: "{{ harbor_hosts_render_dir }}/pin"
+    dest: "/tmp/infra1099-hosts-{{ inventory_hostname }}.txt"
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+  vars:
+    harbor_hosts_render_dir: "/tmp/infra1099-hosts-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Pin harbor.e-dani.com in /etc/hosts on the node via docker (idempotent)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      sudo -n docker run --rm \
+        -v /etc/hosts:/out/hosts \
+        -v "/tmp/infra1099-hosts-{{ inventory_hostname }}.txt:/in/pin:ro" \
+        alpine:3.20 sh -c '
+          f=/out/hosts
+          cur=$(sed -n "/# BEGIN INFRA-1099 harbor-publico/,/# END INFRA-1099 harbor-publico/p" "$f")
+          new=$(cat /in/pin)
+          if [ "$cur" = "$new" ]; then echo hosts-unchanged; exit 0; fi
+          awk "/# BEGIN INFRA-1099 harbor-publico/{d=1} !d{print} /# END INFRA-1099 harbor-publico/{d=0}" "$f" > /tmp/hosts.new
+          cat /in/pin >> /tmp/hosts.new
+          cat /tmp/hosts.new > "$f"
+          rm -f /tmp/hosts.new
+          echo hosts-changed'
+  register: harbor_hosts_docker_write
+  changed_when: "'hosts-changed' in harbor_hosts_docker_write.stdout"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Remove staged harbor hosts file from the node
+  ansible.builtin.file:
+    path: "/tmp/infra1099-hosts-{{ inventory_hostname }}.txt"
+    state: absent
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
+
+- name: Remove control-host harbor hosts render directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ harbor_hosts_render_dir }}"
+    state: absent
+  vars:
+    harbor_hosts_render_dir: "/tmp/infra1099-hosts-{{ inventory_hostname }}"
+  when:
+    - harbor_registries_enabled | default(false) | bool
+    - registries_write_via_docker | default(false) | bool
