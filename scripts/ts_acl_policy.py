@@ -7,8 +7,8 @@ OAuth client with scopes policy_file:write + devices:core:write — NOT the
 auth-key client (.ts-oauth-id / .ts-oauth-secret), which cannot touch the
 policy file.
 
-Credentials are read from files (mode 0600), never from argv, following the
-pattern of ts_mint_authkey.py:
+Credentials are read from files (mode 0600), never from argv, reusing the
+helpers of ts_mint_authkey.py:
   TS_ACL_OAUTH_ID_FILE     (default /home/dibanez/k8s/.ts-oauth-acl-id)
   TS_ACL_OAUTH_SECRET_FILE (default /home/dibanez/k8s/.ts-oauth-acl-secret)
 or directly from env TS_ACL_OAUTH_CLIENT_ID / TS_ACL_OAUTH_CLIENT_SECRET.
@@ -29,31 +29,16 @@ Logs go to stderr; the policy body goes to stdout only, so the caller can do:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
+from ts_mint_authkey import access_token, log, read_cred
+
 BASE = "https://api.tailscale.com/api/v2"
 DEFAULT_SLUG = "e-dani.com"
-
-
-def log(msg: str) -> None:
-    print(msg, file=sys.stderr)
-
-
-def read_cred(env_name: str, file_env: str, default_file: str) -> str:
-    val = os.environ.get(env_name)
-    if val:
-        return val.strip()
-    path = os.environ.get(file_env, default_file)
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except OSError as exc:
-        raise SystemExit(f"Missing credential: set {env_name} or {file_env} ({path}): {exc}")
 
 
 def api(method: str, path: str, token: str, body: bytes | None = None) -> bytes:
@@ -70,23 +55,10 @@ def api(method: str, path: str, token: str, body: bytes | None = None) -> bytes:
         raise SystemExit(f"{method} {path} failed {exc.code}: {exc.read().decode()[:300]}")
 
 
-def token(client_id: str, client_secret: str) -> str:
-    data = urllib.parse.urlencode({"client_id": client_id, "client_secret": client_secret}).encode()
-    req = urllib.request.Request(
-        BASE + "/oauth/token", data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.load(r)["access_token"]
-    except urllib.error.HTTPError as exc:
-        raise SystemExit(f"OAuth token exchange failed {exc.code}: {exc.read().decode()[:300]}")
-
-
 def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "get"
     slug = os.environ.get("TS_TAILNET_SLUG", DEFAULT_SLUG)
-    tok = token(
+    tok = access_token(
         read_cred("TS_ACL_OAUTH_CLIENT_ID", "TS_ACL_OAUTH_ID_FILE", "/home/dibanez/k8s/.ts-oauth-acl-id"),
         read_cred("TS_ACL_OAUTH_CLIENT_SECRET", "TS_ACL_OAUTH_SECRET_FILE", "/home/dibanez/k8s/.ts-oauth-acl-secret"),
     )
