@@ -31,17 +31,17 @@ spec:
 ---
 # Umbrales, y por qué estos:
 #
-#   max_connections = 400 (por instancia).
+#   max_connections = 500 (por instancia; SC-5295 2026-11-11, antes 400).
 #
-#   Tras el saneamiento del 28-07-2026 el régimen normal está en ~200, de las
-#   que ~105 son la flota Synapse (45 pods con pools explícitos y acotados) y el
-#   resto consumidores ya limitados. 240 (60%) es por tanto "algo ha crecido de
-#   más"; 300 (75%) es el techo que un rolling update no debe superar y coincide
-#   con el criterio de aceptación del incidente.
+#   Régimen medido el 2026-11-11 tras sanear conexiones ociosas >12 h: ~250
+#   backends legítimos (pools estables de keep, synapse_adapter, litellm,
+#   skirmshop apps, hindsight, teslamate…), ~50% del límite: lo que asumen los
+#   umbrales. 300 (60%) es por tanto "algo ha crecido de más"; 375 (75%) es el
+#   techo que un rolling update no debe superar.
 #
 # La división es `on(pod)` a propósito: max_connections es un límite POR
 # INSTANCIA, así que agregar las conexiones de primary y réplica y compararlas
-# contra un solo 400 daría un porcentaje sin sentido.
+# contra un solo límite daría un porcentaje sin sentido.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
