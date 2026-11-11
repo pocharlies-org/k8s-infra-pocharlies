@@ -1,0 +1,50 @@
+{
+  "gh api repos/pocharlies-org/aaa-docs/contents/notes.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bmFtZTogbm90YXM6IGhvbWVsYWIvc2ltcGxlLWFwcCBlcyBkb2N1bWVudGFsLCBubyBlcyB1biB3b3JrZmxvdyBkZSBidWlsZAo=\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/dgx-infra/contents/.github/workflows/build-simple.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bmFtZTogYnVpbGQgc2ltcGxlCm9uOiB3b3JrZmxvd19kaXNwYXRjaAplbnY6CiAgSU1BR0U6IGhvbWVsYWIvc2ltcGxlLWFwcAo=\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/dgx-infra/contents/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBhbHBpbmU6My4yMAo=\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/ghcr-app": {
+    "returncode": 0,
+    "stdout": "{\"default_branch\": \"main\"}"
+  },
+  "gh api repos/pocharlies-org/ghcr-app/contents/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBkb2NrZXIuaW8vbGlicmFyeS9weXRob246My4xMi1zbGltCg==\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/k8s-infra-pocharlies/contents/.github/workflows/build-multi-arch.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bmFtZTogYnVpbGQgbXVsdGktYXJjaApvbjogd29ya2Zsb3dfZGlzcGF0Y2gKZW52OgogIElNQUdFOiBob21lbGFiL211bHRpLWFyY2gtYXBwCiAgRE9DS0VSRklMRTogZG9ja2VyL0RvY2tlcmZpbGUK\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/k8s-infra-pocharlies/contents/docker/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBoYXJib3IuZS1kYW5pLmNvbS9ob21lbGFiL2Jhc2UtcHl0aG9uOjMuMTIKUlVOIGVjaG8gaG9sYQo=\", \"encoding\": \"base64\"}"
+  },
+  "gh api repos/pocharlies-org/upstream-mirror": {
+    "returncode": 1,
+    "stdout": ""
+  },
+  "gh search code homelab/multi-arch-app --owner pocharlies-org --extension yml --json repository path --limit 5": {
+    "returncode": 0,
+    "stdout": "[{\"repository\": {\"nameWithOwner\": \"pocharlies-org/k8s-infra-pocharlies\", \"isPrivate\": true}, \"path\": \".github/workflows/build-multi-arch.yml\"}]"
+  },
+  "gh search code homelab/simple-app --owner pocharlies-org --extension yml --json repository path --limit 5": {
+    "returncode": 0,
+    "stdout": "[{\"repository\": {\"nameWithOwner\": \"pocharlies-org/aaa-docs\", \"isPrivate\": true}, \"path\": \"notes.yml\"}, {\"repository\": {\"nameWithOwner\": \"pocharlies-org/dgx-infra\", \"isPrivate\": true}, \"path\": \".github/workflows/build-simple.yml\"}]"
+  },
+  "gh search code homelab/sin-dato-app --owner pocharlies-org --extension yml --json repository path --limit 5": {
+    "returncode": 0,
+    "stdout": "[]"
+  },
+  "gh search code homelab/single-plat-app --owner pocharlies-org --extension yml --json repository path --limit 5": {
+    "returncode": 0,
+    "stdout": "[]"
+  }
+}
