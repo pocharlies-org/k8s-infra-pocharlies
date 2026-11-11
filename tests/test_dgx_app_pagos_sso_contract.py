@@ -79,7 +79,12 @@ class PagosSSOContract(unittest.TestCase):
         self._assert_protected(_docs(EDGE), "edge-dgx-dashboard-public", 400, "traefik-edge")
 
     def test_ninguna_ruta_de_mas_prioridad_cubre_api_app(self):
-        """Arriba del 400 solo vive la regla /messages (450): no puede tragar /api/app/*."""
+        """Arriba del 400 ninguna regla puede llevarse /api/app/* SIN exigir sesión.
+
+        Lo que se prohíbe es el bypass: una regla de más prioridad que se lleve la superficie de la
+        app sin `sso-chain` la dejaría en la 300 de DGX-1314 (identidad estampada, sin JWT). SC-5366
+        añade la 415 de la LAN, que cubre `/api/app/alarma` justamente para exigir sso-chain (su
+        guarda lee solo el JWT verificado, DGX-807): no sombrea el control set, lo refuerza."""
         for docs, name in ((_docs(LAN), "lan-dgx-dashboard-public-host"),
                            (_docs(EDGE), "edge-dgx-dashboard-public")):
             for doc in docs:
@@ -87,6 +92,8 @@ class PagosSSOContract(unittest.TestCase):
                     continue
                 for route in doc["spec"]["routes"]:
                     if route.get("priority", 0) > 400:
+                        if "sso-chain" in [m["name"] for m in route.get("middlewares", [])]:
+                            continue
                         for prefix in ("/api/app", "/api/hermes-panel"):
                             self.assertNotIn(prefix, route["match"],
                                              f"{name}@{route.get('priority')} would shadow the control set")
