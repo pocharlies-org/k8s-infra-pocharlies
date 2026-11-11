@@ -144,9 +144,16 @@ def reintentar_export(runner, cmd):
 
 
 def partir_ref(ref):
-    """(repo, sufijo) con sufijo '@sha256:...' o ':tag' o ''."""
+    """(repo, sufijo) con sufijo '@sha256:...' o ':tag' o ''.
+
+    Un ref del cluster puede llevar tag Y digest a la vez (p. ej.
+    homelab/x:fork-75b583e@sha256:..., medido 11-11): el tag se quita tambien
+    del repo para que el repo logico quede limpio."""
     if "@" in ref:
         repo, digest = ref.rsplit("@", 1)
+        sep = repo.rfind(":")
+        if sep > repo.rfind("/"):
+            repo = repo[:sep]
         return repo, "@" + digest
     sep = ref.rfind(":")
     if sep > ref.rfind("/"):
@@ -232,44 +239,64 @@ def leer_contenido(runner, repo, ruta):
         return None
 
 
-def buscar_workflow(runner, nombre):
-    """Los workflows de build declaran envs IMAGE:/DOCKERFILE: (verificado en dgx-infra).
-
-    Con la CLI real (gh 2.103, medido 11-11): el filtro de organizacion es
-    `--owner` (no existe `--org`) y el motor legacy de code search no casa la
-    frase exacta "IMAGE: homelab/x"; se busca el path `homelab/<nombre>` en
-    ficheros .yml y se VERIFICA en el contenido la linea `IMAGE: homelab/<nombre>`.
-    Devuelve el primer candidato verificado (orden determinista) o None.
-    """
-    pacear_busqueda(runner)
-    rc, out = reintentar(runner, ["gh", "search", "code", "homelab/{}".format(nombre),
-                                  "--owner", "pocharlies-org", "--extension", "yml",
-                                  "--json", "repository", "path", "--limit", "5"])
+def listar_workflows(runner, repo_gh):
+    """Nombres de los ficheros .github/workflows de un repo ([] si no hay)."""
+    rc, out = reintentar(runner, ["gh", "api",
+                                  "repos/pocharlies-org/{}/contents/.github/workflows"
+                                  .format(repo_gh)])
     if rc != 0:
-        return None
+        return []
     try:
-        resultados = json.loads(out)
+        entradas = json.loads(out)
     except ValueError:
-        return None
-
-    def clave(r):
-        return (r.get("repository", {}).get("nameWithOwner", ""), r.get("path", ""))
-
-    vistos, candidatos = set(), []
-    for r in sorted(resultados, key=clave):
-        if clave(r)[0] and clave(r) not in vistos:
-            vistos.add(clave(r))
-            candidatos.append(clave(r))
-    for repo_wf, ruta_wf in candidatos:
-        contenido_wf = leer_contenido(runner, repo_wf, ruta_wf) or ""
-        if re.search(r"^\s*IMAGE:\s*homelab/{}\s*$".format(re.escape(nombre)),
-                     contenido_wf, re.M):
-            return {"repository": {"full_name": repo_wf}, "path": ruta_wf,
-                    "contenido": contenido_wf}
-    return None
+        return []
+    if not isinstance(entradas, list):
+        return []
+    return sorted(e["name"] for e in entradas
+                  if isinstance(e, dict) and e.get("type") == "file"
+                  and str(e.get("name", "")).endswith((".yml", ".yaml")))
 
 
-def resolver_dockerfile(runner, repo):
+def mapa_de_workflows(runner):
+    """nombre de imagen homelab -> [(repo, workflow, dockerfile declarado), ...].
+
+    Recorre los workflows de build de la organizacion UNA vez (gh api, limite
+    core) en lugar de `gh search code` por imagen. Medido 11-11 con la CLI real
+    (gh 2.103): el motor legacy de code search no es fiable en vivo — devuelve
+    [] para `homelab/blog` y hits con path vacio para `homelab/dgx-dashboard-backend`
+    (que si existe: dgx-infra/.github/workflows/build-dashboard-backend.yml).
+    La fuente de verdad es la misma que fija el spec: los envs IMAGE:/DOCKERFILE:
+    que declaran los workflows de build.
+    """
+    rc, out = reintentar(runner, ["gh", "api", "orgs/pocharlies-org/repos?per_page=100",
+                                  "--paginate", "--jq", ".[].name"])
+    if rc != 0:
+        return {}
+    nombres = [n.strip() for n in out.splitlines() if n.strip()]
+
+    def explorar(repo_gh):
+        pares = []
+        for fich in listar_workflows(runner, repo_gh):
+            ruta_wf = ".github/workflows/" + fich
+            contenido = leer_contenido(runner, "pocharlies-org/" + repo_gh, ruta_wf) or ""
+            m_img = re.search(r"^\s*IMAGE:\s*(\S+)\s*$", contenido, re.M)
+            if not m_img or not m_img.group(1).startswith("homelab/"):
+                continue
+            m_df = re.search(r"^\s*DOCKERFILE:\s*(\S+)\s*$", contenido, re.M)
+            pares.append((m_img.group(1)[len("homelab/"):],
+                          ("pocharlies-org/" + repo_gh, ruta_wf,
+                           m_df.group(1) if m_df else "Dockerfile")))
+        return pares
+
+    mapa = {}
+    with ThreadPoolExecutor(max_workers=TRABAJADORES) as pozo:
+        for pares in pozo.map(explorar, nombres):
+            for nombre, datos in pares:
+                mapa.setdefault(nombre, set()).add(datos)
+    return {k: sorted(v) for k, v in sorted(mapa.items())}
+
+
+def resolver_dockerfile(runner, repo, mapa):
     """(dockerfile, contenido, workflow). dockerfile None = ghcr sin repo GitHub (espejo)."""
     if repo.startswith(GHCR_ORG + "/"):
         nombre = repo[len(GHCR_ORG) + 1:]
@@ -295,14 +322,11 @@ def resolver_dockerfile(runner, repo):
             contenido = leer_contenido(runner, "pocharlies-org/" + nombre, ruta)
         return "pocharlies-org/{}:{}".format(nombre, ruta), contenido, None
     nombre = repo.split("/homelab/", 1)[1]
-    hit = buscar_workflow(runner, nombre)
-    if hit is None:
+    candidatos = mapa.get(nombre)
+    if not candidatos:
         return ({"sin_dato": 'sin workflow de build que declare "IMAGE: homelab/{}" '
                             'en pocharlies-org'.format(nombre)}, None, None)
-    repo_wf = hit["repository"]["full_name"]
-    ruta_wf = hit["path"]
-    m = re.search(r"^\s*DOCKERFILE:\s*(\S+)\s*$", hit["contenido"], re.M)
-    ruta_df = m.group(1) if m else "Dockerfile"
+    repo_wf, ruta_wf, ruta_df = candidatos[0]
     return ("{}:{}".format(repo_wf, ruta_df),
             leer_contenido(runner, repo_wf, ruta_df),
             "{}:{}".format(repo_wf, ruta_wf))
@@ -404,14 +428,14 @@ def resolver_tamanos(runner, ref, host_arq):
     return resuelta, plataforma, comprimido, descomprimido, capas_top, build_fecha
 
 
-def entrada_de(runner, repo, sufijos, consumidores, host_arq):
+def entrada_de(runner, repo, sufijos, consumidores, host_arq, mapa):
     patron = espejo_conocido(repo)
     if patron:
         return {"clase": "espejo",
                 "origen": "upstream {} espejado en el registro propio".format(patron),
                 "repo": repo, "refs": sorted(sufijos),
                 "deployments": sorted(consumidores)}
-    dockerfile, contenido_df, workflow = resolver_dockerfile(runner, repo)
+    dockerfile, contenido_df, workflow = resolver_dockerfile(runner, repo, mapa)
     if dockerfile is None:  # ghcr.io/pocharlies-org/<x> sin repositorio GitHub homonimo
         return {"clase": "espejo",
                 "origen": "el repositorio GitHub pocharlies-org/{} no existe: espejo de un upstream"
@@ -443,7 +467,7 @@ def entrada_de(runner, repo, sufijos, consumidores, host_arq):
     return entrada
 
 
-def inventario(doc, runner, host_arq):
+def inventario(doc, runner, host_arq, mapa):
     por_repo = {}
     for ref, consumidor in consumidores_de(doc):
         if not dentro_de_alcance(ref):
@@ -457,7 +481,8 @@ def inventario(doc, runner, host_arq):
     items = sorted(por_repo.items())
     with ThreadPoolExecutor(max_workers=TRABAJADORES) as pozo:
         entradas = list(pozo.map(
-            lambda kv: entrada_de(runner, kv[0], kv[1]["sufijos"], kv[1]["consumidores"], host_arq),
+            lambda kv: entrada_de(runner, kv[0], kv[1]["sufijos"], kv[1]["consumidores"],
+                                  host_arq, mapa),
             items))
     return sorted(entradas, key=lambda e: e["repo"])
 
@@ -526,7 +551,8 @@ def main(argv=None):
                 return 1
             doc = json.loads(out)
 
-    inv = inventario(doc, runner, host_arq)
+    mapa = mapa_de_workflows(runner)
+    inv = inventario(doc, runner, host_arq, mapa)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "inventario.json").write_text(
