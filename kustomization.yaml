@@ -78,6 +78,7 @@ resources:
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
   - platform/reflector/rbac.yaml
+  - platform/arc/rbac-hermes-despliegue.yaml
   - platform/qa-rbac/rbac.yaml
   - platform/external-secrets/runtime-credentials.yaml
   - platform/onepassword-connect
