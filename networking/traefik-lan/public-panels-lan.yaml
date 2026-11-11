@@ -32,6 +32,23 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # SC-5366: espejo de la 415 de lan-dgx-dashboard-public-host. La guarda de la Alarma lee la
+    # identidad solo del JWT (DGX-807) y aquí sirve el mismo backend: sin sso-chain, jarvis daría 403
+    # donde dgx ya deja pasar. Paridad exigida por tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    - kind: Rule
+      priority: 415
+      match: Host(`jarvis.e-dani.com`) && (Path(`/alarma`) || PathPrefix(`/api/app/alarma`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
