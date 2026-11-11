@@ -147,9 +147,12 @@
 
 - name: Compose the harbor hosts pin lines
   ansible.builtin.set_fact:
-    harbor_hosts_pin_lines: >-
-      {{ harbor_public_edge_ips | product([harbor_public_hostname])
-         | map('join', ' ') | join('\n') }}
+    # Double-quoted YAML scalar, one line: the YAML parser turns \n into a real
+    # newline before Jinja sees it. Jinja string literals do not process
+    # escapes, so the old folded (>-) form reached join('\n') as a literal
+    # backslash-n and wrote it verbatim into /etc/hosts (INFRA-1316: verified
+    # with od on atlantic).
+    harbor_hosts_pin_lines: "{{ harbor_public_edge_ips | product([harbor_public_hostname]) | map('join', ' ') | join('\n') }}"
   when: harbor_registries_enabled | default(false) | bool
 
 - name: Pin harbor.e-dani.com to the public edge in /etc/hosts
