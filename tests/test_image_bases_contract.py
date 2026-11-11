@@ -27,10 +27,12 @@ CAMPOS_REQUERIDOS = ("tag", "digest", "dockerfile", "arquitecturas", "consumidor
 
 
 def parsear_bases(texto):
-    """Parser estricto de bases.md -> {nombre: {campo: valor, 'consumidoras': [..]}}.
+    """Parser de bases.md -> {nombre: {campo: valor, 'consumidoras': [..]}}.
 
-    Formato: secciones `## <nombre>`; campos `- clave: valor`; consumidoras como
-    sublistas `  - <repo>`. Cualquier desvio es un error de contrato.
+    Formato: secciones `## <nombre>`; campos `- clave: valor` (con valor, o vacío
+    para las listas); consumidoras como sublistas indentadas `  - <repo>`. La
+    prosa esta permitida, pero toda linea que empieza por `- ` a nivel de campo
+    debe casar con el formato: un campo mal escrito es un error de contrato.
     """
     bases = {}
     actual = None
@@ -40,20 +42,24 @@ def parsear_bases(texto):
             actual = m.group(1)
             bases[actual] = {"consumidoras": []}
             continue
-        if actual is None:
-            if linea.strip() and not linea.startswith(("#", "-")):
-                raise ValueError(f"linea {n} fuera de seccion: {linea!r}")
-            continue
-        m = re.match(r"^   - (\S+)\s*$", linea)
+        m = re.match(r"^\s{2,}- (\S+)\s*$", linea)
         if m:
+            if actual is None:
+                raise ValueError(f"linea {n}: consumidora fuera de seccion: {linea!r}")
             bases[actual]["consumidoras"].append(m.group(1))
             continue
-        m = re.match(r"^- ([a-z]+):\s*(\S.*?)?\s*$", linea)
-        if m:
-            bases[actual][m.group(1)] = m.group(2) or ""
-            continue
-        if linea.strip() and not linea.startswith("#"):
-            raise ValueError(f"linea {n} no parseable en {actual}: {linea!r}")
+        if linea.startswith("- "):
+            if actual is None:
+                raise ValueError(f"linea {n}: campo fuera de seccion: {linea!r}")
+            m = re.match(r"^- ([a-z]+):\s*(\S.*?)?\s*$", linea)
+            if not m:
+                raise ValueError(f"linea {n}: campo no parseable en {actual}: {linea!r}")
+            clave, valor = m.group(1), m.group(2) or ""
+            if isinstance(bases[actual].get(clave), list):
+                if valor:
+                    raise ValueError(f"linea {n}: {clave} es lista, no admite valor: {linea!r}")
+            else:
+                bases[actual][clave] = valor
     return bases
 
 
