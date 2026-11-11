@@ -163,6 +163,27 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # SC-5366 (Dani, 11-11): la Alarma sí pide Keycloak en LAN y tailnet, como Nova (420).
+    # Su guarda (`guarda_app`) lee la identidad solo del JWT verificado (DGX-807) y la 300 estampa
+    # cabeceras, que el backend no cree: sin Bearer el email es vacío y `/api/app/alarma` daba 403
+    # hasta a Dani (medido: /api/identidad 200 en la misma página y el mismo minuto). Va la página
+    # (/alarma) para que la carga lleve al login, y la API entera: `PathPrefix` cubre las órdenes
+    # (/confirmar, /desarmar), las cámaras (/directo, /foto, /eventos) y la planta. El borde ya la
+    # tenía en su control set (networking/traefik-edge/dgx-dashboard-public.yaml); faltaba el espejo.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/alarma`) || PathPrefix(`/api/app/alarma`))
+      priority: 415
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # dgx.lan.e-dani.com resolves publicly to the LAN VIP (DoH-proof, unlike the
     # AdGuard rewrite of dgx.e-dani.com that DoH clients skip), so LAN/Tailscale
     # browsers land here without Cloudflare/Keycloak. Same ClientIP gate.

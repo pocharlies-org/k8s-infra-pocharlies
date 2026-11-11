@@ -57,8 +57,8 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
-    interno, hud, catchall = route["spec"]["routes"]
-    assert (interno["priority"], hud["priority"], catchall["priority"]) == (500, 400, 300)
+    interno, hud, alarma, catchall = route["spec"]["routes"]
+    assert (interno["priority"], hud["priority"], alarma["priority"], catchall["priority"]) == (500, 400, 415, 300)
     # DGX-829, espejo de la 500 de dgx (INFRA-732): /api/interno responde 404 en el borde, sin backend.
     assert "PathPrefix(`/api/interno`)" in interno["match"]
     assert "middlewares" not in interno
@@ -70,6 +70,11 @@ def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identi
     # DGX-729: además la prueba de borde, para que el backend no se fíe de una x-auth-request-email
     # forjada por un pod que llame al Service sin pasar por Traefik.
     assert hud["middlewares"] == [strip, {"name": "jarvis-public-hud-shell", "namespace": "jarvis"}, proof]
+    # SC-5366: la Alarma es la excepción en los dos hosts — su guarda lee solo el JWT verificado
+    # (DGX-807), así que necesita sso-chain incluso en LAN. Espejo de la 415 de dgx.
+    assert "Path(`/alarma`)" in alarma["match"] and "PathPrefix(`/api/app/alarma`)" in alarma["match"]
+    assert alarma["middlewares"] == [strip, {"name": "sso-chain", "namespace": "keycloak"}, proof]
+    assert alarma["services"] == [{"name": "dgx-dashboard-ui", "namespace": "control-nexus", "port": 80}]
     # DGX-1314 (Dani, 27-10): LAN = Dani, como dgx.lan: el resto del backend, con su identidad estampada
     # y sin SSO (detalle en test_jarvis_host_sso_parity_dgx_contract.py)
     assert catchall["middlewares"] == [{"name": "dgx-lan-identidad-dani", "namespace": "traefik-lan"}, proof]
