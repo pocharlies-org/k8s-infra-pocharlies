@@ -25,7 +25,7 @@ WORKER_TASKS = ROOT / "ansible/roles/k3s_worker/tasks/registries.yml"
 CP_TASKS = ROOT / "ansible/roles/k3s_control_plane/tasks/registries.yml"
 WORKER_TEMPLATE = ROOT / "ansible/roles/k3s_worker/templates/registries.yaml.j2"
 CP_TEMPLATE = ROOT / "ansible/roles/k3s_control_plane/templates/registries.yaml.j2"
-GROUP_VARS = ROOT / "ansible/playbooks/group_vars/ovh_nodes.yml"
+GROUP_VARS = ROOT / "ansible/group_vars/ovh_nodes.yml"
 RUNBOOK = ROOT / "docs/runbook-harbor-registries-ovh.md"
 
 PIN_MARKER = "INFRA-1099 harbor-publico"

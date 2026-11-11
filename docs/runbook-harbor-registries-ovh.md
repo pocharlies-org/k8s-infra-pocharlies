@@ -20,7 +20,7 @@ Fichero versionado (fuente de verdad):
 - Grupo: `ovh_nodes` (children `ks5_control_plane` + `ovh_workers`) en el
   inventario `ansible/inventory/ks5-tailscale.ini`. Los nodos de casa (ubuntu,
   sparks) no reciben el fichero: `harbor_registries_enabled` solo está en
-  `ansible/playbooks/group_vars/ovh_nodes.yml`.
+  `ansible/group_vars/ovh_nodes.yml`.
 
 ## Aplicar
 
@@ -44,7 +44,7 @@ en el host de control con un lookup `op read` (`op-secret`, copia in-cluster
 vía Connect, sin cupo diario). El ítem es
 `infra-harbor-k8s-runtime-pull` (campo `dockerconfigjson`); la tarea extrae
 usuario y contraseña de la entrada `harbor.e-dani.com` (variable
-`harbor_registries_auth_host` en `ansible/playbooks/group_vars/ovh_nodes.yml`).
+`harbor_registries_auth_host` en `ansible/group_vars/ovh_nodes.yml`).
 La tarea va con `no_log: true`: el valor no se imprime ni va a git.
 
 ### sauvage (nodo sin sudo sin contraseña)
@@ -73,7 +73,7 @@ sauvage). `containerd` resuelve en cada pull: cambiar el pin **no** requiere
 reiniciar k3s/k3s-agent.
 
 Las IPs viven en `harbor_public_edge_ips`
-(`ansible/playbooks/group_vars/ovh_nodes.yml`): son las del proxy de
+(`ansible/group_vars/ovh_nodes.yml`): son las del proxy de
 Cloudflare que sirve `e-dani.com`. Cloudflare puede rotar sus IPs de proxy —
 si un pull falla con timeout o `no such host` resolviendo `harbor.e-dani.com`
 sin estar la casa cortada, re-verificar contra un resolutor público y
