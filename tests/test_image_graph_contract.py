@@ -1,0 +1,79 @@
+"""Contrato del grafo de imagenes (INFRA-1296, INFRA-536 P1, criterio C2).
+
+Determinismo con la fixture fija: dos ejecuciones sobre el mismo inventario dan
+bytes identicos (es lo que mide `git diff --exit-code` en C2). Cada imagen del
+inventario aparece como nodo; las bases son raices y los despliegues, hojas.
+"""
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+INVENTORY = ROOT / "scripts" / "image-inventory.py"
+GRAPH = ROOT / "scripts" / "image-graph.py"
+FIXTURES = ROOT / "tests" / "fixtures" / "image-inventory"
+
+
+def run(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+class GraphContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._dir = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._dir.name)
+        r = run([sys.executable, str(INVENTORY), "--fixture-dir", str(FIXTURES),
+                 "--out-dir", str(cls.tmp)])
+        assert r.returncode == 0, f"image-inventory.py fallo: {r.stderr[-2000:]}"
+        cls.inventario = json.loads((cls.tmp / "inventario.json").read_text(encoding="utf-8"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._dir.cleanup()
+
+    def run_graph(self):
+        return run([sys.executable, str(GRAPH), "--inventario", str(self.tmp / "inventario.json"),
+                    "--out-dir", str(self.tmp)])
+
+    def test_generates_dot_and_md(self):
+        r = self.run_graph()
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        self.assertTrue((self.tmp / "grafo.dot").is_file())
+        self.assertTrue((self.tmp / "grafo.md").is_file())
+
+    def test_two_runs_are_byte_identical(self):
+        self.assertEqual(self.run_graph().returncode, 0)
+        first = ((self.tmp / "grafo.dot").read_bytes(), (self.tmp / "grafo.md").read_bytes())
+        self.assertEqual(self.run_graph().returncode, 0)
+        second = ((self.tmp / "grafo.dot").read_bytes(), (self.tmp / "grafo.md").read_bytes())
+        self.assertEqual(first, second)
+
+    def test_every_inventory_image_is_a_node(self):
+        self.assertEqual(self.run_graph().returncode, 0)
+        dot = (self.tmp / "grafo.dot").read_text(encoding="utf-8")
+        for e in self.inventario:
+            self.assertIn('"%s"' % e["repo"], dot, e["repo"])
+
+    def test_bases_are_roots_and_deployments_are_leaves(self):
+        self.assertEqual(self.run_graph().returncode, 0)
+        dot = (self.tmp / "grafo.dot").read_text(encoding="utf-8")
+        self.assertIn('"docker.io/library/python:3.12-slim"', dot)
+        self.assertIn('"harbor.e-dani.com/homelab/base-python:3.12"', dot)
+        self.assertIn('"demo/Deployment/multi-arch-app"', dot)
+        # Una base es padre de su imagen propia:
+        self.assertIn('"docker.io/library/python:3.12-slim" -> "ghcr.io/pocharlies-org/ghcr-app"', dot)
+        # Y la imagen propia es padre de su despliegue:
+        self.assertIn('"ghcr.io/pocharlies-org/ghcr-app" -> "demo/Deployment/ghcr-app"', dot)
+
+    def test_no_runtime_timestamps(self):
+        self.assertEqual(self.run_graph().returncode, 0)
+        for name in ("grafo.dot", "grafo.md"):
+            self.assertNotIn("generated_at", (self.tmp / name).read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()

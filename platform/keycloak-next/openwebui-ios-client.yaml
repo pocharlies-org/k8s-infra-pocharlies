@@ -73,8 +73,11 @@ spec:
 # redirect EXACTO y sus mappers; confidencial con el secreto de 1Password) y el
 # fixture estar en /edani-users antes de que la app (OWU-117) intente el
 # exchange. Falla y deja el hook en rojo si algo no casa — verifica booleanos,
-# redirect exacto, PKCE S256, mappers y las claims del token de ejemplo del
-# fixture (access + userinfo: azp, email, groups /edani-users).
+# redirect exacto, PKCE S256, mappers, las cuatro piezas de la audiencia de
+# introspeccion cruzada (OWU-133: rol ios-audience, scope openwebui-ios-exchange
+# con ese rol, asignado por defecto al publico, rol concedido a /edani-users) y
+# las claims del token de ejemplo del fixture (access + userinfo: azp,
+# aud=openwebui-ios-owui, email, groups /edani-users).
 apiVersion: batch/v1
 kind: Job
 metadata:

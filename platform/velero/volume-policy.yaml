@@ -60,11 +60,16 @@ data:
       # Medido en velero-backups-pocharlies (09-11): 600,1 GiB, de los que 599,8
       # GiB son `kopia/` (contenido de PVCs) y solo 358 MiB los tarballs de
       # manifiestos.
-      # Solo valen las condiciones `volumeTypes` y `pvcLabels`: velero v1.18
-      # rechaza el ConfigMap entero con `field pvcName not found in type
-      # resourcepolicies.volumeCondition` (probado el 09-11 con un Backup CR de
-      # prueba). Un CM inválido rompe TODAS las schedules, así que lo que no
-      # lleva etiqueta no se salta aquí: primero se etiqueta en su propio repo.
+      # `conditions` se decodifica contra `volumeConditions` de velero v1.18: valen
+      # `volumeTypes`, `pvcLabels` y `capacity` (existe: rechaza `1Gi` con `wrong
+      # format of Capacity 1Gi`, o sea que la parsea). Tiran el ConfigMap entero,
+      # con `field X not found in type resourcepolicies.volumeCondition`, `pvcName`,
+      # `usedByPods`, `csiDrivers` y `pvCFolumeAttributes` (probado 09-11 y 10-11 con
+      # un Backup CR de prueba). Un CM inválido rompe TODAS las schedules (vivas: 5),
+      # así que lo que no lleva etiqueta no se salta aquí: primero se etiqueta en su
+      # propio repo. Y `volumeTypes` no sirve para nombrar un caso concreto: `[nfs]`
+      # barrería los 18 PV de origen nfs del cluster, incluidos las voces entrenadas
+      # y los LoRA de `llm`, que se copian a propósito.
       #   aiops ~138 GiB: qdrant + falkordb, analítica derivada de lo que ya sale
       #   de VictoriaMetrics y de loki (24 h). No hay nada que restaurar aquí.
       - conditions:

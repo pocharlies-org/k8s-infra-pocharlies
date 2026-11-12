@@ -47,7 +47,8 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
 ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
-                                     "/api/llm/dgx3/mode")]  # DGX-1054: el mando LLM|creative de dgx3
+                                     "/api/llm/dgx3/mode", "/api/kiosco/vista",
+                                     "/api/kiosco/escritorio")]  # DGX-1054: el mando LLM|creative de dgx3; DGX-1449: el escritorio remoto del quiosco
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
     ("GET", "/api/secretaria/despacho/temas"),
@@ -89,10 +90,13 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/consumers", "/api/litellm/openrouter/account", "/api/litellm/uso-perfiles",
     "/api/litellm/models", "/api/llm/company", "/api/llm/hold-preguntas", "/api/llm/live",
     "/api/llm/refusal-rates", "/api/llm/refusal-rates/series", "/api/llm/series", "/api/llm/sessions",
-    "/api/pages", "/api/service-health", "/api/studio/gallery",
+    "/api/pages", "/api/kiosco/state", "/api/service-health", "/api/studio/gallery",
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
+      ("POST", "/api/kiosco/vista/machine"),
+      ("POST", "/api/kiosco/observed/machine"),
+      ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 

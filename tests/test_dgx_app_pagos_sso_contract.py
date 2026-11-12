@@ -79,14 +79,28 @@ class PagosSSOContract(unittest.TestCase):
         self._assert_protected(_docs(EDGE), "edge-dgx-dashboard-public", 400, "traefik-edge")
 
     def test_ninguna_ruta_de_mas_prioridad_cubre_api_app(self):
-        """Arriba del 400 solo vive la regla /messages (450): no puede tragar /api/app/*."""
-        for docs, name in ((_docs(LAN), "lan-dgx-dashboard-public-host"),
-                           (_docs(EDGE), "edge-dgx-dashboard-public")):
+        """Arriba del 400 ninguna regla puede llevarse /api/app/* SIN exigir sesión.
+
+        Lo que se prohíbe es el bypass: una regla de más prioridad que se lleve la superficie de la
+        app sin `sso-chain` la dejaría en la 300 de DGX-1314 (identidad estampada, sin JWT). SC-5366
+        añade la 415 de la LAN, que cubre `/api/app/alarma` justamente para exigir sso-chain (su
+        guarda lee solo el JWT verificado, DGX-807): no sombrea el control set, lo refuerza.
+
+        Se perdona solo la cadena canónica EXACTA (veredicto de security sobre este PR): por nombre
+        no vale — `sso-chain` sin `namespace: keycloak` no lo resuelve Traefik, el router cae y la
+        petición vuelve a la 300 con el test verde; y sin `strip` delante, o con el orden al revés,
+        la identidad forjada o estampada no es la del JWT."""
+        for docs, name, ns in ((_docs(LAN), "lan-dgx-dashboard-public-host", "traefik-lan"),
+                              (_docs(EDGE), "edge-dgx-dashboard-public", "traefik-edge")):
+            canonica = [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"),
+                        ("dgx-edge-proof", ns)]
             for doc in docs:
                 if doc.get("kind") != "IngressRoute" or doc["metadata"]["name"] != name:
                     continue
                 for route in doc["spec"]["routes"]:
                     if route.get("priority", 0) > 400:
+                        if [(m["name"], m.get("namespace", "")) for m in route.get("middlewares", [])] == canonica:
+                            continue
                         for prefix in ("/api/app", "/api/hermes-panel"):
                             self.assertNotIn(prefix, route["match"],
                                              f"{name}@{route.get('priority')} would shadow the control set")

@@ -1,0 +1,114 @@
+# SC-5371 (security, 11-11-2026): identidad de despliegue de Hermes desde ARC.
+# El workflow "Hermes · despliegue ordenado" (k8s-openclaw-qwen36-pocharlies) sustituye al runner
+# x86-hermes (SC-5299 C4) y corre en el pool ARC dedicado `arc-hermes` (Application arc-hermes en
+# k8s-gitops-pocharlies@deploy/prod:infra/arc.yaml). Su SA es arc-hermes-gha-rs-no-permission
+# (ns arc-runners, la crea el controlador ARC con el scale set). El runner monta su token proyectado
+# (se rota solo, sin secreto que repartir); NADIE más recibe estos permisos: ni el SA global
+# arc-k8s-gha-rs-no-permission (org-wide) ni el arc-openclaw-gha-rs-no-permission (corre la CI del
+# repo, incluidos PRs), que siguen sin permiso de escritura.
+#
+# Alcance = exactamente lo que ejecuta libexec/hermes-despliegue (x86-host-runtime-pocharlies), medido
+# línea a línea el 11-11-2026:
+#   sync/reiniciar/poda → get+patch de la Application argocd/hermes (refrescar annotate, parchar
+#     operación RFC6902, esperar operationState/history)
+#   preverificar (SC-1678) → get de externalsecrets/pushsecrets/secretstores del ns y de los
+#     ClusterSecretStore que referencian (hoy onepassword-connect y kubernetes-correo-hermes;
+#     onepassword es el del incidente medido 03-10)
+#   drenar/soltar → exec en el contenedor hermes del Deployment (write/clear drain_request)
+#   rollout status/restart del Deployment → get+patch de deployments, get de replicasets (rollout
+#     status resuelve la RS nueva) y get de pods
+#   poda (SC-1574) → get de ExternalSecret/Password por nombre para probar el aplicado
+# Fail-closed por diseño: si el chart pasa a referenciar un ClusterSecretStore nuevo, preverificar
+# no puede leerlo y ABORTA antes de drenar (no abre privilegios en caliente).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hermes-despliegue
+  namespace: hermes
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets", "pushsecrets", "secretstores"]
+    verbs: ["get", "list"]
+  # El Password del generador de external-secrets vive en generators.external-secrets.io
+  # (medido 12-11: passwords.generators.external-secrets.io), no en external-secrets.io.
+  - apiGroups: ["generators.external-secrets.io"]
+    resources: ["passwords"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hermes-despliegue
+  namespace: hermes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hermes-despliegue
+subjects:
+  - kind: ServiceAccount
+    name: arc-hermes-gha-rs-no-permission
+    namespace: arc-runners
+---
+# La app de ArgoCD que se sincroniza: SOLO `hermes`, por nombre (get para observar la operación,
+# patch para annotate refresh y escribir /operation).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hermes-despliegue
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    resourceNames: ["hermes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hermes-despliegue
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hermes-despliegue
+subjects:
+  - kind: ServiceAccount
+    name: arc-hermes-gha-rs-no-permission
+    namespace: arc-runners
+---
+# Solo lectura de los ClusterSecretStore que preverificar consulta (cluster-scoped: no hay Role
+# posible). resourceNames cerrados: un store nuevo no referenciable = preverificación aborta.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hermes-despliegue-stores
+rules:
+  - apiGroups: ["external-secrets.io"]
+    resources: ["clustersecretstores"]
+    resourceNames: ["onepassword", "onepassword-connect", "kubernetes-correo-hermes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hermes-despliegue-stores
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hermes-despliegue-stores
+subjects:
+  - kind: ServiceAccount
+    name: arc-hermes-gha-rs-no-permission
+    namespace: arc-runners

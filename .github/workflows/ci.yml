@@ -272,3 +272,17 @@ jobs:
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the longhorn-strict-local StorageClass (INFRA-709)
         run: python3 -m unittest tests/test_longhorn_strict_local_contract.py -v
+
+  # INFRA-1099 ronda 2 (INFRA-1276): el pin de /etc/hosts que fija el destino
+  # del espejo de Harbor al borde publico en los nodos OVH.
+  harbor-registries-ovh-hosts-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the OVH harbor hosts pin (INFRA-1099 · INFRA-1276)
+        run: python3 -m unittest tests/test_harbor_registries_ovh_hosts_contract.py -v

@@ -19,7 +19,7 @@ def casa(rule, host, ip, method, path):
         "Path": lambda p: path == p,
         "PathPrefix": lambda p: path.startswith(p),
         "PathRegexp": lambda rx: re.search(rx, path) is not None,
-        "Method": lambda m: method == m,
+        "Method": lambda *ms: method in ms,
     }
     trozos = re.split(r"(`[^`]*`)", rule)
     expr = "".join(repr(t[1:-1]) if t.startswith("`") else

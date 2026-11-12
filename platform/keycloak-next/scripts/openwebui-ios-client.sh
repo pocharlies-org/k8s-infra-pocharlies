@@ -28,11 +28,33 @@ umask 077
 #      password) y llega por FIXTURE_PASSWORD. El grupo /edani-users NO se
 #      crea aqui: es un hecho del realm que ya existe (oauth2-proxy-chat lo
 #      admite); si falta, este hook falla en seco.
+#   4. (OWU-133) mecanismo de introspeccion cruzada del exchange: OWUI valida el
+#      token del usuario llamando a token/introspection con sus credenciales
+#      (openwebui-ios-owui), y Keycloak 26 solo contesta active=true si el
+#      cliente que introspecta ESTA EN LA AUDIENCIA del token (medido: sin aud,
+#      introspeccion responde {"active":false} y el exchange de OWUI devuelve
+#      400 «Unable to determine which client the token was issued to»). Un
+#      public client no lleva aud por defecto y el mapper legacy
+#      oidc-audience-mapper ya no existe en KC 26; la via soportada es el
+#      Audience Resolve del scope `basic`: un cliente entra en aud si el
+#      usuario tiene un ROL DE ESE CLIENTE incluido en un scope asignado. De
+#      ahi, cuatro piezas reconciliadas aqui:
+#        - rol de cliente `ios-audience` en openwebui-ios-owui;
+#        - client scope `openwebui-ios-exchange` (openid-connect) con ese rol
+#          en sus scope-mappings;
+#        - ese scope, ASIGNADO POR DEFECTO al publico openwebui-ios;
+#        - el rol, concedido al grupo /edani-users (así TODOS los usuarios de
+#          la app, no solo el fixture).
+#      Cuerpo de los POST de role-mappings: REPRESENTACION COMPLETA del rol
+#      (id,name,clientRole,composite,containerId) — con [ {"name":...} ] pelado
+#      el servidor responde 404 (medido; mismo quirk documentado en
+#      admin-keycloack-impersonation-grant.sh).
 # Y VERIFICA antes de dar el OK (falla si no): los booleanos de ambos clientes,
-# el redirect exacto del publico, PKCE S256, los mappers presentes, y las
-# claims del token de ejemplo del usuario fixture (evaluate-scopes): access
-# token con azp=openwebui-ios, email y groups /edani-users; userinfo con email
-# y groups (lo que el exchange va a leer).
+# el redirect exacto del publico, PKCE S256, los mappers presentes, las cuatro
+# piezas del mecanismo de audiencia, y las claims del token de ejemplo del
+# usuario fixture (evaluate-scopes): access token con azp=openwebui-ios,
+# aud=openwebui-ios-owui (la regresion de OWU-133), email y groups
+# /edani-users; userinfo con email y groups (lo que el exchange va a leer).
 #
 # OJO: corre DENTRO de la imagen de Keycloak, que no trae awk ni jq (SC-1215).
 # Solo kcadm + sed/grep/tr/wc/rm/sleep. Nunca imprime secretos ni tokens:
@@ -52,6 +74,10 @@ PROFILE_FIRST_NAME="QA"
 PROFILE_LAST_NAME="OWU95 Fixture"
 EMAIL_MAPPER=openwebui-ios-email
 GROUPS_MAPPER=openwebui-ios-groups
+# OWU-133: piezas del mecanismo de introspeccion cruzada (ver cabecera 4).
+# Inmutables tras el primer merge: renombrarlas es cambio de contrato.
+AUDIENCE_ROLE="${AUDIENCE_ROLE:-ios-audience}"
+AUDIENCE_SCOPE="${AUDIENCE_SCOPE:-openwebui-ios-exchange}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-openwebui-ios-admin.config
 KCADM_OUT=/tmp/kcadm-openwebui-ios-reply.txt
@@ -362,6 +388,120 @@ ensure_fixture_in_group() {
   user_group_has || fail "post-write assertion failed: ${FIXTURE_USERNAME} is not in ${GROUP_PATH}"
 }
 
+# --- OWU-133: mecanismo de introspeccion cruzada (cabecera, punto 4) ---------
+# El Audience Resolve del scope `basic` mete un cliente en `aud` si el usuario
+# tiene un rol DE ESE CLIENTE incluido en un scope asignado al cliente que
+# autentica. Cuatro piezas: rol en el confidencial, scope openid-connect con
+# ese rol en sus scope-mappings, el scope asignado por defecto al publico, y el
+# rol concedido al grupo /edani-users (todos los usuarios de la app).
+
+resolve_role_id() {
+  # $1 = uuid del cliente, $2 = nombre del rol. Imprime el id o vacio.
+  kget "clients/$1/roles/$2" --fields id --format csv --noquotes 2>/dev/null | nonempty_lines | sed -n '1p'
+}
+
+resolve_scope_id_exact() {
+  # $1 = nombre del scope. `-q name=` puede no filtrar en el servidor (no es
+  # parametro de la REST de client-scopes): se casa el nombre EXACTO sobre las
+  # filas devueltas (criterio de resolve_client_exact).
+  rows="$(kget client-scopes --fields id,name --format csv --noquotes 2>/dev/null | \
+    nonempty_lines | while IFS=, read -r sid sname; do
+      [ "${sname}" = "$1" ] && printf '%s\n' "${sid}"
+    done)"
+  [ "$(printf '%s\n' "${rows}" | line_count)" -le 1 ] || fail "duplicate client scope $1"
+  printf '%s' "${rows}"
+}
+
+role_representation_body() {
+  # POST de role-mappings con representacion COMPLETA del rol: con [ {"name":...} ]
+  # pelado el servidor responde 404 (medido OWU-133; mismo quirk documentado en
+  # admin-keycloack-impersonation-grant.sh). $1 = id del rol, $2 = uuid del
+  # cliente contenedor. Escribe en ROLE_BODY.
+  printf '[{"id":"%s","name":"%s","clientRole":true,"composite":false,"containerId":"%s"}]' \
+    "$1" "${AUDIENCE_ROLE}" "$2" > "${ROLE_BODY}"
+}
+
+scope_mapping_has_role() {
+  kget "client-scopes/$1/scope-mappings/clients/${CONFIDENTIAL_UUID}" \
+    --fields name --format csv --noquotes 2>/dev/null | nonempty_lines | grep -qxF "${AUDIENCE_ROLE}"
+}
+
+default_scope_has() {
+  kget "clients/${PUBLIC_UUID}/default-client-scopes" --fields name \
+    --format csv --noquotes 2>/dev/null | nonempty_lines | grep -qxF "$1"
+}
+
+group_has_audience_role() {
+  gid="$(group_id_for "${GROUP_PATH}")"
+  [ -n "${gid}" ] || return 1
+  kget "groups/${gid}/role-mappings/clients/${CONFIDENTIAL_UUID}" \
+    --fields name --format csv --noquotes 2>/dev/null | nonempty_lines | grep -qxF "${AUDIENCE_ROLE}"
+}
+
+ensure_audience_mechanism() {
+  progress "${CONFIDENTIAL_CLIENT_ID}" audience
+  ROLE_BODY=/tmp/kcadm-openwebui-ios-role-body.json
+  KCADM_TMP_FILES="${KCADM_TMP_FILES} ${ROLE_BODY}"
+  ROLE_ID="$(resolve_role_id "${CONFIDENTIAL_UUID}" "${AUDIENCE_ROLE}")"
+  if [ -z "${ROLE_ID}" ]; then
+    "${KCADM}" create "clients/${CONFIDENTIAL_UUID}/roles" --config "${ADMIN_CONFIG}" -r "${REALM}" \
+      -s "name=${AUDIENCE_ROLE}" \
+      -s description="Audiencia del exchange nativo iOS (introspeccion cruzada OWUI, OWU-133)" \
+      >/dev/null 2>&1 || fail "failed to create client role ${AUDIENCE_ROLE}"
+    ROLE_ID="$(resolve_role_id "${CONFIDENTIAL_UUID}" "${AUDIENCE_ROLE}")"
+    [ -n "${ROLE_ID}" ] || fail "post-create assertion failed: role ${AUDIENCE_ROLE} is not resolvable"
+  fi
+  SCOPE_ID="$(resolve_scope_id_exact "${AUDIENCE_SCOPE}")"
+  if [ -z "${SCOPE_ID}" ]; then
+    "${KCADM}" create client-scopes --config "${ADMIN_CONFIG}" -r "${REALM}" \
+      -s "name=${AUDIENCE_SCOPE}" \
+      -s description="Rol de audiencia para el exchange nativo iOS (OWU-133)" \
+      -s protocol=openid-connect >/dev/null 2>&1 || fail "failed to create client scope ${AUDIENCE_SCOPE}"
+    SCOPE_ID="$(resolve_scope_id_exact "${AUDIENCE_SCOPE}")"
+    [ -n "${SCOPE_ID}" ] || fail "post-create assertion failed: scope ${AUDIENCE_SCOPE} is not resolvable"
+  fi
+  if ! scope_mapping_has_role "${SCOPE_ID}"; then
+    role_representation_body "${ROLE_ID}" "${CONFIDENTIAL_UUID}"
+    "${KCADM}" create "client-scopes/${SCOPE_ID}/scope-mappings/clients/${CONFIDENTIAL_UUID}" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" >/dev/null 2>&1 || \
+      fail "failed to map ${AUDIENCE_ROLE} into scope ${AUDIENCE_SCOPE}"
+    scope_mapping_has_role "${SCOPE_ID}" || \
+      fail "post-write assertion failed: ${AUDIENCE_ROLE} not in ${AUDIENCE_SCOPE}"
+  fi
+  if ! default_scope_has "${AUDIENCE_SCOPE}"; then
+    # PUT, no POST: la REST asigna scopes con PUT /clients/{uuid}/default-client-scopes/{scopeId}
+    # (mismo criterio que ensure_fixture_in_group; `create` mandaria POST y daria 404/405).
+    "${KCADM}" update "clients/${PUBLIC_UUID}/default-client-scopes/${SCOPE_ID}" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" >/dev/null 2>&1 || \
+      fail "failed to put default scope ${AUDIENCE_SCOPE} on ${PUBLIC_CLIENT_ID}"
+    default_scope_has "${AUDIENCE_SCOPE}" || \
+      fail "post-write assertion failed: ${AUDIENCE_SCOPE} is not a default scope of ${PUBLIC_CLIENT_ID}"
+  fi
+  if ! group_has_audience_role; then
+    gid="$(group_id_for "${GROUP_PATH}")"
+    [ -n "${gid}" ] || fail "group ${GROUP_PATH} is missing from realm ${REALM}: it is owned outside this repo; refusing to create it"
+    role_representation_body "${ROLE_ID}" "${CONFIDENTIAL_UUID}"
+    "${KCADM}" create "groups/${gid}/role-mappings/clients/${CONFIDENTIAL_UUID}" \
+      --config "${ADMIN_CONFIG}" -r "${REALM}" -f "${ROLE_BODY}" >/dev/null 2>&1 || \
+      fail "failed to grant ${AUDIENCE_ROLE} to group ${GROUP_PATH}"
+    group_has_audience_role || \
+      fail "post-write assertion failed: ${GROUP_PATH} lacks ${AUDIENCE_ROLE}"
+  fi
+}
+
+verify_audience_mechanism() {
+  [ -n "$(resolve_role_id "${CONFIDENTIAL_UUID}" "${AUDIENCE_ROLE}")" ] || \
+    fail "audit: client role ${AUDIENCE_ROLE} is missing on ${CONFIDENTIAL_CLIENT_ID}"
+  SCOPE_ID="$(resolve_scope_id_exact "${AUDIENCE_SCOPE}")"
+  [ -n "${SCOPE_ID}" ] || fail "audit: client scope ${AUDIENCE_SCOPE} is missing"
+  scope_mapping_has_role "${SCOPE_ID}" || \
+    fail "audit: ${AUDIENCE_SCOPE} does not map ${AUDIENCE_ROLE}"
+  default_scope_has "${AUDIENCE_SCOPE}" || \
+    fail "audit: ${AUDIENCE_SCOPE} is not a default scope of ${PUBLIC_CLIENT_ID}"
+  group_has_audience_role || \
+    fail "audit: group ${GROUP_PATH} lacks ${AUDIENCE_ROLE}: tokens of the app would carry no aud and the exchange would answer 400"
+}
+
 # --- verificacion con el token de ejemplo -----------------------------------
 # Admin API "Client scopes > Evaluate": las CLAIMS (JSON decodificado, sin
 # firma) que llevaria un token del cliente publico para el usuario fixture. No
@@ -377,6 +517,11 @@ verify_example_claims() {
   [ -n "${access}" ] || fail "example access token is empty"
   printf '%s' "${access}" | grep -Eq '"azp"[[:space:]]*:[[:space:]]*"'"${PUBLIC_CLIENT_ID}"'"' || \
     fail "example access token has wrong azp (expected ${PUBLIC_CLIENT_ID})"
+  # OWU-133: sin aud=openwebui-ios-owui la introspeccion cruzada de OWUI
+  # responde active=false y el exchange 400 — es la regresion que vigila esto.
+  # forma cadena (un solo aud, KC 26) o array (si alguien anade otro).
+  printf '%s' "${access}" | grep -Eq '"aud"[[:space:]]*:[[:space:]]*(\[[^]]*)?"'"${CONFIDENTIAL_CLIENT_ID}"'"' || \
+    fail "example access token has no aud=${CONFIDENTIAL_CLIENT_ID}: cross-client introspection would fail (OWU-133)"
   printf '%s' "${access}" | grep -Eq '"email"[[:space:]]*:[[:space:]]*"'"${FIXTURE_USERNAME}"'"' || \
     fail "example access token has no email claim for ${FIXTURE_USERNAME}"
   printf '%s' "${access}" | grep -Eq '"groups"[[:space:]]*:[[:space:]]*\[[^]]*"'"${GROUP_PATH}"'"' || \
@@ -411,6 +556,8 @@ case "${MODE}" in
     upsert_confidential_client
     verify_public_client
     verify_confidential_client
+    # OWU-133: audiencia para la introspeccion cruzada del exchange (cabecera 4).
+    ensure_audience_mechanism
     # Fixture: crear si falta, re-enable, nombres, contrasena SIEMPRE (Keycloak
     # == 1Password), y al grupo.
     if FIXTURE_USER_ID="$(resolve_fixture_user_id)"; then
@@ -446,6 +593,7 @@ case "${MODE}" in
   audit)
     verify_public_client
     verify_confidential_client
+    verify_audience_mechanism
     FIXTURE_USER_ID="$(resolve_fixture_user_id)" || \
       fail "audit: ${FIXTURE_USERNAME} does not exist or does not resolve cleanly in realm ${REALM}"
     assert_fixture_is_human

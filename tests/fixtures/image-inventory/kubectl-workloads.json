@@ -1,0 +1,210 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "multi-arch-app",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.e-dani.com/homelab/multi-arch-app:v1.2.3",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "multi-arch-app",
+        "namespace": "demo2"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.lan.e-dani.com/homelab/multi-arch-app:v1.2.3",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "single-plat-app",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.e-dani.com/homelab/single-plat-app:arm64-only",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "simple-app",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.e-dani.com/homelab/simple-app:2026.10",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "redis-cache",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.lan.e-dani.com/homelab/redis:8.2.3-alpine",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "CronJob",
+      "metadata": {
+        "name": "sin-dato-cron",
+        "namespace": "demo"
+      },
+      "spec": {
+        "jobTemplate": {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [
+                  {
+                    "image": "harbor.e-dani.com/homelab/sin-dato-app:9",
+                    "name": "c"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "ghcr-app",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "ghcr.io/pocharlies-org/ghcr-app:sha-abc",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "upstream-mirror",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "ghcr.io/pocharlies-org/upstream-mirror:v1",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "op-connect",
+        "namespace": "onepassword-connect"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "harbor.e-dani.com/homelab/onepassword-connect:2.6.1",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "outside",
+        "namespace": "demo"
+      },
+      "spec": {
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "docker.io/library/nginx:1.27",
+                "name": "c"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "kind": "List"
+}
