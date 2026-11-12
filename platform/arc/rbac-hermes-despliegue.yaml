@@ -39,7 +39,12 @@ rules:
     resources: ["replicasets"]
     verbs: ["get", "list"]
   - apiGroups: ["external-secrets.io"]
-    resources: ["externalsecrets", "pushsecrets", "passwords", "secretstores"]
+    resources: ["externalsecrets", "pushsecrets", "secretstores"]
+    verbs: ["get", "list"]
+  # El Password del generador de external-secrets vive en generators.external-secrets.io
+  # (medido 12-11: passwords.generators.external-secrets.io), no en external-secrets.io.
+  - apiGroups: ["generators.external-secrets.io"]
+    resources: ["passwords"]
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
