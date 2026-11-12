@@ -6,8 +6,9 @@ sin sesión, mientras dgx.e-dani.com daba 302 al SSO — el bypass de ClientIP d
 el control set que dgx puso tras sso-chain (400) en SC-1192/DGX-809. Este contrato no busca cadenas:
 evalúa las reglas de Traefik v3 de los dos hosts, elige la de más prioridad que casa (como Traefik) y
 exige que la cadena de middlewares ganadora sea idéntica en ambos para toda petición de la lista.
-DGX-1314 (Dani, 27-10): desde casa ya no hay SSO en ninguno de los dos (LAN = Dani, su identidad
-estampada); la paridad sigue: misma cadena en los dos hosts.
+DGX-1314 (Dani, 27-10): desde casa ya no hay SSO en lo que no autoriza (LAN = Dani, su identidad
+estampada). DGX-1539 (Dani, 12-11): lo que autoriza con el JWT (control set y escrituras) vuelve a
+sso-chain en los dos hosts. La paridad sigue: misma cadena ganadora en los dos.
 """
 import pathlib
 import unittest
@@ -92,14 +93,17 @@ class ParidadJarvisConDgx(unittest.TestCase):
                         self.assertIn(("dgx-lan-identidad-dani", "traefik-lan"), _cadena(ruta), caso)
                         self.assertNotIn(("sso-chain", "keycloak"), _cadena(ruta), caso)
 
-    def test_lecturas_del_hallazgo_van_como_dani_desde_casa(self):
-        """DGX-829 las puso tras sso-chain; DGX-1314: desde casa, con la identidad de Dani y sin login."""
+    def test_lecturas_del_hallazgo_van_tras_sso_desde_casa(self):
+        """DGX-829 las puso tras sso-chain; DGX-1314 las bajó a la estampa; DGX-1539 (Dani, 12-11)
+        las sube de nuevo: GET /api/company/control devuelve `puede_operar` y este backend solo lo
+        lee del Bearer (DGX-807) — con la estampa sale false para todos y el configurador se apaga."""
         rutas = _rutas(*JARVIS[:2])
         for ip in DE_CASA:
             for path in ("/api/company/control", "/api/litellm/keys"):
                 with self.subTest(f"{path} desde {ip}"):
                     cadena = _cadena(_gana(rutas, JARVIS[2], ip, "GET", path))
-                    self.assertEqual(cadena, [("dgx-lan-identidad-dani", "traefik-lan"),
+                    self.assertEqual(cadena, [("dgx-strip-identity-headers", "traefik-lan"),
+                                              ("sso-chain", "keycloak"),
                                               ("dgx-edge-proof", "traefik-lan")])
 
     def test_el_hud_sigue_sin_sesion(self):
