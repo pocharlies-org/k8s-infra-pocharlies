@@ -119,7 +119,9 @@ metadata:
   annotations:
     e-dani.com/motivo: >-
       DinD necesita Service/Pod CIDRs para Harbor y BuildKit; la allowlist 10/8
-      conserva aislados la tailnet y el :19900 del x86.
+      conserva aislados la tailnet y el :19900 del x86. El runtime de compañía
+      (SC-5299) necesita además SSH al x86: sólo :22 a 100.83.56.98, el :19900
+      sigue cerrado.
 spec:
   podSelector:
     matchLabels:
@@ -130,6 +132,13 @@ spec:
     - to:
         - ipBlock:
             cidr: 10.0.0.0/8
+    # SSH del runtime de compañía al nodo x86 (SC-5404). Sólo el puerto 22 de
+    # esa IP; el :19900 (RCE sin auth) y el resto de la tailnet siguen fuera.
+    - to:
+        - ipBlock:
+            cidr: 100.83.56.98/32
+      ports:
+        - { protocol: TCP, port: 22 }
 ---
 # `arc-openclaw` no usa DinD, pero kube-router también evalúa su tráfico contra
 # la ClusterIP del Service antes de las reglas namespaceSelector de arriba. Por
@@ -186,3 +195,52 @@ spec:
       ports:
         - { protocol: TCP, port: 8443 }
         - { protocol: TCP, port: 8000 }
+---
+# El pool `arc-hermes` (los runners donde corre Hermes, SC-5299) necesita hablar
+# con la API de Kubernetes: `kubectl annotate application` del drenado. Medido
+# el 12-11-2026 desde un pod con su etiqueta en un namespace con las policies
+# actuales: `kubernetes.default.svc` (10.43.0.1:443) y el endpoint real
+# 100.107.21.89:6443 dan connection refused — kube-router evalúa el destino
+# pre-DNAT (ClusterIP, dentro del except 10/8) y post-DNAT (tailnet, dentro del
+# except 100.64/10), y la excepción namespaceSelector de arc-runners-egress no
+# cubre ninguna de las dos. Es el mismo modo de fallo documentado para
+# `arc-openclaw` arriba, y la misma solución, más estrecha aún: solo el API.
+#
+# No abre Harbor ni BuildKit (Hermes no los usa); si algún día los necesita, se
+# abre entonces su puerto. Los tres /32 son los endpoints actuales del service
+# `kubernetes` (ks5-cp-1/2/3 por tailscale, medidos con
+# `kubectl get endpoints kubernetes -n default`); si un control-plane cambia de
+# IP, esta lista se actualiza con él.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-hermes-cluster-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      El runtime de Hermes necesita la API de Kubernetes (kubectl annotate);
+      solo el service CIDR en 443 y los tres endpoints reales del API en 6443.
+      El :19900 del x86 sigue cerrado para el pool.
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: arc-hermes
+  policyTypes:
+    - Egress
+  egress:
+    # Destino pre-DNAT: la ClusterIP del service `kubernetes`.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+    # Destino post-DNAT: los endpoints hostNetwork del API server.
+    - to:
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+      ports:
+        - { protocol: TCP, port: 6443 }
