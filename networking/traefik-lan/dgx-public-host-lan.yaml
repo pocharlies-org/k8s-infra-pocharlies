@@ -109,8 +109,12 @@ spec:
     # entran por la 460 de abajo, con la identidad de Dani y sin login).
     # /static/vendor/react/ también: la consola carga su React de ahí y el dashboard ya no
     # lo tiene (INFRA-265 lo borró; sin esto /messages salía en blanco, DGX-1181).
+    # DGX-291 (P4): entran además la consola de WhatsApp (/{whatsapp,whatsapp-console,
+    # conversaciones}, /api/whatsapp/*) y la mensajería de autoreply; la partición ops
+    # (telegram/* salvo conversations, brain, systems) se expresa por prioridad: esas
+    # rutas no matchean aquí y siguen cayendo en la 300 (dashboard).
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`) || Path(`/whatsapp`) || PathPrefix(`/whatsapp/`) || Path(`/whatsapp-console`) || PathPrefix(`/whatsapp-console/`) || Path(`/conversaciones`) || PathPrefix(`/conversaciones/`) || PathPrefix(`/api/whatsapp`) || (PathPrefix(`/api/autoreply`) && ((!PathPrefix(`/api/autoreply/telegram`)) || Path(`/api/autoreply/telegram/conversations`)) && !PathPrefix(`/api/autoreply/brain`) && !PathPrefix(`/api/autoreply/systems`)))
       priority: 460
       middlewares:
         - name: dgx-lan-identidad-dani
@@ -120,7 +124,7 @@ spec:
           namespace: messages
           port: http
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/static/vendor/react/`) || PathPrefix(`/api/messages`) || Path(`/whatsapp`) || PathPrefix(`/whatsapp/`) || Path(`/whatsapp-console`) || PathPrefix(`/whatsapp-console/`) || Path(`/conversaciones`) || PathPrefix(`/conversaciones/`) || PathPrefix(`/api/whatsapp`) || (PathPrefix(`/api/autoreply`) && ((!PathPrefix(`/api/autoreply/telegram`)) || Path(`/api/autoreply/telegram/conversations`)) && !PathPrefix(`/api/autoreply/brain`) && !PathPrefix(`/api/autoreply/systems`)))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
