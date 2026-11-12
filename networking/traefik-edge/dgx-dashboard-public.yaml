@@ -141,8 +141,14 @@ spec:
     # mandaba /api/messages a la copia vieja del dashboard. Los assets
     # compartidos (/static/navbar.js, colors_and_type.css, vendor) siguen en el
     # dashboard: son los suyos y navbar.js llama a APIs del dashboard.
+    # DGX-291 (P4): la consola de WhatsApp (/{whatsapp,whatsapp-console,conversaciones}
+    # y /api/whatsapp/*) y la mensajería de autoreply (reglas, conversaciones, voz)
+    # entran aquí: las sirve dgx-messages. La partición ops queda expresada por
+    # prioridad — /api/autoreply/telegram/* (salvo conversations), /brain y /systems
+    # no matchean esta regla y caen en el control set (400) o en la pública (100),
+    # es decir, siguen en el dashboard (routes_ops_social.py tras DGX-296).
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`))
+      match: Host(`dgx.e-dani.com`) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`) || Path(`/whatsapp`) || PathPrefix(`/whatsapp/`) || Path(`/whatsapp-console`) || PathPrefix(`/whatsapp-console/`) || Path(`/conversaciones`) || PathPrefix(`/conversaciones/`) || PathPrefix(`/api/whatsapp`) || (PathPrefix(`/api/autoreply`) && ((!PathPrefix(`/api/autoreply/telegram`)) || Path(`/api/autoreply/telegram/conversations`)) && !PathPrefix(`/api/autoreply/brain`) && !PathPrefix(`/api/autoreply/systems`)))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
