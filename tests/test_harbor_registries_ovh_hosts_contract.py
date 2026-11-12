@@ -108,6 +108,59 @@ class HarborRegistriesOvhHostsContractTest(unittest.TestCase):
         # la re-verificacion de las IPs del borde (Cloudflare puede rotarlas)
         self.assertIn("1.1.1.1", runbook)
 
+    # --- el pin compone UNA linea por IP del borde, con saltos de linea reales ---
+
+    def _pin_template(self, tasks_text: str) -> str:
+        """Valor YAML-parseado de `harbor_hosts_pin_lines` (el `block` del blockinfile)."""
+        found: list[str] = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if k == "harbor_hosts_pin_lines" and isinstance(v, str):
+                        found.append(v)
+                    walk(v)
+            elif isinstance(node, list):
+                for x in node:
+                    walk(x)
+
+        for doc in yaml.safe_load_all(tasks_text):
+            walk(doc)
+        self.assertEqual(len(found), 1, "harbor_hosts_pin_lines debe definirse exactamente una vez")
+        return found[0]
+
+    def test_pin_compone_una_linea_por_ip_con_saltos_reales(self) -> None:
+        """INFRA-1316 (#502): el bloque escribe una linea por IP del borde publico,
+        separadas por saltos de linea REALES, con las dos IPs de group_vars.
+
+        El bug (#498) componia el bloque con un escalar plegado (>-): Jinja no procesa
+        escapes, asi que join('\\n') llegaba como backslash-n LITERAL y /etc/hosts
+        recibia '\\' 'n' en vez de un salto de linea (verificado con od en atlantic).
+        El fix (#502) es un escalar YAML entrecomillado doble: el parser de YAML
+        convierte \\n en un salto REAL antes de que Jinja lo vea. Este test es rojo con
+        el plegado (no habria chr(10) y quedaria backslash-n) y verde con el
+        entrecomillado; es justo la composicion que IT midio destructivamente en
+        INFRA-1316 (las dos lineas del pin presentes y efectivas en sauvage).
+
+        No duplica test_group_vars_define_public_edge_pin: aquel valida que las IPs son
+        publicas; este valida que las DOS se vierten como lineas separadas (la laguna
+        que rompio C1 no era el valor de la IP sino que el bloque no se formaba).
+        """
+        ips = self.group_vars["harbor_public_edge_ips"]
+        self.assertGreaterEqual(len(ips), 2, "el pin debe cubrir las dos IPs del borde de group_vars")
+        for tasks in (self.worker_tasks, self.cp_tasks):
+            bloque = self._pin_template(tasks)
+            # separador REAL: el entrecomillado doble convirtio \n en chr(10)
+            self.assertIn("\n", bloque,
+                          "el join debe separar con salto de linea REAL (#502), no literal")
+            self.assertNotIn("\\n", bloque,
+                             "backslash-n literal: regresion al escalar plegado >- de #498 (INFRA-1316)")
+            # una linea por IP: producto de las IPs del borde por el nombre, unidas por espacio
+            self.assertIn("harbor_public_edge_ips", bloque)
+            self.assertIn("harbor_public_hostname", bloque)
+            self.assertIn("product", bloque)
+            self.assertIn("join", bloque)
+
 
 if __name__ == "__main__":
     unittest.main()
