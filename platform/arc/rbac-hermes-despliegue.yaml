@@ -15,8 +15,10 @@
 #     ClusterSecretStore que referencian (hoy onepassword-connect y kubernetes-correo-hermes;
 #     onepassword es el del incidente medido 03-10)
 #   drenar/soltar → exec en el contenedor hermes del Deployment (write/clear drain_request)
-#   rollout status/restart del Deployment → get+patch de deployments, get de replicasets (rollout
-#     status resuelve la RS nueva) y get de pods
+#   rollout status/restart del Deployment → informers de list+watch sobre deployments y
+#     replicasets (medido 12-11, run 43219942763: sin list/watch la rollout status caducaba con
+#     `cannot list resource "deployments"`), más el get+patch de deployments del restart
+#     (SC-5413; la medición del 11-11 se quedó en get) y get de pods
 #   poda (SC-1574) → get de ExternalSecret/Password por nombre para probar el aplicado
 # Fail-closed por diseño: si el chart pasa a referenciar un ClusterSecretStore nuevo, preverificar
 # no puede leerlo y ABORTA antes de drenar (no abre privilegios en caliente).
@@ -34,10 +36,10 @@ rules:
     verbs: ["create"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch", "patch"]
   - apiGroups: ["apps"]
     resources: ["replicasets"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["external-secrets.io"]
     resources: ["externalsecrets", "pushsecrets", "secretstores"]
     verbs: ["get", "list"]
