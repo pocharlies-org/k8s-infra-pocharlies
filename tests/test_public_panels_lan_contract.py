@@ -57,7 +57,13 @@ def test_skirmbooks_lan_route_is_sso_gated_with_oauth2_callback_path():
 
 def test_jarvis_preserves_hud_rewrite_and_trusted_catchall_without_client_identity():
     route = ingress("networking/traefik-lan/public-panels-lan.yaml", "lan-jarvis-public-host")
-    interno, hud, alarma, catchall = route["spec"]["routes"]
+    routes = route["spec"]["routes"]
+
+    def _con(texto):
+        return next(r for r in routes if texto in r["match"])
+
+    interno, hud, alarma = _con("/api/interno"), _con("/jarvis"), _con("/alarma")
+    catchall = next(r for r in routes if r.get("priority") == 300)
     assert (interno["priority"], hud["priority"], alarma["priority"], catchall["priority"]) == (500, 400, 415, 300)
     # DGX-829, espejo de la 500 de dgx (INFRA-732): /api/interno responde 404 en el borde, sin backend.
     assert "PathPrefix(`/api/interno`)" in interno["match"]

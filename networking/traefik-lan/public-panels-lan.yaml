@@ -49,6 +49,38 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # INFRA-1321: espejo de la 400/350 de lan-dgx-dashboard-public-host. Las escrituras del
+    # panel y del clúster autorizan con el JWT verificado (DGX-807) y la estampa de la 300 no
+    # lleva Bearer: en jarvis daban el mismo 403. Paridad exigida por
+    # tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    - kind: Rule
+      priority: 400
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/model-routing`)) && Method(`POST`, `PUT`, `DELETE`, `PATCH`)
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      priority: 350
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))

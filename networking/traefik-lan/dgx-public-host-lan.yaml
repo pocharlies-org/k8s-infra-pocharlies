@@ -25,6 +25,10 @@
 # pasar por sso-chain; la estampa SOBRESCRIBE las 7 cabeceras, así que una cabecera
 # forjada no da más que eso. Riesgo aceptado por Dani: cualquier máquina o pod de esos
 # rangos actúa como él. Desde fuera (borde y la regla 100) sigue sso-chain.
+# INFRA-1321: excepción — lo que autoriza con el JWT verificado (DGX-807: `puede_operar`,
+# `es_dani`, escrituras de clúster) no puede vivir en la 300, porque la estampa no lleva
+# Bearer y todas daban 403 desde la LAN. Esas rutas vuelven a sso-chain en la 400/350,
+# como /alarma en la 415 (SC-5366); la página y las lecturas siguen sin login.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -173,6 +177,43 @@ spec:
     - kind: Rule
       match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/alarma`) || PathPrefix(`/api/app/alarma`))
       priority: 415
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # INFRA-1321: las escrituras del panel que autorizan con el JWT verificado
+    # (`puede_operar` = /company-operator; `es_dani` en el despacho de la secretaría)
+    # vuelven a sso-chain, que es el único que inyecta el Bearer. En la 300 solo llega
+    # la estampa de `dgx-lan-identidad-dani`, que el backend ya no cree (DGX-807): medido
+    # el 12-11, PUT /api/company/control/cuenta-reset → 403 not_company_operator y el
+    # botón «gastar este reset» no gastaba nada. Solo estas APIs: la página y las
+    # lecturas de telemetría siguen en el bypass, sin login.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/model-routing`)) && Method(`POST`, `PUT`, `DELETE`, `PATCH`)
+      priority: 400
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # Misma razón, mismas rutas que la 350 del borde: escrituras sobre el clúster
+    # (`exigir_admin_cluster` también lee grupos del JWT). Las lecturas quedan en la 300.
+    - kind: Rule
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-lan
