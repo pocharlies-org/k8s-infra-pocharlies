@@ -13,6 +13,10 @@ de /escalar y que las lecturas que la app usa sin sesión siguen abiertas POR LA
 Toda cadena acaba en dgx-edge-proof (DGX-729): la prueba de borde va en cada ruta al dashboard.
 DGX-1314 (Dani, 27-10): en el Traefik de LAN no hay SSO, LAN = Dani: desde casa TODO cae en la
 cadena LAN_DANI (su identidad estampada + prueba).
+DGX-1539 (Dani, 12-11): lo que autoriza con el JWT vuelve a sso-chain también desde casa (400/350,
+como antes de DGX-1314): sin Bearer `puede_operar` sale false para todos y el configurador se apaga.
+Los POST del quiosco siguen en el bypass (así estaban antes de DGX-1314; el mando dgx3 web va tras
+SSO y su variante /machine con HMAC no).
 DGX-809 (spec PM 04-11): en el borde ya no hay bypass de casa (fuera la 200 de dgx/s3 y las
 400/300 de jarvis): una IP de casa que llama al borde es tratada como externa (100.64.0.0/10 =
 tailnet y CGNAT, DGX-1429) y TODO pide sso-chain, incluidas las lecturas y las máquinas con HMAC,
@@ -47,8 +51,8 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
 ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
-                                     "/api/llm/dgx3/mode", "/api/kiosco/vista",
-                                     "/api/kiosco/escritorio")]  # DGX-1054: el mando LLM|creative de dgx3; DGX-1449: el escritorio remoto del quiosco
+                                     "/api/llm/dgx3/mode")]  # DGX-1054: el mando LLM|creative de dgx3
+# Los POST del quiosco van en la lista de abiertos por casa (no estaban en la 350 pre-DGX-1314).
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
     ("GET", "/api/secretaria/despacho/temas"),
@@ -94,6 +98,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
+      ("POST", "/api/kiosco/vista"), ("POST", "/api/kiosco/escritorio"),  # DGX-1449: quioscos, sin sesión por casa (como antes de DGX-1314)
       ("POST", "/api/kiosco/vista/machine"),
       ("POST", "/api/kiosco/observed/machine"),
       ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
@@ -123,10 +128,9 @@ class SecretariaYEscriturasTrasSSO(unittest.TestCase):
                                *self._cada_peticion(BACKGROUND_CONSUMERS, solo=INFRA_832)]:
             with self.subTest(caso):
                 self.assertIsNotNone(ruta, caso)
-                esperada = LAN_DANI if ns == "traefik-lan" else [
-                    ("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"), ("dgx-edge-proof", ns)]
+                esperada = [("dgx-strip-identity-headers", ns), ("sso-chain", "keycloak"), ("dgx-edge-proof", ns)]
                 self.assertEqual(self._cadena(ruta), esperada,
-                                 f"{caso}: LAN = Dani; en el edge, identidad vaciada, sso-chain y prueba de borde")
+                                 f"{caso}: DGX-1539 — lo que autoriza con el JWT va tras sso-chain también por casa")
 
     def _esperada(self, ns):
         # LAN = Dani (DGX-1314); borde = sso-chain para todo, también con IP de casa (DGX-809).

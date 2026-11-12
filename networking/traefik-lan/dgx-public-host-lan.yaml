@@ -192,15 +192,16 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
-    # INFRA-1321: las escrituras del panel que autorizan con el JWT verificado
-    # (`puede_operar` = /company-operator; `es_dani` en el despacho de la secretaría)
-    # vuelven a sso-chain, que es el único que inyecta el Bearer. En la 300 solo llega
-    # la estampa de `dgx-lan-identidad-dani`, que el backend ya no cree (DGX-807): medido
-    # el 12-11, PUT /api/company/control/cuenta-reset → 403 not_company_operator y el
-    # botón «gastar este reset» no gastaba nada. Solo estas APIs: la página y las
-    # lecturas de telemetría siguen en el bypass, sin login.
+    # DGX-1539 (Dani, 12-11): el control set vuelve íntegro tras sso-chain, lecturas incluidas.
+    # INFRA-1321 subió solo las escrituras de /api/company y /api/model-routing, pero la puerta del
+    # configurador la marca la LECTURA: GET /api/company/control devuelve `puede_operar`, que desde
+    # DGX-807 solo sale del Bearer — sin él sale false para todos (también el operador) y alarma/
+    # cuentas quedan en «tu usuario solo puede mirar». Con la cookie _edani_sso puesta sso-chain es
+    # transparente; solo un anónimo sin cookie cae al login. Sustituye a la 400 estrecha de
+    # INFRA-1321 (absorbida). Sin /api/messages ni /api/autoreply (los gana la 460) ni /api/app/alarma
+    # (la gana la 415). Espejo en jarvis: tests/test_jarvis_host_sso_parity_dgx_contract.py.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/model-routing`)) && Method(`POST`, `PUT`, `DELETE`, `PATCH`)
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || PathPrefix(`/cuentas`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
@@ -213,10 +214,13 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
-    # Misma razón, mismas rutas que la 350 del borde: escrituras sobre el clúster
-    # (`exigir_admin_cluster` también lee grupos del JWT). Las lecturas quedan en la 300.
+    # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
+    # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster, que
+    # lee los grupos del JWT). DGX-1539: el resto de escrituras del panel vuelve también (ver 400)
+    # — sin Bearer el guarda rechaza también al operador. Absorbe la 350 estrecha de INFRA-1321.
+    # Las lecturas de estas rutas quedan en la 300 (son las LECTURAS_ABIERTAS del contrato de paridad).
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
@@ -232,8 +236,9 @@ spec:
     # dgx.lan.e-dani.com resolves publicly to the LAN VIP (DoH-proof, unlike the
     # AdGuard rewrite of dgx.e-dani.com that DoH clients skip), so LAN/Tailscale
     # browsers land here without Cloudflare/Keycloak. Same ClientIP gate.
-    # DGX-1314: todo el dashboard (control set y escrituras incluidos) entra aquí con la
-    # identidad de Dani estampada; una cabecera forjada queda sobrescrita.
+    # DGX-1314: el resto del dashboard (lecturas sin decisión) entra aquí con la identidad de Dani
+    # estampada; una cabecera forjada queda sobrescrita. DGX-1539: el control set y las escrituras NO
+    # (suben a 400/350 con sso-chain) porque el backend no autoriza con cabeceras (DGX-807).
     - kind: Rule
       match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
@@ -274,6 +279,36 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # DGX-1539: hermana del host dgx — el control set y las escrituras vuelven tras sso-chain (ver el
+    # comentario de la regla 400 de lan-dgx-dashboard-public-host). Sin Bearer el backend no autoriza (DGX-807).
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
+      priority: 400
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      priority: 350
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     - kind: Rule
       match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 300
