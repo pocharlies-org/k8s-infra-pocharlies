@@ -1,11 +1,14 @@
 ---
 # Las Oficinas (oficinas-pocharlies): la vista 3D en vivo de las sesiones de agentes y del barrio de la
-# Compañía (una oficina por bot de Hermes, la Sala Kanban y los mensajes entre bots). La sirve
-# oficinas.service en el puerto 19930 del x86 (0.0.0.0, tailnet); enlazada desde la pestaña «Compañía» de
-# dgx.e-dani.com/claude-sessions (27-09-2026, Dani).
+# Compañía (una oficina por bot de Hermes, la Sala Kanban y los mensajes entre bots). Enlazada desde la
+# pestaña «Compañía» de dgx.e-dani.com/claude-sessions (27-09-2026, Dani).
 #
-# Service ExternalName al x86 por MagicDNS, como jira-epic-trigger-public.yaml. NO EndpointSlice: argocd-cm
-# excluye EndpointSlice/Endpoints de todo el clúster, así que ArgoCD no lo aplica y Traefik da 503.
+# Backend: el Service del pod company (SC-5299, épica SC-3637 — la compañía ya no sirve nada en el x86).
+# oficinas.service ya no existe en el x86 (medido 12-11-2026: sin oyente en :19930 ni en el x86 ni en el
+# pod); el panel volverá cuando el proceso entre en el pod y el svc `company` publique el 19930.
+#
+# Service ExternalName al DNS del svc, como jira-epic-trigger-public.yaml (SC-5091). NO EndpointSlice:
+# argocd-cm excluye EndpointSlice/Endpoints de todo el clúster, así que ArgoCD no lo aplica y Traefik da 503.
 # Keycloak (sso-chain) SIEMPRE: la vista enseña nombres de sesión y claves de Jira, y su
 # /api/ask habla con Hermes. El oauth2-proxy de sso-chain usa el callback central de auth-next y la cookie de
 # .e-dani.com, así que un host nuevo no necesita tocar el cliente de Keycloak.
@@ -19,7 +22,7 @@ metadata:
     app.kubernetes.io/part-of: traefik-edge-cutover
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: company.paseo.svc.cluster.local
   ports:
     - name: http
       port: 19930

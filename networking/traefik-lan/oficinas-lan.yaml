@@ -1,6 +1,8 @@
 ---
 # Las Oficinas en la LAN / tailnet (ver traefik-edge/oficinas-public.yaml). Con SSO también aquí: la vista
 # enseña sesiones y claves de Jira y su /api/ask habla con Hermes.
+# Backend: el Service del pod company (SC-5299, épica SC-3637). El panel queda caído hasta que el proceso
+# entre en el pod y el svc `company` publique el 19930 (medido 12-11-2026: oficinas.service ya no existe).
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,7 +13,7 @@ metadata:
     app.kubernetes.io/part-of: traefik-lan
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: company.paseo.svc.cluster.local
   ports:
     - name: http
       port: 19930
