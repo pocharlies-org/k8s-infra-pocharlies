@@ -186,3 +186,51 @@ spec:
       ports:
         - { protocol: TCP, port: 8443 }
         - { protocol: TCP, port: 8000 }
+---
+# El despliegue ordenado de Hermes (`hermes-despliegue.yml` de
+# k8s-openclaw-qwen36-pocharlies) corre en el pool `arc-hermes` desde #745
+# (SC-5299) y habla con la API de Kubernetes con el serviceaccount del pod
+# (`server: https://kubernetes.default.svc`). Sin esta política el paso
+# «Despliegue ordenado» fallaba a los 14 s con `dial tcp 10.43.0.1:443:
+# connect: connection refused` (runs 43196495904 y 43219942763, SC-5413):
+# `arc-runners-egress` excluye 100.64/10 y el DNAT de kubernetes.default cae
+# sobre los endpoints tailnet de los tres control-plane.
+#
+# Es la variante mínima de `arc-openclaw-service-egress`: el helper
+# `libexec/hermes-despliegue` sólo ejecuta kubectl (annotate/get/patch/rollout/
+# exec) contra la API; no necesita Harbor, BuildKit ni Traefik. No abre Pod
+# CIDRs, LAN doméstica ni el :19900 del x86.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-hermes-cluster-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      El despliegue ordenado de Hermes (arc-hermes) llama a la API de
+      Kubernetes con el SA del pod; sólo se permiten la ClusterIP del Service
+      en 443 y los tres endpoints reales del API server en 6443.
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: arc-hermes
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+    # `kubernetes.default:443` se traduce a los endpoints hostNetwork del API
+    # server antes de que kube-router evalúe la regla. Son IPs Tailscale
+    # estables de los tres control-plane; no se abre el resto de 100.64/10.
+    - to:
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+      ports:
+        - { protocol: TCP, port: 6443 }
