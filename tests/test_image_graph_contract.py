@@ -75,5 +75,23 @@ class GraphContractTest(unittest.TestCase):
             self.assertNotIn("generated_at", (self.tmp / name).read_text(encoding="utf-8"))
 
 
+class GraphPublishedContractTest(unittest.TestCase):
+    """El grafo publicado en el repo (INFRA-1296, hallazgo de qa al cierre de INFRA-536).
+
+    C2 pide el grafo publicado y regenerable. `git diff --exit-code` sobre ficheros
+    no trackeados pasa en falso porque git los ignora, asi que la publicacion se
+    mide con `git ls-files`: si alguien borra los generados del tronco, falla en CI.
+    """
+
+    def test_generated_graph_files_are_tracked(self):
+        for name in ("docs/images/grafo.md", "docs/images/grafo.dot"):
+            r = subprocess.run(["git", "ls-files", "--error-unmatch", name],
+                               capture_output=True, text=True, cwd=ROOT)
+            self.assertEqual(
+                r.returncode, 0,
+                "%s no esta trackeado en el repo: debe generarse con "
+                "scripts/image-graph.py y commitearse (C2)" % name)
+
+
 if __name__ == "__main__":
     unittest.main()
