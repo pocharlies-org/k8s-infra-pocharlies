@@ -286,3 +286,15 @@ jobs:
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the OVH harbor hosts pin (INFRA-1099 · INFRA-1276)
         run: python3 -m unittest tests/test_harbor_registries_ovh_hosts_contract.py -v
+
+  image-inventory-graph-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate inventario y grafo (INFRA-1296 · INFRA-536)
+        run: python3 -m unittest tests/test_image_bases_contract.py tests/test_image_inventory_contract.py tests/test_image_graph_contract.py -v
