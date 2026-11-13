@@ -7,6 +7,7 @@ dentro del propio campo, y el jq EXACTO del criterio C1 dando 0.
 """
 import json
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -194,6 +195,56 @@ class InventoryContractTest(unittest.TestCase):
             for name in ("inventario.json", "inventario.md", "sizes-baseline.json"):
                 self.assertEqual((self.tmp / name).read_bytes(),
                                  (Path(segundo) / name).read_bytes(), name)
+
+
+class PublishedInventoryContractTest(unittest.TestCase):
+    """El inventario y la línea base PUBLICADOS en docs/images/ (INFRA-536 C1, regression).
+
+    Las pruebas de arriba ejercitan la regeneración sobre la fixture; qa midió además
+    el fichero commiteado en el tronco (el jq exacto de C1 dando 0 sobre
+    `docs/images/inventario.json`). Sin red ni cluster: si alguien commitea un
+    inventario roto o editado a mano, o una baseline que no casa con él, CI se pone
+    rojo aquí. Las bases (C3) ya leen el inventario commiteado; nadie lo hacía contra
+    su propio contrato, y `scripts/image-guard.py` (C4) consume la baseline publicada.
+    """
+
+    INVENTARIO = ROOT / "docs" / "images" / "inventario.json"
+    BASELINE = ROOT / "docs" / "images" / "sizes-baseline.json"
+    DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inventario = json.loads(cls.INVENTARIO.read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(shutil.which("jq"), "jq is not installed")
+    def test_inventario_commiteado_pasa_el_jq_exacto_de_c1(self):
+        r = subprocess.run(["jq", C1_JQ, str(self.INVENTARIO)],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "0",
+                         "docs/images/inventario.json incumple el criterio C1")
+
+    def test_inventario_commiteado_bien_formado(self):
+        self.assertIsInstance(self.inventario, list)
+        self.assertGreater(len(self.inventario), 0)
+        for e in self.inventario:
+            self.assertTrue(e.get("repo"), e)
+            self.assertIn(e.get("clase"), ("propia", "espejo"), e.get("repo"))
+            self.assertIsInstance(e.get("deployments"), list, e.get("repo"))
+
+    def test_baseline_publicada_casa_con_el_inventario(self):
+        baseline = json.loads(self.BASELINE.read_text(encoding="utf-8"))
+        self.assertIn("formato", baseline)
+        repos = {e["repo"] for e in self.inventario}
+        for repo, entradas in baseline["imagenes"].items():
+            self.assertIn(repo, repos, f"baseline con imagen fuera del inventario: {repo}")
+            for digest, v in entradas.items():
+                self.assertRegex(digest, self.DIGEST_RE, repo)
+                for clave in ("comprimido", "descomprimido"):
+                    val = v.get(clave)
+                    ok = isinstance(val, int) and not isinstance(val, bool)
+                    ok = ok or (isinstance(val, dict) and "sin_dato" in val)
+                    self.assertTrue(ok, f"{repo}@{digest[:19]}: {clave} ni entero ni sin_dato: {val!r}")
 
 
 if __name__ == "__main__":

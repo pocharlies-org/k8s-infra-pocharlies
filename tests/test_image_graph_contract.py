@@ -93,5 +93,32 @@ class GraphPublishedContractTest(unittest.TestCase):
                 "scripts/image-graph.py y commitearse (C2)" % name)
 
 
+class PublishedGraphMatchesInventoryContractTest(unittest.TestCase):
+    """El grafo commiteado ES la regeneración del inventario commiteado (C2, regression).
+
+    `GraphContractTest` fija el determinismo sobre la fixture y
+    `GraphPublishedContractTest` que los ficheros están trackeados; falta la
+    coherencia ENTRE los dos artefactos publicados: regenerar `scripts/image-graph.py`
+    sobre `docs/images/inventario.json` debe reproducir byte a byte los
+    `grafo.md`/`grafo.dot` del tronco (es exactamente lo que qa midió a mano con doble
+    ejecución + diff, sin red). Si alguien actualiza el inventario sin regenerar el
+    grafo, el grafo publicado queda obsoleto y esto lo pone en rojo.
+    """
+
+    INVENTARIO = ROOT / "docs" / "images" / "inventario.json"
+
+    def test_grafo_commiteado_es_la_regeneracion_del_inventario_commiteado(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = run([sys.executable, str(GRAPH), "--inventario", str(self.INVENTARIO),
+                     "--out-dir", tmp])
+            self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+            for name in ("grafo.md", "grafo.dot"):
+                self.assertEqual(
+                    (ROOT / "docs" / "images" / name).read_bytes(),
+                    (Path(tmp) / name).read_bytes(),
+                    "%s no es la regeneración de docs/images/inventario.json: "
+                    "regenerar con scripts/image-graph.py y commitear (C2)" % name)
+
+
 if __name__ == "__main__":
     unittest.main()
