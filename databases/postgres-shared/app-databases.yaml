@@ -439,3 +439,22 @@ spec:
   ensure: present
   cluster:
     name: postgres-shared-nvme
+---
+# SC-5489: comercio del Brain sobre pgvector (sustituye a Qdrant/FalkorDB). El esquema lo crea el Brain.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: catalogo
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: catalogo
+  owner: catalogo
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
+  extensions:
+    - name: vector
+      ensure: present
