@@ -15,9 +15,21 @@ spec:
     - name: node.capacity
       rules:
         - alert: NodeDiskFilling
+          # SC-5400 (NODE-19133): dgx3 excluido — su disco de datos es de 916G y
+          # vive ~82-84 % con el nodo sano (SC-3062 midió 168 GiB libres el 27-10;
+          # el 13-11 mide 146G: /srv/creative 447G de pesos de las lanes
+          # creative + /srv/models 109G). El 80 % fijo —umbral pensado para la
+          # raíz de 3.6T de sauvage (INFRA-993)— saltaría en falso cada día en
+          # dgx3. Su cobertura real la lleva NodeRootDiskLowOrFilling
+          # (k8s-observability, 100 GiB absolutos, decisión SC-3062) y esta
+          # familia sigue cubriendo el 90 % crítico (NodeDiskNearEviction). El
+          # join con kube_pod_info es porque las series de node-exporter no
+          # traen label de nodo (instance = podIP:9100).
           expr: |
             (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"})
               / node_filesystem_size_bytes{mountpoint="/"} > 0.80
+            and on(pod)
+            kube_pod_info{namespace="monitoring", pod=~"vm-prometheus-node-exporter-.*", node!="dgx3"}
           for: 30m
           labels:
             severity: warning
