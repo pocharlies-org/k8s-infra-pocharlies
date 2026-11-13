@@ -409,6 +409,15 @@ spec:
         passwordSecret:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
+      # SC-5489: comercio del Brain (catálogo, precios, ofertas) que sale de Qdrant/FalkorDB.
+      # Rol propio, no `skirmshop` (que es dueño de sii y skirmbooks). Item `catalogo-db`, sembrado por security.
+      - name: catalogo
+        ensure: present
+        login: true
+        connectionLimit: 20
+        passwordSecret:
+          name: catalogo-db-credentials
+        comment: "Comercio del Brain sobre pgvector (repo: pocharlies-org/skirmshop-brain-v2). SC-5489."
       # SC-2956 D2: base de los empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies).
       # Contraseña en 1Password (item `analisis-db`, sembrado por security), reconciliada desde
       # analisis-db-credentials (app-credentials.yaml). No aplicar hasta que ese item exista.
