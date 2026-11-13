@@ -98,12 +98,13 @@ data:
     -- ── Precios multicanal y costes (las expansiones de /prices/comparison) ─
     -- ChannelOffer = nuestro precio por canal, crudo (price + currency +
     -- vat_incl; la homogeneización de IVA es del read layer, nunca aquí).
-    -- product_id viene de la arista HAS_CHANNEL_PRICE (5.948 aristas / 5.429
-    -- nodos medidos: ~1:1; si una oferta cuelga de varios productos duplicados,
-    -- la carga la deja en el producto canónico).
+    -- HAS_CHANNEL_PRICE va en tabla de aristas propia: medido 13-11, 273 ofertas
+    -- cuelgan de más de un id de producto DISTINTO (una columna product_id
+    -- perdería filas de /prices/comparison). Las propiedades de la arista
+    -- (channel/price/currency/vat_incl/observed_at) son copia de las del nodo en
+    -- el escritor (extractors/channel.py): no se duplican aquí.
     CREATE TABLE IF NOT EXISTS catalogo.channel_offer (
       id text PRIMARY KEY,
-      product_id text,
       title text,
       sku text,
       channel text,
@@ -115,8 +116,11 @@ data:
       url text,
       content_hash text
     );
-    CREATE INDEX IF NOT EXISTS channel_offer_product_idx
-      ON catalogo.channel_offer (product_id);
+    CREATE TABLE IF NOT EXISTS catalogo.product_channel_offer (
+      product_id text NOT NULL,
+      channel_offer_id text NOT NULL,
+      PRIMARY KEY (product_id, channel_offer_id)
+    );
 
     -- ManufacturerProduct (id = SKU del fabricante) + SOURCED_FROM con
     -- match_score. La selección de coste por tiers (sku exacto → any-cost →
@@ -169,11 +173,12 @@ data:
     CREATE INDEX IF NOT EXISTS product_match_competitor_idx
       ON catalogo.product_match (competitor_product_id);
 
-    -- SupplierOffer ("where to buy") + aristas HAS_OFFER (nuestro producto) y
-    -- OFFERED_BY (SupplierStore). commerce_queries lee exactly estas columnas.
+    -- SupplierOffer ("where to buy"): store_id de OFFERED_BY (0 ofertas con >1
+    -- tienda medidas: columna basta). HAS_OFFER va en tabla de aristas: 110
+    -- ofertas cuelgan de más de un producto distinto. commerce_queries lee
+    -- exactly estas columnas.
     CREATE TABLE IF NOT EXISTS catalogo.supplier_offer (
       id text PRIMARY KEY,
-      product_id text,
       store_id text,
       supplier text,
       supplier_id text,
@@ -186,8 +191,11 @@ data:
       url text,
       content_hash text
     );
-    CREATE INDEX IF NOT EXISTS supplier_offer_product_idx
-      ON catalogo.supplier_offer (product_id);
+    CREATE TABLE IF NOT EXISTS catalogo.product_supplier_offer (
+      product_id text NOT NULL,
+      supplier_offer_id text NOT NULL,
+      PRIMARY KEY (product_id, supplier_offer_id)
+    );
     CREATE TABLE IF NOT EXISTS catalogo.supplier_store (
       id text PRIMARY KEY,
       supplier_id text
@@ -207,10 +215,11 @@ data:
     CREATE INDEX IF NOT EXISTS customer_phone_idx ON catalogo.customer (phone);
 
     -- commerce_order: id = order_name del grafo (#ORD10635 y variantes; el
-    -- lector de tracking prueba las tres formas). carrier_id/shipment_id/
-    -- tracking_number vienen de SHIPPED_VIA/FULFILLED_BY (19.088/0 aristas).
-    -- email es el camino de fallback de customer_orders (pedidos ingesta-
-    -- dos sin arista PLACED).
+    -- lector de tracking prueba las tres formas). shipment_id de FULFILLED_BY
+    -- (0 aristas medidas el 13-11: columna, 1:1 por construcción). SHIPPED_VIA
+    -- va en tabla de aristas: 12 pedidos con >1 carrier distinto, y la arista
+    -- lleva su propio tracking_number (order_shipped_via). email es el camino
+    -- de fallback de customer_orders (pedidos ingesta-dos sin arista PLACED).
     CREATE TABLE IF NOT EXISTS catalogo.commerce_order (
       id text PRIMARY KEY,
       name text,
@@ -225,9 +234,13 @@ data:
       financial_status text,
       fulfillment_status text,
       created_at timestamptz,
-      carrier_id text,
-      shipment_id text,
-      tracking_number text
+      shipment_id text
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.order_shipped_via (
+      order_id text NOT NULL,
+      carrier_id text NOT NULL,
+      tracking_number text,
+      PRIMARY KEY (order_id, carrier_id)
     );
     CREATE INDEX IF NOT EXISTS commerce_order_email_idx
       ON catalogo.commerce_order (email);
@@ -245,9 +258,12 @@ data:
     CREATE INDEX IF NOT EXISTS order_placed_customer_idx
       ON catalogo.order_placed (customer_id);
 
-    -- CONTAINS (102.116): line_key = id del nodo destino. product_id solo si el
-    -- destino es un Product; los UnresolvedLineItem (22.113) conservan su línea
-    -- con product_id NULL (hecho del grafo, no se descarta).
+    -- CONTAINS (102.116 aristas / 81.237 pares (pedido,destino) distintos):
+    -- line_key = id del nodo destino, y las aristas repetidas del mismo par se
+    -- colapsan en la carga (ninguna ruta viva lee quantity: customer_orders
+    -- colecta DISTINCT p.title y demand/trending cuenta pedidos). product_id
+    -- solo si el destino es un Product; los UnresolvedLineItem (22.113)
+    -- conservan su línea con product_id NULL (hecho del grafo, no se descarta).
     CREATE TABLE IF NOT EXISTS catalogo.order_line (
       order_id text NOT NULL,
       line_key text NOT NULL,
@@ -362,14 +378,17 @@ data:
     ALTER TABLE catalogo.product OWNER TO catalogo;
     ALTER TABLE catalogo.collection OWNER TO catalogo;
     ALTER TABLE catalogo.channel_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.product_channel_offer OWNER TO catalogo;
     ALTER TABLE catalogo.manufacturer_product OWNER TO catalogo;
     ALTER TABLE catalogo.product_sourced_from OWNER TO catalogo;
     ALTER TABLE catalogo.competitor_product OWNER TO catalogo;
     ALTER TABLE catalogo.product_match OWNER TO catalogo;
     ALTER TABLE catalogo.supplier_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.product_supplier_offer OWNER TO catalogo;
     ALTER TABLE catalogo.supplier_store OWNER TO catalogo;
     ALTER TABLE catalogo.customer OWNER TO catalogo;
     ALTER TABLE catalogo.commerce_order OWNER TO catalogo;
+    ALTER TABLE catalogo.order_shipped_via OWNER TO catalogo;
     ALTER TABLE catalogo.order_placed OWNER TO catalogo;
     ALTER TABLE catalogo.order_line OWNER TO catalogo;
     ALTER TABLE catalogo.carrier OWNER TO catalogo;
