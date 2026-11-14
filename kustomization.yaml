@@ -49,10 +49,10 @@ resources:
   - networking/traefik-edge/canonical-hosts-public.yaml
   - networking/traefik-edge/chat-public.yaml
   - networking/arc-runners/networkpolicy.yaml
-  - networking/casa-egress/namespace.yaml
-  - networking/casa-egress/squid-config.yaml
-  - networking/casa-egress/deployment.yaml
-  - networking/casa-egress/networkpolicy.yaml
+  - platform/casa-egress/namespace.yaml
+  - platform/casa-egress/squid-config.yaml
+  - platform/casa-egress/deployment.yaml
+  - platform/casa-egress/networkpolicy.yaml
   - networking/arc-skills-eval/namespace.yaml
   - networking/arc-skills-eval/networkpolicy.yaml
   - networking/arc-skills-eval/externalsecret-arc-github-app.yaml
