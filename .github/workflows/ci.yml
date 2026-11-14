@@ -298,3 +298,20 @@ jobs:
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate inventario y grafo (INFRA-1296 · INFRA-536)
         run: python3 -m unittest tests/test_image_bases_contract.py tests/test_image_inventory_contract.py tests/test_image_graph_contract.py -v
+
+  # SC-5299 (CA8): cut/undo scripts pinned by sha256 and the inotify limit of the nodes.
+  ca8-scripts-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the CA8 scripts and the inotify limit (SC-5299)
+        run: |
+          bash -n ansible/roles/ca8_scripts/files/ca8-cut.sh
+          bash -n ansible/roles/ca8_scripts/files/ca8-undo.sh
+          bash -n scripts/ca8/ca8-run-c.sh
+          python3 -m unittest tests/test_ca8_scripts_contract.py -v

@@ -1,0 +1,5 @@
+---
+# Only the key this role owns; the rest of 99-inotify.conf is left alone.
+- name: Apply fs.inotify.max_user_instances
+  ansible.builtin.command: "sysctl -w fs.inotify.max_user_instances={{ common_hardening_inotify_max_user_instances }}"
+  changed_when: true

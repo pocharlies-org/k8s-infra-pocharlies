@@ -1,0 +1,16 @@
+---
+# SC-5299 (CA8, house-off drill): the cut and undo scripts every CA8 run must use.
+# ca8-undo.sh goes first: ca8-cut.sh refuses to cut when the undo is missing.
+# The files are the reviewed copies (2026-11-14); tests/test_ca8_scripts_contract.py
+# pins their sha256, so a change to either script is a reviewed change here.
+- name: Install the CA8 undo and cut scripts in /usr/local/sbin
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - ca8-undo.sh
+    - ca8-cut.sh
+  tags: [ca8]

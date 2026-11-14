@@ -1,0 +1,16 @@
+---
+# SC-5299: root hit 128/128 inotify instances on atlantic on 2026-11-13 (journald and
+# systemd "Too many open files"). Every k3s node gets max_user_instances = 8192.
+# lineinfile, not a whole-file copy: alphalink's 99-inotify.conf also sets
+# max_user_watches and max_queued_events, and those lines stay as they are.
+- name: Set fs.inotify.max_user_instances in /etc/sysctl.d/99-inotify.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.d/99-inotify.conf
+    regexp: '^\s*fs\.inotify\.max_user_instances\s*='
+    line: "fs.inotify.max_user_instances = {{ common_hardening_inotify_max_user_instances }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Apply fs.inotify.max_user_instances
+  tags: [inotify]
