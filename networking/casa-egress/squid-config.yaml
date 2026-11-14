@@ -1,0 +1,53 @@
+---
+# squid.conf del túnel de salida por casa (INFRA-1353).
+#
+# Es un TÚNEL, no un proxy corporativo: sin caché, sin autenticación propia y
+# sin reescribir cabeceras. Lo que lo acota es la red (acl de pods) y la
+# NetworkPolicy del final de este directorio.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: casa-egress
+  name: squid-conf
+  labels:
+    app.kubernetes.io/name: casa-egress
+data:
+  squid.conf: |
+    http_port 3128
+
+    # Puertos por los que se navega: web y los servicios de la LAN que escuchan
+    # en puertos no estándar (traefik-lan, dashboards).
+    acl SSL_ports port 80 443 8080 8443
+    acl Safe_ports port 80 443 8080 8443
+
+    # Quién puede usarlo: las redes de pods del cluster (flannel). El proxy no
+    # tiene auth propia; esta acl es la frontera de uso junto con la
+    # NetworkPolicy, que además limita QUÉ namespaces entran.
+    acl clientes_cluster src 10.42.0.0/16
+
+    http_access deny !Safe_ports
+    http_access allow clientes_cluster
+    http_access deny all
+
+    # Sin caché: cada petición sale directa. Un proxy con caché compartiría
+    # respuestas entre consumidores y guardaría en disco contenido de terceros.
+    cache deny all
+    cache_mem 32 MB
+
+    # Con casa de intermediaria no se añade X-Forwarded-For ni se reescribe Via:
+    # quien mira al otro lado (Stripe) ve solo la IP de casa, que es el punto.
+    forwarded_for off
+    via off
+
+    # Rootfs de solo lectura: todo lo escribible va a los emptyDir montados.
+    # (request_body_temp_dir: la directiva de squid 6 apunta por defecto a
+    # /var/spool/squid, que es el emptyDir montado más abajo.)
+    pid_filename /tmp/squid.pid
+    coredump_dir /tmp
+    access_log none
+    cache_log /dev/stderr
+
+    # El helper pinger pide ICMP (CAP_NET_RAW): con capabilities.drop:[ALL] no lo
+    # obtiene y suelta un FATAL en el log en cada arranque. Aquí no se hace
+    # ninguna comprobación ICMP: se apaga.
+    pinger_enable off

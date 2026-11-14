@@ -1,0 +1,16 @@
+# INFRA-1353: la salida residencial de la compañía.
+#
+# El navegador headless compartido (playwright-mcp) se programa donde hay
+# recursos — atlantic o sauvage (INFRA-1200, Dani 07-11) — y ambos son nodos en
+# OVH: medido el 14-11-2026, un pod suyo sale a internet por 57.129.17.172
+# (ASN de datacenter). Para lo que necesita IP de casa — un checkout de Stripe,
+# un sitio que bloquea datacenters — el tráfico tiene que salir por el ABI de
+# casa, no por el del cloud. Aquí vive ese túnel: un squid fijado al nodo
+# `ubuntu` (x86 = casa), cuyo egress es 83.46.70.1 (Orange ES, residencial).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: casa-egress
+  labels:
+    app.kubernetes.io/name: casa-egress
+    e-dani.com/motivo: salida-residencial-de-casa-para-workloads-del-cluster

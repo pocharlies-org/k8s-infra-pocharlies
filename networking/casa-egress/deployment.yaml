@@ -1,0 +1,107 @@
+---
+# El túnel de salida por casa (INFRA-1353): un squid en el nodo `ubuntu`.
+#
+# POR QUE UN POD Y NO UN SERVICIO EN EL HOST. El egress de un pod es el del nodo
+# donde corre. Fijando este Deployment a `ubuntu` (x86 = casa) el cluster gana
+# una salida con IP residencial declarada en GitOps, con la misma vigilancia que
+# el resto del estate; un binario a mano en el x86 sería el incidente del mes
+# que viene. Lo consume quien lo declara en su manifest con --proxy-server
+# (hoy el playwright-mcp), y la NetworkPolicy de al lado decide quién más puede.
+#
+# NO LLEVA priorityClassName: preemptible. Si el x86 desaloja, este pod cae
+# último: es pequeño (128 Mi) y por detrás queda sin salida el navegador de toda
+# la compañía. Es el único pod del repo cuyo nodo es una decisión de red, no de
+# capacidad: cambiar el nodeSelector cambia la IP con la que se ve internet.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: casa-egress
+  name: casa-egress
+  labels:
+    app.kubernetes.io/name: casa-egress
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: casa-egress
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: casa-egress
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu
+      securityContext:
+        # `proxy` de la imagen (uid 13). Con fsGroup, los emptyDir montados
+        # entran group-writable para él: squid escribe su spool y su pid.
+        runAsNonRoot: true
+        runAsUser: 13
+        runAsGroup: 13
+        fsGroup: 13
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: squid
+          # Digest del ÍNDICE multi-arch (amd64 incluido: el nodo es x86).
+          #   TOK=$(curl -s "https://public.ecr.aws/token/?scope=repository:ubuntu/squid:pull" | jq -r .token)
+          #   curl -sI -H "Authorization: Bearer $TOK" -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+          #     https://public.ecr.aws/v2/ubuntu/squid/manifests/6.6-24.04_beta | grep -i docker-content-digest
+          image: public.ecr.aws/ubuntu/squid:6.6-24.04_beta@sha256:ac4358927ea33611986df9a2f6df8f33955f7b40d1de6c34a4c4befd5739bfeb
+          # El entrypoint de la imagen hace envsubst de su template y escribe en
+          # /etc/squid (read-only aquí). Se salta: la config entra por ConfigMap
+          # y squid la lee con -f.
+          command: ["/usr/sbin/squid", "-N", "-f", "/etc/squid-conf/squid.conf"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: proxy
+              containerPort: 3128
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/squid-conf
+              readOnly: true
+            # Rootfs de solo lectura: pid, body temporales y spool del squid.
+            - name: tmp
+              mountPath: /tmp
+            - name: spool
+              mountPath: /var/spool/squid
+          livenessProbe:
+            tcpSocket: { port: proxy }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket: { port: proxy }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: conf
+          configMap:
+            name: squid-conf
+        - name: tmp
+          emptyDir: {}
+        - name: spool
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: casa-egress
+  name: casa-egress
+  labels:
+    app.kubernetes.io/name: casa-egress
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: casa-egress
+  ports:
+    - name: proxy
+      port: 3128
+      targetPort: proxy

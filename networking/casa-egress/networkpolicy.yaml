@@ -1,0 +1,41 @@
+---
+# Fronteira del túnel (INFRA-1353).
+#
+# Un proxy abierto dentro del cluster es una salida anónima a internet para
+# cualquier pod: quien lo alcance puede sacar datos o atacar terceros con la IP
+# de casa. Por eso default-deny y una lista explícita de namespaces
+# consumidores. Añadir un consumidor nuevo = una línea aquí (y su PR), no un
+# label cualquiera.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: casa-egress
+  name: casa-egress-default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: casa-egress
+  name: casa-egress-allow-consumers
+  annotations:
+    e-dani.com/motivo: >-
+      Solo los namespaces declarados aquí salen por casa. Hoy el navegador
+      headless compartido (INFRA-1353: el checkout de Stripe necesita IP
+      residencial; el pod navega por atlantic/sauvage y sin esto saldría por el
+      ASN del cloud).
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: casa-egress
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: playwright-mcp
+      ports:
+        - port: 3128
+          protocol: TCP
