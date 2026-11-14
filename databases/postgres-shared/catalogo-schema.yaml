@@ -1,0 +1,462 @@
+# SC-5490 (F1): esquema relacional + pgvector del comercio del Brain en la base
+# `catalogo` (la declara SC-5489; extensión `vector` 0.8.0 en esquema `public`,
+# medido en vivo 13-11: pg_extension.extnamespace='public').
+#
+# Por qué un Job y no un CRD: igual que agent-transcripts-schema.yaml — CNPG
+# declara BASES (app-databases.yaml) pero NO declara esquemas ni tablas. El
+# precedente de DDL de la casa es el Job SQL idempotente como hook PostSync.
+#
+# Qué tablas (dictamen del architect SC-5490, nota 35894, condiciones 2 y 6):
+# las que leen las rutas VIVAS del Brain, derivadas del Cypher real de
+# src/api/prices.py (_BODY, /prices/position), src/services/commerce_queries.py,
+# src/api/intel.py, src/api/demand.py, src/retrievers/business_graph.py
+# (customer_orders / order_tracking / shipping_tracking) y los escritores
+# src/pipeline/catalog_sync.py, src/extractors/{channel,supplier,manufacturer,
+# competitor,competitor_match}.py. Esquema relacional, no JSONB+recursivo
+# (condición Q2: todas las rutas vivas son expansiones de 1 hop + agregación).
+#
+# Condición 2 (Customer/Order/Shipment/TrackingEvent/Return), medido en el grafo
+# skirmshop_v2 el 13-11 (GRAPH.QUERY, solo lectura): Customer 11.310, Order
+# 27.907, Carrier 122, Shipment 1, TrackingEvent 1, Return 0; CONTAINS 102.116,
+# PLACED 39.496, SHIPPED_VIA 19.088. Se elige la opción (a) del architect —
+# añadir las tablas de pedidos — porque ADEMÁS de /search las necesita
+# /demand/trending (Order-CONTAINS->Product con filtro por created_at, cliente
+# skirmshop-picqer) y /intel/summary (recuentos Customer/Order). Con estos
+# volúmenes (decenas de miles de filas) es trivial en Postgres y todo es 1-hop.
+# Las ramas de /search que leen PurchaseOrder/Invoice/SII/CompatibilityRule NO
+# entran (no las nombra el dictamen; F2 decide con el mismo criterio).
+#
+# Idempotencia y no-destructivo: todo IF NOT EXISTS + ALTER OWNER al dueño que
+# ya tiene (catálogo). Nada de DROP. Sobre el clúster actual es no-op tras el
+# primer apply; tras un rebuild reconstruye el esquema antes del primer Job de
+# carga (SC-5490 F3).
+#
+# El Job espera a que la base exista (el Database CR lo reconcilia el instance
+# manager de forma asíncrona — mismo motivo que agent-transcripts-schema.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalogo-schema-sql
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-catalogo
+data:
+  setup.sql: |
+    CREATE SCHEMA IF NOT EXISTS catalogo;
+
+    -- ── Catálogo (grafo Product/Collection + Path B de catalog_sync) ──────
+    -- Clave = id canónico del grafo (el handle; catalog_sync fija p.id = handle).
+    -- La carga (F3) colapsa los Product duplicados por id exactamente como la
+    -- consulta viva de prices.py (WITH p.id AS pid, head(collect(DISTINCT p)))
+    -- y une sus aristas — condición 6 del architect. shopify_id UNIQUE: dos
+    -- handles con el mismo id inmutable es un conflicto de identidad, no un dato.
+    CREATE TABLE IF NOT EXISTS catalogo.product (
+      id text PRIMARY KEY,
+      shopify_id bigint UNIQUE,
+      handle text,
+      title text,
+      sku text,
+      vendor text,
+      product_type text,
+      tags jsonb,
+      price double precision,
+      min_price double precision,
+      max_price double precision,
+      compare_at_price text,
+      inventory_quantity integer,
+      variants_count integer,
+      variants jsonb,
+      image_url text,
+      url text,
+      status text,
+      created_at timestamptz,
+      updated_at timestamptz,
+      deleted_at timestamptz,
+      last_seen_in_source timestamptz,
+      competitor_checked_at timestamptz,
+      previous_handle text,
+      handle_changed_at timestamptz,
+      catalog_content_fingerprint text,
+      catalog_content_snapshot jsonb
+    );
+
+    -- Colección (nodo Collection del grafo: id = handle).
+    CREATE TABLE IF NOT EXISTS catalogo.collection (
+      id text PRIMARY KEY,
+      shopify_id bigint,
+      title text,
+      products_count integer,
+      image_url text,
+      url text,
+      status text,
+      updated_at timestamptz,
+      deleted_at timestamptz,
+      last_seen_in_source timestamptz
+    );
+
+    -- ── Precios multicanal y costes (las expansiones de /prices/comparison) ─
+    -- ChannelOffer = nuestro precio por canal, crudo (price + currency +
+    -- vat_incl; la homogeneización de IVA es del read layer, nunca aquí).
+    -- HAS_CHANNEL_PRICE va en tabla de aristas propia: medido 13-11, 273 ofertas
+    -- cuelgan de más de un id de producto DISTINTO (una columna product_id
+    -- perdería filas de /prices/comparison). Las propiedades de la arista
+    -- (channel/price/currency/vat_incl/observed_at) son copia de las del nodo en
+    -- el escritor (extractors/channel.py): no se duplican aquí.
+    CREATE TABLE IF NOT EXISTS catalogo.channel_offer (
+      id text PRIMARY KEY,
+      title text,
+      sku text,
+      channel text,
+      kind text,
+      price double precision,
+      currency text,
+      vat_incl boolean,
+      observed_at timestamptz,
+      url text,
+      content_hash text
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.product_channel_offer (
+      product_id text NOT NULL,
+      channel_offer_id text NOT NULL,
+      PRIMARY KEY (product_id, channel_offer_id)
+    );
+
+    -- ManufacturerProduct (id = SKU del fabricante) + SOURCED_FROM con
+    -- match_score. La selección de coste por tiers (sku exacto → any-cost →
+    -- msrp → any) es del read layer (F2), igual que en Cypher.
+    CREATE TABLE IF NOT EXISTS catalogo.manufacturer_product (
+      id text PRIMARY KEY,
+      title text,
+      sku text,
+      provider text,
+      vendor text,
+      price double precision,
+      cost double precision,
+      msrp double precision,
+      currency text,
+      url text,
+      image_url text,
+      content_hash text
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.product_sourced_from (
+      product_id text NOT NULL,
+      manufacturer_product_id text NOT NULL,
+      match_score double precision,
+      PRIMARY KEY (product_id, manufacturer_product_id)
+    );
+
+    -- CompetitorProduct (id = competitor:<domain>:<url>) + PRODUCT_MATCH con
+    -- confidence (el escritor es competitor-llm-matcher, condición 4 del
+    -- architect: confluye aquí). competitor-prune busca por competidor →
+    -- índice en competitor_product_id.
+    CREATE TABLE IF NOT EXISTS catalogo.competitor_product (
+      id text PRIMARY KEY,
+      title text,
+      brand text,
+      price double precision,
+      currency text,
+      url text,
+      domain text,
+      is_promotion boolean,
+      stock_status text,
+      observed_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.product_match (
+      product_id text NOT NULL,
+      competitor_product_id text NOT NULL,
+      confidence double precision,
+      method text,
+      matched_at timestamptz,
+      PRIMARY KEY (product_id, competitor_product_id)
+    );
+    CREATE INDEX IF NOT EXISTS product_match_competitor_idx
+      ON catalogo.product_match (competitor_product_id);
+
+    -- SupplierOffer ("where to buy"): store_id de OFFERED_BY (0 ofertas con >1
+    -- tienda medidas: columna basta). HAS_OFFER va en tabla de aristas: 110
+    -- ofertas cuelgan de más de un producto distinto. commerce_queries lee
+    -- exactly estas columnas.
+    CREATE TABLE IF NOT EXISTS catalogo.supplier_offer (
+      id text PRIMARY KEY,
+      store_id text,
+      supplier text,
+      supplier_id text,
+      sku text,
+      title text,
+      price double precision,
+      cost double precision,
+      currency text,
+      offer_source text,
+      url text,
+      content_hash text
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.product_supplier_offer (
+      product_id text NOT NULL,
+      supplier_offer_id text NOT NULL,
+      PRIMARY KEY (product_id, supplier_offer_id)
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.supplier_store (
+      id text PRIMARY KEY,
+      supplier_id text
+    );
+
+    -- ── Ontología de pedidos (condición 2, opción (a); medida arriba) ──────
+    -- Customer.id = email canónico (así lo escribe el extractor Shopify).
+    CREATE TABLE IF NOT EXISTS catalogo.customer (
+      id text PRIMARY KEY,
+      name text,
+      phone text,
+      city text,
+      country text,
+      total_spent double precision,
+      orders_count integer
+    );
+    CREATE INDEX IF NOT EXISTS customer_phone_idx ON catalogo.customer (phone);
+
+    -- commerce_order: id = order_name del grafo (#ORD10635 y variantes; el
+    -- lector de tracking prueba las tres formas). shipment_id de FULFILLED_BY
+    -- (0 aristas medidas el 13-11: columna, 1:1 por construcción). SHIPPED_VIA
+    -- va en tabla de aristas: 12 pedidos con >1 carrier distinto, y la arista
+    -- lleva su propio tracking_number (order_shipped_via). email es el camino
+    -- de fallback de customer_orders (pedidos ingesta-dos sin arista PLACED).
+    CREATE TABLE IF NOT EXISTS catalogo.commerce_order (
+      id text PRIMARY KEY,
+      name text,
+      number text,
+      order_id text,
+      legacy_order_id text,
+      source_id text,
+      shopify_id text,
+      email text,
+      total_price double precision,
+      order_status text,
+      financial_status text,
+      fulfillment_status text,
+      created_at timestamptz,
+      shipment_id text
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.order_shipped_via (
+      order_id text NOT NULL,
+      carrier_id text NOT NULL,
+      tracking_number text,
+      PRIMARY KEY (order_id, carrier_id)
+    );
+    CREATE INDEX IF NOT EXISTS commerce_order_email_idx
+      ON catalogo.commerce_order (email);
+    -- /demand/trending: WHERE created_at >= cutoff ORDER BY count.
+    CREATE INDEX IF NOT EXISTS commerce_order_created_idx
+      ON catalogo.commerce_order (created_at);
+
+    -- PLACED es Customer→Order (39.496 aristas / 11.310 clientes: un pedido
+    -- puede haberlo escrito más de un email; tabla de aristas, no columna).
+    CREATE TABLE IF NOT EXISTS catalogo.order_placed (
+      order_id text NOT NULL,
+      customer_id text NOT NULL,
+      PRIMARY KEY (order_id, customer_id)
+    );
+    CREATE INDEX IF NOT EXISTS order_placed_customer_idx
+      ON catalogo.order_placed (customer_id);
+
+    -- CONTAINS (102.116 aristas / 81.237 pares (pedido,destino) distintos):
+    -- line_key = id del nodo destino, y las aristas repetidas del mismo par se
+    -- colapsan en la carga (ninguna ruta viva lee quantity: customer_orders
+    -- colecta DISTINCT p.title y demand/trending cuenta pedidos). product_id
+    -- solo si el destino es un Product; los UnresolvedLineItem (22.113)
+    -- conservan su línea con product_id NULL (hecho del grafo, no se descarta).
+    CREATE TABLE IF NOT EXISTS catalogo.order_line (
+      order_id text NOT NULL,
+      line_key text NOT NULL,
+      product_id text,
+      quantity integer,
+      raw_title text,
+      sku text,
+      price double precision,
+      PRIMARY KEY (order_id, line_key)
+    );
+    CREATE INDEX IF NOT EXISTS order_line_product_idx
+      ON catalogo.order_line (product_id);
+
+    CREATE TABLE IF NOT EXISTS catalogo.carrier (
+      id text PRIMARY KEY
+    );
+    CREATE TABLE IF NOT EXISTS catalogo.shipment (
+      id text PRIMARY KEY,
+      carrier text,
+      status text,
+      tracking_number text,
+      tracking_url text
+    );
+    CREATE INDEX IF NOT EXISTS shipment_tracking_idx
+      ON catalogo.shipment (tracking_number);
+
+    -- occurred_at/timestamp: el lector los pasa tal cual (coalesce), sin
+    -- comparar → texto fiel al grafo. Las comparaciones de fechas van por
+    -- commerce_order.created_at, que sí es timestamptz.
+    CREATE TABLE IF NOT EXISTS catalogo.tracking_event (
+      id text PRIMARY KEY,
+      order_id text,
+      shipment_id text,
+      tracking_number text,
+      raw_code text,
+      carrier text,
+      status text,
+      normalized_status text,
+      location text,
+      occurred_at text,
+      timestamp text,
+      url text,
+      tracking_url text
+    );
+    CREATE INDEX IF NOT EXISTS tracking_event_order_idx
+      ON catalogo.tracking_event (order_id);
+    CREATE INDEX IF NOT EXISTS tracking_event_shipment_idx
+      ON catalogo.tracking_event (shipment_id);
+    CREATE INDEX IF NOT EXISTS tracking_event_number_idx
+      ON catalogo.tracking_event (tracking_number);
+
+    CREATE TABLE IF NOT EXISTS catalogo.product_return (
+      id text PRIMARY KEY,
+      order_id text,
+      tracking_number text,
+      carrier text,
+      status text,
+      reason text,
+      tracking_url text
+    );
+    CREATE INDEX IF NOT EXISTS product_return_order_idx
+      ON catalogo.product_return (order_id);
+    CREATE INDEX IF NOT EXISTS product_return_number_idx
+      ON catalogo.product_return (tracking_number);
+
+    -- ── Documentos vectoriales (Path B de Qdrant → pgvector) ───────────────
+    -- bge-m3, 1024 dims, coseno (todas las colecciones, plan fase 1).
+    -- catalog_document: product_catalog (kind=product, key=shopify_id),
+    -- product_collections (kind=collection, key=handle), product_pages
+    -- (kind=page, key=handle, chunk_index por trozo — pages son multi-punto).
+    -- payload guarda el punto Qdrant íntegro (los filtros de /catalog/search
+    -- — published, inventory_quantity, compatible_platforms, product_type,
+    -- category — viven ahí como filtros jsonb en F2).
+    CREATE TABLE IF NOT EXISTS catalogo.catalog_document (
+      kind text NOT NULL,
+      key text NOT NULL,
+      chunk_index integer NOT NULL DEFAULT 0,
+      shopify_id text,
+      payload jsonb NOT NULL,
+      body text,
+      embedding vector(1024),
+      PRIMARY KEY (kind, key, chunk_index)
+    );
+
+    -- commerce_document: skirmshop_documents (la ingesta de comercio por
+    -- push-ingest: emails, pedidos, mensajes, ventanas de conversación). Lo
+    -- lee /search (vector). kind = payload.type.
+    CREATE TABLE IF NOT EXISTS catalogo.commerce_document (
+      source_id text NOT NULL,
+      chunk_index integer NOT NULL DEFAULT 0,
+      kind text,
+      payload jsonb NOT NULL,
+      body text,
+      embedding vector(1024),
+      PRIMARY KEY (source_id, chunk_index)
+    );
+
+    -- HNSW coseno SOLO donde una ruta viva hace búsqueda vectorial:
+    -- catalog_document (/catalog/search, /catalog/recommendations, /search) y
+    -- commerce_document (/search). channel_offers_v2/supplier_offers_v2 NO
+    -- llevan embedding: /catalog/offers/search tiene 0 tráfico en 14 d
+    -- (contrato vivo, portar sin prioridad); si F2 la porta, añade la columna
+    -- y su índice aquí (aditivo, no rompe nada).
+    CREATE INDEX IF NOT EXISTS catalog_document_embedding_hnsw
+      ON catalogo.catalog_document USING hnsw (embedding vector_cosine_ops);
+    CREATE INDEX IF NOT EXISTS commerce_document_embedding_hnsw
+      ON catalogo.commerce_document USING hnsw (embedding vector_cosine_ops);
+
+    -- Converge al dueño del rol (como agent-transcripts): el DDL corre como
+    -- superusuario; el consumidor (el Brain) es `catalogo`.
+    ALTER SCHEMA catalogo OWNER TO catalogo;
+    ALTER TABLE catalogo.product OWNER TO catalogo;
+    ALTER TABLE catalogo.collection OWNER TO catalogo;
+    ALTER TABLE catalogo.channel_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.product_channel_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.manufacturer_product OWNER TO catalogo;
+    ALTER TABLE catalogo.product_sourced_from OWNER TO catalogo;
+    ALTER TABLE catalogo.competitor_product OWNER TO catalogo;
+    ALTER TABLE catalogo.product_match OWNER TO catalogo;
+    ALTER TABLE catalogo.supplier_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.product_supplier_offer OWNER TO catalogo;
+    ALTER TABLE catalogo.supplier_store OWNER TO catalogo;
+    ALTER TABLE catalogo.customer OWNER TO catalogo;
+    ALTER TABLE catalogo.commerce_order OWNER TO catalogo;
+    ALTER TABLE catalogo.order_shipped_via OWNER TO catalogo;
+    ALTER TABLE catalogo.order_placed OWNER TO catalogo;
+    ALTER TABLE catalogo.order_line OWNER TO catalogo;
+    ALTER TABLE catalogo.carrier OWNER TO catalogo;
+    ALTER TABLE catalogo.shipment OWNER TO catalogo;
+    ALTER TABLE catalogo.tracking_event OWNER TO catalogo;
+    ALTER TABLE catalogo.product_return OWNER TO catalogo;
+    ALTER TABLE catalogo.catalog_document OWNER TO catalogo;
+    ALTER TABLE catalogo.commerce_document OWNER TO catalogo;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-shared-catalogo-schema
+  namespace: databases
+  annotations:
+    # PostSync y no Sync: el hook corre cuando el Cluster ya está aplicado y
+    # sano (mismo patrón y misma razón que role-settings.yaml).
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shared-infrastructure
+        app.kubernetes.io/component: postgres-catalogo
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          env:
+            - name: PGHOST
+              value: postgres-shared-rw.databases.svc.cluster.local
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: password }
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              ok=0
+              for i in $(seq 1 60); do
+                if psql -v ON_ERROR_STOP=1 -d catalogo -Atc 'SELECT 1' >/dev/null 2>&1; then
+                  ok=1; break
+                fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "catalogo no existe tras 5 min (Database CR sin reconciliar)" >&2
+                exit 1
+              fi
+              psql -v ON_ERROR_STOP=1 -d catalogo -f /sql/setup.sql
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: sql
+          configMap:
+            name: catalogo-schema-sql

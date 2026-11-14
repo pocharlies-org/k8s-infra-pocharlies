@@ -10,6 +10,7 @@ resources:
   - services-alias.yaml
   - app-databases.yaml
   - agent-transcripts-schema.yaml
+  - catalogo-schema.yaml
   - role-settings.yaml
   - brain-openwebui-grants.yaml
   - monitoring.yaml
