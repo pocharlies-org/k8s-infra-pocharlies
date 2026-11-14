@@ -17,6 +17,19 @@ parameters:
   replicaAutoBalance: best-effort
   diskSelector: nvme
   nodeSelector: ks5-nvme
+  # Pin the RWX share-manager (in-cluster NFS server) to the KS-5 nodes.
+  # Incident 2026-11-13: the share-manager of paseo/claude-creds ran on
+  # atlantic, stopped answering, the NFS clients on atlantic went D-state and
+  # the node hung (OVH hard reboot). Longhorn v1.13 reads this parameter from
+  # the PV StorageClass when it creates the share-manager pod
+  # (controller/share_manager_controller.go, getShareManagerNodeSelectorFromStorageClass).
+  # Same value as longhorn-openclaw-shared-rwx-encrypted. Node label
+  # node-pool=ks5-nvme exists only on ks5-cp-1/2/3.
+  # NOTE: this file is not in the root kustomization, so ArgoCD does not apply
+  # it. The live SC was recreated by hand on 2026-11-13 (kubectl replace --force)
+  # with this parameter and numberOfReplicas "3" (the live value; the "1" below
+  # from INFRA-969 was never applied). StorageClass parameters are immutable.
+  shareManagerNodeSelector: "node-pool:ks5-nvme"
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
