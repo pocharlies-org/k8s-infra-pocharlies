@@ -1,0 +1,3 @@
+---
+# SC-5299: inotify instance limit for every k3s node (tasks/inotify.yml).
+common_hardening_inotify_max_user_instances: 8192

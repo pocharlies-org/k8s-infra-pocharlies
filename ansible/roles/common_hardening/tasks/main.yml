@@ -75,3 +75,6 @@
   community.general.ufw:
     state: enabled
     policy: deny
+
+- name: Raise the inotify instance limit (SC-5299)
+  ansible.builtin.import_tasks: inotify.yml
