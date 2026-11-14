@@ -11,10 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = ROOT / "ansible"
 FILES = ANSIBLE / "roles/ca8_scripts/files"
 
-# Reviewed 2026-11-14; identical to /usr/local/sbin on atlantic, ks5-cp-1/2/3, alphalink.
+# Reviewed 2026-11-14 (undo rewritten without eval after the PR #523 security review);
+# identical to /usr/local/sbin on atlantic, ks5-cp-1/2/3, alphalink.
 PINNED_SHA256 = {
     "ca8-cut.sh": "cfc20901b3e23ca7addbc5c879e30d89ff96bcbaf0ad7ceaf35ee50ac60a7e91",
-    "ca8-undo.sh": "42ed97c033a103ad79a24b55c8d4b14fb29c35e7ce95c08feaa64a161bf2ab39",
+    "ca8-undo.sh": "4abab6be6c9694cfec6a114972b3c4748018fda100cab9d9376f98ec9e5888fa",
 }
 BUGGY_UNDO = 's/-A INPUT/-D INPUT/'
 
@@ -38,11 +39,32 @@ class Ca8ScriptsContractTest(unittest.TestCase):
                     # Only allowed as a quoted warning in a comment.
                     self.assertTrue(line.lstrip().startswith("#"), f"{path}: {line}")
 
-    def test_generator_undo_calls_the_node_script(self) -> None:
+    def test_undo_never_evaluates_rule_text(self) -> None:
+        text = (FILES / "ca8-undo.sh").read_text(encoding="utf-8")
+        self.assertNotIn("eval", text)
+        self.assertIn("-L INPUT --line-numbers -n", text)
+        # Only lists and deletes: never adds, flushes or touches a policy.
+        for forbidden in (" -I ", " -A ", " -F", " -P ", " -X", "ACCEPT"):
+            self.assertNotIn(forbidden, text, forbidden)
+
+    def test_generator_cuts_and_undoes_through_the_node_scripts(self) -> None:
         text = (ROOT / "scripts/ca8/ca8-run-c.sh").read_text(encoding="utf-8")
-        self.assertIn(
-            "UNDO_B64=$(printf '%s' '/usr/local/sbin/ca8-undo.sh' | base64 -w0)", text
-        )
+        self.assertIn("CUT=/usr/local/sbin/ca8-cut.sh", text)
+        self.assertIn("UNDO=/usr/local/sbin/ca8-undo.sh", text)
+        self.assertIn('node_cmd "$n" "$CUT ', text)
+        self.assertNotIn("iptables -w -I", text)
+        self.assertNotIn("-I INPUT", text)
+        self.assertNotIn("UNDO_B64", text)
+        self.assertNotIn("StrictHostKeyChecking=no", text)
+        self.assertIn("-o ServerAliveInterval=5 -o ServerAliveCountMax=3", text)
+
+    def test_cut_schedules_undo_before_the_first_rule(self) -> None:
+        text = (FILES / "ca8-cut.sh").read_text(encoding="utf-8")
+        timer = text.index('run "$SYSTEMD_RUN" --unit="$UNIT"')
+        backup = text.index('run "$SYSTEMD_RUN" --unit="$BACKUP_UNIT"')
+        first_rule = text.index('-I INPUT')
+        self.assertLess(timer, first_rule)
+        self.assertLess(backup, first_rule)
 
     def test_role_installs_undo_before_cut_as_root_0755(self) -> None:
         task = load_yaml("ansible/roles/ca8_scripts/tasks/main.yml")[0]

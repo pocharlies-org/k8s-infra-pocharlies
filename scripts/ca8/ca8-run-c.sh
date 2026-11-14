@@ -8,22 +8,31 @@
 #      en atlantic → 0 descargas) + /host montado + espera por status.phase=Running.
 # Reintentos por nodo al poner y verificar (3 intentos, ssh ConnectTimeout=10); se aborta
 # solo tras agotarlos, retirando todo.
+# Revisión de seguridad del PR #523 (14-11): el corte ya no inserta reglas desde aquí. Cada nodo
+# corre /usr/local/sbin/ca8-cut.sh, que programa los dos timers de vuelta ANTES de la primera
+# regla (los orígenes incluyen 100.83.56.98, la IP del x86: un corte lanzado desde el x86 tumba
+# su propia sesión ssh). Toda retirada usa /usr/local/sbin/ca8-undo.sh. Los dos guiones los
+# instala ansible/playbooks/ca8-scripts.yml (pocharlies-org/k8s-infra-pocharlies).
 set -u
 export KUBECONFIG="$HOME/.kube/config"
 EPOCH=$(date +%s)
 TAG="ca8-$EPOCH"
-SSHOPTS="-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no"
+# Claves de host fijadas: known_hosts del x86 (compartido con company-0), sin aceptar claves nuevas.
+SSHOPTS="-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=3"
 NODOS="ks5-cp-1 ks5-cp-2 ks5-cp-3 atlantic alphalink"
+# Solo para el registro: la lista que corta es SOURCES de ca8-cut.sh (la misma).
 ORIGENES="100.82.12.28 100.73.153.70 100.93.188.99 100.83.56.98 192.168.50.0/24"
 HELPER=ca8-atlantic-helper
 IMG=harbor.lan.e-dani.com/homelab/paseo-atlantic@sha256:6e94762849d4c95b1cb85677c32ab7367022d2cd4f4208a994125b8a0a1d34a1
 JR="python3 $HOME/.local/libexec/x86-host-runtime/jira_rest.py"
 LOG=/tmp/ca8-20261113c.log
 VM=http://vmsingle-vm-victoria-metrics-k8s-stack.monitoring.svc:8428
-# retira todas las reglas cuyo comentario empiece por ca8 (idempotente). NUNCA un undo a mano:
-# el anterior (sed "s/-A INPUT/-D INPUT/" | sh) no llevaba el comando iptables (exit 127) y dejó
-# atlantic cortado el 2026-11-13. Script del nodo, desplegado en los 5 nodos (2026-11-14).
-UNDO_B64=$(printf '%s' '/usr/local/sbin/ca8-undo.sh' | base64 -w0)
+# Guiones del nodo. CUT <tag> <secs>: timers de vuelta (secs y secs+900) y después 5 DROP con
+# comentario "ca8-<tag>". UNDO: retira toda regla cuyo comentario empiece por ca8 (idempotente).
+# NUNCA un undo a mano: el anterior (sed "s/-A INPUT/-D INPUT/" | sh) no llevaba el comando
+# iptables (exit 127) y dejó atlantic cortado el 2026-11-13.
+CUT=/usr/local/sbin/ca8-cut.sh
+UNDO=/usr/local/sbin/ca8-undo.sh
 N_OK=0
 RESULTATS=""
 
@@ -51,21 +60,24 @@ retry_nodo(){ local n=$1; shift; local i
 reglas_ca8(){ node_cmd "$1" "iptables -S INPUT | grep -c 'comment ca8' || true" | tail -1; }
 
 wipe_nodo(){ local n=$1 c
-  node_cmd "$n" "echo $UNDO_B64 | base64 -d | sh" || return 1
+  node_cmd "$n" "$UNDO" || return 1
   c=$(reglas_ca8 "$n") || return 1
   log "  $n: reglas restantes=$c"
   [ "$c" = "0" ]
 }
 
-# pone 5 reglas DROP + timer de vuelta (undo) + seguro a 75'; verifica 5 reglas
-poner_corte(){ local n=$1 tag=$2 undo_s=$3 o c r
-  r=$RANDOM
-  for o in $ORIGENES; do
-    node_cmd "$n" "iptables -C INPUT -s $o -m comment --comment $tag -j DROP 2>/dev/null || iptables -I INPUT -s $o -m comment --comment $tag -j DROP" || return 1
-  done
-  node_cmd "$n" "systemd-run --on-active=${undo_s}s --unit=${tag}-undo-$r /bin/sh -c 'echo $UNDO_B64 | base64 -d | sh'" >/dev/null || return 1
-  node_cmd "$n" "systemd-run --on-active=4500s --unit=${tag}-seguro-$r /bin/sh -c 'echo $UNDO_B64 | base64 -d | sh'" >/dev/null || return 1
-  c=$(node_cmd "$n" "iptables -S INPUT | grep -c 'comment $tag' || true" | tail -1)
+reglas_tag(){ node_cmd "$1" "iptables -S INPUT | grep -c 'comment $2' || true" | tail -1; }
+
+# corte en el nodo con ca8-cut.sh: undo a undo_s y respaldo a undo_s+900 programados ANTES de
+# la primera regla; el comentario queda "ca8-<tag sin ca8->" = $tag. Verifica 5 reglas.
+# Reintento idempotente: si un intento anterior ya cortó (y su ssh cayó después) no se corta
+# dos veces; si quedó a medias, se retira con UNDO antes de repetir.
+poner_corte(){ local n=$1 tag=$2 undo_s=$3 c
+  c=$(reglas_tag "$n" "$tag") || return 1
+  [ "$c" = "5" ] && return 0
+  if [ "$c" != "0" ]; then node_cmd "$n" "$UNDO" >/dev/null || return 1; fi
+  node_cmd "$n" "$CUT ${tag#ca8-} $undo_s" >/dev/null || return 1
+  c=$(reglas_tag "$n" "$tag") || return 1
   [ "$c" = "5" ]
 }
 
@@ -82,7 +94,7 @@ final(){ local veredicto=$1
 }
 
 limpiar(){ local n
-  for n in $NODOS; do node_cmd "$n" "echo $UNDO_B64 | base64 -d | sh" >/dev/null 2>&1 || true; done
+  for n in $NODOS; do node_cmd "$n" "$UNDO" >/dev/null 2>&1 || true; done
   kubectl delete pod "$HELPER" --ignore-not-found >/dev/null 2>&1 || true
 }
 trap limpiar EXIT
@@ -120,16 +132,16 @@ spec:
 YAML
 kubectl wait --for=jsonpath='{.status.phase}'=Running pod/$HELPER --timeout=180s || { log "BLOQUEO: helper de atlantic no arranca"; kubectl describe pod $HELPER 2>&1 | sed -n '/^Events:/,$p'; final "CA8: NO CUMPLE — BLOQUEO preflight (helper atlantic)"; exit 2; }
 
-log "Pre: sin restos ca8 y nodos alcanzables (3 intentos por nodo)"
+log "Pre: sin restos ca8, guiones instalados y nodos alcanzables (3 intentos por nodo)"
 for n in $NODOS; do
-  if ! retry_nodo "$n" node_cmd "$n" "iptables -S INPUT >/dev/null && iptables -S INPUT | grep -c 'comment ca8' | grep -qx 0"; then
+  if ! retry_nodo "$n" node_cmd "$n" "test -x $CUT && test -x $UNDO && iptables -S INPUT >/dev/null && iptables -S INPUT | grep -c 'comment ca8' | grep -qx 0"; then
     log "BLOQUEO: $n no responde o tiene restos ca8 tras 3 intentos"; abortar; final "CA8: NO CUMPLE — BLOQUEO preflight ($n)"; exit 2
   fi
 done
 log "Pre: sin restos ca8 en los 5 nodos. Guiones instalados."
 
 # ---------- pre-test: corte de 2 min en atlantic ----------
-log "PRE-TEST: corte de 2 min en atlantic con systemd-run --on-active=120"
+log "PRE-TEST: corte de 2 min en atlantic con $CUT (vuelta a 120 s, respaldo a 1020 s)"
 if ! retry_nodo atlantic poner_corte atlantic "ca8-pretest-$EPOCH" 120; then
   log "PRE-TEST NO: no se pudieron poner 5 reglas verificadas en atlantic"; abortar; final "CA8: NO CUMPLE — BLOQUEO pre-test"; exit 2
 fi
