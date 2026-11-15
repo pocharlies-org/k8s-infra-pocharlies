@@ -161,5 +161,9 @@ Nº de casos: **pendiente de medir**.
   fusiona ANTES de crear/conceder el rol, y la concesión sigue de inmediato para cerrar la ventana.
 - longhorn-single (1 réplica, Delete, sin dataLocality) existe solo a mano en el clúster, no está en git y no se usa: no
   garantiza en qué nodo cae la réplica. Para un volumen local de un nodo, longhorn-strict-local.
+- Trampa de olas: el CronJob `keycloak/keycloak-role-drift` (ola 0) falla a propósito cuando detecta drift de roles y
+  deja la ola 0 no sana, lo que bloquea las olas posteriores del Application `k8s-infra` (arreglo pendiente:
+  k8s-gitops#515). Si el Application no avanza tras un merge, comprobar este CronJob antes de culpar al cambio
+  (INFRA-171, criterio 7 del épico INFRA-123; el caso SC-2238 de arriba lo documenta desde el lado del catálogo).
 
 Última verificación contra el código: 2026-10-08 · e5fe657 (origin/main)
