@@ -51,6 +51,7 @@ MAQUINA = [
     ("POST", "/api/secretaria/despacho/secretaria-dani/escalar"),
     ("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),
     ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
+    ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide la ventana (HMAC V2)
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
