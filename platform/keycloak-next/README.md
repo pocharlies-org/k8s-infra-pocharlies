@@ -134,7 +134,7 @@ gate and explicit state rollback.
 
 `agentgateway-domain-roles-job.yaml` creates the fourteen reviewed domain roles
 without assigning them (`agentgateway-write:dgx-control` joined inert in
-INFRA-249: no allowlist entry, so its three gated tools stay denied). The hook fails if one is composite, mapped to a group,
+INFRA-249: no allowlist entry, so its gated tool stays denied). The hook fails if one is composite, mapped to a group,
 or held by any user other than the reviewed service accounts in its
 immutable `ALLOWED_SERVICE_ACCOUNTS` map: the six chat pairs (`:media`,
 `:social`, `:workspace`, `:gsc`, `:synapse` and `:hermes`, all of them

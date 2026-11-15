@@ -179,8 +179,8 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
 
     def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
         # INFRA-249: created without grantees; any holder, even the reviewed chat
-        # identity, fails the reconcile, so the three dgx-control write tools
-        # stay fail-closed until a dedicated client and map entry are reviewed.
+        # identity, fails the reconcile, so the gated dgx-control write tool
+        # stays fail-closed until a dedicated client and map entry are reviewed.
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         self.assertNotIn("agentgateway-write:dgx-control=", script)
         result, _ = self._run_reconciler({

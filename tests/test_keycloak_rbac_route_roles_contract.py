@@ -93,7 +93,7 @@ SMALL = {
          "tools": {"agentgateway-write": ["picqer_orders", "picqer_products"],
                    "agentgateway-write:picqer": ["picqer_orders", "picqer_products"]}},
         {"route": "dgx-control", "path": "/dgx-control", "require": [],
-         "tools": {"agentgateway-write:dgx-control": ["compute_mode_set", "opencode_restart"]}},
+         "tools": {"agentgateway-write:dgx-control": ["refusal_lambda_set", "opencode_restart"]}},
         {"route": "chat-stt", "path": "/chat-stt", "require": [], "tools": {}},
         {"route": "cto-office", "path": "/cto-office", "require": ["cto-office-send"],
          "tools": {"cto-office-send": ["cto_office_send"]}},
@@ -248,7 +248,7 @@ class RouteRolesMatrixTest(unittest.TestCase):
         for route in ("dgx-control", "chat-dgx-control"):
             self.assertEqual(self.routes[route]["require"], set(), route)
             self.assertEqual(self.routes[route]["tools"], {
-                "agentgateway-write:dgx-control": {"compute_mode_set", "refusal_lambda_set"},
+                "agentgateway-write:dgx-control": {"refusal_lambda_set"},
             }, route)
 
     def test_cto_office_route_is_retired_but_its_role_stays_reserved(self):

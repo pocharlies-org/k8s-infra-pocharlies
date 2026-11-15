@@ -70,14 +70,14 @@ este repo; el verificador dice qué fila.
 
 ## Decisión del CTO: `agentgateway-write:dgx-control` (INFRA-249)
 
-`/dgx-control` y `/chat-dgx-control` gatean `compute_mode_set` y
-`refusal_lambda_set` en `agentgateway-write:dgx-control` (`opencode_restart` salió con DGX-1135),
+`/dgx-control` y `/chat-dgx-control` gatean `refusal_lambda_set` en
+`agentgateway-write:dgx-control` (`opencode_restart` salió con DGX-1135; la escritura del perfil global de cómputo se retiró con DGX-1621),
 un rol que el 24-09-2026 **no existía en el realm** (verificador: `DRIFT:
 agentgateway-write:dgx-control referenciado en config y ausente del realm`).
 Decisión del CTO (INFRA-219, no se reabre): se **añade** el rol al reconciliador
 `scripts/agentgateway-domain-roles.sh` **sin concederlo a nadie** (sin entrada en
-`ALLOWED_SERVICE_ACCOUNTS`, `grantees: []` en `ROLES.yaml`). Es inerte: las tres
-tools siguen denegadas para todo token, y el hook falla si alguien lo tiene.
+`ALLOWED_SERVICE_ACCOUNTS`, `grantees: []` en `ROLES.yaml`). Es inerte: la tool
+sigue denegada para todo token, y el hook falla si alguien lo tiene.
 Concederlo exige revisar un client dedicado y su entrada en la allowlist, como
 los pares de `chat-agentgateway`. No se toca el `require:` de ninguna ruta.
 
@@ -369,7 +369,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/chat-dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["refusal_lambda_set"]
       }
     },
     {
@@ -377,7 +377,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/dgx-control",
       "require": [],
       "tools": {
-        "agentgateway-write:dgx-control": ["compute_mode_set", "refusal_lambda_set"]
+        "agentgateway-write:dgx-control": ["refusal_lambda_set"]
       }
     },
     {
