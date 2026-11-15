@@ -1,0 +1,12 @@
+# Fixture INFRA-1365: pins fijados por digest como refs completas (values/deployments).
+image:
+  repository: harbor.lan.e-dani.com/homelab/synapse
+  tag: v2026.11.12.2
+core:
+  image: harbor.lan.e-dani.com/homelab/correo-core@sha256:1111111111111111111111111111111111111111111111111111111111111111
+sidecar:
+  image: harbor.e-dani.com/homelab/correo-telegram@sha256:2222222222222222222222222222222222222222222222222222222222222222
+# no es pin: imagen de Docker Hub y digest corto (no 64 hex)
+noise:
+  image: docker.io/library/redis:7-alpine
+  bad: harbor.lan.e-dani.com/homelab/x@sha256:abc123

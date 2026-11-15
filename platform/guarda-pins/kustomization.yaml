@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# El ConfigMap `guarda-pins` (código: pins.py + migrar.py) lo genera el kustomization
+# raíz desde scripts/guarda-pins/ (veáse comentario allí); este kustomization solo
+# ensambla los recursos del namespace.
+resources:
+  - namespace.yaml
+  - externalsecret.yaml
+  - rbac.yaml
+  - migrar-job.yaml

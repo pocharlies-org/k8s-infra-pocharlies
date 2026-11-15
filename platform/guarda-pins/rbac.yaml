@@ -1,0 +1,10 @@
+# El Job de migración no toca la API de Kubernetes: habla solo con Harbor (HTTP) y
+# clona GitHub. No necesita RBAC; basta un ServiceAccount para no montar el `default`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: guarda-pins-migrar
+  namespace: guarda-pins
+  labels:
+    app.kubernetes.io/name: guarda-pins
+automountServiceAccountToken: false

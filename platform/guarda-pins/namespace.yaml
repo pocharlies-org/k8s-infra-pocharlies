@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: guarda-pins
+  labels:
+    app.kubernetes.io/name: guarda-pins
+    pod-security.kubernetes.io/enforce: restricted

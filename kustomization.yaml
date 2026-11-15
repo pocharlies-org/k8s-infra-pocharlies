@@ -92,6 +92,7 @@ resources:
   - platform/external-secrets/cluster-secret-store-correo-hermes.yaml
   - platform/external-secrets/cluster-secret-store-correo-synapse.yaml
   - platform/external-secrets/change-detector
+  - platform/guarda-pins
   - platform/external-secrets/x86-1password-master.yaml
   - platform/velero/node-agent-config.yaml
   - platform/velero/volume-policy.yaml
@@ -112,3 +113,19 @@ resources:
   - kubernetes/workloads/company-dreaming-cronjob.yaml
   - kubernetes/workloads/sauvage-pod-reaper.yaml
   - kubernetes/node-capacity-alerts.yaml
+
+# INFRA-1365: el Job de migración (platform/guarda-pins) lleva su código como
+# ConfigMap, patrón change-detector (no imagen nueva). El módulo y migrar.py viven en
+# scripts/guarda-pins/ (lo consumen la guarda y migrar.py); se generan aquí, en la raíz,
+# porque configMapGenerator no puede escapar del directorio del kustomization y la raíz
+# sí contiene scripts/. El Job lo monta en /opt/guarda-pins.
+configMapGenerator:
+  - name: guarda-pins
+    namespace: guarda-pins
+    files:
+      - scripts/guarda-pins/pins.py
+      - scripts/guarda-pins/migrar.py
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/name: guarda-pins

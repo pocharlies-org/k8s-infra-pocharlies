@@ -1,0 +1,123 @@
+# INFRA-1365 (P2): Job único que aplica la convención keep-<digest12> a los pins de
+# Harbor fijados por digest en los repos GitOps que aún no la tienen. GitOps (no
+# kubectl apply a mano): lo sincroniza la Application k8s-infra (path "." del repo).
+#
+# Patrón change-detector: código en ConfigMap (scripts/guarda-pins), imagen fijada por
+# digest, runAsNonRoot 65532, readOnlyRootFilesystem, backoffLimit 0 (migrar.py reintentos
+# en memoria; un reintento del Job sería otro clone + otra tanda de llamadas a Harbor).
+# El reporte va por stdout (evidencia del Job; sin PVC).
+#
+# El Job es de un solo uso: ArgoCD lo crea al primer sync y no lo relanza (un Job es
+# inmutable). Para volver a ejecutarlo tras corregir un pendiente: borrar el Job y dejar
+# que ArgoCD lo vuelva a crear en el siguiente sync.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guarda-pins-migrar
+  namespace: guarda-pins
+  labels:
+    app.kubernetes.io/name: guarda-pins
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: guarda-pins
+    spec:
+      serviceAccountName: guarda-pins-migrar
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: clone-gitops
+          image: docker.io/library/alpine/git:2.45.2@sha256:22ab341ead80d18c1be6836c16f4263eeb1bd7e87414f4263884c6726761be29
+          imagePullPolicy: IfNotPresent
+          # Clon shallow de cada repo GitOps listado en /work/repos/<repo>. El token
+          # viaja por http.extraHeader (no en la URL), así no queda en .git/config.
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              AUTH="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+              mkdir -p /work/repos
+              for repo in $GITOPS_REPOS; do
+                name="$(basename "$repo")"
+                git -c "http.extraHeader=Authorization: Basic ${AUTH}" \
+                    clone --depth 1 --quiet \
+                    "https://github.com/${repo}.git" "/work/repos/${name}"
+              done
+              echo "clonados: $(ls /work/repos | tr '\n' ' ')"
+          env:
+            - name: GITOPS_REPOS
+              value: >-
+                pocharlies-org/k8s-synapse-pocharlies
+                pocharlies-org/k8s-socialmedia-pocharlies
+                pocharlies-org/k8s-skills-catalog-pocharlies
+                pocharlies-org/k8s-offers-mcp-pocharlies
+                pocharlies-org/k8s-libreplay-pocharlies
+                pocharlies-org/k8s-paseo-pocharlies
+                pocharlies-org/k8s-redroid-pocharlies
+                pocharlies-org/k8s-frigate-pocharlies
+                pocharlies-org/skirmshop-labels
+                pocharlies-org/k8s-shopify-label-pocharlies
+                pocharlies-org/k8s-shopify-sync-pocharlies
+                pocharlies-org/k8s-shopify-back-in-stock-pocharlies
+                pocharlies-org/k8s-shopify-chatbot-pocharlies
+                pocharlies-org/k8s-render3d-pocharlies
+            - name: HOME
+              value: /work
+            - name: TMPDIR
+              value: /work
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef: { name: guarda-pins-creds, key: GITHUB_TOKEN }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+      containers:
+        - name: migrar
+          image: docker.io/library/python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/opt/guarda-pins/migrar.py"]
+          env:
+            - { name: GITOPS_DIRS, value: /work/repos }
+            - { name: HARBOR_BASE, value: "https://harbor.lan.e-dani.com" }
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+            - { name: TMPDIR, value: /work }
+            - name: HARBOR_USER
+              valueFrom:
+                secretKeyRef: { name: guarda-pins-creds, key: HARBOR_USER }
+            - name: HARBOR_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: guarda-pins-creds, key: HARBOR_PASSWORD }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 192Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: code, mountPath: /opt/guarda-pins, readOnly: true }
+            - { name: work, mountPath: /work, readOnly: true }
+      volumes:
+        - name: code
+          configMap:
+            name: guarda-pins
+            defaultMode: 0444
+        - name: work
+          emptyDir: { sizeLimit: 512Mi }
