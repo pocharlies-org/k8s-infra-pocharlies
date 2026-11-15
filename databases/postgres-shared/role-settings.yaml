@@ -32,6 +32,42 @@
 # puesto en k8s-observability-pocharlies/keep/values.yaml): sin pre-ping, la
 # primera reutilización de una conexión cortada por el servidor explota en la
 # aplicación en vez de reponerse de forma transparente.
+#
+# --- INFRA-1295 (P1): idle_session_timeout = 15min por rol -------------------
+#
+# Segundo ajuste de este Job: `idle_session_timeout = '15min'` para los roles
+# cubiertos. Corta en el servidor las conexiones `idle` (fuera de transacción)
+# que los pools de los consumidores abandonan y que saturaron postgres-shared
+# el 28-07 (~291 ociosas acumuladas, la de keep con 7 días). 15 min es el
+# valor fijado por el architect (nota-architect-plan.md de INFRA-1295): dos
+# órdenes de magnitud sobre cualquier hueco legítimo entre transacciones y
+# margen suficiente para que ninguna ociosa sobreviva a los 30 min del
+# criterio C1. El GUC se lee al abrir la sesión (`pg_db_role_setting`), así
+# que no requiere restart ni cambia ninguna cadena de conexión.
+#
+# Limpieza única del backlog tras los ALTER: `ALTER ROLE SET` solo afecta a
+# sesiones NUEVAS, así que las ociosas ya acumuladas no mueren sin el
+# `pg_terminate_backend` final. Es idempotente (en syncs posteriores devuelve
+# 0 filas) y solo mata `state='idle'` — nunca `idle in transaction` — y solo
+# de los roles cubiertos. `pg_stat_activity` es vista de clúster desde PG 9.6,
+# así que la limpieza alcanza a las sesiones de todas las bases.
+#
+# REGLA OBLIGATORIA (evita la regresión silenciosa): todo rol nuevo de
+# `managed.roles` del cluster.yaml debe añadirse a la lista de ALTERs de este
+# Job, o dejar aquí justificada su exclusión.
+#
+# Excluidos a propósito (ni ALTER ni terminate):
+#   - synapse_dispatcher, synapse_adapter — mantienen conexiones LISTEN que
+#     están en `state='idle'` por diseño; entrarán en P2 solo tras pasar la
+#     prueba de reconexión (matar backend idle → siguiente unidad de trabajo
+#     sin reinicio del pod).
+#   - synapse_migration, synapse_owner — exclusión permanente: migraciones
+#     con pg_advisory_lock (la razón ya documentada arriba).
+#   - postgres (superuser: instance manager de CNPG y los propios Job
+#     PostSync) y streaming_replica (walsender): nunca.
+#
+# Para revertir el mecanismo completo:
+#   ALTER ROLE <rol> RESET idle_session_timeout;   (por cada rol cubierto)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -73,11 +109,58 @@ spec:
             - psql
             - -v
             - ON_ERROR_STOP=1
-            - -c
             # ALTER ROLE ... SET es idempotente y persiste en el catálogo
             # (pg_db_role_setting), así que sobrevive a reinicio y failover.
             # Para revertir: ALTER ROLE keep RESET idle_in_transaction_session_timeout;
+            - -c
             - ALTER ROLE keep SET idle_in_transaction_session_timeout = '5min';
+            # idle_session_timeout por rol (INFRA-1295 P1, valor fijado por el
+            # architect: 15min). La lista son los roles cubiertos; los
+            # excluidos y su razón, en el comentario de cabecera. Todo rol
+            # nuevo de managed.roles entra aquí o justifica su exclusión.
+            - -c
+            - |
+              ALTER ROLE keep SET idle_session_timeout = '15min';
+              ALTER ROLE keycloak SET idle_session_timeout = '15min';
+              ALTER ROLE teslamate SET idle_session_timeout = '15min';
+              ALTER ROLE langfuse SET idle_session_timeout = '15min';
+              ALTER ROLE skirmbooks_ui_app SET idle_session_timeout = '15min';
+              ALTER ROLE hindsight SET idle_session_timeout = '15min';
+              ALTER ROLE litellm SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_engine SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_gateway SET idle_session_timeout = '15min';
+              ALTER ROLE n8n SET idle_session_timeout = '15min';
+              ALTER ROLE n8n_stg SET idle_session_timeout = '15min';
+              ALTER ROLE aurora SET idle_session_timeout = '15min';
+              ALTER ROLE horarios SET idle_session_timeout = '15min';
+              ALTER ROLE sauvage_bot SET idle_session_timeout = '15min';
+              ALTER ROLE dgxbench SET idle_session_timeout = '15min';
+              ALTER ROLE company_crm SET idle_session_timeout = '15min';
+              ALTER ROLE catalogo SET idle_session_timeout = '15min';
+              ALTER ROLE analisis SET idle_session_timeout = '15min';
+              ALTER ROLE opencode_archive SET idle_session_timeout = '15min';
+              ALTER ROLE brain_openwebui_ro SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
+            # Limpieza única del backlog tras los ALTER (INFRA-1295 P1): los
+            # ALTER solo afectan a sesiones nuevas, así que las ociosas ya
+            # acumuladas mueren aquí. Idempotente: en syncs posteriores
+            # devuelve 0 filas. Solo state='idle' (nunca idle in transaction)
+            # y solo roles cubiertos.
+            - -c
+            - |
+              SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+              WHERE state = 'idle'
+                AND state_change < now() - interval '15 minutes'
+                AND usename = ANY (ARRAY[
+                  'keep', 'keycloak', 'teslamate', 'langfuse',
+                  'skirmbooks_ui_app', 'hindsight', 'litellm',
+                  'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
+                  'aurora', 'horarios', 'sauvage_bot', 'dgxbench',
+                  'company_crm', 'catalogo', 'analisis', 'opencode_archive',
+                  'brain_openwebui_ro', 'synapse_sre_m2m',
+                  'synapse_sre_reporter', 'synapse_agent_m2m']);
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 128Mi }
