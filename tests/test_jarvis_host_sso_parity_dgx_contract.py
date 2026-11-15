@@ -32,7 +32,7 @@ CONTROL_SET = [("GET", p) for p in (
     "/api/company/control", "/api/company/entregas", "/api/litellm/keys", "/api/litellm/config",
     "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/hermes-sessions",
     "/api/app/secure/x",
-    "/api/app/pagos/lista", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
+    "/api/app/pagos/lista", "/api/app/alertas/a_x", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
     "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel",
     "/api/secretaria/despacho/temas", "/despacho-secretaria",
 )]
@@ -52,6 +52,7 @@ MAQUINA = [
     ("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),
     ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
     ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide la ventana (HMAC V2)
+    ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (

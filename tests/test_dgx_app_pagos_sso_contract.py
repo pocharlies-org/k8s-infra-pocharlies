@@ -26,7 +26,9 @@ ROUTING = ROOT / "platform" / "keycloak-next" / "routing.yaml"
 # DGX-674 (security C1): /api/app/alarma* (SSO + lista de emails en el backend) entra igual que
 # pagos; /api/alarma* es la ruta de maquina (HMAC V2) y NO entra, como /api/pagos*.
 # SC-2175 (security): /api/hermes-panel* (dgx.panel.hermes.v1) entra igual: su backend da 401 sin la cabecera.
-APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/push`)",
+# DGX-1628: /api/app/alertas* (la alerta urgente: detalle, imagen y respuesta «Lo hago/No») entra igual que pagos;
+# /api/alertas* es la de máquina (firma X-Dgx-*) y NO entra.
+APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/alertas`)", "PathPrefix(`/api/app/push`)",
                 "PathPrefix(`/api/app/alarma`)", "PathPrefix(`/api/hermes-panel`)")
 
 
