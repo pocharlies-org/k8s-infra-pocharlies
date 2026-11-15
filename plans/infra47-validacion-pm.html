@@ -1,0 +1,39 @@
+Rol: pm · Fecha: 2026-09-18 · Sesión: ffdafd89-33ae-4549-9e27-506e3e4e1b67 · Estado: CUMPLE
+
+# Veredicto funcional INFRA-47 — enforce `agentgateway-read:picqer` en la ruta /picqer
+
+VALIDACIÓN: CUMPLE (caja pre-merge; los criterios VIVOS quedan pendientes post-merge y DONE no llega hasta su evidencia).
+
+PR verificado: https://github.com/pocharlies-org/k8s-agentgateway-pocharlies/pull/84 · rama `infra-47-enforce-picqer` · commit único b962cbd · base main · estado OPEN y mergeStateStatus CLEAN (leído con `gh pr view 84` en esta sesión pm). Sustituye a #77 (no fusionar #77). Patrón idéntico al PR #76 (ruta /shopify-admin, INFRA-46), ya fusionado, verificado en vivo y con firma pm.
+
+Evidencia base: 70-qa.md (adjunto 10797, veredicto PASA con comando y salida pegados por criterio), 50-entrega.md (adjunto 10455), cuerpo del PR #84. Nota de honestidad: la reproducción propia del diff por pm (git en el repo) fue DENEGADA por el mapa de permisos del rol; pm no la ha rodeado y firma sobre la evidencia pegada por qa más los metadatos del PR leídos con `gh`, igual que en la firma de INFRA-46.
+
+## Criterio 1 LITERAL (403 al principal ajeno y 200 al titular, rol viajando en el token decodificado) — PENDING-POSTMERGE
+
+No reproducible antes del merge: el gate no existe en el clúster hasta que ArgoCD aplique main con el commit. Es el mismo criterio vivo del patrón #76. Queda a cargo de devops tras el merge, con comando y salida pegados y el rol `agentgateway-read:picqer` visto en el payload decodificado del token (defecto 6 de SC-100: otorgado no basta, tiene que viajar).
+
+## Criterio 2 PRECONDICIÓN (72 h sin principal sin otorgar llamando a /picqer) — CUMPLE (evidencia por despacho)
+
+Despacho del CTO en INFRA-47: en las 72 h previas el único llamante observado en la ruta fue `2379d025` (el SA del client agentgateway-mcp, titular del rol) y openclaw no mostró tráfico en /picqer. Salvedad registrada también en el cuerpo del PR: la API REST de comentarios del issue devuelve 0 comentarios (decisión 12978 da 404), así que la evidencia consta COMO DESPACHADA, no releída por qa ni por pm. Cobertura del riesgo: si aun así existiera un llamante sin otorgar, el primer síntoma sería su 403 en la verificación viva post-merge, que es obligatoria antes de DONE.
+
+## Criterio 3 (PR de un commit, diff solo en /picqer, rollback por revert) — CUMPLE
+
+Evidencia pegada por qa (criterio 1 de su 70-qa.md): `git diff --stat origin/main...b962cbd` da 3 ficheros, 5 inserciones y 2 borrados: `k8s/base/agentgateway-config.yaml` (3 líneas nuevas DENTRO de la ruta picqer, entre jwtAuth y backendAuth), la fila /picqer de `docs/route-index.md`, y `checksum/config` de `k8s/base/manifest.yaml`. Las rutas /cto-office, /company-metrics, los `mcpAuthorization` por herramienta y las rutas de chat OWU quedan sin tocar. Un solo commit (b962cbd), rollback = revert de ese commit. El bloque nuevo es fail-closed y de forma idéntica al de /shopify-admin ya en main (mismo `authorization` con `rules` y un único `require` del rol; qa comparó ambos bloques línea a línea). Checksum recalculado sobre el config con ambos bloques: sha256 9d3302ac...e5d5, coincidente con el del manifest (qa lo recalculó con `sha256sum` en el worktree del head).
+
+## Criterio 4 post-merge (Application agentgateway-mcp Synced/Healthy y /cto-office intacto) — PENDING-POSTMERGE
+
+Verificable solo tras el merge y la aplicación de ArgoCD. Devops pega comando y salida sobre el objeto vivo (no el semáforo), incluida la funcionalidad de /cto-office.
+
+## Criterio 5 documentación — CUMPLE
+
+`docs/route-index.md` refleja el gate en la fila /picqer dentro del mismo commit (qa y cuerpo del PR). La entrega nombra el documento que refleja el cambio: docs/route-index.md.
+
+## Coherencia con el otorgamiento en Keycloak (cruce de qa, no bloquea)
+
+qa no pudo leer los role-mappings (fuera de su mapa de permisos, sin rodeos). El otorgamiento del rol al SA `2379d025` quedó cerrado por devops en el ciclo INFRA-44. El 200 al titular de la verificación viva post-merge es la confirmación autoritativa de que el grant existe y viaja.
+
+## Pendiente post-merge (bloquea DONE)
+
+1. El CTO fusiona el PR #84 (y cierra #77 sin fusionar).
+2. Devops verifica en vivo y adjunta la evidencia: 403 al principal ajeno, 200 al titular con el rol visto en el token decodificado, Application agentgateway-mcp Synced/Healthy y /cto-office Synced/Healthy y funcional, sobre el objeto vivo.
+3. Con esa evidencia adjunta, pm pasa la historia a DONE. Sin ella se queda en Sign-off.

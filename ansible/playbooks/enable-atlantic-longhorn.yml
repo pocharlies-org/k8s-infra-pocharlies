@@ -1,0 +1,261 @@
+---
+# Explicit, gated rollout that makes Atlantic a full Longhorn node: it attaches
+# volumes for its pods AND stores replicas on /var/lib/longhorn.
+# History: INFRA-991 (24-10) admitted Atlantic as attach-only after the correo
+# core landed there without the Longhorn CSI driver (pattern copied from
+# enable-sauvage-longhorn-attach-only.yml, INFRA-679). INFRA-1103 (01-11, Dani):
+# Atlantic is prepared and stores replicas; disk `default-disk-atlantic` with 60 %
+# reserved, because the rest of the node (Paseo included) already used 46 % of
+# that filesystem.
+#
+# Required order:
+#   1. Upgrade Longhorn with storage/longhorn/values.yaml.
+#   2. Confirm the three Longhorn settings asserted below are applied.
+#   3. Run this playbook with the explicit confirmation token.
+#
+# Example:
+#   CONFIRM_ATLANTIC_LONGHORN=enable-atlantic-longhorn \
+#     ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
+#     ansible/playbooks/enable-atlantic-longhorn.yml
+
+- name: Confirm the Atlantic Longhorn rollout
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'CONFIRM_ATLANTIC_LONGHORN') == 'enable-atlantic-longhorn'
+        fail_msg: >-
+          Set CONFIRM_ATLANTIC_LONGHORN=enable-atlantic-longhorn
+          after the Longhorn Helm values have been upgraded and verified.
+
+- name: Install Longhorn attach and encryption prerequisites on Atlantic
+  hosts: atlantic
+  become: true
+  gather_facts: true
+  roles:
+    - longhorn_prereqs
+
+- name: Admit Atlantic to Longhorn as attach and replica-storage node
+  hosts: localhost
+  gather_facts: false
+  vars:
+    longhorn_namespace: longhorn-system
+    longhorn_node: atlantic
+  tasks:
+    - name: Read Atlantic Kubernetes node state
+      ansible.builtin.command:
+        argv: [kubectl, get, node, "{{ longhorn_node }}", -o, json]
+      register: atlantic_node_raw
+      changed_when: false
+
+    - name: Require Atlantic to be Ready
+      ansible.builtin.assert:
+        that:
+          - >-
+            (atlantic_node_raw.stdout | from_json).status.conditions
+            | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True')
+            | list | length == 1
+        fail_msg: "Atlantic must be Ready before Longhorn admission."
+
+    - name: Read Longhorn admission safety settings
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - get
+          - settings.longhorn.io
+          - create-default-disk-labeled-nodes
+          - system-managed-components-node-selector
+          - taint-toleration
+          - -o
+          - json
+      register: longhorn_settings_raw
+      changed_when: false
+
+    - name: Index Longhorn settings
+      ansible.builtin.set_fact:
+        longhorn_settings_items: "{{ (longhorn_settings_raw.stdout | from_json)['items'] }}"
+
+    - name: Index Longhorn setting application state
+      ansible.builtin.set_fact:
+        create_default_disk_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'create-default-disk-labeled-nodes')
+            | first
+          }}
+        system_component_selector_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'system-managed-components-node-selector')
+            | first
+          }}
+        taint_toleration_setting: >-
+          {{
+            longhorn_settings_items
+            | selectattr('metadata.name', 'equalto', 'taint-toleration')
+            | first
+          }}
+
+    - name: Refuse admission unless no-disk and taint gates are active
+      ansible.builtin.assert:
+        that:
+          - create_default_disk_setting.value | bool
+          - system_component_selector_setting.value == 'storage-longhorn:true'
+          - "'pocharlies.io/pool=bulk:NoSchedule' in taint_toleration_setting.value"
+          - create_default_disk_setting.status.applied | bool
+          - system_component_selector_setting.status.applied | bool
+          - taint_toleration_setting.status.applied | bool
+        fail_msg: >-
+          Longhorn must create disks only on explicitly labelled nodes, select
+          storage-longhorn=true for system components, and tolerate the bulk
+          pool taint before the node is admitted.
+
+    - name: Remove any default-disk opt-in from Atlantic
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if kubectl get node "{{ longhorn_node }}" -o json \
+          | jq -e '.metadata.labels | has("node.longhorn.io/create-default-disk")' >/dev/null; then
+          kubectl label node "{{ longhorn_node }}" node.longhorn.io/create-default-disk-
+          echo changed
+        else
+          echo unchanged
+        fi
+      register: remove_default_disk_label
+      changed_when: "'changed' in remove_default_disk_label.stdout"
+
+    - name: Label Atlantic for Longhorn system components
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - label
+          - node
+          - "{{ longhorn_node }}"
+          - "storage-longhorn=true"
+          - --overwrite
+      register: label_atlantic
+      changed_when: "'not labeled' not in label_atlantic.stdout"
+
+    - name: Wait for the Longhorn node resource
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=create
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    # 565351383859 B = 60 % of the 877 GiB md3 filesystem (measured 01-11).
+    - name: Enable replica storage on the node and its disk
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - patch
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - --type=merge
+          - -p
+          - >-
+            {"spec":{"allowScheduling":true,"disks":{"default-disk-atlantic":{"allowScheduling":true,
+            "diskDriver":"","diskType":"filesystem","evictionRequested":false,"path":"/var/lib/longhorn",
+            "storageReserved":565351383859,"tags":[]}}}}
+      changed_when: true
+
+    - name: Wait for Longhorn manager on Atlantic
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - app=longhorn-manager
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn CSI plugin on Atlantic
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - app=longhorn-csi-plugin
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn engine image on Atlantic
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - longhorn.io/component=engine-image
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Wait for Longhorn instance manager on Atlantic
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - wait
+          - --for=condition=Ready
+          - pod
+          - -l
+          - longhorn.io/component=instance-manager
+          - --field-selector
+          - "spec.nodeName={{ longhorn_node }}"
+          - --timeout=5m
+      changed_when: false
+
+    - name: Read final Longhorn node state
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ longhorn_namespace }}"
+          - get
+          - "nodes.longhorn.io/{{ longhorn_node }}"
+          - -o
+          - json
+      register: longhorn_node_raw
+      changed_when: false
+
+
+    - name: Prove Atlantic accepts replicas
+      ansible.builtin.assert:
+        that:
+          - (longhorn_node_raw.stdout | from_json).spec.allowScheduling
+          - (longhorn_node_raw.stdout | from_json).spec.disks['default-disk-atlantic'].allowScheduling
+          - >-
+            (longhorn_node_raw.stdout | from_json).status.diskStatus['default-disk-atlantic'].conditions
+            | selectattr('status', 'equalto', 'True') | map(attribute='type') | list
+            is superset(['Ready', 'Schedulable'])
+        fail_msg: >-
+          Atlantic does not accept replicas: the node or default-disk-atlantic is
+          not schedulable, or the disk is not Ready and Schedulable.

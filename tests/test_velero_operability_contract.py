@@ -42,10 +42,11 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         self.assertEqual(section.count("loadAffinity:"), 1)
         self.assertNotIn("topology: lan", section)
 
-    def test_node_agent_covers_lan_and_ovh_but_not_remote(self):
+    def test_node_agent_covers_lan_ovh_and_cloud_but_not_remote(self):
         section = VALUES.split("nodeAgent:", 1)[1].split("# Velero server", 1)[0]
-        self.assertIn('values: ["lan", "ovh"]', section)
-        self.assertNotIn('values: ["lan", "ovh", "remote"]', section)
+        self.assertIn('values: ["lan", "ovh", "cloud"]', section)
+        self.assertNotIn('"remote"', section)
+        self.assertIn("value: alpha", section)
         self.assertIsNone(re.search(r"^  nodeSelector:\s*$", section, re.MULTILINE))
         self.assertIn("--node-agent-configmap=velero-node-agent-config", section)
         self.assertIn('cpu: "1"', section)
@@ -73,22 +74,55 @@ class VeleroOperabilityContractTest(unittest.TestCase):
             },
         )
 
-    def test_fsb_policy_skips_only_ephemeral_emptydir(self):
+    def test_fsb_policy_skips_ephemerals_and_derived_data(self):
         self.assertIn("name: velero-fsb-volume-policy", VOLUME_POLICY)
         self.assertIn("volumeTypes:\n            - emptyDir", VOLUME_POLICY)
         # 66c8717 added the second skip: CNPG-managed PVCs, which CNPG/barman
         # already backs up with real PITR. The durable volume-type selectors
         # below remain forbidden; the CNPG rule matches by pvcLabels only.
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 2)
+        # INFRA-993 adds four more pvcLabels skips: VictoriaMetrics, Loki and
+        # Langfuse carry no backup by decision (Dani, 26-10).
+        # INFRA-1222 (Dani, 09-11) suma 14: analítica derivada (aiops), caché
+        # (buildkit, trivy, pesos de modelo con etiqueta), el export NFS —que es
+        # recursión del contenido que ya se copia PVC a PVC— y el mirror de un
+        # bucket. Lo que velero v1.18 rechaza del CM entero, con `field X not found
+        # in type resourcepolicies.volumeCondition`: las cuatro claves de abajo.
+        # Hay más admitidas (`capacity` existe, probado 10-11), así que una clave
+        # nueva se prueba con un Backup CR antes de fiarse de esta lista; un CM
+        # inválido tumba las 5 schedules vivas.
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 20)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
+        for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
+                          "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio",
+                          "app: aiops-qdrant-ks5", "app: aiops-falkordb-ks5", "app: buildkitd",
+                          "app: nfs-subdir-external-provisioner",
+                          "app.kubernetes.io/name: grafana", "app.kubernetes.io/name: vmsingle-rca",
+                          "app.kubernetes.io/name: skirmshop-drive-mirror", "component: trivy",
+                          "app: ollaya", "app: bge", "app: stt-turbo", "app: gliner2-extract",
+                          "app.kubernetes.io/name: sc80-restore-drill",
+                          "app.kubernetes.io/name: drill-restore"):
+            self.assertIn(no_backup, VOLUME_POLICY)
+        for condicion_prohibida in ("pvcName", "usedByPods", "csiDrivers", "pvCFolumeAttributes"):
+            self.assertNotIn(
+                f"          {condicion_prohibida}:", VOLUME_POLICY.split("policies.yaml: |")[1]
+            )
+        # lo que sí es dato único no se salta: lo entrenado en el ns llm (comparte
+        # etiqueta omnivoice-tts-dgx2 entre el modelo descargable y las voces, así
+        # que ninguna de las tres PVCs se salta), y el media de whatsapp, que es
+        # chat que no se vuelve a descargar
+        # en forma de regla (12 espacios), no de prosa: el comentario explica
+        # justamente por qué omnivoice-tts-dgx2 NO puede ir en la lista
+        for still_protected in ("app: omnivoice-tts-dgx2", "app: omnivoice-tts-trained",
+                                "app: voicelab", "app: whatsapp"):
+            self.assertNotIn(f"            {still_protected}\n", VOLUME_POLICY)
         for durable_selector in ("persistentVolumeClaim", "csi:", "nfs:"):
             self.assertNotIn(durable_selector, VOLUME_POLICY)
 
     def test_all_schedules_keep_pvc_fsb_and_reference_policy(self):
         schedule_count = SCHEDULES.count("kind: Schedule")
-        self.assertEqual(schedule_count, 3)
-        self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), 3)
-        self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), 3)
+        self.assertEqual(schedule_count, 4)
+        self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), schedule_count)
+        self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), schedule_count)
         self.assertNotIn("defaultVolumesToFsBackup: false", SCHEDULES)
 
 

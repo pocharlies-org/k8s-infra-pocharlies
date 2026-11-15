@@ -1,0 +1,78 @@
+# SC-4304: declared grants only; credentials come from the existing automation identity.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-hindsight-leila-grants
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "22"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: hindsight-leila-grants
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector: {node-pool: ks5-nvme}
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: reconcile
+          image: python:3.13.5-alpine3.22@sha256:37b14db89f587f9eaa890e4a442a3fe55db452b69cca1403cc730bd0fbdc8aaf
+          command: [python3, -B, /opt/rbac/hindsight-leila-grants.py]
+          env:
+            - {name: KEYCLOAK_URL, value: 'http://keycloak.keycloak.svc.cluster.local'}
+            - {name: KC_REALM, value: edani}
+            - {name: KC_TOKEN_REALM, value: master}
+            - {name: KC_CLIENT_ID_FILE, value: /credentials/client_id}
+            - {name: KC_CLIENT_SECRET_FILE, value: /credentials/client_secret}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: code, mountPath: /opt/rbac, readOnly: true}
+            - {name: credentials, mountPath: /credentials, readOnly: true}
+      volumes:
+        - name: code
+          configMap: {name: keycloak-hindsight-leila-grants, defaultMode: 0444}
+        - name: credentials
+          secret:
+            secretName: keycloak-automation
+            defaultMode: 0440
+            items:
+              - {key: client_id, path: client_id}
+              - {key: client_secret, path: client_secret}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hindsight-leila-grants-egress
+  namespace: keycloak
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: hindsight-leila-grants}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: keycloak}}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

@@ -1,39 +1,6 @@
 ---
 # Split-horizon routes for human-facing panels. AdGuard sends these public
 # names to Traefik LAN; Internet continues through traefik-edge + Keycloak.
-#
-# OJO: el Service estable de Chamber vive en
-# networking/traefik-lan/openchamber-lan.yaml y se llama
-# `openchamber-lan-x86`. Mantener ambas rutas sobre ese ExternalName evita que
-# esta ruta split-DNS vuelva al Service selectorless retirado.
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: lan-openchamber-public-host
-  namespace: traefik-lan
-spec:
-  entryPoints: [websecure]
-  routes:
-    - kind: Rule
-      priority: 300
-      match: Host(`chamber.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      services:
-        - name: openchamber-lan-x86
-          port: 3000
-          serversTransport: openchamber-lan-transport
-    - kind: Rule
-      priority: 100
-      match: Host(`chamber.e-dani.com`)
-      middlewares:
-        - name: sso-chain
-          namespace: keycloak
-      services:
-        - name: openchamber-lan-x86
-          port: 3000
-          serversTransport: openchamber-lan-transport
-  tls:
-    secretName: wildcard-edani-tls
----
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -42,6 +9,15 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
+    # DGX-829, espejo de la 500 de lan-dgx-dashboard-public-host (INFRA-732): /api/interno/* solo por
+    # el Service del clúster; 404 en el borde (edge-static-server), nunca al backend por este host.
+    - kind: Rule
+      priority: 500
+      match: Host(`jarvis.e-dani.com`) && PathPrefix(`/api/interno`)
+      services:
+        - name: edge-static-server
+          namespace: traefik-edge
+          port: 8080
     - kind: Rule
       priority: 400
       match: Host(`jarvis.e-dani.com`) && (Path(`/`) || Path(`/jarvis`) || Path(`/jarvis.html`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
@@ -50,6 +26,57 @@ spec:
           namespace: traefik-lan
         - name: jarvis-public-hud-shell
           namespace: jarvis
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # SC-5366: espejo de la 415 de lan-dgx-dashboard-public-host. La guarda de la Alarma lee la
+    # identidad solo del JWT (DGX-807) y aquí sirve el mismo backend: sin sso-chain, jarvis daría 403
+    # donde dgx ya deja pasar. Paridad exigida por tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    - kind: Rule
+      priority: 415
+      match: Host(`jarvis.e-dani.com`) && (Path(`/alarma`) || PathPrefix(`/api/app/alarma`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    # DGX-1539: espejo íntegro de la 400/350 de lan-dgx-dashboard-public-host (control set con
+    # lecturas + escrituras). Autorizan con el JWT verificado (DGX-807) y la estampa de la 300 no
+    # lleva Bearer: en jarvis daban el mismo 403. Paridad exigida por
+    # tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    - kind: Rule
+      priority: 400
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || PathPrefix(`/cuentas`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
+    - kind: Rule
+      priority: 350
+      match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: sso-chain
+          namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
@@ -57,11 +84,12 @@ spec:
     - kind: Rule
       priority: 300
       match: Host(`jarvis.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      # Sin SSO en este host: las cabeceras de identidad (x-auth-request-email…) se vacían siempre, como en
-      # dgx.lan; si no, cualquiera de la LAN/tailnet se haría pasar por Dani ante `es_dani` del dashboard
-      # (despacho de secretarias, decisiones de pago dgx.app.pagos.v1). Security, 03-10-2026.
+      # DGX-1314 (Dani, 27-10): LAN = Dani, como dgx.lan: todo el backend sin SSO con la identidad de Dani
+      # estampada (sobrescribe cualquier cabecera forjada). Paridad: tests/test_jarvis_host_sso_parity_dgx_contract.py.
       middlewares:
-        - name: dgx-strip-identity-headers
+        - name: dgx-lan-identidad-dani
+          namespace: traefik-lan
+        - name: dgx-edge-proof
           namespace: traefik-lan
       services:
         - name: dgx-dashboard-ui

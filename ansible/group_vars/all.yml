@@ -12,6 +12,7 @@ k3s_disable_components:
   - local-storage
 k3s_tls_sans:
   - k8s.lan.e-dani.com
+  - k3s-api.taile0ad27.ts.net
   - x86.taile0ad27.ts.net
   - ks5-cp-1
   - ks5-cp-2

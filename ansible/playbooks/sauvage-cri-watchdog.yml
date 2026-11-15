@@ -1,0 +1,12 @@
+---
+# INFRA-944: host-side recovery for the CRI stall that stopped sauvage from
+# creating pod sandboxes (disk fsync saturation -> RunPodSandbox deadline ->
+# leaked sandbox name reservations). The in-cluster zombie-watchdog cannot
+# self-heal this: it is pinned to sauvage and needs the same CRI to run.
+- name: Install the CRI stall watchdog on sauvage
+  hosts: sauvage
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - sauvage_cri_watchdog

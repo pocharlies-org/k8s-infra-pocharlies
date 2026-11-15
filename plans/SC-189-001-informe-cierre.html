@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>SC-189-001 — Visor de compañía en company.e-dani.com: sesiones de agente del x86, solo lectura tras SSO</title>
+<style>
+body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #172b4d; line-height: 1.5; max-width: 900px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.5em; border-bottom: 2px solid #dfe1e6; padding-bottom: 8px; }
+h2 { font-size: 1.2em; margin-top: 1.6em; color: #0052cc; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+th, td { border: 1px solid #dfe1e6; padding: 6px 8px; text-align: left; vertical-align: top; font-size: 0.95em; }
+th { background: #f4f5f7; }
+.cumple { color: #006644; font-weight: bold; }
+.noverif { color: #974f0c; font-weight: bold; }
+code { background: #f4f5f7; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+.aviso { background: #fff7e6; border-left: 4px solid #ff8b00; padding: 8px 12px; margin: 12px 0; }
+.ok { background: #e3fcef; border-left: 4px solid #00875a; padding: 8px 12px; margin: 12px 0; }
+</style>
+</head>
+<body>
+<h1>SC-189-001 — Visor de compañía en company.e-dani.com: sesiones de agente del x86, solo lectura tras SSO</h1>
+<p><strong>Veredicto funcional de la pm (lucia): CIERRE APROBADO.</strong> Informe de cierre de la épica
+<a href="https://e-dani.atlassian.net/browse/SC-189">SC-189</a>, re-abierta el 14-09-2026 por la auditoría
+retrospectiva (comentario 12579: pasó de Backlog a Done sin QA, sin Sign-off y sin informe) y tramitada de nuevo
+con QA formal (veredicto APROBADO de valeria, comentario 12622, 15-09-2026) y este informe.</p>
+
+<h2>Objetivo</h2>
+<p>Hoy es verdad lo que pedía el encargo: <code>https://company.e-dani.com</code> está detrás del SSO de Keycloak
+(realm edani, auth-next.e-dani.com) — sin sesión no sirve ningún contenido, medido con 302 incluso desde LAN/tailnet
+— y la superficie de datos del visor (ruta <code>/company-view</code> del responder del x86, consumida por el backend
+del dashboard) es de <strong>lista blanca en origen</strong>: metadatos, estado, títulos y árbol de subagentes; nunca
+cuerpos de conversación. El visor no lanza, no para y no escribe ninguna sesión (405 «solo lectura» explícito).
+Restricciones literales del operador: «no publiques contenido de mensajes», «solo lectura», «nunca expuesto sin
+autenticación» — las tres cumplidas y medidas, criterio por criterio, más abajo.</p>
+
+<h2>Qué se construyó</h2>
+<ul>
+<li><strong>x86 (<code>x86-host-runtime-pocharlies</code>, PR #3, merge 365c95f en <code>main</code>):</strong> ruta
+GET <code>/company-view</code> en <code>libexec/claude-rc-status.py</code>, protegida con el <code>X-RC-Token</code>
+que el responder ya exigía. Lista blanca de 13 campos por sesión (<code>VIEW_SESSION_FIELDS</code>) y 6 por hijo;
+<code>titulo</code> solo de registro <code>custom-title</code>/<code>ai-title</code> o etiqueta sintética
+(<code>sesion uuid-corto repo</code>), jamás el recorte del primer prompt. <code>do_POST</code> intercepta la ruta
+con 405 «solo lectura» explícito (no el 501 genérico: el 405 dice «esta ruta no escribe»). <code>GET /sessions</code>
+no cambia de forma (tiene consumidor). Se rechazó montar <code>hostPath ~/.claude</code> en el pod: la redacción vive
+en el origen, de modo que los cuerpos nunca cruzan la frontera (decisión del CTO, documentada en la descripción del
+epic, con el precedente del <code>agent-session-mirror</code> retirado por su modo de fallo en la escritura).</li>
+<li><strong>Dashboard (<code>dgx-infra</code>, PR #258, merge a9f2bfc5 en <code>master</code>):</strong> passthrough
+en <code>routes_claude_sessions.py</code> (reenvía el JSON del host sin añadir ni recortar), página
+<code>static/company.html</code> (sin credenciales del host: grep de token/IP vacío, medido de nuevo el 15-09) y
+<code>ui/conf.d/20-company.conf</code> con locations exactas. <code>app.py</code> intacto.</li>
+<li><strong>Edge (<code>k8s-infra-pocharlies</code>, PR #99, merge 46f7b2b en <code>main</code>):</strong>
+IngressRoute <code>edge-company-viewer-public</code> en <code>traefik-edge</code>: UNA sola route
+<code>Host(company.e-dani.com)</code> con middleware <code>sso-chain</code> (ns keycloak), sin bypass por ClientIP
+ni priority (el de <code>edge-dgx-dashboard-public</code> está prohibido aquí), <code>tls.store: default</code>
+(wildcard <code>*.e-dani.com</code>), backend <code>dgx-dashboard-ui:80</code>.</li>
+<li><strong>Reubicación registrada (09-09):</strong> <code>20-company.conf</code> cambió a alias 302 —
+<code>company.e-dani.com</code> ya no sirve su propia copia de <code>company.html</code> sino que redirige tras el
+SSO a la vista canónica <code>dgx.e-dani.com/claude-sessions#compania</code>. Decisión anotada en la cabecera del
+fichero; la ruta sigue bajo <code>sso-chain</code> (medido el 15-09). La garantía del epic se mantiene en la
+superficie que este define.</li>
+</ul>
+
+<h2>Artefactos</h2>
+<table>
+<tr><th>Artefacto</th><th>Estado</th></tr>
+<tr><td>PR #3 <code>x86-host-runtime-pocharlies</code> (SC-191)</td><td>Mergeado a <code>main</code> en 365c95f (04-09); EN-TRONCO confirmado el 15-09 con <code>merge-base --is-ancestor</code> (devops)</td></tr>
+<tr><td>PR #258 <code>dgx-infra</code> (SC-193)</td><td>Mergeado a <code>master</code> en a9f2bfc5 (04-09); EN-TRONCO confirmado el 15-09</td></tr>
+<tr><td>PR #99 <code>k8s-infra-pocharlies</code> (SC-195)</td><td>Mergeado a <code>main</code> en 46f7b2b (04-09); EN-TRONCO confirmado el 15-09</td></tr>
+<tr><td>Aditivos sobre la lista blanca: PR #27 (4aae4e6), commit 6b7af00, PR #34 (038e663), commit 3f14d6f (SC-208/213); en dgx-infra PR #262 (00efaa92) y fix #284 (019c2209)</td><td>En tronco; todos con pedido de operador registrado en el código; aditivos puros (añadir, nunca renombrar) conforme al contrato de <a href="https://e-dani.atlassian.net/browse/SC-269">SC-269</a></td></tr>
+<tr><td>Despliegue x86</td><td>Sha instalado del responder idéntico a <code>origin/main</code>; unit <code>claude-rc-status</code> activa (verificado devops el 15-09)</td></tr>
+<tr><td>Despliegue dashboard</td><td>Digests en producción backend <code>ci-e04f842da</code> y UI <code>ci-3d5275ed43</code>, ambos descienden de a9f2bfc5</td></tr>
+<tr><td>Producción</td><td><code>https://company.e-dani.com</code> — 302 a auth-next.e-dani.com sin sesión, medido el 15-09 por qa</td></tr>
+</table>
+
+<h2>Evidencia — veredicto criterio a criterio</h2>
+<p>Fuente primaria: veredicto QA de valeria del 15-09-2026 (comentario 12622 en SC-189, medición viva desde el x86),
+verificación de merges y despliegue de devops del 15-09, verificación AC del 05-09 sobre el servicio vivo
+(comentario 10681 en SC-191) y el cierre por cita del CTO del 08-09 (comentario 11281). La pm no repite medidas que
+ya están en Jira con su salida; las cita y las comprueba contra el estado vivo descrito por devops y qa hoy.</p>
+<table>
+<tr><th>Criterio</th><th>Veredicto</th><th>Evidencia</th></tr>
+<tr><td>No publicar cuerpos: lista blanca en origen, <code>contexto</code> ausente</td><td class="cumple">CUMPLE</td><td>qa 12622 §1: 13 bases exactas más 5 extras aditivos, todos metadata (números/booleanos/enums/nombre); <code>has("contexto")</code> medido false. §2: fragmentos de 60 chars del primer mensaje de usuario de 3 sesiones vivas, <code>grep -F</code> contra la respuesta completa → 0 coincidencias en las 3. En su día, 10681: 36 transcripts, 0 coincidencias.</td></tr>
+<tr><td><code>titulo</code> solo de <code>custom-title</code>/<code>ai-title</code> o sintético</td><td class="cumple">CUMPLE</td><td>qa 12622 §3: 3 casos medidos (dos <code>ai-title</code> idénticos byte a byte, uno sintético <code>sesion 2fefb566 dgx-infra</code>). El test literal de grep de títulos tiene falsos positivos estructurales documentados (10681): un <code>ai-title</code> puede copiar un prompt corto; el criterio operativo es la procedencia, y esa está medida conforme.</td></tr>
+<tr><td><code>actividad_actual</code> es metadato (nombre de tool/estado), no payload</td><td class="cumple">CUMPLE</td><td>qa 12622 §4: longitud máxima medida 54, límite 80.</td></tr>
+<tr><td>Solo lectura: el visor no lanza, no para, no escribe</td><td class="cumple">CUMPLE</td><td>qa 12622 §5: POST con token a <code>/company-view</code> → 405 <code>{"error": "solo lectura"}</code> (intercepción explícita, líneas 2717-2720). §7: ningún handler de escritura nuevo sobre la superficie del visor; los preexistentes (<code>/start</code>, rename, archive) intactos y aparte. Nota SC-359 más abajo.</td></tr>
+<tr><td>Nunca expuesto sin autenticación (sso-chain en TODAS las reglas)</td><td class="cumple">CUMPLE</td><td>qa 12622 §9: objeto vivo <code>edge-company-viewer-public</code> con UNA sola route y <code>sso-chain</code>, sin ClientIP ni priority → se satisface por construcción y por medida. §8: <code>curl -skI https://company.e-dani.com/</code> → 302 a auth-next.e-dani.com incluso desde LAN/tailnet. §5: responder sin token → 401 con 0 ocurrencias de uuid.</td></tr>
+<tr><td><code>GET /sessions</code> (consumidor preexistente) intacto</td><td class="cumple">CUMPLE</td><td>qa 12622 §6: forma vieja medida en vivo; testigo git de los últimos 5 commits sobre el fichero: ninguno toca la forma.</td></tr>
+<tr><td>Sin credenciales del host en la UI</td><td class="cumple">CUMPLE</td><td>qa 12622 §10: grep de <code>X-RC-Token</code> / token / IP de tailnet sobre <code>company.html</code> en <code>origin/master</code> → vacío.</td></tr>
+<tr><td>Desplegado y visible en el objeto vivo (no el semáforo de ArgoCD)</td><td class="cumple">CUMPLE</td><td>devops 15-09: sha instalado del responder == <code>origin/main</code>, unit activa; digests del dashboard descienden de a9f2bfc5. qa 15-09: IngressRoute vivo y 302 público medidos directamente sobre el clúster y el DNS.</td></tr>
+<tr><td>Cero hijos abiertos</td><td class="cumple">CUMPLE</td><td>SC-191, SC-193, SC-195: las tres historias Done (verificado hoy con jira_get_issue).</td></tr>
+<tr><td>Render final de la página en navegador autenticado</td><td class="noverif">NO VERIFICADO</td><td>qa 12622 §11: chrome-mcp CONNECTION_CLOSED en la sesión qa (también negado antes al CTO). Razonamiento de aceptación, abajo.</td></tr>
+</table>
+
+<div class="aviso"><strong>El NO VERIFICADO no bloquea el cierre — razonamiento.</strong> Lo que el epic define como
+superficie está medido entero: la lista blanca en origen (con su salida real), las locations exactas de nginx, el 302
+a SSO sin sesión desde todos los orígenes, y la ausencia de credenciales en la UI. Lo único no medido es el
+<em>pixel final</em> en un navegador autenticado. Se acepta porque: (a) cada salto de la cadena de datos está medido
+por separado (responder 200 con 1054 sesiones y árboles de hijos poblados — vistos desde el JSON el 05-09,
+comentario 10681 —, passthrough, nginx, página sin secretos); (b) desde el 09-09 el host es alias 302 a la vista
+canónica del dashboard en dgx.e-dani.com, que es la pantalla de uso diario y cuyos defectos de frontend vivían en el
+código de SC-269, no en el de este epic; (c) el riesgo residual de un render roto sería un fallo de presentación en
+la vista canónica, no una fuga de cuerpos ni una superficie de escritura — las tres restricciones duras se aplican en
+servidor, y ahí están medidas. Queda como cabo suelto registrado: comprobación visual puntual por el operador
+(recomendada, no bloqueante).</div>
+
+<h2>Decisiones</h2>
+<ul>
+<li><strong>CTO:</strong> no montar <code>hostPath ~/.claude</code> — la redacción se aplica en origen para que los
+cuerpos nunca crucen la frontera del pod (motivo y precedente en la descripción del epic).</li>
+<li><strong>CTO:</strong> <code>titulo</code> con procedencia garantizada y fallback sintético; el criterio de prueba
+nombra el origen de la cadena tras medirse que «título» también podía ser cuerpo (recorte del primer prompt).</li>
+<li><strong>CTO (cierre por cita, comentario 11281, 08-09):</strong> la lista blanca «exacta» de SC-191 queda
+ampliada <em>aditivamente</em> bajo el contrato de SC-269 — añadir al final, nunca renombrar/reordenar. Los 5 extras
+medidos hoy tienen cada uno su pedido de operador registrado en el código (#27, 6b7af00, #34, 3f14d6f).</li>
+<li><strong>Devops (09-09, anotada en la cabecera de <code>20-company.conf</code>):</strong> company.e-dani.com pasa
+a alias 302 de la vista canónica, manteniendo <code>sso-chain</code>. Sustitución registrada; no rompe ninguna
+restricción del epic.</li>
+<li><strong>PM (hoy):</strong> se acepta el ítem NO VERIFICADO como no bloqueante por el razonamiento de arriba, y se
+ordena el cierre: QA (12622) → Sign-off → Done con este informe. Es la segunda vez que esta épica llega a Done; la
+primera (05-09) fue inválida por trámite (sin QA, sin Sign-off, sin informe), no por falta de función.</li>
+</ul>
+
+<h2>Fuera de alcance / deuda</h2>
+<ul>
+<li><strong>Comprobación visual de la página tras el SSO</strong> por el operador (único ítem no medido; ver aviso).</li>
+<li><strong><a href="https://e-dani.atlassian.net/browse/SC-359">SC-359</a></strong> añadió <code>/api/company/</code>
+al este host (interruptor de la compañía): superficie de control gateada a grupo Keycloak <code>/company-operator</code>
+(403 sin grupo, medido por qa); no escribe en ninguna sesión. La garantía «el visor no lanza, no para, no escribe»
+sigue siendo cierta en la superficie de SC-189; SC-359 es continuación, no esta épica.</li>
+<li><strong><a href="https://e-dani.atlassian.net/browse/SC-269">SC-269</a></strong> es la continuación del visor
+(enriquecimiento Jira aditivo), con su propio cierre aparte.</li>
+<li>Apps ArgoCD <code>k8s-infra</code>/<code>traefik-edge</code> vistas OutOfSync en la pasada de hoy — ajenas a este
+epic (nota para quien las posea; el objeto <code>edge-company-viewer-public</code> está vivo y medido).</li>
+<li>El responder del x86 se despliega como copia suelta sin git (trazabilidad solo por contenido/mtime) — apuntado el
+08-09, sin dueño asignado aquí.</li>
+<li><strong>Resuelto el 08-09:</strong> el ~99% de <code>MemoryCurrent</code> del servicio es page cache benigno
+(anon 22.8 MiB de 128M; comentario 11282). No hay trabajo abierto de memoria.</li>
+</ul>
+
+<h2>Sesión</h2>
+<ul>
+<li>Sesión CTO: <code>e5bad3db-4f02-4e2e-a74c-0f70e93cc234</code> (repo <code>k8s-infra-pocharlies</code>; reanudar:
+<code>cd /home/dibanez/k8s/k8s-infra-pocharlies &amp;&amp; claude --resume e5bad3db-4f02-4e2e-a74c-0f70e93cc234</code>)</li>
+<li>Tech-lead en vuelo: <code>agent-a5035b5cd44ea19fb</code></li>
+<li>QA: valeria — veredicto 12622 (15-09-2026). Devops: verificación de merges y despliegue (15-09-2026).</li>
+<li>PM que cierra: lucia — <code>agent-ac71605f24378626e</code></li>
+</ul>
+</body>
+</html>

@@ -15,16 +15,14 @@ OP_VAULT="${OP_VAULT:-k8s-pocharlies}"
 
 declare -A USERS=(
   [breakglass]="minio-breakglass-admin"
-  [harbor]="harbor-s3"
   [velero]="velero-s3"
   [loki]="loki-s3"
 )
 # Item titles follow the migration convention (vault path `/` -> `-`, mount
-# dropped): secret/minio/harbor-s3 -> minio-harbor-s3. Field labels stay
+# dropped): secret/minio/velero-s3 -> minio-velero-s3. Field labels stay
 # identical to the old KV keys: access_key / secret_key.
 declare -A ITEMS=(
   [breakglass]="minio-breakglass-admin"
-  [harbor]="minio-harbor-s3"
   [velero]="minio-velero-s3"
   [loki]="minio-loki-s3"
 )
@@ -148,8 +146,8 @@ probe_bucket() {
       mc --config-dir "$d" cat "scoped/$bucket/$probe" >/dev/null
       mc --config-dir "$d" rm "scoped/$bucket/$probe" >/dev/null
       mc --config-dir "$d" ls "scoped/$bucket/" >/dev/null
-      other=harbor-blobs
-      [ "$bucket" = harbor-blobs ] && other=velero-backups
+      other=loki-chunks
+      [ "$bucket" = loki-chunks ] && other=velero-backups
       if mc --config-dir "$d" ls "scoped/$other/" >/dev/null 2>&1; then
         printf "unexpected cross-bucket permission\n" >&2
         exit 1
@@ -215,31 +213,28 @@ kubectl -n argocd get applications.argoproj.io -o json | jq -e '
 ' >/dev/null || fail "Argo is not globally quiescent"
 kubectl -n minio wait --for=condition=Ready pod/minio-0 --timeout=30s >/dev/null
 
-for key in harbor velero loki; do jq -e . "$ROOT/storage/minio/$key-s3-policy.json" >/dev/null; done
+for key in velero loki; do jq -e . "$ROOT/storage/minio/$key-s3-policy.json" >/dev/null; done
 
-for key in breakglass harbor velero loki; do
+for key in breakglass velero loki; do
   op_item_exists "${ITEMS[$key]}" && fail "refusing to overwrite an existing 1Password item: ${ITEMS[$key]}"
   minio_admin admin user info admin "${USERS[$key]}" >/dev/null 2>&1 && fail "refusing to overwrite an existing MinIO user: ${USERS[$key]}"
   PASSWORDS[$key]="$(openssl rand -hex 24)"
 done
-for policy in harbor-s3 velero-s3 loki-s3; do
+for policy in velero-s3 loki-s3; do
   minio_admin admin policy info admin "$policy" >/dev/null 2>&1 && fail "refusing to overwrite an existing MinIO policy: $policy"
 done
 
-for key in breakglass harbor velero loki; do
+for key in breakglass velero loki; do
   op_item_create "${ITEMS[$key]}" "${USERS[$key]}" "${PASSWORDS[$key]}"
 done
 
 create_user breakglass consoleAdmin
-create_policy harbor-s3 "$ROOT/storage/minio/harbor-s3-policy.json"
-create_user harbor harbor-s3
 create_policy velero-s3 "$ROOT/storage/minio/velero-s3-policy.json"
 create_user velero velero-s3
 create_policy loki-s3 "$ROOT/storage/minio/loki-s3-policy.json"
 create_user loki loki-s3
 
 probe_breakglass
-probe_bucket harbor harbor-blobs true
 probe_bucket velero velero-backups true
 probe_bucket loki loki-chunks false
 

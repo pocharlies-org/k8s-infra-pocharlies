@@ -1,0 +1,92 @@
+# The read-only fixture of the AgentGateway write-role smoke (INFRA-1189, C7
+# validation of epic INFRA-218): the confidential client
+# `agentgateway-smoke-operator`, reconciled by scripts/agentgateway-smoke-operator-client.sh.
+# Its service account holds exactly agentgateway-read:social and
+# agentgateway-read:workspace and nothing from the agentgateway-write family —
+# the OPERATOR_TOKEN shape scripts/smoke-write-role.sh (k8s-agentgateway-pocharlies)
+# needs to prove the write boundary, which no other principal of the realm has
+# (every holder of both reads also holds a write role).
+#
+# Same hardening as correo-agente-clients.yaml (section 19 of the RUNBOOK):
+# GitOps-declared, service account only, fullScopeAllowed=false, audience
+# mcp.lan.e-dani.com, exact token verified. No ExternalSecret: Keycloak
+# generates the secret and the smoke's consumers read it through the admin API
+# (the fixture grants two reviewed read roles; no 1Password item is warranted).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-smoke-operator-client
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-smoke-operator-client
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # After the read-grants hook (wave 20) that owns the two roles and reviews
+    # this holder; same wave as hermes-enviar, jarvis-echo and the correo
+    # clients, which reconcile other clients and share no state with this one.
+    argocd.argoproj.io/sync-wave: "24"
+spec:
+  backoffLimit: 1
+  # Two roles mapped (the light case of the correo read identity, which measured
+  # well inside the 1800 s shared budget).
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-smoke-operator-client
+        # Reuses the Keycloak+DNS-only egress policy declared in
+        # synapse-sre-client.yaml (keycloak-synapse-agent-clients-egress).
+        synapse.e-dani.com/agentgateway-m2m-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-pool: ks5-nvme
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: reconcile-client
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-smoke-operator-client.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - { name: MODE, value: ensure }
+            - { name: KEYCLOAK_URL, value: http://keycloak.keycloak.svc.cluster.local }
+            - { name: REALM, value: edani }
+            - { name: CLIENT_ID, value: agentgateway-smoke-operator }
+            - { name: AGENTGATEWAY_AUDIENCE, value: mcp.lan.e-dani.com }
+            - { name: MAPPER_NAME, value: aud-mcp }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-smoke-operator-client
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

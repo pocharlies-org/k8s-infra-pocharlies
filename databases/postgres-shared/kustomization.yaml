@@ -4,12 +4,15 @@ namespace: databases
 resources:
   - namespace.yaml
   - priorityclass.yaml
-  - minio-credentials.yaml
+  - ovh-credentials.yaml
   - app-credentials.yaml
   - cluster.yaml
+  - services-alias.yaml
   - app-databases.yaml
   - agent-transcripts-schema.yaml
+  - catalogo-schema.yaml
   - role-settings.yaml
+  - brain-openwebui-grants.yaml
   - monitoring.yaml
   - aurora-rca-coverage-queries.yaml
   - shared-rabbitmq.yaml
@@ -18,6 +21,7 @@ resources:
   - shared-valkey-secrets.yaml
   - shared-valkey.yaml
   - scheduledbackup.yaml
+  - rw-connectivity-probe.yaml
 labels:
   - includeSelectors: false
     pairs:

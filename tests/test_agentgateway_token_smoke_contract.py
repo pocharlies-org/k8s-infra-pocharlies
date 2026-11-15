@@ -361,7 +361,18 @@ class AgentgatewayTokenSmokeContractTest(unittest.TestCase):
         self.assertNotIn("--secret", code)
         for tool in ("jq", "awk", "curl", "python"):
             self.assertNotRegex(code, rf"\b{tool}\b")
-        self.assertIn("KC_CLI_PASSWORD=", code)
+        # The env-form admin login now lives in kc-admin-common.sh
+        # (login_admin_env); this hook must override the shared login_admin
+        # with that variant, so the password never reaches argv here.
+        self.assertIn("login_admin() { login_admin_env; }", code)
+        self.assertIn(
+            "KC_CLI_PASSWORD=",
+            "\n".join(
+                line
+                for line in (BASE / "scripts" / "kc-admin-common.sh").read_text().splitlines()
+                if not line.lstrip().startswith("#")
+            ),
+        )
         self.assertIn("KC_CLI_CLIENT_SECRET=", code)
 
     def test_job_manifest_contract(self):

@@ -73,7 +73,16 @@ class AgentGatewayChatMcpIdentityContractTest(unittest.TestCase):
             'REALM_SCOPE_ROLE_NAMES="${REALM_SCOPE_ROLE_NAMES:-agentgateway-write}"',
             script,
         )
-        self.assertIn('EXPECTED_REALM_SCOPE_ROLE_NAMES="agentgateway-write"', script)
+        # The engine's identity pins are overridable so the thin
+        # hindsight-personal wrapper (#452) can reuse it; the defaults below are
+        # THIS client's identity and must stay.
+        self.assertIn(
+            'EXPECTED_REALM_SCOPE_ROLE_NAMES="${EXPECTED_REALM_SCOPE_ROLE_NAMES:-agentgateway-write}"',
+            script,
+        )
+        self.assertIn('EXPECTED_CLIENT_ID="${EXPECTED_CLIENT_ID:-agentgateway-chat-mcp}"', script)
+        self.assertIn('SCOPE_AUDIT="${SCOPE_AUDIT:-subset}"', script)
+        self.assertIn('ROLE_OWNER="${ROLE_OWNER:-the agentgateway-write-role hook}"', script)
         self.assertIn("REALM_SCOPE_ROLE_NAMES is immutable", script)
         # INFRA-477: the scope-mapping READ helper is the shared library's
         # (role_scope_has_direct_role); the create call and this client's own
@@ -86,7 +95,8 @@ class AgentGatewayChatMcpIdentityContractTest(unittest.TestCase):
         # agentgateway-write-role.sh.
         self.assertIn("client role scope is missing ${role}", script)
         self.assertIn("client realm scope mapping is missing ${role}", script)
-        self.assertIn("the agentgateway-write-role hook owns it", script)
+        self.assertIn("the agentgateway-write-role hook", script)
+        self.assertIn("refusing to create it here", script)
         # the old letter claimed this client emitted no realm role at all —
         # that WAS the C2 blocker and must not come back
         self.assertNotIn("no realm role", script)

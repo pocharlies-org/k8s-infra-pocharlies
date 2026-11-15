@@ -1,4 +1,7 @@
 ---
+# Harbor registries.yaml for OVH nodes (INFRA-1099). Gated by
+# harbor_registries_enabled, so home nodes running this role are untouched.
+- ansible.builtin.include_tasks: registries.yml
 - name: Require K3S_TOKEN
   ansible.builtin.assert:
     that:
@@ -31,6 +34,7 @@
     group: root
     mode: "0600"
   no_log: true
+  notify: Restart k3s after config change
 
 - name: Install k3s server
   ansible.builtin.shell:

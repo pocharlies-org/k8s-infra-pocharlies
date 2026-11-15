@@ -1,0 +1,167 @@
+# CoreDNS local: una réplica en cada nodo (INFRA-1019, 28-10-2026).
+#
+# Por qué: el CoreDNS que empaqueta k3s solo corría en dos ks5. Con
+# `trafficDistribution: PreferSameNode` en el Service `kube-dns`, un nodo con
+# réplica propia se responde a sí mismo y uno sin ella reparte entre todas. En
+# 25-09 el x86 iba a los ks5 por el relay DERP (~180 ms por consulta) y se le dio
+# su réplica (coredns-x86); el 27-10 atlantic y ks5-cp-3 mandaban ~1/3 de sus
+# consultas a esa réplica de casa (29 ms cada una): 59–66 ms por nombre resuelto,
+# frente a ~1 ms en un ks5 con réplica. Ahora todos los nodos tienen la suya y
+# ninguno sale de su máquina para resolver.
+#
+# Reparto: los tres ks5 (`node-pool=ks5-nvme`) llevan el CoreDNS de k3s y este
+# DaemonSet todos los demás nodos. El Deployment `coredns` de k3s tiene una
+# anti-afinidad OBLIGATORIA contra `k8s-app: kube-dns` por nodo (puesta con
+# `kubectl patch`, no viene en el manifiesto de k3s), así que no puede compartir
+# nodo con una réplica de aquí: por eso se excluyen los ks5 y el Deployment de k3s
+# va a 3 réplicas (`kubectl -n kube-system scale deploy/coredns --replicas=3`), que
+# esa misma anti-afinidad reparte una por ks5. El manifiesto de k3s no fija
+# `replicas` y su reaplicación lo conserva. Si se quedara en 2, el ks5 sin réplica
+# reparte entre todas, también las de casa: más lento, pero sin romperse.
+#
+# Qué es: un DaemonSet de CoreDNS con la MISMA imagen que la de k3s, su NodeHosts
+# y `coredns-custom`, un Corefile propio (abajo) y la etiqueta `k8s-app:
+# kube-dns`. Así la selecciona el Service `kube-dns` y las NetworkPolicies que
+# permiten DNS hacia pods kube-dns de kube-system la siguen aceptando. Por eso
+# esto y NO NodeLocal DNSCache: esa intercepta 10.43.0.10 en el host y rompería el
+# DNS de los pods con NetworkPolicy de salida restringida a kube-dns. Tolera todos
+# los taints (Sparks `dedicated=llm`, alphalink, sauvage) y actualiza nodo a nodo
+# con `maxSurge: 1`: la réplica nueva está Ready antes de que se vaya la vieja.
+#
+# `PreferSameNode` lo lleva el Service `kube-dns`, que gestiona k3s, no ArgoCD: el
+# campo se puso con `kubectl patch` y la reaplicación de k3s (three-way merge) lo
+# conserva. Si desapareciera, cada nodo vuelve a repartir entre todas las
+# réplicas: más lento, pero sin romperse.
+#
+# Upstream: la MagicDNS del propio nodo (100.100.100.100), igual que los CoreDNS
+# de los ks5, para que las respuestas sean idénticas (incluidos los *.ts.net);
+# probada en los 10 nodos el 28-10. No se hereda el resolv.conf del nodo: en el x86
+# empieza por 10.43.0.10 y sería un bucle.
+#
+# Respaldo (INFRA-923, 17-10-2026): un `tailscale set --accept-dns=false` deja la
+# MagicDNS de ese nodo sin upstreams y contesta SERVFAIL a todo lo externo; como la
+# réplica sigue Ready, PreferSameNode no suelta a los pods del nodo (en el x86 se
+# quedaron 1 h 45 min sin DNS externo, INFRA-918). Por eso el bloque raíz salta en
+# SERVFAIL/REFUSED a coredns-sauvage (coredns-sauvage.yaml), que pregunta a la
+# MagicDNS de sauvage. El Corefile es el bloque raíz de k3s con solo el `forward`
+# cambiado: si k3s cambia el suyo al subir de versión, se copia aquí. Los bloques
+# de coredns-custom (e-dani.com, ts.net) siguen sin respaldo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-local
+  namespace: kube-system
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+          pods insecure
+          fallthrough in-addr.arpa ip6.arpa
+        }
+        hosts /etc/coredns/NodeHosts {
+          ttl 60
+          reload 15s
+          fallthrough
+        }
+        prometheus :9153
+        cache 30
+        loop
+        reload
+        loadbalance
+        import /etc/coredns/custom/*.override
+        forward . 100.100.100.100 10.43.0.11 {
+          policy sequential
+          failover SERVFAIL REFUSED
+        }
+    }
+    import /etc/coredns/custom/*.server
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coredns-local
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: coredns-local
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coredns-local
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coredns-local
+        k8s-app: kube-dns
+    spec:
+      serviceAccountName: coredns
+      priorityClassName: system-cluster-critical
+      # Los ks5 llevan el CoreDNS de k3s (ver «Reparto» arriba).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - { key: node-pool, operator: NotIn, values: [ks5-nvme] }
+      tolerations:
+        - operator: Exists
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 100.100.100.100
+      containers:
+        - name: coredns
+          # Misma imagen que el Deployment `coredns` de k3s (v1.36.2+k3s1).
+          image: rancher/mirrored-coredns-coredns:1.14.4
+          args: ["-conf", "/etc/coredns/Corefile"]
+          ports:
+            - { name: dns, containerPort: 53, protocol: UDP }
+            - { name: dns-tcp, containerPort: 53, protocol: TCP }
+            - { name: metrics, containerPort: 9153, protocol: TCP }
+          resources:
+            requests: { cpu: 100m, memory: 70Mi }
+            limits: { memory: 170Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+              drop: ["all"]
+          livenessProbe:
+            httpGet: { path: /health, port: 8080, scheme: HTTP }
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 8181, scheme: HTTP }
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 3
+          volumeMounts:
+            - { name: config-volume, mountPath: /etc/coredns, readOnly: true }
+            - { name: custom-config-volume, mountPath: /etc/coredns/custom, readOnly: true }
+      volumes:
+        - name: config-volume
+          projected:
+            sources:
+              - configMap:
+                  name: coredns-local
+                  items:
+                    - { key: Corefile, path: Corefile }
+              - configMap:
+                  name: coredns
+                  items:
+                    - { key: NodeHosts, path: NodeHosts }
+        - name: custom-config-volume
+          configMap:
+            name: coredns-custom
+            optional: true

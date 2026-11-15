@@ -1,0 +1,34 @@
+# Managed by Ansible — do not edit on the node.
+#   Source of truth: ansible/roles/k3s_control_plane/templates/registries.yaml.j2
+#                    (mirrored in ansible/roles/k3s_worker/templates/)
+#   Applied by:      ansible/playbooks/apply-registries.yml (INFRA-1099)
+# The k3s agent reads this file only at startup; the role handler restarts
+# k3s when it changes.
+#
+# OVH nodes must not reach Harbor through the house LAN (incident premise of
+# INFRA-1022: with the x86 off, every recreated pod hit ImagePullBackOff).
+# Both registry names mirror to the public edge, which already serves
+# harbor-core (networking/traefik-edge/harbor-ingressroute.yaml). The 28 apps
+# keep referencing harbor.lan.e-dani.com: the mirror separates the name from
+# the route, so no image prefix is renamed.
+mirrors:
+  "harbor.e-dani.com":
+    endpoint:
+      - "https://harbor.e-dani.com"
+  "harbor.lan.e-dani.com":
+    endpoint:
+      - "https://harbor.e-dani.com"
+
+# Harbor project `homelab` is private for pull. The robot credentials are read
+# at apply time from 1Password on the control host (lookup op read, see
+# harbor_registries_lookup_cmd in group_vars/ovh_nodes.yml) and never live in
+# git. Credential rotation: docs/runbook-harbor-registries-ovh.md.
+configs:
+  "harbor.e-dani.com":
+    auth:
+      username: "{{ harbor_robot_username }}"
+      password: "{{ harbor_robot_password }}"
+  "harbor.lan.e-dani.com":
+    auth:
+      username: "{{ harbor_robot_username }}"
+      password: "{{ harbor_robot_password }}"

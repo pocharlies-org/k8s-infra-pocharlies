@@ -1,0 +1,114 @@
+{
+  "crane config ghcr.io/pocharlies-org/ghcr-app@sha256:9999999999999999999999999999999999999999999999999999999999999999": {
+    "returncode": 0,
+    "stdout": "{\"created\": \"2026-10-05T12:00:00Z\"}"
+  },
+  "crane config harbor.e-dani.com/homelab/multi-arch-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+    "returncode": 0,
+    "stdout": "{\"created\": \"2026-10-01T10:00:00Z\"}"
+  },
+  "crane config harbor.e-dani.com/homelab/multi-arch-app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+    "returncode": 0,
+    "stdout": "{\"created\": \"2026-10-01T09:00:00Z\"}"
+  },
+  "crane config harbor.e-dani.com/homelab/simple-app@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+    "returncode": 0,
+    "stdout": "{\"created\": \"2026-08-01T00:00:00Z\"}"
+  },
+  "crane config harbor.e-dani.com/homelab/sin-dato-app@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff": {
+    "returncode": 1,
+    "stdout": ""
+  },
+  "crane config harbor.e-dani.com/homelab/single-plat-app@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd": {
+    "returncode": 0,
+    "stdout": "{\"created\": \"2026-09-15T08:00:00Z\"}"
+  },
+  "crane digest alpine:3.20": {
+    "returncode": 0,
+    "stdout": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "crane digest docker.io/library/python:3.12-slim": {
+    "returncode": 0,
+    "stdout": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+  },
+  "crane digest ghcr.io/pocharlies-org/ghcr-app:sha-abc": {
+    "returncode": 0,
+    "stdout": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+  },
+  "crane digest harbor.e-dani.com/homelab/base-python:3.12": {
+    "returncode": 0,
+    "stdout": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+  },
+  "crane digest harbor.e-dani.com/homelab/multi-arch-app:v1.2.3": {
+    "returncode": 0,
+    "stdout": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "crane digest harbor.e-dani.com/homelab/simple-app:2026.10": {
+    "returncode": 0,
+    "stdout": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "crane digest harbor.e-dani.com/homelab/sin-dato-app:9": {
+    "returncode": 0,
+    "stdout": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "crane digest harbor.e-dani.com/homelab/single-plat-app:arm64-only": {
+    "returncode": 0,
+    "stdout": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "crane export ghcr.io/pocharlies-org/ghcr-app@sha256:9999999999999999999999999999999999999999999999999999999999999999 -": {
+    "returncode": 0,
+    "stdout_bytes": 100
+  },
+  "crane export harbor.e-dani.com/homelab/multi-arch-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -": {
+    "returncode": 0,
+    "stdout_bytes": 1200
+  },
+  "crane export harbor.e-dani.com/homelab/multi-arch-app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb -": {
+    "returncode": 0,
+    "stdout_bytes": 9000
+  },
+  "crane export harbor.e-dani.com/homelab/simple-app@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -": {
+    "returncode": 0,
+    "stdout_bytes": 200
+  },
+  "crane export harbor.e-dani.com/homelab/sin-dato-app@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff -": {
+    "returncode": 1,
+    "stdout": ""
+  },
+  "crane export harbor.e-dani.com/homelab/single-plat-app@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd -": {
+    "returncode": 0,
+    "stdout_bytes": 3000
+  },
+  "crane manifest ghcr.io/pocharlies-org/ghcr-app:sha-abc": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 10}, {\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:2222222222222222222222222222222222222222222222222222222222222222\", \"size\": 20}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/multi-arch-app:v1.2.3": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.index.v1+json\", \"manifests\": [{\"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"digest\": \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"size\": 500, \"platform\": {\"architecture\": \"amd64\", \"os\": \"linux\"}}, {\"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"digest\": \"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"size\": 500, \"platform\": {\"architecture\": \"arm64\", \"os\": \"linux\"}}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/multi-arch-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 100}, {\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:2222222222222222222222222222222222222222222222222222222222222222\", \"size\": 300}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/multi-arch-app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 1000}, {\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:2222222222222222222222222222222222222222222222222222222222222222\", \"size\": 2000}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/simple-app:2026.10": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 50}, {\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:2222222222222222222222222222222222222222222222222222222222222222\", \"size\": 60}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/sin-dato-app:9": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 40}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/single-plat-app:arm64-only": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.index.v1+json\", \"manifests\": [{\"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"digest\": \"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"size\": 500, \"platform\": {\"architecture\": \"arm64\", \"os\": \"linux\"}}, {\"mediaType\": \"application/vnd.attestation.v1+json\", \"digest\": \"sha256:9999999999999999999999999999999999999999999999999999999999999998\", \"size\": 837, \"platform\": {\"architecture\": \"unknown\", \"os\": \"unknown\"}}]}"
+  },
+  "crane manifest harbor.e-dani.com/homelab/single-plat-app@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd": {
+    "returncode": 0,
+    "stdout": "{\"schemaVersion\": 2, \"mediaType\": \"application/vnd.oci.image.manifest.v1+json\", \"layers\": [{\"mediaType\": \"application/vnd.oci.image.layer.v1.tar+gzip\", \"digest\": \"sha256:1111111111111111111111111111111111111111111111111111111111111111\", \"size\": 700}]}"
+  }
+}

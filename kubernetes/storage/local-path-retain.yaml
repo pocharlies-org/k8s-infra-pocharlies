@@ -1,0 +1,14 @@
+# local-path con Retain (SC-2659): disco local de un nodo que NO se borra con el
+# PVC. La `local-path` de k3s es `Delete`, y un prune de ArgoCD o un PVC borrado
+# a mano destruiría el dato. La usa el WordPress de AlphaLink (BD y wp-content)
+# en el nodo `alphalink`, que no tiene Longhorn. Un PV liberado se queda en el
+# disco (`/opt/local-path-provisioner/`) hasta que alguien lo borre a propósito.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path-retain
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer

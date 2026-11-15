@@ -1,0 +1,72 @@
+# INFRA-1004: prueba cada 60 s la conexión TCP al servicio rw de postgres-shared desde
+# sauvage — el nodo cuya ruta hacia los ks5 (OVH) quedó intermitente el 27-10 tras el
+# switchover del primario a ks5-cp-2 (P1001/P2024 en pods de skirmshop durante ~2 h,
+# con la cola de traducciones parada a ratos). El switchover no dejó rutas rancias:
+# la evidencia apuntó a pérdida de paquetes en la ruta sauvage↔141.94.73.0/24 (túnel
+# k3s y VXLAN a la vez, con la sesión tailscale estable). Este probe caza la próxima
+# recurrencia sin esperar a que la detecte una app: falla → Job Failed → alarma
+# K8sCronJobFailed (topic Crons), y el health customization de argocd-cm no gatea el sync.
+#
+# Cubre el camino completo que usa la app: DNS del servicio → ClusterIP → DNAT al
+# primario actual → VXLAN al nodo del primario. No depende de la IP del pod, así que
+# sobrevive a failovers.
+#
+# Comprobación a mano (la prueba del ticket):
+#   kubectl exec -n skirmshop deploy/translations-app -- node -e 'new (require("net").Socket)().connect(5432,"postgres-shared-rw.databases.svc").on("connect",()=>{console.log("ok");process.exit(0)}).on("error",e=>{console.log("fail",e.code);process.exit(1)})'
+# Ejecución inmediata:
+#   kubectl create job -n databases --from=cronjob/postgres-rw-connectivity-probe probe-manual-$(date +%s)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-rw-connectivity-probe
+  labels:
+    app.kubernetes.io/name: postgres-rw-connectivity-probe
+spec:
+  schedule: "* * * * *"
+  timeZone: Etc/UTC
+  # Un probe colgado no debe bloquear el siguiente.
+  concurrencyPolicy: Replace
+  startingDeadlineSeconds: 30
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 30
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postgres-rw-connectivity-probe
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          nodeSelector:
+            kubernetes.io/hostname: sauvage
+          # sauvage se registró con --node-taint role=edge:NoSchedule (nodo del edge);
+          # sin esta toleración el pod queda Pending y el Job muere por activeDeadline.
+          # Es la misma toleración que llevan los deployments de skirmshop del nodo.
+          tolerations:
+            - key: role
+              operator: Equal
+              value: edge
+              effect: NoSchedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: nc
+              image: docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+              imagePullPolicy: IfNotPresent
+              # -z: intenta y sale; -w 5: 5 s de timeout. Exit 0 conectado, 1 no.
+              command: ["/bin/sh", "-c", "nc -z -w 5 postgres-shared-rw.databases.svc.cluster.local 5432"]
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }

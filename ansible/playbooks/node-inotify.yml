@@ -1,0 +1,22 @@
+---
+# SC-5299: fs.inotify.max_user_instances = 8192 on the k3s nodes of the tailnet
+# inventory (common_hardening/tasks/inotify.yml; bootstrap-ks5.yml runs it too).
+# sauvage is excluded: ubuntu@sauvage has no passwordless full sudo (INFRA-937).
+# Home nodes outside this inventory (ubuntu/x86, nvidia-dgx, gx10-ec3d, dgx3) keep
+# their own hand files.
+#
+#   ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
+#     ansible/playbooks/node-inotify.yml --limit atlantic --check --diff
+- name: Raise the inotify instance limit on the k3s nodes
+  hosts: "k3s_nodes:!sauvage"
+  become: true
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Apply the inotify sysctl of common_hardening
+      ansible.builtin.include_role:
+        name: common_hardening
+        tasks_from: inotify
+        apply:
+          tags: [inotify]
+      tags: [inotify]

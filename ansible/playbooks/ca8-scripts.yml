@@ -1,0 +1,18 @@
+---
+# SC-5299 (CA8): install /usr/local/sbin/ca8-cut.sh and ca8-undo.sh on the nodes the
+# house-off drill cuts (atlantic, ks5-cp-1/2/3, alphalink). Until 2026-11-14 they were
+# placed by hand; the undo the drill used before (`sed "s/-A INPUT/-D INPUT/" | sh`) had
+# no iptables command and left atlantic cut on 2026-11-13. A CA8 run uses only
+# `ca8-cut.sh <tag> <secs>` and `ca8-undo.sh`; scripts/ca8/ca8-run-c.sh is the reference
+# generator of the drill (its UNDO_B64 calls ca8-undo.sh).
+#
+#   ansible-playbook -i ansible/inventory/ks5-tailscale.ini \
+#     ansible/playbooks/ca8-scripts.yml --limit atlantic --check --diff
+#   ansible-playbook -i ansible/inventory/ks5-tailscale.ini ansible/playbooks/ca8-scripts.yml
+- name: Install the CA8 cut/undo scripts
+  hosts: ca8_nodes
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  roles:
+    - ca8_scripts

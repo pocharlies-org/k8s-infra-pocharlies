@@ -1,0 +1,61 @@
+# Emergency rollback of the SC-4304 S6 grants (RUNBOOK: applied by hand,
+# excluded from Kustomize). Removes ONLY the two human grants this hook
+# introduced (me@e-dani.com, lays84.mv@gmail.com). The reviewed SA holders and
+# the closed chat-SA bypass are left as they are: a rollback of the feature
+# must not reopen the security closure.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-agentgateway-hindsight-personal-grants-rollback
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: agentgateway-hindsight-personal-grants-rollback
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: agentgateway-hindsight-personal-grants-rollback
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector: { node-pool: ks5-nvme }
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: rollback-grants
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          command: ["/bin/sh", "/opt/bootstrap/agentgateway-hindsight-personal-grants.sh"]
+          envFrom:
+            - secretRef: { name: keycloak-bootstrap }
+          env:
+            - { name: MODE, value: rollback }
+            - { name: ROLE_NAME, value: agentgateway-read:hindsight-personal }
+            - { name: HOME, value: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: bootstrap, mountPath: /opt/bootstrap, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-agentgateway-hindsight-personal-grants
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }

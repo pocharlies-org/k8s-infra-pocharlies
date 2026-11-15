@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik-alphalink
+  labels:
+    # Kyverno: allow system images in this namespace
+    pod-security.kubernetes.io/enforce: privileged

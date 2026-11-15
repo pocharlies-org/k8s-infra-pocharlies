@@ -1,0 +1,17 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>INFRA-485 — Duplicada de INFRA-486/487</title>
+<style>:root{--bg:#fff;--fg:#1a1a1a;--mut:#666}@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#aaa}}body{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px}code{font-size:.9em}h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:1.6rem}.m{color:var(--mut)}</style></head><body>
+<h1>INFRA-485 — socialmedia: un solo índice vectorial (cancelada como duplicada)</h1>
+<p class="m">Rol: pm · 2026-10-04 · Estado: Cancelled</p>
+<h2>Por qué se cancela</h2>
+<p>Se pidió dejar Qdrant (brain) como único índice vectorial y retirar pgvector de socialmedia. Esa misma decisión de Dani (04-10) ya se partió en dos épicas, una por repositorio: <b>INFRA-487</b> (brain: filtros por cuenta, plataforma, chat, fechas y tipo; instancia por cuenta) e <b>INFRA-486</b> (socialmedia: leer del brain, resolver mensajes, retirar pgvector). Cubren todos los criterios de 485 y llevan trabajo hecho; mantener 485 duplicaría el trabajo. Decide: PM, por duplicado medido hoy.</p>
+<h2>Qué ya está construido</h2>
+<ul><li>INFRA-487: fusionado y en producción (skirmshop-brain-v2 #72, commit 39c0788).</li>
+<li>INFRA-486: PR k8s-socialmedia-pocharlies #206 abierta, CI en verde, qa PASA y architect APROBADA (04-10). La retirada de pgvector está preparada en su rama. Bloqueo: falta crear en 1Password la clave <code>BRAIN_MESSAGING_SEARCH_KEY</code> (cupo diario de 1Password).</li></ul>
+<h2>Evidencia (04-10)</h2>
+<ul><li><code>jira_get_issue INFRA-486/487</code>: Backlog, enlazadas con Blocks (487 bloquea a 486), criterios equivalentes.</li>
+<li><code>git log origin/main --since='24 hours ago'</code> (brain): 39c0788 INFRA-487 #72.</li>
+<li><code>gh pr list -R pocharlies-org/k8s-socialmedia-pocharlies</code>: #206 OPEN (INFRA-486).</li></ul>
+<h2>Qué pasa ahora</h2>
+<p>Todo el trabajo sigue en INFRA-486 e INFRA-487. Nada se pierde. Nota: ambas siguen en Backlog sin <code>00-spec.md</code>; el supervisor debe tratarlas como épicas ya en ejecución por la sesión interactiva existente.</p>
+<h2>Sesión</h2><p>PM de plan, sin CTO ni makers asignados a esta clave.</p>
+</body></html>

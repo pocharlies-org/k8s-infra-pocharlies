@@ -14,11 +14,18 @@
 #           directos permanentes que la gestoría abre en el navegador), y
 #       (b) un usuario MinIO read-only `talenom-369` con policy acotada SOLO a
 #           ese prefijo (configurado fuera de GitOps con mc; ver memoria).
+#       (c) DGX-892: lectura anónima de objetos del bucket `artifacts` (páginas HTML
+#           que publica la tool `publish_html` de ofimatica, con caducidad). Solo
+#           `artifacts/pub/` es para internet: esta ruta NO sirve `/artifacts/lan/`,
+#           que se ve únicamente por skirmshop-s3.lan.e-dani.com (LAN/tailnet).
+#           Desde DGX-936 la tool da URLs de s3.e-dani.com (artifacts-public.yaml y
+#           traefik-lan/artifacts-lan.yaml); aquí solo abren las ya repartidas.
 #   - El resto del bucket NO es accesible: sin la lectura anónima de su prefijo
 #     y sin credenciales, cualquier otra ruta devuelve AccessDenied.
 #
 # Cuando la gestoría confirme la descarga, este acceso público puede retirarse
-# (borrar este fichero + revocar usuario/anonymous) sin afectar al uso interno.
+# (borrar la IngressRoute + revocar usuario/anonymous) sin afectar al uso interno.
+# El Service se queda: lo usa artifacts-public.yaml.
 apiVersion: v1
 kind: Service
 metadata:
@@ -46,7 +53,7 @@ spec:
   ingressClassName: traefik-edge
   routes:
     - kind: Rule
-      match: Host(`skirmshop-s3.e-dani.com`)
+      match: Host(`skirmshop-s3.e-dani.com`) && !PathPrefix(`/artifacts/lan/`)
       services:
         - name: skirmshop-drive-s3-ext
           port: 9000

@@ -1,0 +1,10 @@
+# SC-2822 — el chart se renderiza por la vía de la casa (kustomize + helmCharts):
+# ArgoCD no sirve charts desde git (el repo-server lo pide como índice helm y da
+# 404). La Application keycloak-sso apunta a este path; las webs se declaran en
+# realms.yaml, que es el valueFile.
+helmCharts:
+  - name: keycloak-sso
+    version: 0.1.0
+    releaseName: keycloak-sso
+    namespace: keycloak
+    valuesFile: realms.yaml

@@ -101,7 +101,28 @@ data:
     # watermark for the broker to flush before OOM. NB: RAM is NOT the real fix —
     # delivery-limit (quorum, phase-2) + the backlog alert below are.
     vm_memory_high_watermark.absolute = 1800MB
+    # SC-2597 (2026-10-27): the system_memory alarm flapped on shared-rabbitmq-1
+    # (26 sets on 22-23/10, 19 on 27/10): each set blocks publishing connections,
+    # the synapse adapters' queue.declare times out and the adapter exits ->
+    # keep-causa deployment-degraded:c1fa477c92 (incidents 17/10, 22/10, 23/10 x3,
+    # 25/10 x2, 27/10). The threshold lives in advanced.config (see
+    # shared-rabbitmq-config), NOT here: neither
+    # system_memory_high_watermark.absolute nor .relative exist in the
+    # rabbitmq.conf schema of 3.13 — both crash the broker at boot with
+    # "unknown variable" / failed_to_prepare_configuration (measured 27/10 with a
+    # throwaway pod on this image; #399 took the first form to production and took
+    # the broker down).
     disk_free_limit.absolute = 500MB
+    # INFRA-879 (2026-10-16): the /synapse critical queues (the sf-quorum-exclude
+    # list) are classic and lose service for the whole duration of a node reboot
+    # (post-upgrade-reboot windows, 04:00/05:00/06:00 UTC). Policy
+    # sf-critical-mirror (ha-mode all, promote-on-shutdown always) mirrors them so
+    # a mirror is promoted when their node goes down; this build of 3.13.7 does
+    # not permit classic mirroring by default, so it must be set here. Decision
+    # and procedure: docs/runbook-rabbitmq-synapse-ha.md. Interim until the
+    # Synapse code re-declares these queues as quorum (x-queue-type is immutable,
+    # so IT cannot convert them in place).
+    deprecated_features.permit.classic_queue_mirroring = true
 ---
 # enabled_plugins + cluster formation config for the 3-replica HA cluster.
 apiVersion: v1
@@ -115,6 +136,18 @@ metadata:
 data:
   enabled_plugins: |
     [rabbitmq_peer_discovery_k8s,rabbitmq_management,rabbitmq_prometheus,rabbitmq_delayed_message_exchange].
+  # SC-2597 (2026-10-27): threshold of the system_memory alarm, the only place
+  # RabbitMQ 3.13 accepts it (rabbitmq.conf rejects both
+  # system_memory_high_watermark.absolute and .relative: "unknown variable",
+  # BOOT FAILED; measured 27/10). Default {relative,0.4} x the 3Gi limit sat
+  # inside the broker's normal RSS burst range, so the alarm flapped and each set
+  # blocked publishers -> synapse adapters died on queue.declare timeout
+  # (keep-causa deployment-degraded:c1fa477c92). 0.5 x 3Gi = 1.5GiB clears the
+  # bursts (RSS baseline ~0.63GB, bursts >1.2GiB) and stays under the 1800MB vm
+  # watermark, so a real overload still blocks publishers before OOM. Proven
+  # live: a throwaway pod with {relative,0.01} fires the alarm at boot.
+  advanced.config: |
+    [{rabbit,[{system_memory_high_watermark,{relative,0.5}}]}].
   rabbitmq.conf: |
     cluster_formation.peer_discovery_backend = k8s
     cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
@@ -232,6 +265,10 @@ spec:
               value: "true"
             - name: RABBITMQ_NODENAME
               value: "rabbit@$(POD_NAME).shared-rabbitmq-headless.$(POD_NAMESPACE).svc.cluster.local"
+            # SC-2597: explicit, so the threshold above cannot silently stop being
+            # read if the image's default path ever moves.
+            - name: RABBITMQ_ADVANCED_CONFIG_FILE
+              value: /etc/rabbitmq/advanced.config
           envFrom:
             - secretRef: { name: rabbitmq-secrets }
             - secretRef: { name: shared-rabbitmq-erlang-cookie }
@@ -239,6 +276,7 @@ spec:
             - { name: data,   mountPath: /var/lib/rabbitmq }
             - { name: config, mountPath: /etc/rabbitmq/enabled_plugins, subPath: enabled_plugins, readOnly: true }
             - { name: config, mountPath: /etc/rabbitmq/rabbitmq.conf,    subPath: rabbitmq.conf,    readOnly: true }
+            - { name: config, mountPath: /etc/rabbitmq/advanced.config,  subPath: advanced.config,  readOnly: true }
             - { name: tuning, mountPath: /etc/rabbitmq/conf.d/20-tuning.conf, subPath: 20-tuning.conf, readOnly: true }
           resources:
             # INFRA-42/INFRA-79 (2026-09-13): cpu 100m -> 200m. p95 14d = 292/294/284m

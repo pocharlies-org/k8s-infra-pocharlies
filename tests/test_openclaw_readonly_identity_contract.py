@@ -386,6 +386,7 @@ class OpenClawReadonlyIdentityContractTest(unittest.TestCase):
                             "cto-office-send",
                             "agentgateway-read:gsc",
                             "agentgateway-read:offers",
+                            "agentgateway-read:plaud",
                             "agentgateway-read:skirmshop-plugins",
                             "agentgateway-read:studio",
                             "agentgateway-read:synapse",

@@ -44,6 +44,20 @@ def read_cred(env_name: str, file_env: str, default_file: str) -> str:
         raise SystemExit(f"Missing credential: set {env_name} or {file_env} ({path}): {exc}")
 
 
+def access_token(client_id: str, client_secret: str) -> str:
+    """client_credentials -> short-lived access token (shared with ts_acl_policy.py)."""
+    data = urllib.parse.urlencode({"client_id": client_id, "client_secret": client_secret}).encode()
+    req = urllib.request.Request(
+        BASE + "/oauth/token", data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)["access_token"]
+    except urllib.error.HTTPError as exc:
+        raise SystemExit(f"OAuth token exchange failed {exc.code}: {exc.read().decode()[:300]}")
+
+
 def main() -> None:
     client_id = read_cred("TS_OAUTH_CLIENT_ID", "TS_OAUTH_ID_FILE", "/home/dibanez/k8s/.ts-oauth-id")
     client_secret = read_cred("TS_OAUTH_CLIENT_SECRET", "TS_OAUTH_SECRET_FILE", "/home/dibanez/k8s/.ts-oauth-secret")
@@ -55,19 +69,9 @@ def main() -> None:
     reusable = os.environ.get("TS_AUTHKEY_REUSABLE", "true").lower() != "false"
     ephemeral = os.environ.get("TS_AUTHKEY_EPHEMERAL", "false").lower() == "true"
 
-    # 1) client_credentials -> short-lived access token
-    data = urllib.parse.urlencode({"client_id": client_id, "client_secret": client_secret}).encode()
-    req = urllib.request.Request(
-        BASE + "/oauth/token", data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            access = json.load(r)["access_token"]
-    except urllib.error.HTTPError as exc:
-        raise SystemExit(f"OAuth token exchange failed {exc.code}: {exc.read().decode()[:300]}")
+    access = access_token(client_id, client_secret)
 
-    # 2) mint the tagged auth key
+    # mint the tagged auth key
     body = json.dumps({
         "capabilities": {"devices": {"create": {
             "reusable": reusable, "ephemeral": ephemeral, "preauthorized": True, "tags": tags,

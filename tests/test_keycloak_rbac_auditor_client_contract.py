@@ -391,7 +391,13 @@ class AuditorManifestContractTest(unittest.TestCase):
         self.assertNotIn("--password", script)
         self.assertNotIn("--secret", script)
         self.assertNotIn("secret=", script)
-        self.assertIn('KC_CLI_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD}" "${KCADM}" config credentials', script)
+        # The env-form login now lives in kc-admin-common.sh (login_admin_env);
+        # this hook must override the shared login_admin with that variant.
+        self.assertIn("login_admin() { login_admin_env; }", script)
+        self.assertIn(
+            'KC_CLI_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD}" "${KCADM}" config credentials',
+            (BASE / "scripts" / "kc-admin-common.sh").read_text(),
+        )
         self.assertIn('KC_CLI_CLIENT_SECRET="${CLIENT_SECRET}" "${KCADM}" config credentials', script)
         self.assertIn("-f - ${merge}", script)
         self.assertNotIn('echo "${CLIENT_SECRET}"', script)

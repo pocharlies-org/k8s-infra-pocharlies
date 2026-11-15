@@ -19,6 +19,12 @@ Keys follow 1Password secret-reference syntax without the vault,
 `<item>/[section/]<field>`, and `dataFrom.extract.key` is the item: the item
 is the first path segment, by title or by id.
 
+A call to the Kubernetes API is retried on 429/5xx/timeout (INFRA-1123): the
+apiserver throttles with API Priority & Fairness, and a 429 storm from the
+operators (their WATCHes reconnecting) used to kill a run that was otherwise
+fine. The retry is only against the API server, so it costs no 1Password quota
+and does not re-list the vault; the Job keeps backoffLimit 0 for that reason.
+
 Exit 1 on any error, so K8sCronJobFailed fires.
 """
 import json
@@ -41,23 +47,60 @@ API = "https://kubernetes.default.svc"
 SA = "/var/run/secrets/kubernetes.io/serviceaccount"
 ESO = "/apis/external-secrets.io/v1"
 MERGE = "application/merge-patch+json"
+# INFRA-1123: the apiserver throttles under load (API Priority & Fairness, 429)
+# and can answer 5xx or drop a connection during a WATCH-reconnect storm. Only
+# these transient classes are retried; a 4xx (other than 429) is a real error and
+# fails at once. Retry-After on the response wins over the fixed backoff.
+API_ATTEMPTS = 3
+API_BACKOFF = (2, 4)
+
+
+def _retry_after(e):
+    """Seconds from a Retry-After header (APF sends it on 429), or None if the
+    header is absent or not a plain number of seconds (an HTTP-date is ignored:
+    the fixed backoff is close enough and never waits on a clock skew)."""
+    hdrs = getattr(e, "headers", None)
+    value = hdrs.get("Retry-After") if hdrs is not None else None
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        return None
+
+
+def _backoff(attempt):
+    return API_BACKOFF[min(attempt, len(API_BACKOFF) - 1)]
+
+
+def _transient(e):
+    return e.code == 429 or 500 <= e.code < 600
 
 
 def call(method, path, body=None, ctype="application/json"):
     data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(API + path, data=data, method=method)
-    with open(SA + "/token") as f:
-        req.add_header("Authorization", "Bearer " + f.read().strip())
-    if body is not None:
-        req.add_header("Content-Type", ctype)
     ctx = ssl.create_default_context(cafile=SA + "/ca.crt")
-    try:
-        with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
-            return json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        if e.code == 404 and method == "GET":
-            return None
-        raise
+    for attempt in range(API_ATTEMPTS):
+        req = urllib.request.Request(API + path, data=data, method=method)
+        with open(SA + "/token") as f:
+            req.add_header("Authorization", "Bearer " + f.read().strip())
+        if body is not None:
+            req.add_header("Content-Type", ctype)
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
+                return json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and method == "GET":
+                return None
+            if not _transient(e) or attempt == API_ATTEMPTS - 1:
+                raise
+            wait = _retry_after(e)
+            time.sleep(_backoff(attempt) if wait is None else wait)
+        except (urllib.error.URLError, TimeoutError):
+            # timeout, connection reset or DNS blip: the same transient class
+            if attempt == API_ATTEMPTS - 1:
+                raise
+            time.sleep(_backoff(attempt))
 
 
 def referenced_items(spec):

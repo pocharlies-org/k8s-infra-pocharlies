@@ -1,7 +1,0 @@
-# Actions Runner Controller — scale-set controller
-# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
-# Namespace: arc-systems
-metrics:
-  controllerManagerAddr: ":8080"
-  listenerAddr: ":8080"
-  listenerEndpoint: "/metrics"

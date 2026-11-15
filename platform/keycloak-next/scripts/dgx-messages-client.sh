@@ -44,15 +44,7 @@ GROUPS_MAPPER=dgx-messages-groups
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-dgx-messages-admin.config
 
-cleanup() {
-  rm -f "${ADMIN_CONFIG}"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  printf 'ERROR: %s\n' "$*" >&2
-  exit 1
-}
+. "${0%/*}/kc-admin-common.sh"
 
 progress() {
   printf '{"client_id":"%s","stage":"%s"}\n' "${CLIENT_ID}" "$1"
@@ -72,35 +64,6 @@ case "${MODE}" in
   rollback) ;;
   *) fail "unsupported MODE=${MODE}" ;;
 esac
-
-nonempty_lines() {
-  sed '/^[[:space:]]*$/d'
-}
-
-line_count() {
-  nonempty_lines | wc -l | tr -d '[:space:]'
-}
-
-login_admin() {
-  attempt=1
-  while [ "${attempt}" -le 30 ]; do
-    if "${KCADM}" config credentials \
-      --config "${ADMIN_CONFIG}" \
-      --server "${KEYCLOAK_URL}" \
-      --realm master \
-      --user "${KC_BOOTSTRAP_ADMIN_USERNAME}" \
-      --password "${KC_BOOTSTRAP_ADMIN_PASSWORD}" >/dev/null 2>&1; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    sleep 5
-  done
-  fail "Keycloak admin login did not become ready"
-}
-
-kget() {
-  "${KCADM}" get "$@" --config "${ADMIN_CONFIG}" -r "${REALM}"
-}
 
 # `-q clientId=` es un filtro de SUBCADENA en el servidor: se piden id,clientId
 # y se casa el clientId exacto, para no confundir dgx-messages con un

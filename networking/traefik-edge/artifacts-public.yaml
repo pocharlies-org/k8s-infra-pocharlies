@@ -1,0 +1,27 @@
+---
+# DGX-936: artifacts públicos de `publish_html` (ofimatica) en
+#   https://s3.e-dani.com/artifacts/pub/<key>
+# Bucket `artifacts` del MinIO skirmshop-drive (ns backup-hub): lectura anónima de
+# objetos y sin listado. Solo `pub/`: `/artifacts/lan/` no tiene ruta aquí y cae en el
+# catch-all SSO de s3.e-dani.com. Priority 300 gana a ese catch-all (100) y al bypass
+# LAN (200), como labs-public.yaml. El Service ExternalName es el de
+# skirmshop-s3-public.yaml (traefik-edge no vigila backup-hub).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: artifacts-public
+  namespace: traefik-edge
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/artifacts/pub/`)
+      priority: 300
+      services:
+        - name: skirmshop-drive-s3-ext
+          port: 9000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge

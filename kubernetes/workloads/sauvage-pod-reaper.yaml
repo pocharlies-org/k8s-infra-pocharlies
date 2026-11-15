@@ -12,6 +12,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "delete"]
+  # INFRA-935 fix (18-10): the global scope (TARGET_NODE="") enumerates
+  # namespaces with `kubectl get ns`; the pods-only role made the job die with
+  # Forbidden. Read-only on namespaces is all the enumeration needs.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -38,7 +44,11 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 240
+      # SC-2679 (27-10): desde el fix INFRA-935 (18-10) el reaper barre TODOS los
+      # namespaces (~100 x 2 fases, ~200 llamadas kubectl): sano tarda ~75 s, pero
+      # con el API algo lento superaba los 240 s y moría por DeadlineExceeded en
+      # cascada (keep-causa cron-job-failed:90dcdf1ed6). 600 s = 8x de margen.
+      activeDeadlineSeconds: 600
       backoffLimit: 1
       ttlSecondsAfterFinished: 3600
       template:
@@ -61,10 +71,14 @@ spec:
               image: alpine/k8s:1.32.5
               imagePullPolicy: IfNotPresent
               env:
+                # INFRA-935: empty means cluster-wide (all nodes, all namespaces).
+                # The old sauvage/skirmshop scope left Completed cronjob pods
+                # piling on the control planes, where every object is watched by
+                # the apiserver that is already the hot spot (ks5-cp-1, 89 % CPU).
                 - name: TARGET_NODE
-                  value: sauvage
+                  value: ""
                 - name: TARGET_NAMESPACES
-                  value: skirmshop
+                  value: ""
                 - name: SUCCEEDED_TTL_SECONDS
                   value: "7200"
                 - name: FAILED_TTL_SECONDS
@@ -79,8 +93,8 @@ spec:
               args:
                 - |
                   set -eu
-                  node="${TARGET_NODE:-sauvage}"
-                  namespaces="${TARGET_NAMESPACES:-skirmshop}"
+                  node="${TARGET_NODE:-}"
+                  namespaces="${TARGET_NAMESPACES:-$(kubectl get ns -o jsonpath='{.items[*].metadata.name}')}"
                   now="$(date +%s)"
                   total=0
 
@@ -93,8 +107,10 @@ spec:
                     marker="/tmp/reaped-$ns-$phase"
                     : > "$marker"
 
+                    sel="status.phase=$phase"
+                    [ -n "$node" ] && sel="$sel,spec.nodeName=$node"
                     kubectl get pods -n "$ns" \
-                      --field-selector="status.phase=$phase,spec.nodeName=$node" \
+                      --field-selector="$sel" \
                       -o custom-columns=NAME:.metadata.name,START:.status.startTime \
                       --no-headers 2>/dev/null |
                     while read -r pod start; do

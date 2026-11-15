@@ -1,0 +1,821 @@
+{
+  "formato": "imagen logica -> digest resuelto -> {comprimido, descomprimido} en bytes. Linea base del guard de tamano (INFRA-536 C4). Los no-datos van como marcador {\"sin_dato\": motivo} dentro del campo. Regenerado por scripts/image-inventory.py; no tocar a mano.",
+  "imagenes": {
+    "harbor.e-dani.com/homelab/agent-jake-browser-mcp-server": {
+      "sha256:17b7ec9958c2de4450d4e332f67b05fdab9f2b310bf08eec9f21b8f75875008b": {
+        "comprimido": 94824855,
+        "descomprimido": 259700224
+      }
+    },
+    "harbor.e-dani.com/homelab/bambulab-openclaw": {
+      "sha256:56adf6111d4d6b3ebaf3c93f1f08572994f044442aecc068ffe50b01afd4c663": {
+        "comprimido": 606466098,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (606466098 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/bge-m3-embedding": {
+      "sha256:fd87b3b5deda5fda2e13e5435582dcb15330cb4ec376de20c9e52915dc9d0f94": {
+        "comprimido": 3497081137,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (3497081137 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/blog": {
+      "sha256:6decd8bb94d6ba5eab793234de29d66dcdcb60b4f96325050ba4c6140f3c9ca9": {
+        "comprimido": 27310798,
+        "descomprimido": 66189824
+      }
+    },
+    "harbor.e-dani.com/homelab/brain-mcp": {
+      "sha256:ed1a9700b5ef458df7ceb77880c4d494338fae6ddfff7213db50d36468022061": {
+        "comprimido": 170451186,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (170451186 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/codex-arcade": {
+      "sha256:3de9431c1c2b54e7eba8ba39421dfda6b23647b8572f5625a5ea556b767bb575": {
+        "comprimido": 26109587,
+        "descomprimido": 63611392
+      }
+    },
+    "harbor.e-dani.com/homelab/comfyui": {
+      "sha256:4c4e8f5c544fc715ebcea2f171ab4a6b8808d3369cf9eed4c7ff1be935e2205a": {
+        "comprimido": 15065856587,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (15065856587 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/comfyui-rtx": {
+      "sha256:4d8c906d018debd9b3492b6783eae23b47fd88accf83fa254144bbac56443327": {
+        "comprimido": 12225072915,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (12225072915 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/company-crm": {
+      "sha256:a9caf89230d91710b4d6ce2b0d967622d25fa3c46db7d8d6044c9d2302ef5ae8": {
+        "comprimido": 70836631,
+        "descomprimido": 213048320
+      }
+    },
+    "harbor.e-dani.com/homelab/control-panel-bff": {
+      "sha256:64572f56d9b40c3194d237193713ea19eeb7241dbaf5428af34811687d3a2762": {
+        "comprimido": 56773705,
+        "descomprimido": 164485632
+      }
+    },
+    "harbor.e-dani.com/homelab/control-panel-ui": {
+      "sha256:f04db3a6eb6add0d4dd31fe9a8a008ae5260cc31beee7db522290c19d12e56ac": {
+        "comprimido": 21052173,
+        "descomprimido": 49577472
+      }
+    },
+    "harbor.e-dani.com/homelab/correo-app": {
+      "sha256:086367b4bbd87a01d7e7947a9996a8105bd2dfdaf0631533a84c4f186113edf1": {
+        "comprimido": 8797915,
+        "descomprimido": 15279616
+      }
+    },
+    "harbor.e-dani.com/homelab/correo-core": {
+      "sha256:7501d7e26b5a719a83950ad177691aada89538f2f9550adda09f29d4da56b263": {
+        "comprimido": 76353746,
+        "descomprimido": 289055232
+      }
+    },
+    "harbor.e-dani.com/homelab/correo-telegram": {
+      "sha256:298597cf30959478c8fc94c4881e1c34eedb27338444c90174038b2206f29221": {
+        "comprimido": 48325444,
+        "descomprimido": 137134080
+      }
+    },
+    "harbor.e-dani.com/homelab/cv-dani": {
+      "sha256:7fdbfc8f4e01f7fdaf3dcc3875fe56afefd91d206cf9105b203e29b5f5b9fbdf": {
+        "comprimido": 28223246,
+        "descomprimido": 65733120
+      }
+    },
+    "harbor.e-dani.com/homelab/cv-manu": {
+      "sha256:3b9b2adc6f3104df5a28acd1c3bbe37f8296dfa618b00a2a90dcd27b4209fadc": {
+        "comprimido": 89206045,
+        "descomprimido": 127923200
+      }
+    },
+    "harbor.e-dani.com/homelab/cv-oracle": {
+      "sha256:c0df5fba8f2259092986712ea34e531bc1b7364b038c52b1acb0d63b4adb314c": {
+        "comprimido": 57450374,
+        "descomprimido": 165252608
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-dashboard-backend": {
+      "sha256:fd2d6d1cb7c36ba5755465279babb6328574510936f7dd1c2c50f259f69e71a7": {
+        "comprimido": 335400371,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (335400371 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-dashboard-ui": {
+      "sha256:9336aa802517c55531ab5fe41a7608359b8f6c52133d536863b67d5da93c2429": {
+        "comprimido": 35216651,
+        "descomprimido": 79639552
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-infra/chat": {
+      "sha256:3b2ad9c4899265e24d3d697f5ab9185cc60d67b8ed21b10d65f36fc62234179d": {
+        "comprimido": 1838836418,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (1838836418 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-infra/ofimatica": {
+      "sha256:16e6fdd091f1d13bc7f332bcae0549cb93b09c40b0ccdf6857ca98385550cb7f": {
+        "comprimido": 83613210,
+        "descomprimido": 241892352
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-infra/omnivoice": {
+      "sha256:e9d7df4f0d28adc1a8e36dc7847ded21956bbde20450331697aa173a3a08f5e8": {
+        "comprimido": 16616192186,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (16616192186 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-infra/omnivoice-audio": {
+      "sha256:ad7917cfd73ca997e97e20ddc6334a9a720a04085feba496e895a1a0793bd671": {
+        "comprimido": 232470593,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (232470593 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-infra/voicelab": {
+      "sha256:918e6eaa967cb96e566b6ce54c40f741edb17af6ec652557d72eb5c5ba102971": {
+        "comprimido": 816753612,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (816753612 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-messages": {
+      "sha256:68743e1a9976fd7b92a4278e191b09763a276e2e3b6915310a83ce8a5b5af4c4": {
+        "comprimido": 72863938,
+        "descomprimido": 215087616
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-node-metrics": {
+      "sha256:9f71826a12873afde35732901314129c4053669f6c10bc81d25664bd6f37b29c": {
+        "comprimido": 72796163,
+        "descomprimido": 187012096
+      }
+    },
+    "harbor.e-dani.com/homelab/dgx-synapse-mcp": {
+      "sha256:e568fb82fdf54f306c8ad542facb329174d1dc1ad909e39ed95abfa9a489491e": {
+        "comprimido": 70303346,
+        "descomprimido": 206175232
+      }
+    },
+    "harbor.e-dani.com/homelab/eg2-embedding": {
+      "sha256:3997f1b7815fc28bcb70b6d2cfa06b8cebc80f0ad6cc5dc5998990b7136d4553": {
+        "comprimido": 455286077,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (455286077 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/frigate-assets": {
+      "sha256:60c426a24acd845ec025375ce3a42c82d66e15fe28a9a1791c78fddef2fb1b82": {
+        "comprimido": 40910109,
+        "descomprimido": 47064064
+      }
+    },
+    "harbor.e-dani.com/homelab/galan-proposal-chat": {
+      "sha256:27cd66894b37d478ab5dd6b2e978ec706cd2d36ee118319aeab93b3b88ef1db4": {
+        "comprimido": 59203688,
+        "descomprimido": 169811968
+      }
+    },
+    "harbor.e-dani.com/homelab/galan-proposal-site": {
+      "sha256:b87dfc993b26451ebf66afddf1eb70b2c7b8530139f99fccce79ae9c326038a8": {
+        "comprimido": 26365781,
+        "descomprimido": 56682496
+      }
+    },
+    "harbor.e-dani.com/homelab/gbp-festivos": {
+      "sha256:8f65618c2201252b280cfb8a4cb809b1399a203ff1eb4b80db0d5984258fb584": {
+        "comprimido": 48091054,
+        "descomprimido": 126156288
+      }
+    },
+    "harbor.e-dani.com/homelab/gh-token-refresher": {
+      "sha256:c9686b657e7546ce55f6c36bcc521f2db44723ec1f0f861313805494ff704a61": {
+        "comprimido": 73486445,
+        "descomprimido": 205568512
+      }
+    },
+    "harbor.e-dani.com/homelab/gliner2-extract": {
+      "sha256:3f2f8951ca7debffdd00da04e0e1e921e8649a6f4f0e7ccc92148ed9c6977343": {
+        "comprimido": 369485413,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (369485413 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/ha-dashboard": {
+      "sha256:6ae7dc0395c00b1ac802b40e5bcf60ce90280404467177a57c74978a00a4ee7a": {
+        "comprimido": 65382854,
+        "descomprimido": 189596672
+      }
+    },
+    "harbor.e-dani.com/homelab/hermes-agent": {
+      "sha256:c76b9f1c5d30269b2946990264536efae052695ce025c4809530e16eb504de26": {
+        "comprimido": 1122072363,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (1122072363 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/horarios-alphalink": {
+      "sha256:9cef91e94cdc6d3ae9747cca59e35b5c62edd9a68335bd0522087fd857b8bcda": {
+        "comprimido": 64445744,
+        "descomprimido": 189107712
+      }
+    },
+    "harbor.e-dani.com/homelab/inmobiliarias-proposal": {
+      "sha256:1dbf19022a1edee9c7e1a0ef9bcf46614652ee51bb2a8cbe86812492d5ea0db1": {
+        "comprimido": 61233920,
+        "descomprimido": 172813312
+      }
+    },
+    "harbor.e-dani.com/homelab/jarvis-alexa": {
+      "sha256:6f96e7e3f54fc89593b25cc6d08e982fc814ab41c59a2e116b3b0e94c221c784": {
+        "comprimido": 102327439,
+        "descomprimido": 249139712
+      }
+    },
+    "harbor.e-dani.com/homelab/jarvis-backend": {
+      "sha256:b72607f6d95c0deaa3ccafc43edd67bfa44f3ab71de1ad8efb7ca59d098284c9": {
+        "comprimido": 488034643,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (488034643 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/k8s-analisis-pocharlies": {
+      "sha256:2c8fb4d6a27edf2f1c4b81430baea29f56cd19455e08a8572662ef871fae6dc1": {
+        "comprimido": 78747456,
+        "descomprimido": 302716928
+      }
+    },
+    "harbor.e-dani.com/homelab/k8s-skills-catalog-pocharlies": {
+      "sha256:c308e0989aca44a7b8eb3844236011c4a1b2938ad991b02faa5957ecf79c02da": {
+        "comprimido": 184752520,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (184752520 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/krea2-trainer-gb10": {
+      "sha256:a10a418cde8af3ebc5a42e74084ac1fe1a3e3fbe845d3582bb6bead522dd61bb": {
+        "comprimido": 11202221912,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (11202221912 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/libreplay-web": {
+      "sha256:67aa4d19c387e72b665f6884ae609fec771913609cf938f226eae74214bb035c": {
+        "comprimido": 160040954,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (160040954 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/litellm": {
+      "sha256:627b3f4616eb5ab560f223855b8bdbbf5650e948fc64904f986298802f81de27": {
+        "comprimido": 403717357,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (403717357 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/mcp-stdio-bridge": {
+      "sha256:7a60752b51acb29e59fcf3160ebe3e909d1fef38c02a6e3854cdf8ef0699c7a7": {
+        "comprimido": 173840000,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (173840000 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/mcp-stdio-pool-bridge": {
+      "sha256:0958a31d43bc56549360bcb4855c44a22f8c7c9f8bde28673d17cfa0a31160fb": {
+        "comprimido": 164065072,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (164065072 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/nova": {
+      "sha256:20da2aa3384e2d4e453430838384dd61472d784307c8434055f50e6299cbe513": {
+        "comprimido": 130221417,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (130221417 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/nova-avatar": {
+      "sha256:de9f854df646d578f03781674012406dda72a0932dcc72a7f9c3bf1c2b75c4ec": {
+        "comprimido": 4562560600,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (4562560600 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/offers-mcp": {
+      "sha256:c16922eff322b81373049660211f7d66cc3e5c927d7b5dfc2f0592ffa9ffe949": {
+        "comprimido": 71755184,
+        "descomprimido": 209388544
+      }
+    },
+    "harbor.e-dani.com/homelab/partcrafter-api": {
+      "sha256:d726c297d037d465af0b80437dcd6ee18b3a0defdf699cd5da505c0a11997811": {
+        "comprimido": 11979248246,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (11979248246 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/paseo-atlantic": {
+      "sha256:2e12feda5fa569afe762a88cf17c1e9faf4683c44a4e81d2edf707cd69a76fc3": {
+        "comprimido": 606225031,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (606225031 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/photos-mcp": {
+      "sha256:49a9c03a7573fd746ff0d49f7ca68a8e0a8a94d7d0283484ac0ccb46a6d474e7": {
+        "comprimido": 112806125,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (112806125 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/picqer-mcp": {
+      "sha256:8a359d45c4cd64e4634eb6547efae805eeff719ec139fd09bcfb92ddef6f5636": {
+        "comprimido": 78702555,
+        "descomprimido": 218862592
+      }
+    },
+    "harbor.e-dani.com/homelab/serpientetool-backend": {
+      "sha256:6acc83d3aa0558a26a59e32b51031868dc3719fa3475f048c630090a56753c76": {
+        "comprimido": 58252752,
+        "descomprimido": 167115264
+      }
+    },
+    "harbor.e-dani.com/homelab/serpientetool-frontend": {
+      "sha256:7b1ffb3ea663cc72e96983c794de8111d6d7201705aa6a62cfe4f6b89b1551a1": {
+        "comprimido": 20984022,
+        "descomprimido": 49382400
+      }
+    },
+    "harbor.e-dani.com/homelab/shared-rabbitmq": {
+      "sha256:3cd4d34c77457d5dd125bf7c070617132117b84237539c472bec612adbcd0275": {
+        "comprimido": 114497904,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (114497904 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-admin-mcp": {
+      "sha256:40c455aec71918aad59f88e1cc257ee11781763afaf736831b2de44bc62cfed7": {
+        "comprimido": 72355464,
+        "descomprimido": 210915328
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-affiliate-app": {
+      "sha256:3b8366e2943b73f17a2b944e7e2614a8936aca8526a7188f3cca9759368a24a3": {
+        "comprimido": 205034193,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (205034193 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-back-in-stock": {
+      "sha256:bc2881c45a8e89ea8052daaeda2ba84518776acb4fb6e6c2d87149a86d87c7b2": {
+        "comprimido": 377339239,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (377339239 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-back-in-stock-worker-email": {
+      "sha256:f8b14b917ed7516db929b9be51955527194775628cb296e457cd50f1baf89d84": {
+        "comprimido": 107973694,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (107973694 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-back-in-stock-worker-whatsapp": {
+      "sha256:7a86159a305b90d080caf3be35b8190fe01f5d051904abf1d0e75564c0534217": {
+        "comprimido": 106285983,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (106285983 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-bundle-app": {
+      "sha256:1793ebf6064810124a44e700ba984c3c64d27955f4c41c9f3d205a093438c939": {
+        "comprimido": 135608208,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (135608208 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-collections-tree-app": {
+      "sha256:e9dd256050ac1bb8ec204e058921924d5580584c4c8240166b09b1308d96025f": {
+        "comprimido": 152463157,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (152463157 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-sii-app": {
+      "sha256:eb782ac2cb6ac2bf0536d07b2ed5f1f9d575f31f21d122b6537110ea3c088361": {
+        "comprimido": 221551953,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (221551953 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-sync-app": {
+      "sha256:5a1fc60b3139e5b359cf618e554d6af557a34a14ec51aff01c6a1e451c5753d9": {
+        "comprimido": 82205215,
+        "descomprimido": 216302592
+      }
+    },
+    "harbor.e-dani.com/homelab/shopify-translation-app": {
+      "sha256:d93f04a1518cc1bb5b6c4f28bc9638d9228c8ed8729425db341605938b1d3d5c": {
+        "comprimido": 183996411,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (183996411 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmbooks-aeat-browser": {
+      "sha256:410544e059d4e97749ddf9000d982f6fc3538af67fb61ccb94fc866758173877": {
+        "comprimido": 1180232847,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (1180232847 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmbooks-backend": {
+      "sha256:c9204770c5af18795fc1ca893b9557e3215ec427aa137508993560dcdedcb487": {
+        "comprimido": 599946474,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (599946474 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmbooks-ui": {
+      "sha256:3a9208fe2f71019fcafcc3c7f038a84675a294a98dd6c414be91df274edea070": {
+        "comprimido": 113524645,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (113524645 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-brain-v2": {
+      "sha256:a6aa145741ee20861d13111d33ec5df8a2ab064f98f8b8e83015cace84b2cd6b": {
+        "comprimido": 293684835,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (293684835 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-correos-adapter": {
+      "sha256:4b54fed005ae23901003b0d9f3d47393224cd13f98e566d158f1cf83ed388324": {
+        "comprimido": 64579496,
+        "descomprimido": 210366464
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-correos-express-adapter": {
+      "sha256:a468037e771189c112eaec33f032125616ce23d59bb679d486baa10ee406d9f5": {
+        "comprimido": 67469266,
+        "descomprimido": 218228736
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-event-gateway": {
+      "sha256:81f0adff9b05d8d0f5caa55a92eb2ce18a7357cd0ef7a435159e8cc5d034cfae": {
+        "comprimido": 61448517,
+        "descomprimido": 191397888
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-event-projector": {
+      "sha256:a77ef40f2cfb30689585c78814ef7d570f388fe77f75560c1fdb823f5f11d319": {
+        "comprimido": 60362926,
+        "descomprimido": 186186752
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-label-storage": {
+      "sha256:e2ea9101a6e1adf6106ba68e7eaeb6f32203e6ced9b9157eb4c8d6f04ef82991": {
+        "comprimido": 60129768,
+        "descomprimido": {
+          "sin_dato": "crane export fallo tras 2 intentos"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-notification-dispatcher": {
+      "sha256:2b33f06fed4d6c69788901e6112647a1e7eaf7915a560836155b393c6cdaa8c3": {
+        "comprimido": 60326431,
+        "descomprimido": 186046976
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-ops-edit-hold-reconciler": {
+      "sha256:281ec03277a90907e80bacb5cd904c3dfd8baf29f6644daf56b6d25b0754053d": {
+        "comprimido": 56692978,
+        "descomprimido": 169703936
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-outbox-relay": {
+      "sha256:18009f7900b822ae545beef3757e4f332b0d624ffb119fd2faa4b2746fa14e2b": {
+        "comprimido": 59502968,
+        "descomprimido": 183013376
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-pickup-point-reminder": {
+      "sha256:8e98104cb9301dff4fe6e81bebd16f390497123721eb70d175272c792b37cc75": {
+        "comprimido": 57571602,
+        "descomprimido": 172960256
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-routing-service": {
+      "sha256:89dada9bd1f6297aa957e8540e3884950874dc1f0a70d149968611cf862028ed": {
+        "comprimido": 62177851,
+        "descomprimido": 194018816
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-saga-launcher": {
+      "sha256:d5bfbb7294b01130cacc118729ddafa36749165ad5e890aa9357b67c9b00f3db": {
+        "comprimido": 60469102,
+        "descomprimido": 186721792
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-shopify-app": {
+      "sha256:8d6eaddb82be8566c35a052cfc809a854f42bd2bdc729cb7bb235e3792186e49": {
+        "comprimido": 69746632,
+        "descomprimido": 228400640
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-shopify-fulfillment-service": {
+      "sha256:fc883afeee0ef61fed90872830bd9ddf3684c9ef4c14112e2d6161add55dba9e": {
+        "comprimido": 62494646,
+        "descomprimido": 195531264
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-synapse-janitor": {
+      "sha256:acdb162e2716fff61637de5b643fffec1bb1ecb676fe4b81a28ed5a854897808": {
+        "comprimido": 60181397,
+        "descomprimido": 185534976
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-synapse-workflow-registrar": {
+      "sha256:6f07872edcce1dd7536d3775619042fa72320e6e4cc818d4daa556552bff9852": {
+        "comprimido": 57506203,
+        "descomprimido": 168483840
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-telegram-optin-ingest": {
+      "sha256:390d3e8355aaa83738d12c7506d5a142bd794d24f1bed2b2e107fb19cea260b6": {
+        "comprimido": 59977225,
+        "descomprimido": 184261120
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-tracking-ingestion": {
+      "sha256:c0c432a3df405b2e2d01cd2f64b27e29f0092f1597472a84e5691c61873aec58": {
+        "comprimido": 60449636,
+        "descomprimido": 186553344
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-tracking-poll-scheduler": {
+      "sha256:b66bc67185a358cf99b641ca959182552f41e7035c5f97539babece578349707": {
+        "comprimido": 56676079,
+        "descomprimido": 169565184
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-ups-adapter": {
+      "sha256:5ce8ad4051e440c699c0208cf183c61a7611b37a22f74eaa866e8907fb57feff": {
+        "comprimido": 67605650,
+        "descomprimido": 219231232
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest": {
+      "sha256:632e63d53ae63b2bb3510e4685c04f93ad1236ed8900dd9ade065e31efeb9927": {
+        "comprimido": 59972754,
+        "descomprimido": 184245248
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-picker": {
+      "sha256:2aa5a54ef072192d1d1e776cc33b074f728b70c0995692c108e6ef130ad56a98": {
+        "comprimido": 84197154,
+        "descomprimido": 313163776
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshop-serial-numbers": {
+      "sha256:c88373f02fb3e8b70fd7ee2a8838b80e04bd7a5f39d5767dccb56f8cbfeb00f9": {
+        "comprimido": 214847239,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (214847239 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/skirmshopshopifyapp": {
+      "sha256:1d0faac156ada81575608a0a777f211122277b6e4f0068702ed497d5b4269170": {
+        "comprimido": 237627580,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (237627580 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/stt-mcp": {
+      "sha256:fb724c437c0287bba6a14b7df02e171a272735946e9065afd6a5010961b07964": {
+        "comprimido": 75615542,
+        "descomprimido": 220003328
+      }
+    },
+    "harbor.e-dani.com/homelab/stt-turbo": {
+      "sha256:8e0f999168c872e2c3be6ad36c10eb4cb9416693fc3a4cbadaf5d869c9f348c2": {
+        "comprimido": 2058613203,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (2058613203 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/synapse": {
+      "sha256:db7edb77186ca8ed6b7bec8b26d66f73edf36e9f014647c776b5d63cffff8243": {
+        "comprimido": 586264920,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (586264920 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/synapse-document-intake": {
+      "sha256:af4698cc0430b234be2b67e1bc3efff860c7e06a17fae61e2061a07e2367f3f6": {
+        "comprimido": 231629255,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (231629255 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/tesla-control-mcp": {
+      "sha256:53849f4d67c499b40e159b0996bd9614db988f5bf99aad32f1508c45c19c773a": {
+        "comprimido": 72778708,
+        "descomprimido": 216227328
+      }
+    },
+    "harbor.e-dani.com/homelab/teslamate-mcp": {
+      "sha256:25f9acc9f4ee74e56f855d4f0ebfb2aea62c009effb4bd91e7d60f577e574557": {
+        "comprimido": 65974449,
+        "descomprimido": 188444672
+      }
+    },
+    "harbor.e-dani.com/homelab/tomorrowland-app": {
+      "sha256:5beb7af1733423d2a0ab4d4522855bda211da8108935786f85823a3de36a2725": {
+        "comprimido": 183069549,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (183069549 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/update-watch-forker": {
+      "sha256:614cc374e2b6add3844b208f06fe3f9fa0f2b03d7989e1035253e66a59a7d36a": {
+        "comprimido": 380350542,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (380350542 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/uriel-poster": {
+      "sha256:a1f11f8ca1f6c3877784096558330e4a8b26d2b2c51c4ca450262ca343df9121": {
+        "comprimido": 554039456,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (554039456 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/uriel-proposal-chat": {
+      "sha256:1f51cdf39f6481df5fee73cf6070bc0e90e2d024cb7cf4196f6c38164c9fdcef": {
+        "comprimido": 59115593,
+        "descomprimido": 169049088
+      }
+    },
+    "harbor.e-dani.com/homelab/uriel-proposal-site": {
+      "sha256:0cfcffe0df4111bf6137c02ac7e925d14260c98f26ad2d44516fa47945bd4067": {
+        "comprimido": 32391869,
+        "descomprimido": 65623040
+      }
+    },
+    "harbor.e-dani.com/homelab/videovigilancia": {
+      "sha256:901d01a2387693c65c145b0aecab865bab71025c07f67a903ee1fa77c1492cf1": {
+        "comprimido": 27971914,
+        "descomprimido": 69596160
+      }
+    },
+    "harbor.e-dani.com/homelab/web-edani": {
+      "sha256:560109ebc3237441b8b45b8d159a13298e5fb814855f2b1b7ed172fe2083bfbe": {
+        "comprimido": 33820675,
+        "descomprimido": 72677376
+      }
+    },
+    "harbor.e-dani.com/homelab/weight-resolver": {
+      "sha256:b9ccb82a4d7d047690a5a5ff179086424c8c9574ce18930f3a8d1325d894a150": {
+        "comprimido": 398822037,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (398822037 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-correo-bridge": {
+      "sha256:61e25d1a83440bf1af1dfe7a7b1e3b0edb3ad92068070fe302f84fe358b124d2": {
+        "comprimido": 196176414,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (196176414 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-instagram-connector": {
+      "sha256:4c388afc8d3dc6c77afb01fc2b920f442b4eaacc05321de415e775496dcbe762": {
+        "comprimido": 177383943,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (177383943 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-mcp-server": {
+      "sha256:bdcb5e6c8dc5fedb3eb7874defc74db7512aa3fac6e8e8c865c5d83b07f04b31": {
+        "comprimido": 198638663,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (198638663 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion": {
+      "sha256:431e15f132cbddb1128923c8c13c482bfc204ffea6a9e153461422c6e051feb6": {
+        "comprimido": 298479836,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (298479836 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-telegram-connector": {
+      "sha256:8594502b214dd8c2e44ab602c88c15e952402831a96e01b3eacc2292ccef6ae8": {
+        "comprimido": 182782833,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (182782833 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-telegram-sync": {
+      "sha256:ef67824334fcee2256a49a8184e851ff9cab7b2f1a602f202887e3e775f8f9c1": {
+        "comprimido": 199238414,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (199238414 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-app": {
+      "sha256:4278e4cefe65f37e1e709a2f2bd993fc8c04b9d2ccaaf13649f54c0346cd19bc": {
+        "comprimido": 114129968,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (114129968 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-connector": {
+      "sha256:ed1de167f7b532b5dcdb298d5fd5a4656f239f323e90353a76742eec1ec2902d": {
+        "comprimido": 196805974,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (196805974 bytes comprimidos)"
+        }
+      }
+    },
+    "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-synapse-bridge": {
+      "sha256:07000db79888620a801b3707ce32d8bfb41d2afb7b66a306b56bf306f1c290e5": {
+        "comprimido": 173293647,
+        "descomprimido": {
+          "sin_dato": "omitido por tamano (173293647 bytes comprimidos)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Defaults de la plantilla. Las webs se declaran en realms.yaml (la Application
+# lo pasa como valueFiles); aquí solo va lo que es igual para todas.
+keycloak:
+  publicUrl: https://auth-next.e-dani.com
+  internalUrl: http://keycloak.keycloak.svc.cluster.local
+  adminSecret: keycloak-bootstrap
+
+images:
+  oauth2Proxy: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+  # Construido contra 26.5.5; el servidor es 26.6.2 (misma API admin de la 26).
+  configCli: docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+
+secretStore: onepassword-connect
+
+google:
+  # Ítem 1Password con el cliente OAuth de Google Cloud que lleva un callback
+  # por realm: https://auth-next.e-dani.com/realms/<realm>/broker/google/endpoint
+  item: ""
+
+realms: []

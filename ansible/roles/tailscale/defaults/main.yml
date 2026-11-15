@@ -1,0 +1,7 @@
+---
+# Pinned and held: 1.104.x keeps sending to peers over DERP after a peer or
+# node-key change and never retries the direct path (tailscale/tailscale#21728).
+# INFRA-999: Atlantic on 1.104.2 relayed all its traffic to the KS-5 nodes
+# through DERP (~30 Mbit/s, 300-1500 ms RTT). 1.102.2 is what the KS-5 control
+# planes run. Raise this only once #21728 is fixed.
+tailscale_version: "1.102.2"

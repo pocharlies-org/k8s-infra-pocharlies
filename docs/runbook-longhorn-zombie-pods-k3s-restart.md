@@ -1,9 +1,12 @@
 # Longhorn zombie pods after a k3s restart ("no Pending workload pods")
 
-Tracked in INFRA-41. Diagnosis is closed (INFRA-73). The fix is published in
-Longhorn v1.13.0 and the cluster is being bumped to it through INFRA-122; until
-that bump is deployed and verified, the operational answer below (recreate the
-pod) is what clears a stuck mount.
+Tracked in INFRA-41. Diagnosis is closed (INFRA-73). The fix shipped in
+Longhorn v1.13.0 and is deployed and verified in this cluster (INFRA-122): on
+2026-11-01 a single k3s restart on `ks5-cp-3` left the fixture pod `Ready` on
+its own — same name and UID, 0 `FailedMount` events (50-entrega.md of
+INFRA-168, 70-qa.md PASA). The recovery below is what cleared a stuck mount on
+versions before v1.13.0; it stays the emergency answer if the symptom ever
+reappears.
 
 ## Symptom
 
@@ -43,7 +46,7 @@ contains it:
 
 | version | fix |
 | --- | --- |
-| v1.11.2 | this cluster's current chart — no fix |
+| v1.11.2 | chart this cluster ran before INFRA-122 — no fix |
 | v1.11.3 | published — no fix (backport did not land in 1.11.x) |
 | v1.12.0, v1.12.1 | published (latest of the 1.12 line) — no fix |
 | v1.12.2 | not published; the backport (longhorn-manager#5225) is merged to `v1.12.x` — only the release is missing |
@@ -51,8 +54,8 @@ contains it:
 
 The GitOps surface is `infra/longhorn.yaml` (multi-source Application, chart
 pinned there) plus `infra/longhorn/values.yaml` in `k8s-gitops-pocharlies`,
-branch `deploy/prod`. There is **no configuration workaround** — until v1.13.0
-is deployed, recovery is operational (recreate the pod).
+branch `deploy/prod`. There was **no configuration workaround** — before
+v1.13.0, recovery was operational (recreate the pod).
 
 ### Upgrade path (INFRA-122)
 
@@ -77,8 +80,16 @@ therefore **1.11.2 → 1.12.1 → 1.13.0**, one PR per bump of `targetRevision` 
    volume left Degraded mid-route stops the path and escalates to the CTO —
    do not continue to the next minor, and do not downgrade.
 
-If the symptom reappears on a node before v1.13.0 is running (or a k3s restart
-happens during the upgrade window), use the recovery below; it is unchanged.
+**Status (2026-11-01): the route is complete — the cluster runs chart
+v1.13.0.** For the **next** Longhorn bump, step 3 is manual work:
+`concurrentAutomaticEngineUpgradePerNodeLimit` is back to `0` in
+`infra/longhorn/values.yaml` (lowered after the 91 volumes were verified on
+v1.13.0, INFRA-166), so engines do not follow the chart on their own. Raise
+the limit, wait until every engine runs the new image, set it back to `0`,
+and only then move `targetRevision`.
+
+If the symptom ever reappears (e.g. on a node not yet on v1.13.0, or during
+a future upgrade window), use the recovery below; it is unchanged.
 
 ## Recovery (operational)
 
@@ -102,13 +113,14 @@ Verify: the replacement pod reaches `Ready` and shows no new
 Materials live in `infra/longhorn-zombie-test/` in `k8s-gitops-pocharlies`
 (namespace `longhorn-zombie-test`, 1 GiB RWO Longhorn PVC, one busybox writer
 pinned to `ks5-cp-3`, and an ArgoCD Application with no `automated` sync). The
-directory is NOT referenced by the root `kustomization.yaml`, so merging its PR
-deploys nothing.
+Application is NOT in the root `kustomization.yaml` — the INFRA-168 cleanup
+removed it after the 2026-11-01 measurement — so the fixture is deployed on
+demand, never permanently.
 
-1. In the operator window, a follow-up PR adds
-   `infra/longhorn-zombie-test/application.yaml` to the root
-   `kustomization.yaml`. Sync the app manually — its `syncPolicy` has no
-   `automated` block on purpose.
+1. In the operator window, apply the Application directly:
+   `kubectl apply -f infra/longhorn-zombie-test/application.yaml` (repo
+   `k8s-gitops-pocharlies`, branch `deploy/prod`). Its `syncPolicy` has no
+   `automated` block on purpose — sync the app manually when ready.
 2. Capture the pod before the restart:
 
    ```bash
@@ -117,7 +129,9 @@ deploys nothing.
    ```
 
 3. Restart k3s on `ks5-cp-3` (`sudo systemctl restart k3s`). This command is
-   executed ONLY by the operator, never by an agent session.
+   executed by the operator, or by a session explicitly authorized by
+   `security` for the window — never ad-hoc. The 2026-11-01 measurement ran
+   that way (Request INFRA-1046): one restart, no repeats.
 4. Watch the pod and its events:
 
    ```bash
@@ -132,5 +146,8 @@ deploys nothing.
    state: the pod was never recreated, only its mount is wedged.
 6. Recover with the rollout restart above and confirm the new pod (new UID)
    mounts and reaches `Ready`.
-7. Cleanup: a follow-up PR removes the Application from the root
-   `kustomization.yaml` and ArgoCD prunes the test namespace contents.
+7. Cleanup: `kubectl delete -f infra/longhorn-zombie-test/application.yaml`.
+   The Application's finalizer cascade-deletes the namespace contents —
+   workloads and the PVC — which is what this fixture wants: everything under
+   `longhorn-zombie-test` is disposable test data. Elsewhere in the cluster,
+   never delete an ArgoCD Application by hand.

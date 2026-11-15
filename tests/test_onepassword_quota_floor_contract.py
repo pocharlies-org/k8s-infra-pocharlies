@@ -34,6 +34,16 @@ def repo_externalsecrets():
                 yield p, d, spec
 
 
+def onchange_ok(spec):
+    """None/OnChange como siempre; CreatedOnce solo si nunca refresca (0s o ausente): una clave
+    creada una vez (LUKS, INFRA-980) no llama a 1Password periódicamente — está por debajo del
+    suelo de cuota, no por encima. CreatedOnce periódico sí lo contamina y ha de seguir fallando."""
+    policy = spec.get("refreshPolicy")
+    if policy in (None, "OnChange"):
+        return True
+    return policy == "CreatedOnce" and spec.get("refreshInterval") in (None, "0s", 0)
+
+
 class OnChangeCoverageTest(unittest.TestCase):
     def test_policy_defaults_both_stores_to_onchange(self):
         policy = next(d for d in load(POLICIES) if d.get("metadata", {}).get("name") == "externalsecret-onepassword-onchange")
@@ -54,8 +64,20 @@ class OnChangeCoverageTest(unittest.TestCase):
             name = d["metadata"]["name"]
             if name in PERIODIC_IN_THIS_REPO:
                 continue
-            self.assertIn(policy, (None, "OnChange"), f"{p.relative_to(ROOT)}::{name} refreshPolicy={policy}")
+            self.assertTrue(onchange_ok(spec), f"{p.relative_to(ROOT)}::{name} refreshPolicy={policy}")
         self.assertGreater(seen, 0, "scan found no onepassword ExternalSecret: the glob broke")
+
+
+class CreatedOnceFloorTest(unittest.TestCase):
+    """El caso que el contrato nuevo debe seguir parando: CreatedOnce con intervalo periódico."""
+
+    def test_createdonce_periodico_sigue_fallando(self):
+        self.assertFalse(onchange_ok({"refreshPolicy": "CreatedOnce", "refreshInterval": "24h"}))
+        self.assertFalse(onchange_ok({"refreshPolicy": "Never"}))
+
+    def test_createdonce_sin_refresh_pasa(self):
+        self.assertTrue(onchange_ok({"refreshPolicy": "CreatedOnce", "refreshInterval": "0s"}))
+        self.assertTrue(onchange_ok({"refreshPolicy": "CreatedOnce"}))
 
 
 class CronJobFloorTest(unittest.TestCase):

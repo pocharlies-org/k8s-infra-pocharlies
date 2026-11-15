@@ -25,8 +25,9 @@ spec:
       containers:
         - name: mc
           # minio/mc ya no se publica en Docker Hub (pull access denied); la
-          # imagen del servidor trae /usr/bin/mc y ya está en sauvage.
-          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # imagen del servidor trae /usr/bin/mc. Espejo público en GHCR, no en
+          # Harbor: este plano no puede depender de Harbor (DGX-1336).
+          image: ghcr.io/pocharlies-org/minio:RELEASE.2025-04-22T22-12-26Z
           command: ["sh", "-c"]
           resources:
             requests: {cpu: 10m, memory: 32Mi}

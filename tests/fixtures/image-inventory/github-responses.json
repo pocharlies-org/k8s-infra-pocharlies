@@ -1,0 +1,58 @@
+{
+  "gh api orgs/pocharlies-org/repos?per_page=100 --paginate --jq .[].name": {
+    "returncode": 0,
+    "stdout": "aaa-docs\ndgx-infra\nghcr-app\nk8s-infra-pocharlies\nupstream-mirror\n"
+  },
+  "gh api repos/pocharlies-org/aaa-docs/contents/.github/workflows": {
+    "returncode": 0,
+    "stdout": "[{\"name\": \"notes.yml\", \"type\": \"file\"}]"
+  },
+  "gh api repos/pocharlies-org/aaa-docs/contents/.github/workflows/notes.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bm90YXM6IGhvbWVsYWIvc2ltcGxlLWFwcCBlcyBkb2N1bWVudGFsLCBubyBkZWNsYXJhIGxhIGltYWdlbgo=\"}"
+  },
+  "gh api repos/pocharlies-org/dgx-infra/contents/.github/workflows": {
+    "returncode": 0,
+    "stdout": "[{\"name\": \"build-simple.yml\", \"type\": \"file\"}]"
+  },
+  "gh api repos/pocharlies-org/dgx-infra/contents/.github/workflows/build-simple.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bmFtZTogYnVpbGQgc2ltcGxlCm9uOiB3b3JrZmxvd19kaXNwYXRjaAplbnY6CiAgSU1BR0U6IGhvbWVsYWIvc2ltcGxlLWFwcAo=\"}"
+  },
+  "gh api repos/pocharlies-org/dgx-infra/contents/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBhbHBpbmU6My4yMAo=\"}"
+  },
+  "gh api repos/pocharlies-org/ghcr-app": {
+    "returncode": 0,
+    "stdout": "{\"default_branch\": \"main\"}"
+  },
+  "gh api repos/pocharlies-org/ghcr-app/contents/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBkb2NrZXIuaW8vbGlicmFyeS9weXRob246My4xMi1zbGltCg==\"}"
+  },
+  "gh api repos/pocharlies-org/ghcr-app/contents/.github/workflows": {
+    "returncode": 1,
+    "stdout": ""
+  },
+  "gh api repos/pocharlies-org/k8s-infra-pocharlies/contents/.github/workflows": {
+    "returncode": 0,
+    "stdout": "[{\"name\": \"build-multi-arch.yml\", \"type\": \"file\"}]"
+  },
+  "gh api repos/pocharlies-org/k8s-infra-pocharlies/contents/.github/workflows/build-multi-arch.yml": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"bmFtZTogYnVpbGQgbXVsdGktYXJjaApvbjogd29ya2Zsb3dfZGlzcGF0Y2gKZW52OgogIElNQUdFOiBob21lbGFiL211bHRpLWFyY2gtYXBwCiAgRE9DS0VSRklMRTogZG9ja2VyL0RvY2tlcmZpbGUK\"}"
+  },
+  "gh api repos/pocharlies-org/k8s-infra-pocharlies/contents/docker/Dockerfile": {
+    "returncode": 0,
+    "stdout": "{\"content\": \"RlJPTSBoYXJib3IuZS1kYW5pLmNvbS9ob21lbGFiL2Jhc2UtcHl0aG9uOjMuMTIKUlVOIGVjaG8gaG9sYQo=\"}"
+  },
+  "gh api repos/pocharlies-org/upstream-mirror": {
+    "returncode": 1,
+    "stdout": ""
+  },
+  "gh api repos/pocharlies-org/upstream-mirror/contents/.github/workflows": {
+    "returncode": 1,
+    "stdout": ""
+  }
+}

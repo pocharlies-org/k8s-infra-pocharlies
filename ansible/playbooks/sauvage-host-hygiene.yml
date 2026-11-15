@@ -1,0 +1,26 @@
+---
+# INFRA-937: sauvage is the one public node (OVH, traefik-edge). The Ubuntu
+# desktop install left socket-activated services that are pure attack surface
+# here. Veeam, Samba, NFS and k3s-agent depend on none of them. Masked, not
+# just disabled: cups and avahi restart on socket/dbus activation otherwise.
+- name: Host hygiene on sauvage
+  hosts: sauvage
+  become: true
+  vars:
+    masked_units:
+      - cups.service
+      - cups.socket
+      - cups.path
+      - cups-browsed.service
+      - avahi-daemon.service
+      - avahi-daemon.socket
+      - ModemManager.service
+      - wpa_supplicant.service
+  tasks:
+    - name: Stop and mask desktop leftovers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+        masked: true
+      loop: "{{ masked_units }}"

@@ -1,0 +1,33 @@
+---
+- name: Validate the watchdog is only applied to sauvage
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'sauvage'
+      - sauvage_cri_watchdog_threshold | int >= 3
+      - sauvage_cri_watchdog_min_gap_seconds | int >= 1800
+    fail_msg: >-
+      The CRI watchdog restarts k3s-agent: it is scoped to sauvage and must
+      keep a threshold of at least 3 stalls and a restart gap of at least
+      30 minutes.
+
+- name: Install the CRI stall watchdog script
+  ansible.builtin.template:
+    src: sauvage-cri-watchdog.sh.j2
+    dest: "{{ sauvage_cri_watchdog_script_path }}"
+    mode: "0755"
+
+- name: Install the watchdog systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - sauvage-cri-watchdog.service
+    - sauvage-cri-watchdog.timer
+
+- name: Enable and start the watchdog timer
+  ansible.builtin.systemd:
+    name: sauvage-cri-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true

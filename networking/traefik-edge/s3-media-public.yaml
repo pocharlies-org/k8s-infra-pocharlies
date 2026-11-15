@@ -1,15 +1,18 @@
 ---
 # Public media URL for DGX/AI Studio artifacts stored in MinIO.
 # Cloudflare -> traefik-edge -> dgx-dashboard-ui -> dashboard S3 media gateway.
-# LAN/Tailscale/cluster source ranges bypass Keycloak so OpenClaw/Codex/Claude
-# agents can read generated media directly; internet callers use Keycloak SSO.
 #
 # SC-702 (SC-1191/SC-1192): this host shares the dashboard backend, so the
 # bypass route here exposed the same control API as dgx.e-dani.com. H1 strips
 # the 7 identity headers on every route (before sso-chain where present); H2
 # puts the approved control set behind sso-chain with higher-priority routes.
-# Media reads (the purpose of this bypass) stay open. dgx-strip-identity-headers
-# is defined once per Traefik instance — see dgx-dashboard-public.yaml.
+# DGX-809 (spec PM 04-11): the ClientIP bypass (prio 200) is GONE — on the edge
+# a home-range IP is external (100.64.0.0/10 = whole tailnet and carrier CGNAT,
+# DGX-1429) and this host shares the dashboard backend. Agents at home read
+# media through AdGuard -> traefik-lan (bypass unchanged); from the cloud they
+# already reached the edge as non-home IPs and used SSO or the internal Service.
+# dgx-strip-identity-headers is defined once per Traefik instance — see
+# dgx-dashboard-public.yaml.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -28,37 +31,61 @@ spec:
     # SC-1316: la pagina /entregas del dashboard y sus assets propios van
     # tambien por sso-chain para LAN/tailnet/cluster (C3): sin esto, la lista
     # queda abierta mientras su API (/api/company/entregas) exige login.
+    # DGX-809 (security S1 de DGX-800): /api/secretaria entera (conversaciones de los cuatro perfiles,
+    # Leila incluida, y las Acciones ACC) y la pagina /despacho-secretaria entran en el control-set: sin
+    # sesion las leia, creaba o borraba cualquiera de la LAN, la tailnet o un pod. Fuera queda solo
+    # POST /api/secretaria/despacho[/<perfil>]/escalar (maquina a maquina, HMAC V2 propio): cae en el bypass.
+    # INFRA-380: /plaud y /api/plaud (grabaciones privadas) entran igual que en el twin del host dgx —
+    # este host sirve el mismo dgx-dashboard-ui y su bypass 200 dejaria /plaud sin SSO desde LAN.
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/messages`) || PathPrefix(`/api/autoreply`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/api/nova`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # DGX-809 (security H-2 de DGX-799): tres escrituras sin identidad del backend
+    # (POST /api/activity/power y /api/llm/uncensored)
+    # entran igual, solo con POST: sus GET siguen abiertos. POST /api/activity/claude/refresh
+    # se queda abierto (F1 de security: lo llama sin sesión la extensión vscode-claude-cuenta).
     # SC-1192: cluster/compute WRITES behind sso-chain, split by Method —
     # GET /api/cluster/state and /api/compute/mode stay open on the bypass.
+    # DGX-821: TODO POST /api/cluster/* (refresh y docker incluidos) va por SSO: el backend
+    # exige en todas esas rutas la prueba de borde y el grupo /edani-admins (guarda_cluster).
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/apply`) || PathRegexp(`^/api/cluster/k8s/[^/]+/[^/]+/[^/]+/(scale|restart)$`) || PathRegexp(`^/api/cluster/argocd/[^/]+/(sync|rollback)$`) || Path(`/api/compute/mode`)) && Method(`POST`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/kiosco/vista`) || Path(`/api/kiosco/escritorio`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # SC-2901: refs de render que validan modelos externos. El fetcher de Alibaba
+    # DashScope descarga la URL de cada reference_image desde internet; tras
+    # sso-chain recibía la página de login de Keycloak (302 -> /realms/edani,
+    # medido en los logs del borde) y el render moría con «Cannot determine file
+    # type». Público por diseño SOLO lo subido a este prefijo; el dashboard sigue
+    # limitando la gateway a los prefijos media/* (PREFIX_BY_KIND, s3_artifacts.py).
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
-      priority: 200
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/dgx-studio/media/images/cine/refs/`)
+      priority: 300
       middlewares:
         - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: dgx-edge-proof
           namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
@@ -72,6 +99,8 @@ spec:
           namespace: traefik-edge
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus

@@ -1,6 +1,6 @@
 # Manual state rollback. This file is intentionally excluded from kustomization.
 # Follow RUNBOOK.md: only run during an authorized incident while the versioned
-# ConfigMap still exists. It deletes the 21 agentgateway-read:* realm roles
+# ConfigMap still exists. It deletes the 22 agentgateway-read:* realm roles
 # (cascading their service-account grants and client scope mappings) after
 # verifying no member falls outside the reviewed INFRA-23 H2 matrix.
 apiVersion: batch/v1

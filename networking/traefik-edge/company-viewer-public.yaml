@@ -26,6 +26,8 @@ spec:
       middlewares:
         - name: sso-chain
           namespace: keycloak
+        - name: dgx-edge-proof
+          namespace: traefik-edge
       services:
         - name: dgx-dashboard-ui
           namespace: control-nexus

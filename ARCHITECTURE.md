@@ -36,7 +36,7 @@ automático `prune: false`, `selfHeal: true`):
 |---|---|---|---|
 | Traefik (chart) | 40.2.0 | edge + LAN | nginx (retirado) |
 | MetalLB, cert-manager, external-dns, external-secrets, Kyverno, Velero, Harbor, CNPG, Keycloak (`keycloak-next`) | por `platform/*`, `networking/*` | plataforma | — |
-| Ansible + Terraform OVH + `scripts/ovh_install.py` | — | KS-5 (3 control-plane) | scripts a mano |
+| Ansible + Terraform OVH + `scripts/ovh_install.py` | — | KS-5 (3 control-plane) y ficheros de nodo en OVH (`/etc/rancher/k3s/registries.yaml`, hardening, Longhorn prereqs) | scripts a mano |
 | Python 3.12 + PyYAML 6.0.2 | CI | tests de contrato | — |
 
 ## 4. Componentes compartidos
@@ -45,18 +45,28 @@ automático `prune: false`, `selfHeal: true`):
 |---|---|---|---|
 | Rutas públicas del edge | `networking/traefik-edge/<app>-public.yaml` | ídem | todas las apps públicas |
 | Rutas LAN | `networking/traefik-lan/` (`canonical-hosts-lan.yaml`) | ídem | toda la LAN (+ AdGuard) |
-| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply |
+| Postgres compartido | `databases/postgres-shared` | ídem | litellm, langfuse, firecrawl, document-intake, auto-reply, skirmbooks-ui (rol propio `skirmbooks_ui_app` declarado en `spec.managed.roles`, SKIRM-184), hindsight (rol `hindsight`, base con `vector` por el CRD Database, INFRA-940), analisis (rol y base `analisis`, SC-2956 D2; el ExternalSecret lee el item `analisis-db`) |
 | Catálogo de roles Keycloak | `platform/keycloak-next/ROLES.yaml` | ídem | AgentGateway |
-| Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae. Kyverno `externalsecret-alibaba-plan-only-litellm` (POLICY 8, Enforce, DGX-619/626) deniega al admitir todo ExternalSecret fuera del ns `litellm` cuyo `remoteRef.key`, `dataFrom.extract.key` o `dataFrom.find.name.regexp` apunte a `alibaba-model-studio*`; las claves del Token Plan de Alibaba solo se leen allí, el resto va por el plan-gateway. No ve Secrets creados a mano | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
+| Login de una web (un realm de Keycloak por web, siempre separado: norma en `docs/sso-por-app.md`, SC-2822) | `platform/keycloak-sso/realms.yaml` (chart: realm por keycloak-config-cli, oauth2-proxy y `sso-<realm>-chain`) | ídem | cada web con login; `tests/test_keycloak_realm_per_web_contract.py` |
+| Bootstrap de los hooks PostSync de Keycloak (trap de limpieza, `fail`, login admin con reintentos, `kget`, líneas no vacías) | `platform/keycloak-next/scripts/kc-admin-common.sh` | ídem | los hooks de keycloak-next; único sitio de estas funciones |
+| Reconciliadores de clients de servicio de Keycloak (mapper de audiencia, scope de roles, mint y comprobación exacta del token) | `platform/keycloak-next/scripts/keycloak-reconcile-lib.sh` (carga después de `kc-admin-common.sh`) | ídem | chat-agentgateway, jarvis-echo, hermes-enviar, correo-agente, agentgateway-chat-mcp, domain-roles |
+| Client de servicio dedicado con roles EXACTOS (comprobaciones, scope, concesión, `fullScopeAllowed=false`, token exacto, rollback) | `platform/keycloak-next/scripts/keycloak-scoped-client-lib.sh` (`run_scoped_client`, carga después de `keycloak-reconcile-lib.sh`; la tabla de roles y las guardas quedan en cada script) | ídem | hermes-enviar, correo-agente-lectura, correo-ejecutor |
+| Secretos desde 1Password | ClusterSecretStore `onepassword-connect` sobre 1Password Connect (copia local del vault, sin cupo diario) + ES en `refreshPolicy: OnChange` (Kyverno `externalsecret-onepassword-onchange`) + `onepassword-change-detector` (force-sync de lo que cambió, cada 4 h, en los dos stores). Transición: Kyverno `externalsecret-onepassword-to-connect` admite los ES escritos para `onepassword` (`key: ítem/campo`) como de `onepassword-connect` (`key: ítem` + `property`) hasta reescribir los ~30 repos. El store `onepassword` (SDK, cupo de 1000/día de la cuenta) queda para las PushSecret y como respaldo si Kyverno cae. Kyverno `externalsecret-alibaba-plan-only-litellm` (POLICY 8, Enforce, DGX-619/626) deniega al admitir todo ExternalSecret fuera del ns `litellm` cuyo `remoteRef.key`, `dataFrom.extract.key` o `dataFrom.find.name.regexp` apunte a `alibaba-model-studio*`; las claves del Token Plan de Alibaba solo se leen allí, el resto va por el plan-gateway. No ve Secrets creados a mano. Recoger un secreto nuevo o rotado: la regla única es el comentario de `platform/external-secrets/cluster-secret-store-onepassword.yaml` (nuevo = crear el ES; rotado = force-sync de ESE ES o del CES, o el detector; nunca reiniciar ESO ni anotar el store) | `platform/onepassword-connect/`, `platform/external-secrets/`, `platform/kyverno/policies.yaml` | todo ExternalSecret del clúster |
 | Secretos in-cluster entre namespaces (sin 1Password, sin cupo) | ClusterSecretStore `kubernetes-control-nexus-pagos`: SA `eso-control-nexus-pagos-reader` (ns `hermes`) + Role/RoleBinding de SOLO `get` por resourceNames sobre `dgx-dashboard-pagos` y `dgx-dashboard-pagos-decision` (ns `control-nexus`) — patrón `kubernetes-cnpg` | `platform/external-secrets/cluster-secret-store-control-nexus-pagos.yaml` | Hermes (plugin `confirmar-pago`, dgx.app.pagos.v1) |
+| `/etc/rancher/k3s/registries.yaml` de los nodos OVH (espejos de Harbor al edge; las 28 apps siguen referenciando `harbor.lan.e-dani.com`: el espejo separa nombre de ruta, ningún prefijo se renombra) | plantilla `ansible/roles/k3s_worker/templates/registries.yaml.j2` (espejo en `k3s_control_plane`), aplicada con `ansible/playbooks/apply-registries.yml` (INFRA-1099). La contraseña del robot nunca está en git: lookup `op read` desde 1Password en el host de control (`op-secret`/Connect, ítem `infra-harbor-k8s-runtime-pull`). Handler reinicia k3s/k3s-agent (el agente solo lee el fichero al arrancar); los nodos de casa quedan fuera por `harbor_registries_enabled`. El mismo playbook fija además en `/etc/hosts` de los nodos del grupo el destino del espejo (`harbor.e-dani.com`) al borde público — bloque marcado `INFRA-1099 harbor-publico`, IPs en `harbor_public_edge_ips` — porque el DNS del tailnet responde la IP de casa también por ese nombre (INFRA-1276); no requiere reinicio | `ansible/roles/k3s_worker/templates/registries.yaml.j2`, `ansible/playbooks/apply-registries.yml`, `docs/runbook-harbor-registries-ovh.md` | k3s/k3s-agent en ks5-cp-1/2/3, sauvage y atlantic |
 | Runbooks | `docs/runbook*.md`, `docs/disaster-recovery.md` | `docs/` | operación |
+| Volumen local de un nodo (1 réplica, strict-local, reclaim Delete, WaitForFirstConsumer) | StorageClass longhorn-strict-local | kubernetes/storage/longhorn-strict-local.yaml (listada en kustomization.yaml raíz y en kubernetes/storage/kustomization.yaml) | Frigate (frigate-config y frigate-media en ubuntu, INFRA-701). Sus PVC llevan argocd.argoproj.io/sync-options: Prune=false,Delete=false: borrar el PVC destruye el dato |
+| Inventario y grafo regenerables de imágenes propias (INFRA-536) | `docs/images/inventario.json` (7 claves no nulas por propia, no-dato como marcador `sin_dato` dentro del campo) + `docs/images/sizes-baseline.json` (digest → comprimido/descomprimido, línea base del guard de tamaño) + `inventario.md`, `grafo.md`, `grafo.dot`. Regenerados por `scripts/image-inventory.py` y `scripts/image-graph.py` desde las refs reales del clúster (`kubectl` + `crane` + `gh`); no tocar a mano | `docs/images/`, `scripts/image-inventory.py`, `scripts/image-graph.py` | bases comunes (INFRA-1297: consumidores ≥3 por pila), guard de CI (INFRA-1298: `sizes-baseline.json`), imágenes hijas INFRA-537..541; contrato en `tests/test_image_inventory_contract.py` y `tests/test_image_graph_contract.py` |
 
 ## 5. Cómo se construye aquí
 
 Host nuevo = IngressRoute en `networking/traefik-{edge,lan}/` + línea en `kustomization.yaml` + rewrite en AdGuard + (edge)
 `wildcard-cert`/TLS store. **Un cambio de naturaleza destructiva** (KS-5, OVH reinstall) exige las confirmaciones
 explícitas del README (`CONFIRM_OVH_REINSTALL=…`) y `docs/runbook.md`. `docs/architecture.md` describe el estado
-objetivo KS-5; el estado actual lo manda el cluster.
+objetivo KS-5; el estado actual lo manda el cluster. StorageClass nueva = fichero en kubernetes/storage/ + línea en el
+kustomization.yaml raíz. El kustomization.yaml de kubernetes/storage/ no lo consume ninguna Application (solo
+scripts/verify_sauvage_longhorn.sh): un fichero que solo esté ahí no llega al clúster. Ejemplo: longhorn-prod-nvme.yaml
+(longhorn-prod-nvme y longhorn-dev) no está en el raíz.
 
 ## 6. Tests y validaciones
 
@@ -95,13 +105,29 @@ Nº de casos: **pendiente de medir**.
 
 - `README`/`docs/architecture.md` aún dicen k3s v1.32.5 y «ubuntu único control-plane»: el cluster real tiene `ks5-cp-1/2/3`
   (README desfasado).
-- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona.
+- El edge no ve namespaces fuera de su allowlist: una ruta pública «en el namespace de la app» no funciona
+  (Traefik descarta la ruta entera —`failed to get service <ns>/<svc>: namespace is not within watched
+  namespaces` en sus logs— y el host responde 404 con todo `Synced`). La receta es un `Service` ExternalName
+  dentro de `traefik-edge`, en el mismo fichero del host, referenciado por la IngressRoute sin `namespace`
+  (`edge-chat-public` en `chat-public.yaml`; `edge-horarios-alphalink` en `horarios-alphalink-public.yaml`,
+  SC-2532). **No** se amplía `providers.kubernetescrd.namespaces` con la namespace del producto: cambia los
+  args del DaemonSet (reinicio en cada nodo, hostPort 443) y dejaría que una namespace de producto cargue sus
+  propias rutas en el edge compartido sin pasar por este repo.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
+- Los nombres de `e-dani.com` que necesita un cliente del clúster se fijan a `traefik-lan` en
+  `networking/dns/coredns-custom.yaml` — hoy `harbor`, `harbor.lan`, `litellm` y `argocd` (SC-2443, SC-2445). Un nombre
+  sin fijar cae en `forward` y responde la MagicDNS del nodo del cliente, porque cada nodo resuelve en su réplica de
+  `coredns-local` (INFRA-1019): los nodos de OVH reciben las IPs públicas del borde y los de casa pueden recibir otras,
+  así que el cliente va por LAN o por el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
+  grande). `dgx` y `s3` van fijados por `hosts` a la VIP `192.168.50.240`, que también es alcanzable desde los cp
+  (medido 15-10-2026). Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez.
 - ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
   `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
   reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect
   está en Harbor; ver `docs/disaster-recovery.md`.
+- El store `onepassword` va en la última wave (30) a propósito: con el cupo agotado queda `InvalidProviderConfig` y
+  bloquearía las waves siguientes; un recurso nuevo con wave > 30 lo rompe (`test_onepassword_store_wave_contract`).
 - 1Password Connect (INFRA-511/520): Deployment de réplica única, emptyDir, sin PVC — SPOF aceptado (si cae, ESO
   conserva el último valor de cada Secret). Las 13 PushSecret de Hermes (ns hermes) permanecen en el store SDK
   `onepassword`: el proveedor Connect no implementa SecretExists, que exige updatePolicy IfNotExists; por eso el
@@ -110,5 +136,34 @@ Nº de casos: **pendiente de medir**.
 - Un ExternalSecret fuera de `litellm` con un ítem `alibaba-model-studio*` se rechaza al aplicar (mensaje DGX-619;
   POLICY 8). Usa el plan-gateway. `failurePolicy: Ignore`: si Kyverno cae, se admite. Sin medir: un ítem referido por
   UUID en vez de por título y `find.tags`/`find.path` no están cubiertos.
+- Agente de casos de Postia (DGX-1218, épica DGX-1209): los clients `correo-agente-lectura` (solo los
+  `agentgateway-read:<ruta>` de sus perfiles, ningún `agentgateway-write*`) y `correo-ejecutor`
+  (`agentgateway-write:correo-ejecutor` y `agentgateway-read:shopify-admin`) los reconcilia un único script con la tabla
+  de roles fija por `CLIENT_ID` (`correo-agente-clients.yaml`, ola 24); el rol lo crea `agentgateway-domain-roles` (ola
+  19). Mismo molde que `hermes-enviar`: el secreto se siembra en 1Password tras el sync (RUNBOOK 19).
+- Envío de correo de Hermes (INFRA-676, épica INFRA-480): el client `hermes-enviar` (service account, roles
+  exactamente `agentgateway-read:workspace` y `agentgateway-write:workspace-envio`, `fullScopeAllowed=false`) y los
+  roles `agentgateway-write:workspace-envio` y `:workspace-borrador` los crea `platform/keycloak-next` por hooks
+  PostSync (`hermes-enviar-client.yaml` en la ola 24, `agentgateway-domain-roles` en la 19), nunca a mano. El hook no
+  gestiona el secreto: se siembra en 1Password `hermes-kc-enviar` tras el primer sync (RUNBOOK 18) y tiene que estar
+  antes del chart de Hermes. `workspace-borrador` tiene un único titular revisado, `secretaria-skirmshop` (solo redacta borradores; nunca
+  envía). El hook solo lo tolera; la concesión en el realm la hace el proceso de identidades de secretaria (INFRA-494).
+  Entre el merge y la concesión `keycloak-role-drift` da `DRIFT:` (el catálogo declara un titular que el realm aún no
+  tiene). En el primer sync,
+  `keycloak-role-drift` puede dar `DRIFT:` hasta que acaban los hooks; se limpia solo.
+- Navegador de las secretarias (SC-2238): `agentgateway-write:browser-navegacion` (27 tools de `/browser`, regla en
+  k8s-agentgateway-pocharlies#191) y sus cuatro titulares (`service-account-hermes-secretaria`, `-dani`, `-leila` y `-casa`; el de `-skirmshop` queda fuera por
+  veredicto de Security, DGX-760 comentario 30717: lectura de negocio, INFRA-492) están declarados en
+  `ROLES.yaml`, `PRINCIPALS.md` y `ROUTE-ROLES.md`; `tests/test_keycloak_rbac_browser_navegacion_contract.py` fija que
+  las dos copias de la lista son el mismo conjunto de 27 (corte de Security, sin las 13 sensibles). El rol NO está en `ROLE_NAMES` del hook `agentgateway-domain-roles`: se
+  crea y se concede en el realm a mano (API admin, sin composites ni el rol pelado, admin events enlazados al ticket), y
+  hasta entonces `keycloak-role-drift` da `DRIFT:` (rol catalogado que el realm aún no tiene). Orden: este catálogo se
+  fusiona ANTES de crear/conceder el rol, y la concesión sigue de inmediato para cerrar la ventana.
+- longhorn-single (1 réplica, Delete, sin dataLocality) existe solo a mano en el clúster, no está en git y no se usa: no
+  garantiza en qué nodo cae la réplica. Para un volumen local de un nodo, longhorn-strict-local.
+- Trampa de olas: el CronJob `keycloak/keycloak-role-drift` (ola 0) falla a propósito cuando detecta drift de roles y
+  deja la ola 0 no sana, lo que bloquea las olas posteriores del Application `k8s-infra` (arreglo pendiente:
+  k8s-gitops#515). Si el Application no avanza tras un merge, comprobar este CronJob antes de culpar al cambio
+  (INFRA-171, criterio 7 del épico INFRA-123; el caso SC-2238 de arriba lo documenta desde el lado del catálogo).
 
-Última verificación contra el código: 2026-10-07 · 7bc9dff (origin/main)
+Última verificación contra el código: 2026-10-08 · e5fe657 (origin/main)

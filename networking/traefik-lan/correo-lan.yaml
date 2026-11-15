@@ -1,0 +1,53 @@
+---
+# DGX-880 (P10 de la épica DGX-870, security S20): puerta LAN/tailnet del núcleo de correo (`correo-core`, ns
+# `correo`), la API humana que usarán la web y el iPhone (DGX-878). El comodín `*.lan.e-dani.com` de Cloudflare
+# resuelve `correo.lan.e-dani.com` al VIP de traefik-lan (192.168.50.240; medido 15-10-2026), el certificado es el de
+# la casa (el TLSStore por defecto, `*.lan.e-dani.com`) y solo entran las mismas redes de confianza que en dgx.lan
+# (LAN, tailnet y pods/servicios del clúster); desde cualquier otra la regla no casa y Traefik responde 404.
+#
+# Sin `sso-chain`, sin `dgx-edge-proof` y sin el borrado de cabeceras de identidad: a diferencia del dashboard, el
+# núcleo valida el JWT del emisor OIDC él mismo (firma, `iss`, `aud` y cliente permitido) y ningún dato de identidad
+# le llega por cabecera, así que una cabecera forjada no le sirve para nada.
+#
+# Destinos (DGX-882 P4, chart 0.2.0): `/v1` y `/healthz` van al Service HUMANO `correo:80` del núcleo, con
+# prioridad explícita para que ningún cambio de longitud de las reglas le dé `/v1` a la web, y el resto del host a la
+# web `correo-web:80`. DGX-1213 (22-10, épica DGX-1208): de `/v2` solo `/v2/casos` y `/v2/clientes` van al núcleo, con la
+# misma regla y las mismas redes; `/v2/inbound` y `/v2/buzones` son de máquina y no se publican. La regla de la web va sin access log: la vuelta del login (`/auth/callback?code=…`) es suya y
+# traefik-lan guarda la query en `RequestPath` (security, DGX-882 33631). El Service de máquina
+# (`correo-machine`, ingest de productores y métricas, solo interno: Hermes y Synapse lo llaman por el DNS del
+# clúster) NUNCA se publica aquí ni en ninguna otra ruta (tests/test_correo_lan_route_contract.py). Tampoco hay ruta
+# pública por sauvage: esta IngressRoute no lleva clase de ingreso que el borde procese y `correo` no está en el
+# allowlist de namespaces de traefik-edge.
+#
+# El ns y el Service los crea la Application `correo` (P9). Hasta entonces Traefik no encuentra el destino y este
+# host responde 404, que es inocuo. `correo.lan.e-dani.com` es la hipótesis de nombre del plan: renombrarlo es
+# cambiar el host de aquí y la `publicUrl` de los values de Skirmshop (P8).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-correo
+  namespace: traefik-lan
+  labels: {app.kubernetes.io/part-of: correo, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`correo.lan.e-dani.com`) && (PathPrefix(`/v1`) || PathPrefix(`/v2/casos`) || PathPrefix(`/v2/clientes`) || Path(`/healthz`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      priority: 1000
+      services:
+        - name: correo
+          namespace: correo
+          port: 80
+    - kind: Rule
+      match: Host(`correo.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      observability:
+        accessLogs: false
+      services:
+        - name: correo-web
+          namespace: correo
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-lan

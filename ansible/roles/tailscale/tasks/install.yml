@@ -1,0 +1,22 @@
+---
+- name: Add Tailscale apt keyring
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      install -d -m 0755 /usr/share/keyrings
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+    creates: /etc/apt/sources.list.d/tailscale.list
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: "tailscale={{ tailscale_version }}"
+    state: present
+    allow_downgrade: true
+    allow_change_held_packages: true
+    update_cache: true
+
+- name: Hold Tailscale at the pinned version
+  ansible.builtin.dpkg_selections:
+    name: tailscale
+    selection: hold

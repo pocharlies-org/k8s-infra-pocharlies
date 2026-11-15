@@ -5,3 +5,4 @@ resources:
   - harbor-push-eso.yaml
   - buildkitd-amd64.yaml
   - buildkitd-arm64.yaml
+  - buildkitd-arm64-dgx3.yaml

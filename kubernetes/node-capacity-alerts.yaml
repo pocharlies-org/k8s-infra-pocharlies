@@ -1,0 +1,59 @@
+# INFRA-993: alerta de capacidad antes del desalojo del kubelet. La raíz de sauvage
+# (3.6T, HDD RAID) se llenó de datos vivos sin que nadie avisara: el kubelet pasó de
+# 15 % libre a desalojar a ciegas (minio-0 fuera, Harbor 500, ~45 pods ImagePullBackOff).
+# El umbral por defecto de eviction-hard es nodefs.available<10 %; avisar al 80 % deja
+# margen real para podar (velero/cnpg/langfuse/Harbor GC) antes de que desaloje.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: node-capacity
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+spec:
+  groups:
+    - name: node.capacity
+      rules:
+        - alert: NodeDiskFilling
+          # SC-5400 (NODE-19133): dgx3 excluido — su disco de datos es de 916G y
+          # vive ~82-84 % con el nodo sano (SC-3062 midió 168 GiB libres el 27-10;
+          # el 13-11 mide 146G: /srv/creative 447G de pesos de las lanes
+          # creative + /srv/models 109G). El 80 % fijo —umbral pensado para la
+          # raíz de 3.6T de sauvage (INFRA-993)— saltaría en falso cada día en
+          # dgx3. Su cobertura real la lleva NodeRootDiskLowOrFilling
+          # (k8s-observability, 100 GiB absolutos, decisión SC-3062) y esta
+          # familia sigue cubriendo el 90 % crítico (NodeDiskNearEviction). El
+          # join con kube_pod_info es porque las series de node-exporter no
+          # traen label de nodo (instance = podIP:9100).
+          expr: |
+            (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"})
+              / node_filesystem_size_bytes{mountpoint="/"} > 0.80
+            and on(pod)
+            kube_pod_info{namespace="monitoring", pod=~"vm-prometheus-node-exporter-.*", node!="dgx3"}
+          for: 30m
+          labels:
+            severity: warning
+            area: storage
+          annotations:
+            summary: "Raíz de {{ $labels.instance }} por encima del 80 %"
+            description: >-
+              Lleva 30 minutos por encima del 80 % de uso. El kubelet desaloja
+              pods al quedarse por debajo del 10 % libre (eviction-hard), y en
+              sauvage eso tumba MinIO y deja a Harbor sin plano de datos. Revisar
+              retenciones: velero (TTL), cnpg (barman), langfuse (ILM de eventos),
+              GC de Harbor, y la poda de imágenes de containerd.
+
+        - alert: NodeDiskNearEviction
+          expr: |
+            (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"})
+              / node_filesystem_size_bytes{mountpoint="/"} > 0.90
+          for: 10m
+          labels:
+            severity: critical
+            area: storage
+          annotations:
+            summary: "{{ $labels.instance }} a punto de desalojar por disco"
+            description: >-
+              Por encima del 90 % sostenido: el umbral de desalojo del kubelet
+              está a un paso. Actuar ya (poda de caducados de las propias
+              herramientas); no esperar a la ventana semanal.

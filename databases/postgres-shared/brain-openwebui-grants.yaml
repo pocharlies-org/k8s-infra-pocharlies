@@ -1,0 +1,77 @@
+# INFRA-555 (P2-b) — GRANTs del rol `brain_openwebui_ro` sobre la base `chat` de
+# Open WebUI (deployment chat/chat de dgx-infra, que NO se modifica).
+#
+# `spec.managed.roles` de CNPG gestiona atributos y pertenencias, no privilegios
+# sobre objetos: los SELECT se conceden aquí, con un Job PostSync (patrón exacto:
+# role-settings.yaml), que corre cuando el Cluster ya está aplicado y sano — y el
+# operador CNPG ya ha creado el rol desde managed.roles.
+#
+# Solo lectura sobre exactamente tres tablas (decisión 1 del plan INFRA-546,
+# verificada contra el esquema vivo el 31-10: `chat` 184 filas con el JSON legado,
+# `chat_message` 1218 filas — los mensajes viven separados —, `"user"` para el
+# email del dueño):
+#   - chat: índice de chats (id, user_id, title, updated_at) para el cursor por
+#     updated_at y el barrido de ids que propaga los borrados
+#   - chat_message: mensajes normalizados (role, content, chat_id)
+#   - "user": email del propietario → vault (me@e-dani.com → personal,
+#     lays84.mv@gmail.com → leila; cualquier otro usuario no se indexa)
+#
+# Cero escrituras: nada de INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES ni CREATE
+# sobre el esquema. Si Open WebUI añade tablas que el indexador necesite, se
+# añaden aquí de una en una (el Job se re-ejecuta en cada sync); nunca
+# GRANT ... ON ALL TABLES.
+#
+# Secuencia: requiere el item de 1Password `brain-openwebui-db` sembrado (ver
+# app-credentials.yaml); sin él el rol no existe y este Job falla — a propósito
+# (ON_ERROR_STOP): un GRANT que no se aplica debe ser visible, no silencioso.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-shared-brain-openwebui-grants
+  namespace: databases
+  annotations:
+    # PostSync y no Sync: el hook corre cuando el Cluster ya está aplicado y
+    # sano (mismo motivo que role-settings.yaml).
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shared-infrastructure
+        app.kubernetes.io/component: postgres-brain-openwebui-grants
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          env:
+            - name: PGHOST
+              value: postgres-shared-rw.databases.svc.cluster.local
+            - name: PGDATABASE
+              # Los GRANT son sobre objetos de la base chat, no de postgres
+              # (a diferencia de role-settings.yaml, que opera en el catálogo).
+              value: chat
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-shared-superuser, key: password }
+          command:
+            - psql
+            - -v
+            - ON_ERROR_STOP=1
+            - -c
+            # GRANT es idempotente; el Job se re-ejecuta en cada sync y repasa
+            # los permisos de las tres tablas.
+            - >-
+              GRANT USAGE ON SCHEMA public TO brain_openwebui_ro;
+              GRANT SELECT ON TABLE chat, "user", chat_message TO brain_openwebui_ro;
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }

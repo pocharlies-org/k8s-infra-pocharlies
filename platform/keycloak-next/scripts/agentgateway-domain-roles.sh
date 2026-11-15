@@ -8,11 +8,11 @@ REALM="${REALM:-edani}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
 # agentgateway-write:dgx-control (INFRA-249, CTO decision in ROUTE-ROLES.md)
-# is created inert: the gateway already gates compute_mode_set,
-# refusal_lambda_set and opencode_restart on it, and it has no entry in
+# is created inert: the gateway already gates compute_mode_set and
+# refusal_lambda_set on it, and it has no entry in
 # ALLOWED_SERVICE_ACCOUNTS, so nobody may hold it and those tools stay denied.
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control}"
-EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:hermes,agentgateway-write:dgx-control"
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova}"
+EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova"
 # Dedicated confidential clients reviewed to hold exactly one domain role each,
 # as "<role>=<service-account-username>". The client itself is reconciled by a
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
@@ -25,25 +25,70 @@ EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentga
 # AgentGateway; the grants are owned by the devops creation process in
 # k8s-openclaw-qwen36-pocharlies, never by this hook). Same rule as the
 # chat pairs above: this hook only tolerates the reviewed holders.
-ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila}"
-EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila"
+#
+# INFRA-676 (2026-10-07, P4b of INFRA-480): two new domain roles for the
+# Gmail draft/send split of k8s-agentgateway-pocharlies#186.
+# agentgateway-write:workspace-envio (gmail_send, gmail_forward,
+# gmail_send_draft, gmail_delete_draft) is held by exactly one service
+# account, the dedicated client hermes-enviar of the Hermes `enviar` plugin
+# (hermes-enviar-client.sh, sync-wave 24). agentgateway-write:workspace-borrador
+# (gmail_create_draft, gmail_update_draft) has exactly one reviewed holder,
+# the secretaria-skirmshop profile. The pair was added in a SEPARATE change
+# (INFRA-676, after k8s-agentgateway-pocharlies#186 propagated) because security
+# (INFRA-640, condition 2) only allows it once the narrowing of :workspace has
+# reached the gateway; the grant itself is made by the devops identity process in
+# k8s-openclaw-qwen36-pocharlies, never by this hook.
+# DGX-1218 (PR-2 de DGX-1209): agentgateway-write:correo-ejecutor, el rol
+# acotado del ejecutor de casos de Postia (order_shipping_line_replace,
+# order_returnable_lines_get, return_create y labels_pickup_create,
+# k8s-agentgateway-pocharlies#221). Un único titular, el client
+# correo-ejecutor (correo-agente-client.sh, sync-wave 24), que es quien lo concede.
+# SC-5065: agentgateway-write:hindsight-tienda es inerte (mismo patron): la ruta
+# /hindsight-tienda-admin del adaptador hindsight-tienda-writer-mcp se gateara con
+# regla dual (write pelado o este rol) cuando la registre la PR del consumidor
+# (SC-5064) en k8s-agentgateway-pocharlies; el auth-proxy identifica la maquina, no
+# el workspace, y el SA compartido del gateway no recibe roles de dominio.
+# INFRA-1224/INFRA-1234 (2026-11-09, veredicto security INFRA-1234):
+# agentgateway-write:nova es el gate literal de la ruta /nova (Nova, el agente de
+# voz: Meet/llamada real + transcripciones PII; k8s-agentgateway-pocharlies#272).
+# A diferencia de alphalink, NO es inerte y NO usa regla dual: el gate exige el rol
+# literal (el write global no lo pasa) y su único titular es el SA compartido del
+# plano de sesiones, service-account-agentgateway-mcp — el JWT con el que las
+# sesiones de Claude de Dani llaman a Nova. El grant y el client scope viajan en la
+# matriz de agentgateway-read-grants.sh (wave 20); este hook crea el rol y tolera
+# ese único titular (ALLOWED_SERVICE_ACCOUNTS).
+# SC-2726: agentgateway-write:alphalink es inerte (patrón dgx-control): la ruta
+# /alphalink acepta el write pelado o el rol de dominio (regla dual), y el SA
+# compartido del gateway no recibe roles de dominio. Si el realm lo concede, el
+# reconcile lo revoca; cualquier OTRO titular sigue fallando.
+REVOKE_SERVICE_ACCOUNTS="${REVOKE_SERVICE_ACCOUNTS:-agentgateway-write:alphalink=service-account-agentgateway-mcp}"
+EXPECTED_REVOKE_SERVICE_ACCOUNTS="agentgateway-write:alphalink=service-account-agentgateway-mcp"
 
-cleanup() { rm -f "${ADMIN_CONFIG}"; }
-trap cleanup EXIT HUP INT TERM
+ALLOWED_SERVICE_ACCOUNTS="${ALLOWED_SERVICE_ACCOUNTS:-agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp}"
+EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp"
 
-# Mechanical helpers (fail, login_admin, kget, nonempty_lines) come from the
-# shared reconcile library (INFRA-477); the reviewed role family, the
-# service-account allowlist and the bounded-holder check stay right here.
+. "${0%/*}/kc-admin-common.sh"
+
+# The bootstrap comes from kc-admin-common.sh; the reconcile library (INFRA-477)
+# adds the lookup helpers. The reviewed role family, the service-account
+# allowlist and the bounded-holder check stay right here.
 . "$(dirname "$0")/keycloak-reconcile-lib.sh"
 
 [ "${ROLE_NAMES}" = "${EXPECTED_ROLE_NAMES}" ] || \
   fail "ROLE_NAMES is immutable; update the reviewed reconciler and AgentGateway matrix together"
 [ "${ALLOWED_SERVICE_ACCOUNTS}" = "${EXPECTED_ALLOWED_SERVICE_ACCOUNTS}" ] || \
   fail "ALLOWED_SERVICE_ACCOUNTS is immutable; review the dedicated client reconciler and this allowlist together"
+[ "${REVOKE_SERVICE_ACCOUNTS}" = "${EXPECTED_REVOKE_SERVICE_ACCOUNTS}" ] || \
+  fail "REVOKE_SERVICE_ACCOUNTS is immutable; the inert-role decision lives in ROUTE-ROLES.md"
 
 role_exists() {
   role="$1"
   kget "roles/${role}" --fields id >/dev/null 2>&1
+}
+
+revoke_pair() {
+  # True when "<role>=<username>" is on the revoke list (inert role).
+  printf '%s\n' "${REVOKE_SERVICE_ACCOUNTS}" | tr ',' '\n' | grep -Fxq "${1}=${2}"
 }
 
 allowed_service_account() {
@@ -66,6 +111,21 @@ assert_bounded_noncomposite() {
   groups="$(kget "roles/${role}/groups" --fields path --format csv --noquotes | nonempty_lines)"
   [ -z "${groups}" ] || fail "${role} is assigned to a group; human/group grants are forbidden"
   if [ -n "${users}" ]; then
+    kept=""
+    while IFS= read -r username; do
+      if revoke_pair "${role}" "${username}"; then
+        "${KCADM}" delete-roles --config "${ADMIN_CONFIG}" -r "${REALM}" \
+          --role-name "${role}" --user "${username}" >/dev/null 2>&1 || \
+          fail "failed to revoke ${role} from ${username}"
+        revoked=$((revoked + 1))
+      elif [ -z "${kept}" ]; then kept="${username}"; else kept="${kept}
+${username}"; fi
+    done <<EOF
+${users}
+EOF
+    users="${kept}"
+  fi
+  if [ -n "${users}" ]; then
     [ -n "${allowed}" ] || fail "${role} is assigned to a user; dedicated-client rollout is not ready"
     while IFS= read -r username; do
       printf '%s\n' "${allowed}" | grep -Fxq "${username}" || \
@@ -81,6 +141,7 @@ login_admin
 
 created=0
 granted=0
+revoked=0
 old_ifs="${IFS}"
 IFS=,
 for role in ${ROLE_NAMES}; do
@@ -97,5 +158,5 @@ for role in ${ROLE_NAMES}; do
 done
 IFS="${old_ifs}"
 
-printf '{"role_family":"agentgateway-write-domain","roles":12,"created":%s,"human_assigned":false,"service_account_grants":%s}\n' \
-  "${created}" "${granted}"
+printf '{"role_family":"agentgateway-write-domain","roles":18,"created":%s,"human_assigned":false,"service_account_grants":%s,"grants_revoked":%s}\n' \
+  "${created}" "${granted}" "${revoked}"

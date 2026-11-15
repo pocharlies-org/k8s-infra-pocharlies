@@ -23,6 +23,7 @@ MCP_SA = "service-account-agentgateway-mcp"
 OPENCLAW_SA = "service-account-openclaw-readonly-agentgateway"
 CHAT_SA = "service-account-chat-agentgateway"
 JARVIS_SA = "service-account-jarvis-echo"
+ENVIAR_SA = "service-account-hermes-enviar"
 SECRETARIA_SAS = [
     "service-account-hermes-secretaria",
     "service-account-hermes-secretaria-casa",
@@ -31,13 +32,32 @@ SECRETARIA_SAS = [
 ]
 SECRETARIA_SKIRMSHOP_SA = "service-account-hermes-secretaria-skirmshop"
 PROBE_SA = "service-account-atlassian-mcp-probe"
+CORREO_LECTURA_SA = "service-account-correo-agente-lectura"
+ANALISIS_SA = "service-account-analisis"
+CORREO_EJECUTOR_SA = "service-account-correo-ejecutor"
+# INFRA-1189: the read-only fixture of the write-boundary smoke (granted by
+# agentgateway-smoke-operator-client.sh, wave 24, reviewed in this allowlist).
+SMOKE_OPERATOR_SA = "service-account-agentgateway-smoke-operator"
+# INFRA-1245 (verdict INFRA-1248): three of the five Nova identities are
+# reviewed holders of shared route roles (grants owned by
+# hindsight-reader-client.sh, wave 24; reviewed in this allowlist).
+NOVA_TIENDA_SA = "service-account-nova-hindsight-tienda"
+NOVA_CLAUDE_PERSONAL_SA = "service-account-nova-hindsight-claude-personal"
+NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
+# SC-3805: the two reviewed human holders of agentgateway-read:social
+# (granted by admin API in the SC-1144 C4 session, outside the reconciler).
+HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
+# INFRA-1180: the reviewed human holder of agentgateway-read:photos (the user
+# of the native app photos-ios; granted by photos-app-client.sh, wave 25,
+# outside the read-grants matrix).
+PHOTOS_HUMAN_USERNAMES = ["me@e-dani.com"]
 
 
-def shell_list(path, variable):
+def shell_list(path, variable, sep=","):
     match = re.search(rf'^{variable}="([^"]*)"$', path.read_text(encoding="utf-8"), re.MULTILINE)
     if not match:
         raise AssertionError(f"{variable} not found in {path.name}")
-    return [item for item in match.group(1).split(",") if item]
+    return [item for item in match.group(1).split(sep) if item]
 
 
 def owned_by(catalog, script):
@@ -54,12 +74,31 @@ class RoleCatalogParityTest(unittest.TestCase):
         openclaw = shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")
         chat = shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES")
         jarvis = shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES")
+        enviar = shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES")
         secretaria = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")
         secretaria_skirmshop = shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")
         probe = shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES")
+        correo_lectura = shell_list(READ_GRANTS, "EXPECTED_CORREO_LECTURA_READ_ROLE_NAMES")
+        correo_ejecutor = shell_list(READ_GRANTS, "EXPECTED_CORREO_EJECUTOR_READ_ROLE_NAMES")
+        analisis = shell_list(READ_GRANTS, "EXPECTED_ANALISIS_READ_ROLE_NAMES")
+        humanos = shell_list(READ_GRANTS, "EXPECTED_HUMANOS_READ_ROLE_NAMES")
+        photos_human = shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES")
+        smoke_operator = shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES")
+        nova_tienda = shell_list(READ_GRANTS, "EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES")
+        nova_claude_personal = shell_list(READ_GRANTS, "EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES")
+        nova_atlassian = shell_list(READ_GRANTS, "EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES")
+        self.assertTrue(set(correo_lectura) <= set(reads))
+        self.assertTrue(set(humanos) <= set(reads))
+        self.assertTrue(set(photos_human) <= set(reads))
+        self.assertTrue(set(correo_ejecutor) <= set(reads))
+        self.assertTrue(set(analisis) <= set(reads))
         self.assertTrue(set(openclaw) <= set(reads))
         self.assertTrue(set(chat) <= set(reads))
         self.assertTrue(set(jarvis) <= set(reads))
+        self.assertTrue(set(enviar) <= set(reads))
+        self.assertTrue(set(nova_tienda) <= set(reads))
+        self.assertTrue(set(nova_claude_personal) <= set(reads))
+        self.assertTrue(set(nova_atlassian) <= set(reads))
         owned = owned_by(self.catalog, READ_GRANTS)
         self.assertEqual(set(owned), set(reads), "roles owned by agentgateway-read-grants.sh")
         for role in reads:
@@ -73,11 +112,39 @@ class RoleCatalogParityTest(unittest.TestCase):
                 | ({OPENCLAW_SA} if role in openclaw else set())
                 | ({CHAT_SA} if role in chat else set())
                 | ({JARVIS_SA} if role in jarvis else set())
+                # INFRA-676: same rule for the hermes-enviar grantee
+                # (EXPECTED_ENVIAR_READ_ROLE_NAMES), the grant owned by
+                # hermes-enviar-client.sh.
+                | ({ENVIAR_SA} if role in enviar else set())
                 # SC-2005: reviewed holders granted outside this reconciler
                 # (INFRA-494 secretarias, SC-1834 probe).
                 | (set(SECRETARIA_SAS) if role in secretaria else set())
                 | ({SECRETARIA_SKIRMSHOP_SA} if role in secretaria_skirmshop else set())
                 | ({PROBE_SA} if role in probe else set())
+                # DGX-1218: the two case-agent grantees, grants owned by
+                # correo-agente-client.sh.
+                | ({CORREO_LECTURA_SA} if role in correo_lectura else set())
+                | ({CORREO_EJECUTOR_SA} if role in correo_ejecutor else set())
+                # SC-1282: the analysis platform grantee (granted by security
+                # in SC-2967, outside this reconciler).
+                | ({ANALISIS_SA} if role in analisis else set())
+                # SC-3805: the two reviewed human grantees of social (granted
+                # by admin API in the SC-1144 C4 session, outside this
+                # reconciler).
+                | (set(HUMANOS_USERNAMES) if role in humanos else set())
+                # INFRA-1180: the reviewed human grantee of photos (the user of
+                # the native app photos-ios; grant owned by
+                # photos-app-client.sh, wave 25, outside this reconciler).
+                | (set(PHOTOS_HUMAN_USERNAMES) if role in photos_human else set())
+                # INFRA-1189: the smoke fixture grantee, grant owned by
+                # agentgateway-smoke-operator-client.sh.
+                | ({SMOKE_OPERATOR_SA} if role in smoke_operator else set())
+                # INFRA-1245 (verdict INFRA-1248): the three Nova grantees of
+                # shared route roles, grants owned by
+                # hindsight-reader-client.sh (wave 24).
+                | ({NOVA_TIENDA_SA} if role in nova_tienda else set())
+                | ({NOVA_CLAUDE_PERSONAL_SA} if role in nova_claude_personal else set())
+                | ({NOVA_ATLASSIAN_SA} if role in nova_atlassian else set())
             )
             self.assertEqual(set(owned[role]["grantees"]), expected, role)
 
@@ -95,19 +162,60 @@ class RoleCatalogParityTest(unittest.TestCase):
 
     def test_extractor_reads_the_reviewed_constants(self):
         # Guard against a silent parse: the matrices are non-trivial today.
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 21)
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 29)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 7)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 3)
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 5)
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES"), ["agentgateway-read:photos"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES"),
+                         ["agentgateway-read:social", "agentgateway-read:workspace"])
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 4)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 9)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
-        self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 11)
+        # INFRA-1245 (verdict INFRA-1248): one reviewed role per Nova holder.
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES"), ["agentgateway-read:hindsight-tienda"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_CLAUDE_PERSONAL_READ_ROLE_NAMES"),
+                         ["agentgateway-read:hindsight-claude-personal"])
+        self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_ATLASSIAN_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
+        self.assertGreaterEqual(len(shell_list(DOMAIN_ROLES, "EXPECTED_ROLE_NAMES")), 14)
         self.assertEqual(
             len([pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
                  if pair.endswith(("hermes-secretaria", "hermes-secretaria-casa",
                                     "hermes-secretaria-dani", "hermes-secretaria-leila"))]),
             8)
+
+    def test_chat_extra_holders_parity_with_domain_roles(self):
+        # SC-2029: the chat hook's exclusivity guard tolerates, on
+        # write:social/:workspace, exactly the reviewed holders of the
+        # domain-roles allowlist that are not its own service account — one
+        # source of truth, no silent drift between the two guards.
+        # INFRA-676: "its own" roles means the ones the chat hook guards
+        # (its ROLE_NAMES). A holder of a role the chat hook never inspects
+        # (workspace-envio, held by hermes-enviar) is not its business, and
+        # copying that pair there would be dead config.
+        chat = SCRIPTS / "chat-agentgateway-client.sh"
+        extra = set(shell_list(chat, "EXPECTED_REVIEWED_EXTRA_HOLDERS"))
+        chat_roles = set(shell_list(chat, "EXPECTED_ROLE_NAMES", sep=" "))
+        domain = {
+            pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
+            if not pair.endswith("=service-account-chat-agentgateway")
+            and pair.partition("=")[0] in chat_roles
+        }
+        self.assertEqual(extra, domain)
+        guarded_elsewhere = {
+            pair for pair in shell_list(DOMAIN_ROLES, "EXPECTED_ALLOWED_SERVICE_ACCOUNTS")
+            if pair.partition("=")[0] not in chat_roles
+        }
+        self.assertEqual({
+            "agentgateway-write:workspace-envio=service-account-hermes-enviar",
+            "agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop",
+            "agentgateway-write:correo-ejecutor=service-account-correo-ejecutor",
+            # INFRA-1224/INFRA-1234: the literal /nova route role, held by the
+            # shared session-plane SA (grant and client scope ride
+            # agentgateway-read-grants.sh; the chat hook never inspects it).
+            "agentgateway-write:nova=service-account-agentgateway-mcp",
+        }, guarded_elsewhere)
 
 
 if __name__ == "__main__":
