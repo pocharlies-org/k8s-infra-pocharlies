@@ -175,8 +175,12 @@ spec:
     # chat-strip-auth-request: SIN sso-chat-chain (la app autentica con su JWT
     # propio de OWUI, obtenido por el exchange nativo — OWU-115) y SIN
     # chat-drop-authorization (aqui el Authorization SÍ hace falta).
+    # OWU-134 (app Chat/Conduit, mismo cliente openwebui-ios): entran con Path()
+    # EXACTO /api/v1/auths/ (usuario actual), /api/config y los settings/info
+    # del propio usuario. NUNCA PathPrefix(/api/v1/auths/) ni /api/v1/users/:
+    # signin/signup/ldap/mfa siguen tras la cadena SSO (scripts/s1-bearer-check.sh A.n).
     - kind: Rule
-      match: Host(`chat.e-dani.com`) && HeaderRegexp(`Authorization`, `^Bearer `) && ( PathPrefix(`/api/models`) || PathPrefix(`/api/chat/completions`) || PathPrefix(`/api/v1/chats`) || PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/auths/oauth`) )
+      match: Host(`chat.e-dani.com`) && HeaderRegexp(`Authorization`, `^Bearer `) && ( PathPrefix(`/api/models`) || PathPrefix(`/api/chat/completions`) || PathPrefix(`/api/v1/chats`) || PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/auths/oauth`) || Path(`/api/v1/auths/`) || Path(`/api/config`) || Path(`/api/v1/users/user/settings`) || Path(`/api/v1/users/user/settings/update`) || Path(`/api/v1/users/user/info`) || Path(`/api/v1/users/user/info/update`) )
       priority: 100
       middlewares:
         - name: chat-strip-auth-request

@@ -10,8 +10,10 @@ umask 077
 # id 30602, OWU-95): es lo que hay aquí, literal.
 #
 # Reconcilia (idempotente):
-#   1. cliente PUBLICO `openwebui-ios`: PKCE S256, redirect EXACTO y unico
-#      owui-ios://auth/callback (sin comodin), NO es el `oauth2-proxy`
+#   1. cliente PUBLICO `openwebui-ios`: PKCE S256, dos redirects EXACTOS, uno
+#      por app de la casa (sin comodin): owui-ios://auth/callback (SwiftUI,
+#      OWU-95) y com.morenoibanez.chat://auth/callback (Chat/Conduit, OWU-134;
+#      con PKCE el redirect solo no concede nada sin el code_verifier), NO es el `oauth2-proxy`
 #      compartido (condicion 1 de OWU-115: la app tiene cliente propio);
 #      mappers `email` y `groups` (full.path) en el access token Y en userinfo
 #      (el exchange de OWUI llama SIEMPRE a userinfo); fullScopeAllowed=false.
@@ -66,6 +68,7 @@ REALM="${REALM:-edani}"
 PUBLIC_CLIENT_ID="${PUBLIC_CLIENT_ID:-openwebui-ios}"
 CONFIDENTIAL_CLIENT_ID="${CONFIDENTIAL_CLIENT_ID:-openwebui-ios-owui}"
 REDIRECT_URI="${REDIRECT_URI:-owui-ios://auth/callback}"
+CONDUIT_REDIRECT_URI="${CONDUIT_REDIRECT_URI:-com.morenoibanez.chat://auth/callback}"
 GROUP_PATH="${GROUP_PATH:-/edani-users}"
 FIXTURE_USERNAME="${FIXTURE_USERNAME:-qa-owu95@e-dani.com}"
 # Nombres de perfil del fixture: fijos, no secretos (Keycloak 26 los exige para
@@ -95,6 +98,7 @@ progress() {
 [ "${PUBLIC_CLIENT_ID}" = "openwebui-ios" ] || fail "PUBLIC_CLIENT_ID is immutable"
 [ "${CONFIDENTIAL_CLIENT_ID}" = "openwebui-ios-owui" ] || fail "CONFIDENTIAL_CLIENT_ID is immutable"
 [ "${REDIRECT_URI}" = "owui-ios://auth/callback" ] || fail "REDIRECT_URI is immutable"
+[ "${CONDUIT_REDIRECT_URI}" = "com.morenoibanez.chat://auth/callback" ] || fail "CONDUIT_REDIRECT_URI is immutable"
 [ "${GROUP_PATH}" = "/edani-users" ] || fail "GROUP_PATH is immutable"
 [ "${FIXTURE_USERNAME}" = "qa-owu95@e-dani.com" ] || fail "FIXTURE_USERNAME is immutable"
 case "${MODE}" in
@@ -145,9 +149,14 @@ read_list_field() {
     sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
-assert_exact_list() {
-  actual="$(read_list_field "$1" "$2")"
-  [ "${actual}" = "\"$3\"" ] || fail "$1 $2 registered is [${actual}], expected exactly [\"$3\"]"
+# Los dos redirects de las apps, ni uno mas ni uno menos, en cualquier orden
+# (Keycloak no garantiza el del alta).
+assert_redirect_set() {
+  actual="$(read_list_field "$1" redirectUris | tr -d '[:space:]')"
+  case "${actual}" in
+    "\"${REDIRECT_URI}\",\"${CONDUIT_REDIRECT_URI}\""|"\"${CONDUIT_REDIRECT_URI}\",\"${REDIRECT_URI}\"") ;;
+    *) fail "$1 redirectUris registered is [${actual}], expected exactly the two app redirects" ;;
+  esac
 }
 
 assert_empty_list() {
@@ -205,7 +214,7 @@ upsert_public_client() {
     -s serviceAccountsEnabled=false \
     -s fullScopeAllowed=false \
     -s protocol=openid-connect \
-    -s "redirectUris=[\"${REDIRECT_URI}\"]" \
+    -s "redirectUris=[\"${REDIRECT_URI}\",\"${CONDUIT_REDIRECT_URI}\"]" \
     -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null 2>&1 || \
     fail "failed to ${action} public client ${PUBLIC_CLIENT_ID}"
   PUBLIC_UUID="$(require_client_exact "${PUBLIC_CLIENT_ID}")"
@@ -267,9 +276,9 @@ verify_public_client() {
   assert_client_boolean "${PUBLIC_UUID}" directAccessGrantsEnabled false
   assert_client_boolean "${PUBLIC_UUID}" serviceAccountsEnabled false
   assert_client_boolean "${PUBLIC_UUID}" fullScopeAllowed false
-  # Redirect EXACTO: ni comodin ni una segunda URI colada a mano (condicion 1
+  # Redirects EXACTOS: ni comodin ni una tercera URI colada a mano (condicion 1
   # de OWU-115).
-  assert_exact_list "${PUBLIC_UUID}" redirectUris "${REDIRECT_URI}"
+  assert_redirect_set "${PUBLIC_UUID}"
   # OJO kcadm 26.6.2 (dgx-messages-client.sh): el campo-objeto `attributes` sin
   # subcampos se imprime vacio por el filtro cliente de kcadm; se casa sobre la
   # representacion COMPLETA (sin --fields), que lleva el secreto — NUNCA se
