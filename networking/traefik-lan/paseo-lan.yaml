@@ -94,7 +94,7 @@ spec:
     secretName: wildcard-edani-tls
 ---
 # Paseo del mac-casa (SC-2639): mismo montaje que paseo.e-dani.com pero contra el daemon launchd del
-# MacBook Casa (100.85.61.58:6767, PASEO_WEB_UI_ENABLED + contraseña). AdGuard manda
+# MacBook Casa (100.82.219.103:6767, PASEO_WEB_UI_ENABLED + contraseña). AdGuard manda
 # paseocasa.e-dani.com al VIP de traefik-lan.
 apiVersion: v1
 kind: Service
