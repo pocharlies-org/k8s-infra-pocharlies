@@ -15,6 +15,7 @@ resources:
   - brain-openwebui-grants.yaml
   - monitoring.yaml
   - aurora-rca-coverage-queries.yaml
+  - idle-sessions-queries.yaml
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml
