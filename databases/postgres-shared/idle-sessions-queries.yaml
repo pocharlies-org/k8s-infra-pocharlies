@@ -1,0 +1,53 @@
+# INFRA-1295 (P3): consulta a medida del exporter CNPG que hace visible la
+# conexión `idle` más antigua por rol — la guardia de que el
+# `idle_session_timeout = 15min` por rol (Job PostSync
+# `postgres-shared-role-settings`, role-settings.yaml) sigue vivo. La consume
+# la alerta `PostgresSharedOldestIdleSession` de monitoring.yaml.
+#
+# Por qué hace falta una custom query (medido 15-11-2026 en las dos
+# instancias): la métrica nativa `cnpg_backends_max_tx_duration_seconds`
+# expone la etiqueta `state="idle"`, pero todas sus series valen 0 — se
+# calcula sobre `xact_start`, que es NULL en una sesión sin transacción
+# abierta. No puede avisar de una ociosa de 4 días. Esta consulta mide
+# `now() - state_change`, que es el tiempo real en estado `idle`.
+#
+# `pg_stat_activity` es vista de clúster (PG ≥ 9.6), así que la consulta se
+# ejecuta una sola vez, en el primario, sobre la base `postgres`, y cubre las
+# sesiones de todas las bases. El exporter corre como el usuario de
+# métricas de CNPG (con `pg_read_all_stats`, la misma permisos con la que ya
+# recolecta `cnpg_backends_total` por usename), así que no necesita GRANT
+# nuevo.
+#
+# Series exportadas — el exporter compone el nombre como
+# `<collector>_<query>_<column>` (patrón documentado en
+# aurora-rca-coverage-queries.yaml):
+#   cnpg_idle_sessions_oldest_seconds{usename,datname}
+# Las columnas no declaradas como métrica (`usename`, `datname`) salen como
+# etiquetas.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-idle-sessions
+  namespace: databases
+  labels:
+    # cnpg.io/reload es una LABEL (docs CNPG 1.29, Monitoring → User defined
+    # metrics): las instancias recargan las consultas al cambiar este
+    # ConfigMap sin `kubectl cnpg reload` manual.
+    cnpg.io/reload: "true"
+    app.kubernetes.io/component: postgres-monitoring
+data:
+  queries: |
+    idle_sessions:
+      query: |
+        SELECT max(EXTRACT(EPOCH FROM (now() - state_change))) AS oldest_seconds,
+               usename, datname
+        FROM pg_stat_activity
+        WHERE state = 'idle' AND usename IS NOT NULL
+        GROUP BY usename, datname
+      primary: true
+      target_databases:
+        - postgres
+      metrics:
+        - oldest_seconds:
+            usage: "GAUGE"
+            description: "Segundos desde el ultimo cambio de estado de la conexion idle mas antigua del rol (guardia del idle_session_timeout, INFRA-1295)"
