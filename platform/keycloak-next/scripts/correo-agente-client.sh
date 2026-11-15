@@ -6,8 +6,8 @@ umask 077
 # The two confidential clients of the Postia case agent (DGX-1218, PR-2 of epic
 # DGX-1209; security condition 3), one Job each, this one script:
 #   - correo-agente-lectura: the agent's read identity. Exactly the
-#     agentgateway-read:<route> roles of its profiles (brain, picqer, shopify,
-#     shopify-admin, skirmshop-plugins, workspace) and NO agentgateway-write*.
+#     agentgateway-read:<route> roles of its profiles (picqer, shopify,
+#     shopify-admin, skirmshop-plugins, workspace; brain out since SC-5492) and NO agentgateway-write*.
 #   - correo-ejecutor: the executor of approved actions. Exactly
 #     agentgateway-write:correo-ejecutor (the gateway CEL behind
 #     order_shipping_line_replace, order_returnable_lines_get, return_create and
@@ -58,7 +58,7 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
 # empty for the read identity: it holds no write role at all.
 case "${CLIENT_ID}" in
   correo-agente-lectura)
-    REVIEWED_ROLES="agentgateway-read:brain agentgateway-read:picqer agentgateway-read:shopify agentgateway-read:shopify-admin agentgateway-read:skirmshop-plugins agentgateway-read:workspace"
+    REVIEWED_ROLES="agentgateway-read:picqer agentgateway-read:shopify agentgateway-read:shopify-admin agentgateway-read:skirmshop-plugins agentgateway-read:workspace"
     WRITE_ROLE_NAME=""
     ;;
   correo-ejecutor)

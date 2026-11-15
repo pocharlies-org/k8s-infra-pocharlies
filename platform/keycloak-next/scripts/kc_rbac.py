@@ -39,7 +39,7 @@ LOCAL_TOKEN_REALM = "master"
 TIMEOUT_SECONDS = 30
 USER_AGENT = "kc-rbac/1 (k8s-infra-pocharlies INFRA-219)"
 
-CATALOG_STATUSES = ("active", "deprecated")
+CATALOG_STATUSES = ("active", "deprecated", "removed")
 CATALOG_ROLE_FIELDS = ("name", "meaning", "grantees", "privilege", "origin", "status")
 
 
@@ -337,8 +337,10 @@ def load_catalog(path):
         if name in catalog:
             raise CatalogError(f"{where}: {name} duplicado")
         if entry["status"] not in CATALOG_STATUSES:
-            raise CatalogError(f"{where}: status de {name} debe ser active o deprecated")
+            raise CatalogError(f"{where}: status de {name} debe ser active, deprecated o removed")
         grantees = entry["grantees"]
+        if entry["status"] == "removed" and grantees:
+            raise CatalogError(f"{where}: {name} es removed y no puede declarar grantees")
         if not isinstance(grantees, list) or not all(isinstance(g, str) and g for g in grantees):
             raise CatalogError(f"{where}: grantees de {name} debe ser una lista de usernames")
         if len(set(grantees)) != len(grantees):

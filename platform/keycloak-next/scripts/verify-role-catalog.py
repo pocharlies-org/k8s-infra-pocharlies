@@ -2,7 +2,7 @@
 """Compare platform/keycloak-next/ROLES.yaml with the live edani realm (INFRA-219 C1).
 
 Read-only. Checks, per catalogued role: the realm role exists (a deprecated
-role may be present or gone), nobody holds it directly outside `grantees`,
+or removed role may be present or gone; a removed one declares no grantees), nobody holds it directly outside `grantees`,
 every declared grantee still holds it, no group carries it (R2), and the
 realm roles it contains are exactly its `composites` (absent = none), so a
 role slipped into default-roles-edani is caught even though it reaches users

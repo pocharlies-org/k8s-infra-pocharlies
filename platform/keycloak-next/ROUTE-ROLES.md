@@ -11,7 +11,9 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **51 rutas, 93 gates** en esta matriz (INFRA-1234, 09-11-2026: + fila `nova`,
+  Hoy: **54 rutas, 91 gates** en esta matriz (SC-5492, 15-11-2026: − filas `brain` y
+  `chat-brain`, retiradas del gateway con brain-mcp en k8s-agentgateway-pocharlies#287;
+  INFRA-1234, 09-11-2026: + fila `nova`,
   declarada por delante del config vivo — pendiente del merge de
   k8s-agentgateway-pocharlies#272; el rol ya existe en el realm por
   agentgateway-domain-roles.sh y viaja en el plano compartido por
@@ -127,8 +129,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `shopify` | `/shopify` | `agentgateway-read:shopify` | `agentgateway-write` (5), `agentgateway-write:shopify` (5) |
 | `chat-analytics` | `/chat-analytics` | — | — |
 | `analytics` | `/analytics` | `agentgateway-read:analytics` | — |
-| `chat-brain` | `/chat-brain` | — | — |
-| `brain` | `/brain` | `agentgateway-read:brain` | — |
 | `social` | `/social` | `agentgateway-read:social` | `agentgateway-write` (13), `agentgateway-write:social` (13) |
 | `chat-tts` | `/chat-tts` | — | `agentgateway-write` (2), `agentgateway-write:media` (2) |
 | `hermes` | `/hermes` | — | `agentgateway-write` (2), `agentgateway-write:hermes` (2) |
@@ -299,18 +299,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "route": "analytics",
       "path": "/analytics",
       "require": ["agentgateway-read:analytics"],
-      "tools": {}
-    },
-    {
-      "route": "chat-brain",
-      "path": "/chat-brain",
-      "require": [],
-      "tools": {}
-    },
-    {
-      "route": "brain",
-      "path": "/brain",
-      "require": ["agentgateway-read:brain"],
       "tools": {}
     },
     {

@@ -50,7 +50,7 @@ class SmokeOperatorReconcilerTest(ScopedClientContractMixin, unittest.TestCase):
     UNREVIEWED_CASES = [
         (CLIENT, "agentgateway-write"),
         (CLIENT, "agentgateway-write:social"),
-        (CLIENT, "agentgateway-read:brain"),
+        (CLIENT, "agentgateway-read:picqer"),
     ]
     AUDIT_NO_MAPPER_CLIENT = CLIENT
     ROLLBACK_CLIENT = CLIENT

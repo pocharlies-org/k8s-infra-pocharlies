@@ -861,7 +861,7 @@ two confidential clients of the Postia case agent with one script,
 `CLIENT_ID`; the flow itself is `keycloak-scoped-client-lib.sh`, shared with
 `hermes-enviar`:
 
-- `correo-agente-lectura`: `agentgateway-read:` `brain`, `picqer`, `shopify`,
+- `correo-agente-lectura`: `agentgateway-read:` `picqer`, `shopify`,
   `shopify-admin`, `skirmshop-plugins`, `workspace`, and no `agentgateway-write*`
   at all (security condition 3 of DGX-1209).
 - `correo-ejecutor`: `agentgateway-write:correo-ejecutor` (created by the

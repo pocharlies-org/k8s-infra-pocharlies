@@ -156,7 +156,7 @@ class RoleCatalogShapeTest(unittest.TestCase):
         catalog = kc_rbac.load_role_catalog(CATALOG)
         self.assertGreaterEqual(len(catalog), 43)
         for name, entry in catalog.items():
-            self.assertIn(entry["status"], ("active", "deprecated"), name)
+            self.assertIn(entry["status"], ("active", "deprecated", "removed"), name)
             self.assertEqual(entry["grantees"], sorted(entry["grantees"]), f"{name}: grantees sorted")
 
     def test_measured_grants_of_the_privileged_principals(self):
@@ -164,7 +164,7 @@ class RoleCatalogShapeTest(unittest.TestCase):
         mcp = "service-account-agentgateway-mcp"
         held = {name for name, entry in catalog.items() if mcp in entry["grantees"]}
         reads = {name for name in held if name.startswith("agentgateway-read:")}
-        self.assertEqual(len(reads), 29)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos
+        self.assertEqual(len(reads), 28)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos; SC-5492: - brain
         self.assertEqual(held - reads, {"agentgateway-write",
                                         "agentgateway-write:nova",
                                         "default-roles-edani"})
@@ -196,7 +196,13 @@ class RoleCatalogShapeTest(unittest.TestCase):
             bad = copy.deepcopy(document)
             bad["roles"][0]["status"] = "retired"
             path.write_text(json.dumps(bad))
-            with self.assertRaisesRegex(kc_rbac.CatalogError, "active o deprecated"):
+            with self.assertRaisesRegex(kc_rbac.CatalogError, "active, deprecated o removed"):
+                kc_rbac.load_role_catalog(path)
+            held = copy.deepcopy(document)
+            held["roles"][0]["status"] = "removed"
+            held["roles"][0]["grantees"] = ["alguien"]
+            path.write_text(json.dumps(held))
+            with self.assertRaisesRegex(kc_rbac.CatalogError, "removed y no puede declarar grantees"):
                 kc_rbac.load_role_catalog(path)
             ghost = copy.deepcopy(document)
             ghost["roles"][0]["composites"] = ["no-existe"]
