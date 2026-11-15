@@ -42,6 +42,42 @@ spec:
 # La división es `on(pod)` a propósito: max_connections es un límite POR
 # INSTANCIA, así que agregar las conexiones de primary y réplica y compararlas
 # contra un solo límite daría un porcentaje sin sentido.
+#
+# --- Régimen de ociosas (INFRA-1295; mecanismo en role-settings.yaml) ------
+#
+#   `idle_session_timeout = 15min` por rol cubierto, aplicado con
+#   `ALTER ROLE … SET` por el Job PostSync `postgres-shared-role-settings`
+#   (role-settings.yaml): el GUC vive en `pg_db_role_setting` y se lee al
+#   abrir la sesión, así que no requiere restart ni cambia ninguna cadena de
+#   conexión. El mismo Job hace la limpieza ÚNICA del backlog acumulado
+#   (`pg_terminate_backend` de las ociosas >15min de los roles cubiertos):
+#   `ALTER ROLE SET` solo afecta a sesiones NUEVAS, y la limpieza es
+#   idempotente (en syncs posteriores devuelve 0 filas).
+#
+#   Excluidos del régimen (motivo completo en role-settings.yaml):
+#     - synapse_dispatcher, synapse_adapter — conexiones LISTEN que están
+#       `state='idle'` por diseño; entran solo tras la prueba de reconexión
+#       de P2.
+#     - synapse_migration, synapse_owner — exclusión permanente:
+#       migraciones con `pg_advisory_lock`.
+#     - postgres (superuser: instance manager de CNPG y los propios Job
+#       PostSync) y streaming_replica (walsender): nunca.
+#
+#   Por qué 60%/75% sobre max_connections 500 siguen valiendo: el régimen
+#   legítimo esperado tras el saneado es ~250 backends de pools vivos (~50%
+#   del límite, medido 11-11). El timeout corta la cola de ociosas
+#   abandonadas (criterio del epic: ninguna ociosa mayor del 30%, y ninguna
+#   sobreviviendo 30 min) pero no toca los pools legítimos, que son lo que
+#   estos umbrales miden. Un rolling sigue siendo el escenario que 75%
+#   protege.
+#
+#   Guardia del régimen: `PostgresSharedOldestIdleSession` (abajo). La
+#   métrica nativa `cnpg_backends_max_tx_duration_seconds` con
+#   `state="idle"` no sirve para esto: medida el 15-11-2026 en las dos
+#   instancias, todas sus series `idle` valen 0 (se calcula sobre
+#   `xact_start`, que es NULL en una sesión sin transacción abierta). De
+#   ahí la custom query `idle-sessions-queries.yaml` (patrón de
+#   aurora-rca-coverage-queries.yaml), que sí mide `now() - state_change`.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
 metadata:
@@ -124,6 +160,41 @@ spec:
               idle_in_transaction_session_timeout=5min (ver role-settings.yaml);
               si esto salta para otro rol, hay que arreglar el ciclo de
               transacción en el cliente o darle el mismo corte.
+
+        # Guardia del régimen de ociosas (INFRA-1295 P3): si el
+        # idle_session_timeout de un rol cubierto muere (ALTER perdido tras
+        # un restore, rol retirado del Job), la ociosa más antigua de ese
+        # rol vuelve a envejecer. Umbral 30min = el máximo del criterio C1:
+        # con el mecanismo vivo ninguna ociosa pasa de ~15min + retardo.
+        # Solo roles cubiertos por P1 (la lista, en role-settings.yaml —
+        # cuando P2 añada un rol allí, añadirlo también a este regex): los
+        # que aún no tienen timeout (apps de gestoría, skirmshop,
+        # whatsappmcp…) son el trabajo de P2 y dispararían de forma cierta
+        # desde el primer día.
+        - alert: PostgresSharedOldestIdleSession
+          expr: >-
+            max by (usename) (
+              cnpg_idle_sessions_oldest_seconds{namespace="databases",
+                usename=~"keep|keycloak|teslamate|langfuse|skirmbooks_ui_app|hindsight|litellm|synapse_engine|synapse_gateway|n8n|n8n_stg|aurora|horarios|sauvage_bot|dgxbench|company_crm|catalogo|analisis|opencode_archive|brain_openwebui_ro|synapse_sre_m2m|synapse_sre_reporter|synapse_agent_m2m"}
+            ) > 1800
+          for: 5m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: ocioso de +30min del rol {{ $labels.usename }} en postgres-shared
+            description: >-
+              La conexión idle más antigua de {{ $labels.usename }} lleva
+              {{ $value | humanizeDuration }} sin moverse, y con
+              idle_session_timeout=15min no debería pasar de ~16min: el
+              mecanismo murió para este rol (ALTER perdido tras un restore,
+              rol fuera de la lista del Job) o el rol entró en
+              role-settings.yaml sin su prueba de reconexión. Mira
+              `SELECT pid, state_change, application_name FROM
+              pg_stat_activity WHERE usename='{{ $labels.usename }}' AND
+              state='idle' ORDER BY state_change` y el último Job
+              postgres-shared-role-settings (PostSync, ns databases).
 
         - alert: PostgresSharedBackendsWaiting
           expr: max by (pod) (cnpg_backends_waiting_total{namespace="databases"}) > 0
