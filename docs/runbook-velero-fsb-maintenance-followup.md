@@ -94,7 +94,7 @@ kubectl -n velero get configmap velero-fsb-volume-policy -o json | jq -er '
   .data["policies.yaml"]
 ' | grep -F -- '- emptyDir'
 
-for schedule in daily-critical daily-aiops weekly-all; do
+for schedule in daily-critical weekly-all; do  # daily-aiops retirado 15-11, SC-5493
   kubectl -n velero get schedule "$schedule" -o json | jq -e '
     .spec.template.defaultVolumesToFsBackup == true and
     .spec.template.resourcePolicy == {

@@ -82,19 +82,20 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # below remain forbidden; the CNPG rule matches by pvcLabels only.
         # INFRA-993 adds four more pvcLabels skips: VictoriaMetrics, Loki and
         # Langfuse carry no backup by decision (Dani, 26-10).
-        # INFRA-1222 (Dani, 09-11) suma 14: analítica derivada (aiops), caché
+        # INFRA-1222 (Dani, 09-11) sumó 14; SC-5493 (15-11) retiró las dos de
+        # aiops (qdrant y falkordb, almacenes ya borrados): quedan 12 —caché
         # (buildkit, trivy, pesos de modelo con etiqueta), el export NFS —que es
         # recursión del contenido que ya se copia PVC a PVC— y el mirror de un
         # bucket. Lo que velero v1.18 rechaza del CM entero, con `field X not found
         # in type resourcepolicies.volumeCondition`: las cuatro claves de abajo.
         # Hay más admitidas (`capacity` existe, probado 10-11), así que una clave
         # nueva se prueba con un Backup CR antes de fiarse de esta lista; un CM
-        # inválido tumba las 5 schedules vivas.
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 20)
+        # inválido tumba las 4 schedules vivas.
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 18)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
                           "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio",
-                          "app: aiops-qdrant-ks5", "app: aiops-falkordb-ks5", "app: buildkitd",
+                          "app: buildkitd",
                           "app: nfs-subdir-external-provisioner",
                           "app.kubernetes.io/name: grafana", "app.kubernetes.io/name: vmsingle-rca",
                           "app.kubernetes.io/name: skirmshop-drive-mirror", "component: trivy",
@@ -120,7 +121,8 @@ class VeleroOperabilityContractTest(unittest.TestCase):
 
     def test_all_schedules_keep_pvc_fsb_and_reference_policy(self):
         schedule_count = SCHEDULES.count("kind: Schedule")
-        self.assertEqual(schedule_count, 4)
+        # SC-5493 (15-11) retiró `daily-aiops` con los almacenes del Brain.
+        self.assertEqual(schedule_count, 3)
         self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), schedule_count)
         self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), schedule_count)
         self.assertNotIn("defaultVolumesToFsBackup: false", SCHEDULES)
