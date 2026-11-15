@@ -1,31 +1,32 @@
 ---
 # Acceso público (Cloudflare -> traefik-edge) a la carpeta de documentos
-# fiscales del modelo 369 alojados en el MinIO skirmshop-drive (ns backup-hub).
+# fiscales del modelo 369, alojados en el Object Storage de OVH (proyecto
+# 74858f325f3e49c4a3c6ae6ac70ae9a0, región SBG) — onda 4 de INFRA-1175.
 #
 # Diseño de seguridad:
-#   - SOLO se expone la API S3 (puerto 9000). La consola (9001) NO se expone
-#     públicamente: evita dar a internet superficie de fuerza bruta sobre el
-#     usuario de aplicación (RW) que ve toda la facturación de skirmbooks.
-#   - El servicio vive en backup-hub; traefik-edge solo vigila su propio
-#     namespace, así que se referencia vía un Service ExternalName local
-#     (mismo patrón que minio-s3-ext), no por service cross-namespace directo.
+#   - SOLO se expone la API S3. La consola MinIO (9001) desapareció con la
+#     instancia; no hay superficie de fuerza bruta sobre usuario RW.
+#   - Traefik reenvía a s3.sbg.io.cloud.ovh.net con `scheme: https` y el Host
+#     intacto (passHostHeader por defecto): el cliente firma contra este host y
+#     RGW verifica con el Host recibido; path-style (force_path_style) — probado
+#     en vivo el 15-11 (INFRA-1175, comentario de estado).
 #   - El acceso a los objetos es por:
 #       (a) lectura anónima del prefijo fiscal/aeat-369-presentados/* (enlaces
 #           directos permanentes que la gestoría abre en el navegador), y
-#       (b) un usuario MinIO read-only `talenom-369` con policy acotada SOLO a
-#           ese prefijo (configurado fuera de GitOps con mc; ver memoria).
-#       (c) DGX-892: lectura anónima de objetos del bucket `artifacts` (páginas HTML
-#           que publica la tool `publish_html` de ofimatica, con caducidad). Solo
-#           `artifacts/pub/` es para internet: esta ruta NO sirve `/artifacts/lan/`,
-#           que se ve únicamente por skirmshop-s3.lan.e-dani.com (LAN/tailnet).
-#           Desde DGX-936 la tool da URLs de s3.e-dani.com (artifacts-public.yaml y
-#           traefik-lan/artifacts-lan.yaml); aquí solo abren las ya repartidas.
+#       (b) un usuario S3 de OVH read-only `talenom-369` con policy acotada SOLO
+#           a ese prefijo (alta y policy: security, fuera de GitOps).
+#       (c) DGX-892: lectura anónima de objetos del bucket `artifacts` (páginas
+#           HTML que publica la tool `publish_html`, con caducidad). Solo
+#           `artifacts/pub/` es para internet: esta ruta NO sirve
+#           `/artifacts/lan/`, que se ve únicamente por LAN/tailnet
+#           (traefik-lan/artifacts-lan.yaml). La política anónima de OVH debe
+#           acotar el Resource a pub/* (decisión security, INFRA-1175).
 #   - El resto del bucket NO es accesible: sin la lectura anónima de su prefijo
 #     y sin credenciales, cualquier otra ruta devuelve AccessDenied.
 #
 # Cuando la gestoría confirme la descarga, este acceso público puede retirarse
 # (borrar la IngressRoute + revocar usuario/anonymous) sin afectar al uso interno.
-# El Service se queda: lo usa artifacts-public.yaml.
+# El Service se queda: lo usan artifacts-public.yaml y facturas-public.yaml.
 apiVersion: v1
 kind: Service
 metadata:
@@ -33,10 +34,10 @@ metadata:
   namespace: traefik-edge
 spec:
   type: ExternalName
-  externalName: skirmshop-drive-s3.backup-hub.svc.cluster.local
+  externalName: s3.sbg.io.cloud.ovh.net
   ports:
     - name: s3
-      port: 9000
+      port: 443
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -56,7 +57,8 @@ spec:
       match: Host(`skirmshop-s3.e-dani.com`) && !PathPrefix(`/artifacts/lan/`)
       services:
         - name: skirmshop-drive-s3-ext
-          port: 9000
+          port: 443
+          scheme: https
   tls:
     store:
       name: default

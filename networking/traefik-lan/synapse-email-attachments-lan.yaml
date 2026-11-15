@@ -20,9 +20,9 @@ spec:
       match: Host(`s3.e-dani.com`) && PathPrefix(`/synapse-email-attachments`)
       priority: 400
       services:
-        - name: minio-s3
-          namespace: minio
-          port: 9000
+        - name: s3-ovh-ext
+          port: 443
+          scheme: https
   tls:
     store:
       name: default

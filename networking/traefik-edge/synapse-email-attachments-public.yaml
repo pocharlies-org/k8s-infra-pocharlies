@@ -4,8 +4,9 @@
 # NO auth middleware on purpose: the bucket is private (anonymous=none) and the
 # SigV4 presigned signature IS the auth (7d ILM expiry; presign expiry < 7d).
 # Priority 300 beats the s3.e-dani.com SSO catch-all (100) and LAN bypass (200),
-# same pattern as facturas-public.yaml. traefik-edge does not watch the minio
-# namespace, hence the ExternalName hop (allowExternalNameServices=true).
+# same pattern as facturas-public.yaml. Onda 4 (INFRA-1175): el almacén es el
+# Object Storage de OVH; el Host se conserva (la presign firma contra este host)
+# y path-style, probado en vivo el 15-11.
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,11 +15,10 @@ metadata:
   labels: {app.kubernetes.io/part-of: synapse, app.kubernetes.io/managed-by: gitops}
 spec:
   type: ExternalName
-  externalName: minio-s3.minio.svc.cluster.local
+  externalName: s3.sbg.io.cloud.ovh.net
   ports:
     - name: s3
-      port: 9000
-      targetPort: 9000
+      port: 443
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -36,7 +36,8 @@ spec:
       services:
         - name: minio-s3-ext
           namespace: traefik-edge
-          port: 9000
+          port: 443
+          scheme: https
   tls:
     store:
       name: default

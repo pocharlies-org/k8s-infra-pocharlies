@@ -1,8 +1,9 @@
 ---
 # DGX-936: artifacts públicos de `publish_html` (ofimatica) en
 #   https://s3.e-dani.com/artifacts/pub/<key>
-# Bucket `artifacts` del MinIO skirmshop-drive (ns backup-hub): lectura anónima de
-# objetos y sin listado. Solo `pub/`: `/artifacts/lan/` no tiene ruta aquí y cae en el
+# Bucket `artifacts` del Object Storage de OVH (onda 4, INFRA-1175): lectura
+# anónima de objetos y sin listado — la política anónima de OVH acota el Resource
+# a pub/* (security). Solo `pub/`: `/artifacts/lan/` no tiene ruta aquí y cae en el
 # catch-all SSO de s3.e-dani.com. Priority 300 gana a ese catch-all (100) y al bypass
 # LAN (200), como labs-public.yaml. El Service ExternalName es el de
 # skirmshop-s3-public.yaml (traefik-edge no vigila backup-hub).
@@ -20,7 +21,8 @@ spec:
       priority: 300
       services:
         - name: skirmshop-drive-s3-ext
-          port: 9000
+          port: 443
+          scheme: https
   tls:
     store:
       name: default

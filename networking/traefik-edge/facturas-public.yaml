@@ -1,10 +1,9 @@
 ---
-# Public, password-protected access to invoice/document PDFs in the
-# skirmshop-drive MinIO bucket "facturas". URL: https://s3.e-dani.com/facturas/<file>
+# Public, password-protected access to invoice/document PDFs in the OVH
+# Object Storage bucket "facturas". URL: https://s3.e-dani.com/facturas/<file>
 # Gated by Traefik BasicAuth. Anonymous read is enabled ONLY on the "facturas"
-# bucket (a dedicated bucket, NOT the Drive mirror). traefik-edge does not watch
-# the backup-hub namespace, so we expose the MinIO svc via an ExternalName
-# service in the (watched) skirmshop namespace.
+# bucket (policy en OVH: security). Onda 4 (INFRA-1175): Host conservado +
+# path-style + scheme https, probado en vivo el 15-11.
 apiVersion: v1
 kind: Service
 metadata:
@@ -13,11 +12,10 @@ metadata:
   labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
 spec:
   type: ExternalName
-  externalName: skirmshop-drive-s3.backup-hub.svc.cluster.local
+  externalName: s3.sbg.io.cloud.ovh.net
   ports:
     - name: s3
-      port: 9000
-      targetPort: 9000
+      port: 443
 ---
 apiVersion: v1
 kind: Secret
@@ -59,7 +57,8 @@ spec:
       services:
         - name: skirmshop-drive-s3-ext
           namespace: skirmshop
-          port: 9000
+          port: 443
+          scheme: https
   tls:
     store:
       name: default

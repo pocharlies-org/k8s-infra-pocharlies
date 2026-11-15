@@ -1,0 +1,17 @@
+---
+# Onda 4 (INFRA-1175): el almacén de objetos de la casa es el Object Storage de
+# OVH (proyecto 74858f325f3e49c4a3c6ae6ac70ae9a0, SBG). Las rutas LAN que servían
+# de las instancias MinIO apuntan aquí: Host conservado + path-style + scheme
+# https — probado en vivo el 15-11 (firma SigV4 contra el host LAN aceptada por RGW).
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3-ovh-ext
+  namespace: traefik-lan
+  labels: {app.kubernetes.io/managed-by: gitops}
+spec:
+  type: ExternalName
+  externalName: s3.sbg.io.cloud.ovh.net
+  ports:
+    - name: s3
+      port: 443

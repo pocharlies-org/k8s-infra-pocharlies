@@ -256,7 +256,7 @@ spec:
     - kind: Rule
       match: Host(`skirmshop-s3.e-dani.com`)
       services:
-        - {name: skirmshop-drive-s3, namespace: backup-hub, port: 9000}
+        - {name: s3-ovh-ext, port: 443, scheme: https}
     - kind: Rule
       match: Host(`skirmshop-s3-console.e-dani.com`)
       services:
