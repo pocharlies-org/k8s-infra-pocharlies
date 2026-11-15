@@ -208,8 +208,8 @@ jobs:
           python-version: "3.12"
       - name: Install YAML parser
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
-      - name: Validate the 1Password change detector (DGX-506)
-        run: python3 -m unittest tests/test_onepassword_change_detector.py tests/test_onepassword_quota_floor_contract.py -v
+      - name: Validate the 1Password change detector (DGX-506) and the harbor-pull CES lists (SC-3089)
+        run: python3 -m unittest tests/test_onepassword_change_detector.py tests/test_onepassword_quota_floor_contract.py tests/test_harbor_pull_ces_lists_disjoint.py -v
 
   onepassword-connect-contract:
     runs-on: arc-k8s

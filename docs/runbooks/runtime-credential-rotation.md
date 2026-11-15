@@ -14,6 +14,11 @@ pods. Run it from a trusted shell with history disabled and `set +x`.
   rotation is for runtime pull only.
 - The catalog API must run the dual-token build before changing the active
   client credential. A missing primary token must continue to return HTTP 401.
+- A namespace goes in ONE of the two `harbor-runtime-pull` lists (Merge or
+  bootstrap/Owner), never both: two child ExternalSecrets fight over the same
+  `harbor-pull` and one sits permanently in `SecretSyncedError "target is owned
+  by another ExternalSecret"` (SC-3089). Guard:
+  `tests/test_harbor_pull_ces_lists_disjoint.py`.
 
 ## Harbor runtime pull credential
 
