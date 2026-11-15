@@ -226,7 +226,7 @@ def test_coredns_pins_the_x86_tailnet_name():
     assert "taile0ad27.ts.net:53 {" in tailnet_zone
     assert "100.83.56.98 x86.taile0ad27.ts.net" in tailnet_zone
     assert "100.125.62.10 mac-cb.taile0ad27.ts.net" in tailnet_zone
-    assert "100.85.61.58 mac-casa.taile0ad27.ts.net" in tailnet_zone
+    assert "100.82.219.103 mac-casa.taile0ad27.ts.net" in tailnet_zone
     assert "hosts {" in tailnet_zone
     assert "fallthrough" in tailnet_zone
     assert "forward . /etc/resolv.conf" in tailnet_zone
