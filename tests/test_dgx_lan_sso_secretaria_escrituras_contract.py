@@ -103,6 +103,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
       ("POST", "/api/kiosco/vista/machine"),
       ("POST", "/api/kiosco/observed/machine"),
       ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
+      ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
       ("POST", "/api/activity/claude/refresh")]  # F1: extensión vscode-claude-cuenta, sin sesión
 
 
