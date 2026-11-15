@@ -410,9 +410,9 @@ not through a composite), the `privilege` it allows and denies, its `origin`
 PyYAML.
 
 - **An entry is never deleted.** A retired role changes to
-  `status: deprecated`; the verifier accepts a deprecated role whether it is
-  still in the realm or gone. On every pull request CI fetches the trunk
-  copy and runs `scripts/check-catalog-evolution.py`: a trunk role missing
+  `status: deprecated` (`removed` once its route is gone); the verifier accepts a
+  deprecated or removed role whether it is still in the realm or gone. On every
+  pull request CI fetches the trunk copy and runs `scripts/check-catalog-evolution.py`: a trunk role missing
   from the branch, or a trunk `deprecated` role back to `active`, fails the
   job (skipped, with a `SKIP:` line, while the trunk has no `ROLES.yaml`).
 - A composite role lists in `composites` the exact realm roles it contains
