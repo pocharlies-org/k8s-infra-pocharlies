@@ -184,6 +184,28 @@ spec:
       services:
         - name: edge-chat-public
           port: 80
+    # OWU-95 (P25): el canje de tokens de la app nativa y el catalogo de modelos
+    # viajan SIN bearer a proposito (asercion `ExchangeTests` en
+    # pocharlies-org/openwebui-ios): OWUI pone el bearer dentro del canje — el
+    # borde no es el autenticador de la app nativa. Sin esta regla caen en la
+    # cadena SSO (302 al login) y el login nativo por el borde queda roto.
+    # OWUI sigue autenticando el solo (400/401 esperados; verificacion en la PR).
+    # `priority: 99`: gana a la generica; pierde con la bearer de arriba (100)
+    # cuando el cliente trae token — mismo destino, OWUI decide.
+    # `chat-strip-auth-request` es OBLIGATORIA aqui: sin cadena SSO ninguna
+    # fuente fiable pone esas cabeceras; las X-Auth-Request-* que traiga la
+    # peticion son hostiles por construccion (OWU-115, cota no negociable).
+    # Solo estos dos prefijos: el resto del chat sigue por sso-chat-chain.
+    # Mismo match que la hermana LAN (dgx-infra k8s/apps/chat/ingressroute.yaml).
+    - kind: Rule
+      match: Host(`chat.e-dani.com`) && ( PathPrefix(`/api/v1/auths/oauth/oidc/token/exchange`) || PathPrefix(`/api/v1/models`) )
+      priority: 99
+      middlewares:
+        - name: chat-strip-auth-request
+          namespace: traefik-edge
+      services:
+        - name: edge-chat-public
+          port: 80
     - kind: Rule
       match: Host(`chat.e-dani.com`)
       middlewares:
