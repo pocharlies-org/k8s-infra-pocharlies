@@ -1,17 +1,19 @@
 """dgx.app.pagos.v1 (aditivo 04-10-2026): el ClusterSecretStore kubernetes que da a Hermes los
 secretos HMAC del dashboard de pagos, y su RBAC mínimo.
 
-El plugin `confirmar-pago` (k8s-openclaw-qwen36-pocharlies) firma sus rutas de máquina con DOS
-secretos que vive en `control-nexus`, generados in-cluster por el ESO del dashboard (nunca por
+El plugin `confirmar-pago` (k8s-openclaw-qwen36-pocharlies) firma sus rutas de máquina con TRES
+secretos que viven en `control-nexus`, generados in-cluster por el ESO del dashboard (nunca por
 1Password):
 
   - `dgx-dashboard-pagos` (general)   → GET /esperar y POST /resultado
   - `dgx-dashboard-pagos-decision`    → SOLO POST /decision (veredicto del architect sobre
     dgx-infra#961: la secretaria, que recibe el general por pago-alerta, no puede autoaprobarse)
+  - `dgx-dashboard-alertas-hermes`    → POST /api/alertas (DGX-1628: la alerta urgente de Hermes)
 
 Este test fija el alcance, que es lo que hace segura la apertura: `get` exacto y nada más, esos
-dos nombres y ningún otro Secret, y una sola identidad (la SA del store). Un `list`/`watch`, un
-resourceNames suelto o una segunda SA vinculada son escándalo.
+nombres y ningún otro Secret, una sola identidad (la SA del store) y que SOLO el ns `hermes` pueda
+nombrar el store. Un `list`/`watch`, un resourceNames suelto, una segunda SA vinculada o un store
+sin `conditions` son escándalo.
 """
 import pathlib
 import unittest
@@ -23,7 +25,7 @@ STORE = ROOT / "platform" / "external-secrets" / "cluster-secret-store-control-n
 KUSTOMIZATION = ROOT / "kustomization.yaml"
 
 SA = "eso-control-nexus-pagos-reader"
-SECRETS = ["dgx-dashboard-pagos", "dgx-dashboard-pagos-decision"]
+SECRETS = ["dgx-dashboard-pagos", "dgx-dashboard-pagos-decision", "dgx-dashboard-alertas-hermes"]
 
 
 def _docs():
@@ -46,14 +48,20 @@ class PagosHermesReaderContract(unittest.TestCase):
         self.assertEqual(k["server"]["caProvider"], {"type": "ConfigMap", "name": "kube-root-ca.crt",
                                                      "namespace": "control-nexus", "key": "ca.crt"})
 
-    def test_role_solo_get_sobre_los_dos_secretos_y_nada_mas(self):
+    def test_el_store_solo_lo_puede_nombrar_el_ns_hermes(self):
+        """Condición 3 de security en DGX-1628 (comentario 54304): un ClusterSecretStore sin
+        `conditions` lo puede nombrar un ExternalSecret de cualquier namespace."""
+        (store,) = _kind("ClusterSecretStore")
+        self.assertEqual(store["spec"]["conditions"], [{"namespaces": ["hermes"]}])
+
+    def test_role_solo_get_sobre_los_tres_secretos_y_nada_mas(self):
         (role,) = _kind("Role")
         self.assertEqual(role["metadata"]["namespace"], "control-nexus")
         secretos = [r for r in role["rules"] if r.get("resources") == ["secrets"]]
         self.assertEqual(len(secretos), 1)
         (regla,) = secretos
         self.assertEqual(regla["verbs"], ["get"])                       # ni list, ni watch, ni create
-        self.assertEqual(sorted(regla["resourceNames"]), sorted(SECRETS))  # solo estos dos
+        self.assertEqual(sorted(regla["resourceNames"]), sorted(SECRETS))  # solo estos
         self.assertEqual(regla["apiGroups"], [""])
         demas = [r for r in role["rules"] if r.get("resources") != ["secrets"]]
         self.assertEqual([(r["apiGroups"], r["resources"], r["verbs"]) for r in demas],
