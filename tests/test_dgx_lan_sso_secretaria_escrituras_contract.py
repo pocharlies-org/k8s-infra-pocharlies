@@ -98,6 +98,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
     "/api/litellm/background-consumers",  # INFRA-832: el GET sigue abierto
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
+      ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide, Dani toca dos veces (HMAC V2 clase hermes)
       ("POST", "/api/kiosco/vista"), ("POST", "/api/kiosco/escritorio"),  # DGX-1449: quioscos, sin sesión por casa (como antes de DGX-1314)
       ("POST", "/api/kiosco/vista/machine"),
       ("POST", "/api/kiosco/observed/machine"),
