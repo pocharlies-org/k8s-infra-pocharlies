@@ -51,22 +51,14 @@
     },
     {
       "name": "agentgateway-read:brain",
-      "status": "active",
-      "meaning": "Lectura de la ruta /brain de AgentGateway (INFRA-23).",
-      "grantees": [
-        "service-account-agentgateway-mcp",
-        "service-account-correo-agente-lectura",
-        "service-account-hermes-secretaria",
-        "service-account-hermes-secretaria-casa",
-        "service-account-hermes-secretaria-dani",
-        "service-account-hermes-secretaria-leila",
-        "service-account-hermes-secretaria-skirmshop"
-      ],
+      "status": "removed",
+      "meaning": "Retirado (SC-5492, 15-11-2026): era la lectura de la ruta /brain de AgentGateway (INFRA-23). brain-mcp se retiró (k8s-agentgateway-pocharlies#287, k8s-infra-pocharlies#522) y /brain responde 404 desde el 14-11.",
+      "grantees": [],
       "privilege": {
-        "allows": "Llamar a las tools de solo lectura de la ruta /brain de AgentGateway.",
-        "denies": "Cualquier tool de escritura de /brain (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+        "allows": "Nada: la ruta /brain ya no existe.",
+        "denies": "Todo; ningún reconciliador lo crea ni lo concede."
       },
-      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12); los holders service-account-correo-agente-lectura se revisan en la misma allowlist y los concede correo-agente-client.sh (PostSync correo-agente-clients.yaml; DGX-1218)"
+      "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12) y correo-agente-client.sh (DGX-1218) hasta SC-5492 (15-11-2026), que lo saca de ambas matrices a petición de security; el borrado del rol del realm lo hace security tras el merge"
     },
     {
       "name": "agentgateway-read:claude-sessions",

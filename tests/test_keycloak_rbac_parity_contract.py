@@ -162,7 +162,7 @@ class RoleCatalogParityTest(unittest.TestCase):
 
     def test_extractor_reads_the_reviewed_constants(self):
         # Guard against a silent parse: the matrices are non-trivial today.
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 29)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 28)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain
         self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 7)
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
@@ -170,8 +170,8 @@ class RoleCatalogParityTest(unittest.TestCase):
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PHOTOS_HUMAN_READ_ROLE_NAMES"), ["agentgateway-read:photos"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_SMOKE_OPERATOR_READ_ROLE_NAMES"),
                          ["agentgateway-read:social", "agentgateway-read:workspace"])
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 4)
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 9)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_READ_ROLE_NAMES")), 3)  # SC-5492: - brain
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_SECRETARIA_SKIRMSHOP_READ_ROLE_NAMES")), 8)  # SC-5492: - brain
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_PROBE_READ_ROLE_NAMES"), ["agentgateway-read:atlassian"])
         # INFRA-1245 (verdict INFRA-1248): one reviewed role per Nova holder.
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_NOVA_TIENDA_READ_ROLE_NAMES"), ["agentgateway-read:hindsight-tienda"])

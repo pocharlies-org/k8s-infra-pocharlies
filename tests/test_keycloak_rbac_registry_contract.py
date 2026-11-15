@@ -84,6 +84,18 @@ class CatalogEvolutionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(lines, ["CONTRATO: rol agentgateway-write:sauvage es deprecated en el tronco y la rama lo vuelve a active"])
 
+    def test_active_to_removed_passes(self):
+        head = [role("agentgateway-read:weight", "removed")] + TRUNK[1:]
+        code, _ = self.run_check(head)
+        self.assertEqual(code, 0)
+
+    def test_removed_never_comes_back(self):
+        base = [role("agentgateway-read:weight", "removed")] + TRUNK[1:]
+        for status in ("active", "deprecated"):
+            code, lines = self.run_check([role("agentgateway-read:weight", status)] + TRUNK[1:], base_roles=base)
+            self.assertEqual(code, 1)
+            self.assertEqual(lines, [f"CONTRATO: rol agentgateway-read:weight es removed en el tronco y la rama lo vuelve a {status}"])
+
     def test_trunk_without_catalog_is_skipped_explicitly(self):
         code, lines = self.run_check(TRUNK, base_roles=None)
         self.assertEqual(code, 0)

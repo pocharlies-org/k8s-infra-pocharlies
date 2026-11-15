@@ -30,7 +30,7 @@ _spec.loader.exec_module(verify_principals)
 EJECUTOR_ROLE = "agentgateway-write:correo-ejecutor"
 CLIENTS = {
     "correo-agente-lectura": [
-        "agentgateway-read:brain", "agentgateway-read:picqer", "agentgateway-read:shopify",
+        "agentgateway-read:picqer", "agentgateway-read:shopify",
         "agentgateway-read:shopify-admin", "agentgateway-read:skirmshop-plugins", "agentgateway-read:workspace",
     ],
     "correo-ejecutor": ["agentgateway-read:shopify-admin", EJECUTOR_ROLE],

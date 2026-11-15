@@ -3,8 +3,9 @@
 
 An entry is never deleted and a role never comes back from the dead: every
 role name in the trunk catalog must still be in the branch catalog, and a
-role `deprecated` in the trunk must not be `active` in the branch. New roles
-and active -> deprecated are allowed.
+role `deprecated` in the trunk must not be `active` in the branch, and a role
+`removed` in the trunk stays `removed`. New roles and active -> deprecated ->
+removed are allowed.
 
   OK: <N> roles del tronco presentes, 0 borrados, 0 deprecated reactivados   exit 0
   SKIP: el tronco no tiene <path> ...                                        exit 0
@@ -55,6 +56,8 @@ def find_violations(base, head):
     for name in sorted(set(base) & set(head)):
         if base[name] == "deprecated" and head[name]["status"] == "active":
             violations.append(f"CONTRATO: rol {name} es deprecated en el tronco y la rama lo vuelve a active")
+        if base[name] == "removed" and head[name]["status"] != "removed":
+            violations.append(f"CONTRATO: rol {name} es removed en el tronco y la rama lo vuelve a {head[name]['status']}")
     return violations
 
 

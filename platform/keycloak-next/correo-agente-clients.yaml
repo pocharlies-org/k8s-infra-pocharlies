@@ -2,8 +2,8 @@
 # epic DGX-1209; security condition 3), reconciled by one script with the
 # reviewed role set fixed per CLIENT_ID (scripts/correo-agente-client.sh):
 #   - correo-agente-lectura: only the agentgateway-read:<route> roles of the
-#     agent's profiles (brain, picqer, shopify, shopify-admin,
-#     skirmshop-plugins, workspace) and no agentgateway-write* at all.
+#     agent's profiles (picqer, shopify, shopify-admin,
+#     skirmshop-plugins, workspace; brain out since SC-5492) and no agentgateway-write* at all.
 #   - correo-ejecutor: agentgateway-write:correo-ejecutor (the per-tool CEL
 #     rules of k8s-agentgateway-pocharlies#221) and agentgateway-read:shopify-admin;
 #     never the bare agentgateway-write.
