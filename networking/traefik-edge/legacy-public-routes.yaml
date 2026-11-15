@@ -545,11 +545,6 @@ spec:
     - name: sauvage-localhost
       port: 8080
   - kind: Rule
-    match: Host(`qdrant.e-dani.com`)
-    services:
-    - name: sauvage-localhost
-      port: 6333
-  - kind: Rule
     match: Host(`rag.e-dani.com`)
     services:
     - name: sauvage-localhost
