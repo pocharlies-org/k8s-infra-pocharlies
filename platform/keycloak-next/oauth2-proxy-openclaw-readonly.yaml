@@ -118,7 +118,14 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 30
           resources:
-            requests: { cpu: 50m, memory: 96Mi }
+            # INFRA-171 (15-11): cpu request 50m -> 5m. Medido sobre la retencion real de
+            # VictoriaMetrics (48 h con fin de semana completo; las series de 14 dias no
+            # existen, decision del tech-lead): p95 0.1m, max 0.1m (553 puntos) -> suelo
+            # 1,5 x p95 redondeado a 5m. cp-1 estaba al 97 % de requests (epico INFRA-123)
+            # y el calculo de aterrizaje pedia cerrar 36m mas; la nota S1 (INFRA-170)
+            # autoriza este recorte de un oauth2-proxy pequeno «midiendo su p95 antes».
+            # El limit de cpu (500m) no cambia: solo ve el scheduler.
+            requests: { cpu: 5m, memory: 96Mi }
             limits: { cpu: 500m, memory: 256Mi }
           securityContext:
             allowPrivilegeEscalation: false
