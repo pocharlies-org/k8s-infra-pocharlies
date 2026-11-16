@@ -116,13 +116,20 @@ Nº de casos: **pendiente de medir**.
   propias rutas en el edge compartido sin pasar por este repo.
 - `prune: false` en `k8s-infra`: quitar un fichero de `kustomization.yaml` no borra el recurso en el cluster.
 - `docs/runbook-cloudflare-lan-record-budget.md`: límite de registros LAN en Cloudflare; leer antes de añadir hosts.
-- Los nombres de `e-dani.com` que necesita un cliente del clúster se fijan a `traefik-lan` en
-  `networking/dns/coredns-custom.yaml` — hoy `harbor`, `harbor.lan`, `litellm` y `argocd` (SC-2443, SC-2445). Un nombre
-  sin fijar cae en `forward` y responde la MagicDNS del nodo del cliente, porque cada nodo resuelve en su réplica de
-  `coredns-local` (INFRA-1019): los nodos de OVH reciben las IPs públicas del borde y los de casa pueden recibir otras,
-  así que el cliente va por LAN o por el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB: 413/502 en un push de capa
-  grande). `dgx` y `s3` van fijados por `hosts` a la VIP `192.168.50.240`, que también es alcanzable desde los cp
-  (medido 15-10-2026). Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez.
+- El bloque `e-dani.com:53` de `networking/dns/coredns-custom.yaml` es **generado y commiteado** por
+  `scripts/gen_coredns_edani.py` (INFRA-902): fija a `traefik-lan` todo `Host(\`*.e-dani.com\`)` servido por una
+  IngressRoute de `networking/traefik-lan/`. Ya no se añaden nombres a mano. Un nombre sin fijar cae en `forward` y
+  responde la MagicDNS del nodo del cliente, porque cada nodo resuelve en su réplica de `coredns-local` (INFRA-1019): los
+  nodos de OVH reciben las IPs públicas del borde y los de casa pueden recibir otras, así que el cliente va por LAN o por
+  el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB:
+  413/502 en un push de capa grande — SC-2443/SC-2445; el probe libreplay alternaba al borde — INFRA-889). Un nombre que
+  NO deba fijarse va en `networking/dns/coredns-edani-exclusions.yaml` con `reason` de una línea (no es recurso k8s: no va
+  al `kustomization.yaml`). El job de CI `coredns-edani-guard` (`gen_coredns_edani.py --check` +
+  `tests/test_coredns_edani_contract.py`) falla si un Host no está ni fijado ni excluido, si el bloque commiteado tiene
+  drift, si una exclusión no tiene `reason` o si una exclusión queda rancia. `dgx` y `s3` van fijados por `hosts` a la VIP
+  `192.168.50.240` (nunca por `rewrite`, que los sombrearía), alcanzable también desde los cp (medido 15-10-2026).
+  Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez. El bloque `x86-taile0ad27.server` (ts.net)
+  no lo toca el generador: queda byte a byte intacto.
 - ExternalSecret de 1Password (INFRA-511): un commit que solo cambie la clave o el store de un ES escrito para
   `onepassword` no marca su app OutOfSync (ArgoCD ignora esos campos, `argocd/values.yaml` de k8s-gitops-pocharlies):
   reescríbelo a la forma de Connect. Reconstrucción total: Harbor lee sus secretos por Connect y la imagen de Connect

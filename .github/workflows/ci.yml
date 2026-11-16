@@ -180,6 +180,27 @@ jobs:
       - name: Validate external-dns ownership boundary
         run: python3 -m unittest tests/test_external_dns_contract.py
 
+  # INFRA-902: el bloque e-dani.com de coredns-custom es generado desde los Host()
+  # de networking/traefik-lan/. El guard falla si un Host no está fijado ni
+  # excluido, si el bloque commiteado tiene drift o si la lista de exclusiones está
+  # mal formada o rancia (cierra la causa de INFRA-896). PyYAML: el test de
+  # contrato cruza el regex del generador con un parseo independiente (arc-k8s +
+  # setup-python 3.12 + PyYAML==6.0.2, precedente en este mismo fichero).
+  coredns-edani-guard:
+    runs-on: arc-k8s
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Guard the generated e-dani.com block (INFRA-902)
+        run: |
+          python3 scripts/gen_coredns_edani.py --check
+          python3 -m unittest tests/test_coredns_edani_contract.py -v
+
   private-service-exposure-contract:
     runs-on: arc-k8s
     steps:

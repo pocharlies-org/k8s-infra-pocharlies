@@ -1,0 +1,15 @@
+# Exclusiones del generador scripts/gen_coredns_edani.py (INFRA-902).
+#
+# Un Host(`*.e-dani.com`) servido por una IngressRoute de networking/traefik-lan/
+# se fija por defecto a traefik-lan en el bloque e-dani.com:53 de
+# coredns-custom.yaml. Aquí se listan los nombres que NO deben fijarse.
+# `reason` es obligatorio (una línea): el CI (job coredns-edani-guard) falla si
+# falta, si el nombre ya no es un Host() de traefik-lan (exclusión rancia) o si
+# un Host no está ni fijado ni excluido.
+#
+# NO es un recurso de Kubernetes: no va en kustomization.yaml.
+#
+# exclusions:
+#   - name: ejemplo.e-dani.com
+#     reason: por qué se queda en forward y no se fija a traefik-lan
+exclusions: []
