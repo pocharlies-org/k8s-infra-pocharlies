@@ -1,6 +1,7 @@
 ---
-# Blog drafts inbox (blog-panel on the x86 host), published at
-# borradores.e-dani.com — LAN and Tailscale only, no public route at all.
+# Blog drafts inbox (the blog-panel sidecar in pod company-0, ns paseo, since
+# SC-5631), published at borradores.e-dani.com — LAN and Tailscale only, no
+# public route at all.
 #
 # The panel approves, edits and discards the posts that go out to
 # blog.e-dani.com, so it must never be reachable from the edge: there is no
@@ -12,9 +13,11 @@
 # traefik-lan lives in k8s-adguard-pocharlies; borradores.lan.e-dani.com works
 # too via the *.lan wildcard, but the wildcard cert only covers *.e-dani.com.
 #
-# It binds 0.0.0.0 on the host because Traefik reaches it over Tailscale, the
-# same reason as the claude panel beside it. blog-panel repeats the client-IP
-# check itself for anyone hitting the port directly.
+# SC-5631: the panel moved from the x86 host (tailnet name) into the company
+# pod, so this ExternalName now points at the `company` Service in ns paseo;
+# Traefik reaches it over the cluster network (10.42/16, allowed by the panel's
+# own REDES). blog-panel repeats the client-IP check itself for anyone hitting
+# the port directly.
 apiVersion: v1
 kind: Service
 metadata:
@@ -25,7 +28,7 @@ metadata:
     app.kubernetes.io/part-of: traefik-lan
 spec:
   type: ExternalName
-  externalName: x86.taile0ad27.ts.net
+  externalName: company.paseo.svc.cluster.local
   ports:
     - name: http
       port: 8793
