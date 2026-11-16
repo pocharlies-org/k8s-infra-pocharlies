@@ -196,6 +196,9 @@ configMapGenerator:
     files:
       - agentgateway-write-fixture-user.sh=scripts/agentgateway-write-fixture-user.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      # SKIRM-494: la maquinaria de fixtures se comparte con
+      # skirmbooks-qa-fixture-user.sh (extracted verbatim, duplicados CI).
+      - fixture-user-common.sh=scripts/fixture-user-common.sh
     options:
       labels:
         app.kubernetes.io/component: agentgateway-write-fixture-user
@@ -265,6 +268,7 @@ configMapGenerator:
     files:
       - skirmbooks-qa-fixture-user.sh=scripts/skirmbooks-qa-fixture-user.sh
       - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - fixture-user-common.sh=scripts/fixture-user-common.sh
     options:
       labels:
         app.kubernetes.io/component: skirmbooks-qa-fixture-user

@@ -10,22 +10,22 @@ create it. The gestoria tenant role is NOT this hook's fact (migration 0096 of
 skirmbooks-gestoria-src, applied: tenant skirmshop role owner).
 
 Sister of test_agentgateway_write_fixture_user_contract.py (OWU-28-g): the
-identity of the fixture is pinned (username, group, realm — never
-environment-switchable), the password is redacted (never argv, never stdout —
-it reaches kcadm only as the KC_CLI_PASSWORD environment of one call), the
-membership write is followed by a post-read (SC-1215), the rollback removes
-the membership and DISABLES the user (never deletes it), and the catalog
-declarations (ROLES.yaml + PRINCIPALS.md) keep the drift sweep green.
-Functional tests drive the real script against a fake kcadm through the
-shared harness in tests/keycloak_hook_testlib.py.
+fixture machinery is shared verbatim (fixture-user-common.sh), so the fake
+kcadm comes from the shared harness in keycloak_hook_testlib.py
+(SKIRMBOOKS_QA_FAKE_KCADM). These tests pin the identity of the fixture, the
+password redaction (never argv, never stdout), the membership post-read
+(SC-1215), the refusal to create the group, the rollback scope (remove
+membership + disable, never delete) and the catalog declarations
+(ROLES.yaml + PRINCIPALS.md) that keep the drift sweep green.
 """
 
 import json, sys, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # unittest from the repo root
-from keycloak_hook_testlib import (BASE, COMMON, ROOT, BootstrapSourceContractMixin,
-                                   build_fake_kcadm, assert_job_hardened)
+from keycloak_hook_testlib import (BASE, COMMON, FIXTURE_COMMON, ROOT,
+                                   BootstrapSourceContractMixin, SKIRMBOOKS_QA_FAKE_KCADM,
+                                   assert_job_hardened, run_hook)
 
 SCRIPT = BASE / "scripts" / "skirmbooks-qa-fixture-user.sh"
 JOB = BASE / "skirmbooks-qa-fixture-user-job.yaml"
@@ -42,139 +42,18 @@ LAST_NAME = "Fixture"
 # fake kcadm journal (argv), stdout or stderr.
 PASSWORD = "Sentinel-Password-9c1d7b-DoNotLog"
 
-_GET = """\
-        endpoint="$1"
-        shift
-        fields=""
-        exact=""
-        prev=""
-        for a in "$@"; do
-          [ "$prev" = "--fields" ] && fields="$a"
-          case "$a" in username=*) exact="yes";; esac
-          prev="$a"
-        done
-        case "$endpoint" in
-          users)
-            # exact-username resolution (the fixture id is minted, not pinned)
-            if [ -n "$exact" ]; then
-              if [ -f "$state/two-users" ]; then printf 'id-one\\nid-two\\n'; exit 0; fi
-              if [ -f "$state/user-exists" ]; then printf 'fixture-user-id\\n'; fi
-              exit 0
-            fi
-            exit 64
-            ;;
-          groups)
-            if [ -f "$state/group-missing" ]; then exit 0; fi
-            printf 'skirmbooks-users-gid,%s\\n' "$FAKE_GROUP"
-            ;;
-          users/*/groups)
-            if [ -f "$state/group-member" ]; then printf '%s\\n' "$FAKE_GROUP"; fi
-            ;;
-          users/*)
-            case "$fields" in
-              id) printf '%s\\n' "${endpoint#users/}" ;;
-              username) printf '%s\\n' "$FAKE_USERNAME" ;;
-              enabled)
-                if [ -f "$state/user-disabled" ]; then printf 'false\\n'
-                else printf 'true\\n'; fi ;;
-              serviceAccountClientId)
-                if [ -f "$state/user-sa" ]; then printf 'some-client\\n'
-                else printf '\\n'; fi ;;
-              firstName)
-                if [ -f "$state/user-firstname" ]; then cat "$state/user-firstname"
-                else printf '\\n'; fi ;;
-              lastName)
-                if [ -f "$state/user-lastname" ]; then cat "$state/user-lastname"
-                else printf '\\n'; fi ;;
-              *) exit 63 ;;
-            esac
-            ;;
-          *)
-            exit 64
-            ;;
-        esac
-        exit 0
-"""
-
-_WRITE_CASES = """\
-      create)
-        if [ "$1" != "users" ]; then exit 67; fi
-        if [ -f "$state/create-fail" ]; then
-          printf 'HTTP/1.1 400 Bad Request\\n'
-          printf 'Error: User exists with same username\\n'
-          exit 1
-        fi
-        touch "$state/user-exists"
-        for a in "$@"; do
-          case "$a" in
-            firstName=*) printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
-            lastName=*) printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
-          esac
-        done
-        exit 0
-        ;;
-      set-password)
-        # The password must arrive ONLY as the KC_CLI_PASSWORD environment
-        # (kcadm 26's default for --new-password): an argv leak or a missing
-        # environment fails here, loudly.
-        for a in "$@"; do
-          case "$a" in --new-password*|*"$FAKE_PASSWORD"*) exit 70 ;; esac
-        done
-        if [ -z "${KC_CLI_PASSWORD:-}" ]; then exit 71; fi
-        if [ "${KC_CLI_PASSWORD:-}" != "$FAKE_PASSWORD" ]; then exit 72; fi
-        touch "$state/password-applied"
-        exit 0
-        ;;
-      update)
-        endpoint="$1"
-        shift
-        case "$endpoint" in
-          users/*/groups/*)
-            if [ -f "$state/membership-fail" ]; then
-              printf 'HTTP/1.1 404 Not Found\\n'
-              printf 'Error: group not found\\n'
-              exit 1
-            fi
-            # membership-silent-noop: the server answers 0 and writes nothing,
-            # so the post-ensure read must catch it (SC-1215).
-            [ -f "$state/membership-silent-noop" ] || touch "$state/group-member"
-            exit 0
-            ;;
-          users/*)
-            for a in "$@"; do
-              case "$a" in
-                enabled=true) rm -f "$state/user-disabled" ;;
-                enabled=false) touch "$state/user-disabled" ;;
-                firstName=*)
-                  [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
-                lastName=*)
-                  [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
-              esac
-            done
-            exit 0
-            ;;
-          *) exit 68 ;;
-        esac
-        ;;
-      delete)
-        endpoint="$1"
-        case "$endpoint" in
-          users/*/groups/*) rm -f "$state/group-member" ;;
-          *) exit 69 ;;
-        esac
-        exit 0
-        ;;
-"""
-
-FAKE_KCADM = build_fake_kcadm("        exit 0\n", _GET, _WRITE_CASES)
+# The complete-fixture state: user minted, profile names set, already a
+# member of the group.
+COMPLETE = {"user-exists": "1", "user-groups": GROUP + "\n",
+            "user-firstname": FIRST_NAME + "\n", "user-lastname": LAST_NAME + "\n"}
 
 
 def run_reconciler(mode="ensure", fixtures=None, extra_env=None):
-    from keycloak_hook_testlib import run_hook
     env = {"FIXTURE_PASSWORD": PASSWORD, "FAKE_USERNAME": USERNAME,
            "FAKE_PASSWORD": PASSWORD, "FAKE_GROUP": GROUP}
     env.update(extra_env or {})
-    return run_hook(SCRIPT, FAKE_KCADM, mode=mode, fixtures=fixtures, extra_env=env)
+    return run_hook(SCRIPT, SKIRMBOOKS_QA_FAKE_KCADM, mode=mode,
+                    fixtures=fixtures, extra_env=env)
 
 
 class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
@@ -187,7 +66,7 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
         self.assertIn("create users", journal)
         self.assertIn("set-password", journal)
         self.assertIn("update users/fixture-user-id/groups/skirmbooks-users-gid", journal)
-        self.assertIn("group-member", state)
+        self.assertIn(GROUP, state.get("user-groups", ""))
         # The membership write is followed by a re-read (SC-1215 post-assertion).
         self.assertGreater(
             journal.rindex("get users/fixture-user-id/groups"),
@@ -197,7 +76,7 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
     def test_ensure_sets_the_profile_names_when_creating_the_user(self):
         # OWU-76: a user without firstName/lastName is sent to Update Account
         # Information at login. The names are part of the create itself.
-        result, journal, state = run_reconciler("ensure")
+        result, journal, _ = run_reconciler("ensure")
         self.assertEqual(0, result.returncode, result.stderr)
         create_line = next(l for l in journal.splitlines() if l.startswith("create users"))
         self.assertIn(f"firstName={FIRST_NAME}", create_line)
@@ -206,12 +85,7 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
         self.assertIn("emailVerified=true", create_line)
 
     def test_ensure_is_a_noop_on_a_complete_fixture(self):
-        result, journal, state = run_reconciler(
-            "ensure",
-            fixtures={"user-exists": "1", "group-member": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        result, journal, _ = run_reconciler("ensure", fixtures=dict(COMPLETE))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn('"created":false', result.stdout)
         self.assertIn('"changed":false', result.stdout)
@@ -221,36 +95,30 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
         self.assertIn("set-password", journal)
 
     def test_ensure_grants_membership_when_missing(self):
-        result, journal, state = run_reconciler(
-            "ensure",
-            fixtures={"user-exists": "1", "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        fixtures = dict(COMPLETE)
+        del fixtures["user-groups"]
+        result, journal, state = run_reconciler("ensure", fixtures=fixtures)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn('"changed":true', result.stdout)
         self.assertIn("update users/fixture-user-id/groups/skirmbooks-users-gid", journal)
-        self.assertIn("group-member", state)
+        self.assertIn(GROUP, state.get("user-groups", ""))
 
     def test_ensure_post_assertion_fails_when_the_membership_write_silently_noops(self):
         # SC-1215: a 0-exit write that did not land must be caught by the
         # post-ensure read, not reported as granted.
-        result, _, state = run_reconciler(
-            "ensure",
-            fixtures={"user-exists": "1", "membership-silent-noop": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        fixtures = dict(COMPLETE)
+        del fixtures["user-groups"]
+        fixtures["membership-silent-noop"] = "1"
+        result, _, state = run_reconciler("ensure", fixtures=fixtures)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("post-ensure assertion failed", result.stderr)
-        self.assertNotIn("group-member", state)
+        self.assertNotIn(GROUP, state.get("user-groups", ""))
 
     def test_ensure_surfaces_server_reply_on_membership_write_failure(self):
-        result, _, _ = run_reconciler(
-            "ensure",
-            fixtures={"user-exists": "1", "membership-fail": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        fixtures = dict(COMPLETE)
+        del fixtures["user-groups"]
+        fixtures["membership-fail"] = "1"
+        result, _, _ = run_reconciler("ensure", fixtures=fixtures)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("server replied", result.stderr)
 
@@ -286,12 +154,7 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
         self.assertNotIn(PASSWORD, result.stderr)
 
     def test_audit_passes_on_a_complete_fixture(self):
-        result, journal, _ = run_reconciler(
-            "audit",
-            fixtures={"user-exists": "1", "group-member": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        result, journal, _ = run_reconciler("audit", fixtures=dict(COMPLETE))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn('"present":true', result.stdout)
         # Audit mutates nothing.
@@ -300,35 +163,20 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
         self.assertNotIn("set-password", journal)
 
     def test_audit_fails_when_the_membership_is_missing(self):
-        result, _, _ = run_reconciler(
-            "audit",
-            fixtures={"user-exists": "1", "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        fixtures = dict(COMPLETE)
+        del fixtures["user-groups"]
+        result, _, _ = run_reconciler("audit", fixtures=fixtures)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("is not a member of " + GROUP, result.stderr)
 
     def test_rollback_removes_membership_and_disables_never_deletes(self):
-        result, journal, state = run_reconciler(
-            "ensure",
-            fixtures={"user-exists": "1", "group-member": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
-        self.assertEqual(0, result.returncode, result.stderr)
-        # Re-run as rollback against the state the ensure left is not what the
-        # harness does (fresh tmp per run), so drive rollback directly:
-        result, journal, state = run_reconciler(
-            "rollback",
-            fixtures={"user-exists": "1", "group-member": "1",
-                      "user-firstname": FIRST_NAME + "\n",
-                      "user-lastname": LAST_NAME + "\n"},
-        )
+        result, journal, state = run_reconciler("rollback", fixtures=dict(COMPLETE))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("delete users/fixture-user-id/groups/skirmbooks-users-gid", journal)
-        self.assertNotIn("group-member", state)
+        self.assertNotIn(GROUP, state.get("user-groups", ""))
         self.assertIn("user-disabled", state)
-        self.assertNotIn("remove users", journal)  # never deletes the principal
+        # Deleting a principal is the CTO's decision: never here.
+        self.assertNotIn("delete users/fixture-user-id\n", journal)
 
     def test_rollback_is_idempotent_on_an_absent_user(self):
         result, journal, _ = run_reconciler("rollback")
@@ -339,12 +187,21 @@ class SkirmbooksQaFixtureFunctionalTest(unittest.TestCase):
 
 class SkirmbooksQaFixtureStaticTest(BootstrapSourceContractMixin, unittest.TestCase):
     SCRIPT = SCRIPT
+    EXTRA_LIBS = (FIXTURE_COMMON,)
 
     def test_script_pins_its_identity(self):
         code = SCRIPT.read_text()
         self.assertIn('[ "${USERNAME}" = "qa@e-dani.com" ]', code)
         self.assertIn('[ "${USER_GROUP}" = "/skirmbooks-users" ]', code)
         self.assertIn('[ "${REALM}" = "edani" ]', code)
+
+    def test_script_shares_the_fixture_machinery(self):
+        # The duplicados guard forced the extraction: the fixture flows come
+        # from fixture-user-common.sh, never from a local copy.
+        code = SCRIPT.read_text()
+        self.assertIn('. "${0%/*}/fixture-user-common.sh"', code)
+        self.assertNotIn("resolve_user_id() {", code)
+        self.assertNotIn("apply_password() {", code)
 
     def test_job_manifest_is_hardened(self):
         assert_job_hardened(self, JOB.read_text())
@@ -358,6 +215,7 @@ class SkirmbooksQaFixtureStaticTest(BootstrapSourceContractMixin, unittest.TestC
 
     def test_external_secret_reads_the_onepassword_item(self):
         manifest = JOB.read_text()
+        self.assertIn("kind: ExternalSecret", manifest)
         self.assertIn("name: " + ES_NAME, manifest)
         self.assertIn(f"key: {ITEM}/password", manifest)
         self.assertIn("refreshPolicy: OnChange", manifest)
@@ -371,7 +229,9 @@ class SkirmbooksQaFixtureStaticTest(BootstrapSourceContractMixin, unittest.TestC
             "skirmbooks-qa-fixture-user.sh=scripts/skirmbooks-qa-fixture-user.sh",
             kustomization,
         )
-        self.assertIn("kc-admin-common.sh=scripts/kc-admin-common.sh", kustomization)
+        self.assertIn(
+            "fixture-user-common.sh=scripts/fixture-user-common.sh", kustomization
+        )
 
     def test_catalog_declarations_keep_the_drift_sweep_green(self):
         # The same facts tests/test_keycloak_rbac_grant_declaration_contract.py
