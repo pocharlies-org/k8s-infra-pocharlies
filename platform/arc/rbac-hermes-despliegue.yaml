@@ -12,7 +12,8 @@
 #   sync/reiniciar/poda → get+patch de la Application argocd/hermes (refrescar annotate, parchar
 #     operación RFC6902, esperar operationState/history)
 #   preverificar (SC-1678) → get de externalsecrets/pushsecrets/secretstores del ns y de los
-#     ClusterSecretStore que referencian (hoy onepassword-connect y kubernetes-correo-hermes;
+#     ClusterSecretStore que referencian (hoy onepassword-connect, kubernetes-correo-hermes y
+#     kubernetes-control-nexus-pagos —ES hermes-alertas-hmac de DGX-1628—;
 #     onepassword es el del incidente medido 03-10)
 #   drenar/soltar → exec en el contenedor hermes del Deployment (write/clear drain_request)
 #   rollout status/restart del Deployment → informers de list+watch sobre deployments y
@@ -99,7 +100,7 @@ metadata:
 rules:
   - apiGroups: ["external-secrets.io"]
     resources: ["clustersecretstores"]
-    resourceNames: ["onepassword", "onepassword-connect", "kubernetes-correo-hermes"]
+    resourceNames: ["onepassword", "onepassword-connect", "kubernetes-correo-hermes", "kubernetes-control-nexus-pagos"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
