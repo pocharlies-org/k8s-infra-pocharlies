@@ -10,6 +10,12 @@
 # El Job es de un solo uso: ArgoCD lo crea al primer sync y no lo relanza (un Job es
 # inmutable). Para volver a ejecutarlo tras corregir un pendiente: borrar el Job y dejar
 # que ArgoCD lo vuelva a crear en el siguiente sync.
+#
+# activeDeadlineSeconds es la cota de un run colgado, no un presupuesto de trabajo: un
+# run sano tarda ~40 s (35 pins únicos, 2026-11-16). El DeadlineExceeded de ese día no
+# fue volumen: el init se quedó en ImagePullBackOff con la imagen inexistente
+# `library/alpine/git` hasta cumplir el plazo (corregida en #547, OWU-137). Se sube a
+# 1800 para que un Harbor lento no mate un run que avanza.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -19,7 +25,7 @@ metadata:
     app.kubernetes.io/name: guarda-pins
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 900
+  activeDeadlineSeconds: 1800
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
