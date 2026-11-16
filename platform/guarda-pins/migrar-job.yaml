@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: clone-gitops
-          image: docker.io/library/alpine/git:2.45.2@sha256:22ab341ead80d18c1be6836c16f4263eeb1bd7e87414f4263884c6726761be29
+          image: docker.io/alpine/git:2.45.2@sha256:22ab341ead80d18c1be6836c16f4263eeb1bd7e87414f4263884c6726761be29
           imagePullPolicy: IfNotPresent
           # Clon shallow de cada repo GitOps listado en /work/repos/<repo>. El token
           # viaja por http.extraHeader (no en la URL), así no queda en .git/config.
