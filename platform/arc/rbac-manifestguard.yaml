@@ -1,0 +1,60 @@
+# INFRA-1407 (P1 de INFRA-1405, security dictamina en la PR): identidad de solo lectura de los
+# CRDs para el guard de manifiestos de CI.
+#
+# QUE ES. El guard (INFRA-1408) valida los manifiestos GitOps contra los CRDs REALES del clúster
+# destino con `kubeconform --strict` (decisión 1 del architect, nota-architect-plan.md de
+# INFRA-1405). Para eso el runner tiene que leer `customresourcedefinitions`. Nada más: ni
+# dry-run=server (exigía verbos create/update por kind y disparaba webhooks), ni /openapi/v3
+# (los tipos core los cubre `-schema-location default` de kubeconform).
+#
+# QUIEN LO USA. El runner del scale set ARC dedicado `arc-manifestguard` (Application
+# arc-manifestguard en k8s-gitops-pocharlies@deploy/prod:infra/arc.yaml, min 0 / max 2). Su
+# `template.spec.serviceAccountName` es este SA, así que el token que monta el pod del runner es
+# el de esta identidad: rota solo (proyectado por kubelet), sin kubeconfig ni secreto que
+# repartir. El chart NO crea este SA: al fijar `template.spec.serviceAccountName`,
+# no_permission_serviceaccount.yaml queda fuera de la release y el SA lo posee ArgoCD aquí, junto
+# a su RBAC (así se revisan juntos).
+#
+# POR QUE UN SCALE SET PROPIO Y NO EL arc-k8s COMPARTIDO. `arc-k8s` es el runner de TODA la org
+# (github.com/pocharlies-org): dar CRD-read a su SA se lo daría a cualquier job de CI de la org.
+# Con scale set propio, el privilegio solo lo recibe quien pide `runs-on: arc-manifestguard`.
+#
+# ALCANCE EXACTO. Un solo recurso, tres verbos de lectura. Ningún verbo de escritura en ningún
+# sitio de este fichero: el guard lee el esquema, no toca nada. Precedente del mismo patrón con
+# privilegio real: platform/arc/rbac-hermes-despliegue.yaml (SC-5371).
+#
+# ClusterRoleBinding y NO RoleBinding: `customresourcedefinitions` es cluster-scoped y un
+# RoleBinding no otorga acceso a un recurso cluster-scoped (la spec de la historia decía
+# "RoleBinding";
+# esta es la corrección, comprobada con `kubectl auth can-i --as=system:serviceaccount:...`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: arc-manifestguard-cr-reader
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      Identidad del runner arc-manifestguard: lectura de CRDs para validar manifiestos GitOps
+      antes del merge (INFRA-1407).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: arc-manifestguard-cr-reader
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: arc-manifestguard-cr-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: arc-manifestguard-cr-reader
+subjects:
+  - kind: ServiceAccount
+    name: arc-manifestguard-cr-reader
+    namespace: arc-runners
