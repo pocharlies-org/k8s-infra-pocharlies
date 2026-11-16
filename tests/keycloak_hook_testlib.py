@@ -20,6 +20,8 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / "platform" / "keycloak-next"
 COMMON = BASE / "scripts" / "kc-admin-common.sh"
+# Shared fixture-user machinery (SKIRM-494): sourced by both fixture hooks.
+FIXTURE_COMMON = BASE / "scripts" / "fixture-user-common.sh"
 
 # The reconcilers run inside the pinned Keycloak image, which ships no awk
 # (SC-1215). Only these externals may be invoked.
@@ -154,9 +156,10 @@ def add_remove_roles_case(uid_guard):
 """
 
 
-def build_fake_kcadm(config_body, get_body, write_cases, tail=""):
+def build_fake_kcadm(config_body, get_body, write_cases, tail="", fns=""):
     return (
         _PREAMBLE
+        + (fns or "")
         + "\ncase \"$command\" in\n"
         + "  config)\n" + config_body + "    ;;\n"
         + "  get)\n" + get_body + "    ;;\n"
@@ -177,10 +180,15 @@ class BootstrapSourceContractMixin:
         self.assertNotIn("login_admin() {", script)
         self.assertIn('KCADM_TMP_FILES="${KCADM_OUT}"', script)
 
+    # Hook-specific shared libraries the hook sources in addition to
+    # kc-admin-common.sh (e.g. fixture-user-common.sh, SKIRM-494): mixed into
+    # the same image-safe audit.
+    EXTRA_LIBS = ()
+
     def test_script_only_invokes_image_safe_externals(self):
         # The Keycloak 26.6.2 image ships no awk/jq/python (SC-1215). The
         # shared bootstrap runs in the same image, so it is audited too.
-        code = hook_code(self.SCRIPT, COMMON)
+        code = hook_code(self.SCRIPT, COMMON, *self.EXTRA_LIBS)
         for banned in BANNED_EXTERNS:
             self.assertNotIn(banned, code, f"{banned} is not available in the pinned image")
 
@@ -269,9 +277,14 @@ DANIEL_FAKE_KCADM = build_fake_kcadm(
 )
 
 
-# --- fixture user (OWU-28-g): creates the user, re-applies the password -----
+# --- fixture user (OWU-28-g + SKIRM-494): creates the user, re-applies the
+# password. The two fixture hooks (agentgateway-write-fixture-user.sh and
+# skirmbooks-qa-fixture-user.sh) share this dispatch: they differ only in the
+# grant endpoints (realm-role mappings vs the groups list), and the update
+# body is emitted once as a fake function (the CI duplicados guard forbids
+# copying it into a second fake).
 
-_FIXTURE_GET = """\
+_FIXTURE_GET_HEAD = """\
         endpoint="$1"
         shift
         fields=""
@@ -292,12 +305,31 @@ _FIXTURE_GET = """\
             fi
             exit 64
             ;;
+"""
+
+_FIXTURE_ROLE_MAPPINGS_CASE = """\
           users/*/role-mappings/realm)
             if [ -f "$state/user-roles" ]; then cat "$state/user-roles"; fi
             ;;
+"""
+
+# SKIRM-494: the group list of the skirmbooks fixture — the group is resolved
+# by exact path from `groups --fields id,path`, and membership is read from
+# user-groups (the same state file the OWU-28-g fake uses for "no groups").
+_SKIRMBOOKS_GROUPS_CASE = """\
+          groups)
+            if [ -f "$state/group-missing" ]; then exit 0; fi
+            printf 'skirmbooks-users-gid,%s\\n' "$FAKE_GROUP"
+            ;;
+"""
+
+_FIXTURE_USER_GROUPS_CASE = """\
           users/*/groups)
             if [ -f "$state/user-groups" ]; then cat "$state/user-groups"; fi
             ;;
+"""
+
+_FIXTURE_USER_FIELDS_CASE = """\
           users/*)
             case "$fields" in
               id) printf '%s\\n' "${endpoint#users/}" ;;
@@ -317,12 +349,38 @@ _FIXTURE_GET = """\
               *) exit 63 ;;
             esac
             ;;
-""" + _GET_TAIL
+"""
 
-_FIXTURE_WRITE_CASES = """\
+_FIXTURE_GET = (_FIXTURE_GET_HEAD + _FIXTURE_ROLE_MAPPINGS_CASE
+                + _FIXTURE_USER_GROUPS_CASE + _FIXTURE_USER_FIELDS_CASE
+                + _GET_TAIL)
+
+_SKIRMBOOKS_GET = (_FIXTURE_GET_HEAD + _SKIRMBOOKS_GROUPS_CASE
+                   + _FIXTURE_USER_GROUPS_CASE + _FIXTURE_USER_FIELDS_CASE
+                   + _GET_TAIL)
+
+# Emitted once per fake (duplicados guard): both update cases call it.
+_UPDATE_USER_FIELDS_FN = """\
+update_user_fields() {
+  # profile-silent-noop: the server answers 0 and writes nothing, so the
+  # post-update read must catch it (SC-1215).
+  for a in "$@"; do
+    case "$a" in
+      enabled=true) rm -f "$state/user-disabled" ;;
+      enabled=false) touch "$state/user-disabled" ;;
+      firstName=*)
+        [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
+      lastName=*)
+        [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
+    esac
+  done
+}
+"""
+
+_FIXTURE_CREATE_CASE = """\
       create)
-        # create users …: the fixture hook is the ONLY reconciler of this
-        # platform that creates users.
+        # create users …: the fixture hooks are the ONLY reconcilers of this
+        # platform that create users.
         if [ "$1" != "users" ]; then exit 67; fi
         if [ -f "$state/create-fail" ]; then
           printf 'HTTP/1.1 400 Bad Request\\n'
@@ -338,6 +396,9 @@ _FIXTURE_WRITE_CASES = """\
         done
         exit 0
         ;;
+"""
+
+_FIXTURE_SET_PASSWORD_CASE = """\
       set-password)
         # The password must arrive ONLY as the KC_CLI_PASSWORD environment
         # (kcadm 26's default for --new-password): an argv leak or a missing
@@ -350,25 +411,64 @@ _FIXTURE_WRITE_CASES = """\
         touch "$state/password-applied"
         exit 0
         ;;
+"""
+
+_FIXTURE_UPDATE_CASE = """\
       update)
-        # profile-silent-noop: the server answers 0 and writes nothing, so the
-        # post-update read must catch it (SC-1215).
-        for a in "$@"; do
-          case "$a" in
-            enabled=true) rm -f "$state/user-disabled" ;;
-            enabled=false) touch "$state/user-disabled" ;;
-            firstName=*)
-              [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#firstName=}" > "$state/user-firstname" ;;
-            lastName=*)
-              [ -f "$state/profile-silent-noop" ] || printf '%s\\n' "${a#lastName=}" > "$state/user-lastname" ;;
-          esac
-        done
+        update_user_fields "$@"
         exit 0
         ;;
-""" + add_remove_roles_case('"fixture-user-id"')
+"""
+
+# SKIRM-494: the same update plus the membership endpoint (PUT and DELETE on
+# users/<id>/groups/<gid>), guarded by membership-fail / membership-silent-noop.
+_SKIRMBOOKS_UPDATE_CASE = """\
+      update)
+        endpoint="$1"
+        shift
+        case "$endpoint" in
+          users/*/groups/*)
+            if [ -f "$state/membership-fail" ]; then
+              printf 'HTTP/1.1 404 Not Found\\n'
+              printf 'Error: group not found\\n'
+              exit 1
+            fi
+            [ -f "$state/membership-silent-noop" ] || printf '%s\\n' "$FAKE_GROUP" >> "$state/user-groups"
+            exit 0
+            ;;
+          users/*) update_user_fields "$@"; exit 0 ;;
+          *) exit 68 ;;
+        esac
+        ;;
+      delete)
+        endpoint="$1"
+        case "$endpoint" in
+          users/*/groups/*)
+            if [ -f "$state/user-groups" ]; then
+              grep -Fxv "$FAKE_GROUP" "$state/user-groups" > "$state/user-groups.tmp" || true
+              mv "$state/user-groups.tmp" "$state/user-groups"
+            fi
+            ;;
+          *) exit 69 ;;
+        esac
+        exit 0
+        ;;
+"""
+
+_FIXTURE_WRITE_CASES = (_FIXTURE_CREATE_CASE + _FIXTURE_SET_PASSWORD_CASE
+                        + _FIXTURE_UPDATE_CASE
+                        + add_remove_roles_case('"fixture-user-id"'))
 
 FIXTURE_FAKE_KCADM = build_fake_kcadm("        exit 0\n", _FIXTURE_GET,
-                                      _FIXTURE_WRITE_CASES)
+                                      _FIXTURE_WRITE_CASES,
+                                      fns=_UPDATE_USER_FIELDS_FN)
+
+# SKIRM-494 (skirmbooks-qa-fixture-user.sh): same fixture machinery, the
+# grant is the /skirmbooks-users membership instead of a realm role.
+SKIRMBOOKS_QA_FAKE_KCADM = build_fake_kcadm(
+    "        exit 0\n", _SKIRMBOOKS_GET,
+    _FIXTURE_CREATE_CASE + _FIXTURE_SET_PASSWORD_CASE + _SKIRMBOOKS_UPDATE_CASE,
+    fns=_UPDATE_USER_FIELDS_FN)
 
 
 # --- write-role (SC-44 + OWU-80 + OWU-28-g): the exclusivity auditor ---------

@@ -1065,3 +1065,40 @@ ExternalSecret (`nova-herramientas`, ns `nova`) is its own PR in
 k8s-nova-pocharlies, merged once these clients exist. Rotation (weekly session,
 not on the spot): new value in 1Password, set it on the client through the admin
 API, force-sync the consumer ExternalSecret.
+
+## 23. Skirmbooks QA fixture user (`qa@e-dani.com`, SKIRM-494)
+
+`skirmbooks-qa-fixture-user-job.yaml` (PostSync wave 25) owns the QA fixture
+of the skirmbooks web: the human user `qa@e-dani.com` exists, enabled, with
+the password of its 1Password item (vault `k8s-pocharlies`, item
+`keycloak-next-qa`, field `password`, written by `security` — precedent
+`keycloak-next-qa-owu95`, OWU-116) and member of `/skirmbooks-users`, the
+only group `oauth2-proxy-skirmbooks` lets through. Without this membership
+the proxy answers 403 and the web of the fiscal software cannot be validated
+(SKIRM-484 C3). The group itself is owned by `skirmbooks-sso.sh` (wave 21);
+this hook refuses to create it.
+
+The gestoria side needs nothing from here: `qa@e-dani.com` is nominal in
+`gestoria_identity` since migration 0096 of skirmbooks-gestoria-src (applied:
+status `active`, tenant `skirmshop` role `owner`), so the SSO login passes
+`requireTenantRole`. If the login ever answers `no_principal`/`no_tenants`,
+the row is the gestoria repo's fact, not this hook's.
+
+Steady state after sync:
+
+```bash
+kubectl -n keycloak logs job/keycloak-skirmbooks-qa-fixture-user -c reconcile-skirmbooks-qa-fixture-user
+# {"realm":"edani","group":"/skirmbooks-users","username":"qa@e-dani.com","user_id":"<minted-by-keycloak>","present":true,"created":false,"changed":false}
+```
+
+Login: `https://skirmbooks.e-dani.com` → Keycloak (`prompt=login`, so the
+skirmbooks session is independent of the dashboard's). Credentials: 1Password
+item `keycloak-next-qa` (fields `username` and `password`). The fixture has
+no required actions and carries firstName/lastName (the hook sets them,
+OWU-76), so the form is the plain password page.
+
+Rotation (weekly session, not on the spot): edit the `password` field of the
+item, force-sync the ExternalSecret `skirmbooks-qa-fixture-user-credentials`
+(or just wait for the next sync — the hook re-applies on every sync).
+Retirement: run the hook with `MODE=rollback` (removes the membership and
+disables the user; deleting a principal is the CTO's decision).

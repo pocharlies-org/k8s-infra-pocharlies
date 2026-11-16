@@ -1,0 +1,180 @@
+# SKIRM-494 (Request de la sesión en vivo de SKIRM-484): fixture humano de QA
+# para la web de Skirmbooks — qa@e-dani.com en el grupo /skirmbooks-users, el
+# único que deja pasar oauth2-proxy-skirmbooks. Sin esta membresía el proxy
+# responde 403 y el criterio 3 de SKIRM-484 (corregir una factura recibida
+# desde la ficha) no se puede validar por la web; la API/MCP ya se valida por
+# su cuenta.
+#
+# El hook (scripts/skirmbooks-qa-fixture-user.sh) es hermana de
+# agentgateway-write-fixture-user.sh (OWU-28-g) y openwebui-ios-client.sh
+# (OWU-116): CREAR el usuario (el id lo genera Keycloak; se resuelve por
+# username exacto), re-aplicar la contraseña en cada sync (Keycloak ==
+# 1Password, SC-1635/SC-1645) y conceder la membresía de grupo. La contraseña
+# llega a kcadm solo por el entorno KC_CLI_PASSWORD de una llamada: nunca
+# argv, nunca stdout.
+#
+# La contraseña vive SOLO en 1Password (vault k8s-pocharlies, ítem
+# keycloak-next-qa, campo password), creado por security antes del merge
+# (precedente keycloak-next-qa-owu95, OWU-116); la trae el ExternalSecret de
+# abajo (patrón agentgateway-write-fixture-user-credentials). Sin el ítem, el
+# ExternalSecret queda en error y el Job falla: es repara-ya (force-sync), no
+# rotación.
+#
+# El lado gestoria NO necesita fila nueva: qa@e-dani.com es nominal desde la
+# migración 0096 de skirmbooks-gestoria-src (aplicada: active, tenant
+# skirmshop rol owner, medido en vivo 16-11-2026), así que el login SSO pasa
+# requireTenantRole sin tocar la BD.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: skirmbooks-qa-fixture-user-credentials
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: skirmbooks-qa-fixture-user
+spec:
+  refreshInterval: 24h
+  # Kyverno policy externalsecret-onepassword-onchange lo exige: OnChange no
+  # vuelve a leer el proveedor al reiniciar ESO (cuota de 1000 lecturas/día).
+  refreshPolicy: OnChange
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: skirmbooks-qa-fixture-user-credentials
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: FIXTURE_PASSWORD
+      remoteRef:
+        # 1Password key convention: <item>/<field label> in vault k8s-pocharlies.
+        key: keycloak-next-qa/password
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-skirmbooks-qa-fixture-user
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: skirmbooks-qa-fixture-user
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Wave 25: after skirmbooks-sso.yaml (wave 21), which owns the group
+    # /skirmbooks-users this fixture joins; same wave as the sibling fixture
+    # hooks — the three own disjoint facts.
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  backoffLimit: 1
+  # A handful of kcadm calls (resolve/create user, groups, password, one
+  # membership write, post-reads). Same production-safe margin as the sibling
+  # fixture reconcilers.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: skirmbooks-qa-fixture-user
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reconcile-skirmbooks-qa-fixture-user
+          image: quay.io/keycloak/keycloak:26.6.2@sha256:f9ba7b2af90db8dc749a57ca9aedca51e840cb9224441ab546a968da941da900
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/opt/bootstrap/skirmbooks-qa-fixture-user.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-bootstrap
+          env:
+            - name: MODE
+              value: ensure
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: edani
+            - name: USERNAME
+              value: qa@e-dani.com
+            - name: USER_GROUP
+              value: /skirmbooks-users
+            # La contraseña llega por el Secret del ExternalSecret de arriba;
+            # el hook la pasa a kcadm solo por el entorno de una llamada
+            # (KC_CLI_PASSWORD), nunca por argv ni stdout.
+            - name: FIXTURE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: skirmbooks-qa-fixture-user-credentials
+                  key: FIXTURE_PASSWORD
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: keycloak-skirmbooks-qa-fixture-user
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-skirmbooks-qa-fixture-user-egress
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: skirmbooks-qa-fixture-user
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: skirmbooks-qa-fixture-user
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

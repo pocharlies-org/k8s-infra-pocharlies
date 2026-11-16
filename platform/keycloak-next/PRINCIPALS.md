@@ -194,6 +194,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
 | `qa-owu95@e-dani.com` | humano | QA | activo | Fixture de OWU-116 (S1 de OWU-95): usuaria de la ruta bearer de la app nativa en chat.e-dani.com; grupo /edani-users, sin roles directos. Alta y contraseña por GitOps (openwebui-ios-client.sh + ítem 1Password keycloak-next-qa-owu95, lo escribe security); entra una vez por la web antes de probar (el exchange no auto-registra); retirada al cerrar la épica. |
 | `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
+| `qa@e-dani.com` | humano | QA | activo | Fixture de SKIRM-494 (criterio 3 de SKIRM-484): cuenta QA que entra en la web de Skirmbooks (skirmbooks.e-dani.com); grupo /skirmbooks-users, sin roles directos. Ya nominal en gestoria_identity (migración 0096: tenant skirmshop, rol owner). Alta, contraseña y retirada por GitOps (skirmbooks-qa-fixture-user.sh + ítem 1Password keycloak-next-qa, lo escribe security). |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
@@ -403,6 +404,18 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "owner": "QA",
       "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556)",
       "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos.",
+      "realm_roles": [
+        "default-roles-edani"
+      ],
+      "status": "activo"
+    },
+    {
+      "username": "qa@e-dani.com",
+      "type": "humano",
+      "client": null,
+      "owner": "QA",
+      "source": "SKIRM-494 (Request de la sesión en vivo de SKIRM-484, criterio 3: corregir una factura recibida desde la ficha por la web)",
+      "purpose": "Fixture de QA para la web de Skirmbooks (skirmbooks.e-dani.com): única cuenta de prueba en /skirmbooks-users, el grupo que deja pasar oauth2-proxy-skirmbooks; sin roles directos. Ya nominal en gestoria_identity (skirmbooks-gestoria-src migración 0096, aplicada: tenant skirmshop rol owner), así que el login SSO pasa requireTenantRole. Alta, re-aplicación de contraseña y retirada por GitOps (skirmbooks-qa-fixture-user.sh; contraseña en el ítem 1Password keycloak-next-qa, lo escribe security).",
       "realm_roles": [
         "default-roles-edani"
       ],

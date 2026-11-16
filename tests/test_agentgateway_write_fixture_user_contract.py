@@ -26,7 +26,7 @@ import json, re, sys, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # unittest from the repo root
-from keycloak_hook_testlib import (BASE, COMMON, FIXTURE, FIXTURE_FAKE_KCADM, ROOT, ROLE,
+from keycloak_hook_testlib import (BASE, COMMON, FIXTURE, FIXTURE_COMMON, FIXTURE_FAKE_KCADM, ROOT, ROLE,
                                    SA, WRITE_ROLE_FAKE_KCADM, BootstrapSourceContractMixin,
                                    SilentWriteContractMixin, assert_job_hardened,
                                    hook_code, make_token, run_hook)
@@ -275,6 +275,7 @@ class WriteFixtureUserFunctionalTest(SilentWriteContractMixin, unittest.TestCase
 
 class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase):
     SCRIPT = SCRIPT
+    EXTRA_LIBS = (FIXTURE_COMMON,)
     def test_script_pins_the_reviewed_identity(self):
         script = SCRIPT.read_text()
         self.assertIn('REALM="${REALM:-edani}"', script)
@@ -285,7 +286,7 @@ class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase
     def test_profile_names_are_fixed_and_requiredactions_stays_empty(self):
         # OWU-76: the names are pinned constants (no environment override), not
         # secret, and the create still carries requiredActions=[].
-        code = hook_code(SCRIPT, COMMON)
+        code = hook_code(SCRIPT, COMMON, FIXTURE_COMMON)
         self.assertIn(f'PROFILE_FIRST_NAME="{FIRST_NAME}"', code)
         self.assertIn(f'PROFILE_LAST_NAME="{LAST_NAME}"', code)
         self.assertNotIn("PROFILE_FIRST_NAME=\"${", code)
@@ -294,7 +295,7 @@ class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase
         self.assertNotIn("requiredActions=[\"", code)
 
     def test_password_reaches_kcadm_only_via_the_environment(self):
-        code = hook_code(SCRIPT, COMMON)
+        code = hook_code(SCRIPT, COMMON, FIXTURE_COMMON)
         self.assertIn('KC_CLI_PASSWORD="${FIXTURE_PASSWORD}"', code)
         # Never argv, never a JSON attribute, never echoed.
         self.assertNotIn("--new-password", code)
@@ -304,7 +305,7 @@ class WriteFixtureUserStaticTest(BootstrapSourceContractMixin, unittest.TestCase
         self.assertNotIn("set -x", code)
 
     def test_script_creates_users_but_never_deletes_anything(self):
-        code = hook_code(SCRIPT, COMMON)
+        code = hook_code(SCRIPT, COMMON, FIXTURE_COMMON)
         self.assertIn('"${KCADM}" create users', code)
         self.assertIn('"${KCADM}" set-password', code)
         self.assertIn('"${KCADM}" add-roles', code)
