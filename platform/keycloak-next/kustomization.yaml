@@ -44,6 +44,9 @@ resources:
   # INFRA-1180: client publico photos-app (app nativa photos-ios, INFRA-403) +
   # el grant humano agentgateway-read:photos que su token exige.
   - photos-app-client.yaml
+  # SKIRM-494: fixture humano de QA para la web de Skirmbooks (qa@e-dani.com
+  # en /skirmbooks-users; contraseña desde el item 1Password keycloak-next-qa).
+  - skirmbooks-qa-fixture-user-job.yaml
   - keycloak-role-drift-cron.yaml
 configMapGenerator:
   - name: keycloak-hindsight-leila-grants
@@ -255,6 +258,16 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: photos-app-client
+  # SKIRM-494: patron agentgateway-write-fixture-user (solo kc-admin-common.sh):
+  # crea el fixture qa@e-dani.com, re-aplica la contrasena y concede la
+  # membresia /skirmbooks-users (el grupo lo posee skirmbooks-sso, wave 21).
+  - name: keycloak-skirmbooks-qa-fixture-user
+    files:
+      - skirmbooks-qa-fixture-user.sh=scripts/skirmbooks-qa-fixture-user.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+    options:
+      labels:
+        app.kubernetes.io/component: skirmbooks-qa-fixture-user
   - name: keycloak-role-drift
     files:
       - keycloak-role-drift.sh=scripts/keycloak-role-drift.sh
