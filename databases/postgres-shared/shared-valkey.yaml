@@ -340,7 +340,7 @@ spec:
         # (patrón canónico build-bge-embedding.yml). Falta re-pinear el
         # digest tras el primer push (INFRA-1300).
         - name: labeler
-          image: harbor.e-dani.com/homelab/valkey-master-labeler:v1
+          image: harbor.e-dani.com/homelab/valkey-master-labeler:v1@sha256:6997a0ca91c41c8902abfe64294a772aabdb5625267d76b06b43eb00923f515a
           env:
             - { name: NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
             - { name: MASTER_NAME, value: shared-cache-master }
