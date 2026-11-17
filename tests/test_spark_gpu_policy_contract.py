@@ -44,7 +44,10 @@ class TestSparkGpuPolicyContract(unittest.TestCase):
 
     def test_incident_and_bypass_fixtures_exist(self):
         for name in ("deny-incident-pod", "deny-runtimeclass-only-pod", "deny-forged-owner-pod",
-                     "allow-comfyui-lane-pod", "allow-resident-worker-pod", "allow-dashboard-job"):
+                     "allow-comfyui-lane-pod", "allow-resident-worker-pod", "allow-dashboard-job",
+                     # DGX-1672: gpu-operator's CUDA validator, and only it
+                     "allow-gpu-operator-cuda-validator-pod", "deny-gpu-operator-validator-sa-other-pod",
+                     "deny-admin-cuda-validator-pod"):
             path = FIXTURES / f"{name}.yaml"
             self.assertTrue(path.is_file(), path)
             self.assertTrue(path.read_text().startswith("# user: "), path)
