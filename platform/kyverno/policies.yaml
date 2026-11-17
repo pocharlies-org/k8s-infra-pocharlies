@@ -839,7 +839,7 @@ spec:
           come from a queue lane, a GPU system DaemonSet or a listed LLM resident,
           created by its controller; a pod applied by hand is refused. Launch the
           work through the dashboard queue (gpu_arbiter), e.g. POST
-          /api/voicelab/train for an OmniVoice LoRA.
+          /api/train/voz for an OmniVoice voice training.
         deny:
           conditions:
             all:
