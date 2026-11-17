@@ -1,0 +1,16 @@
+# user: system:admin
+apiVersion: v1
+kind: Pod
+metadata:
+  name: deny-runtimeclass-only-pod
+  namespace: default
+  labels: {}
+spec:
+  nodeName: dgx3
+  runtimeClassName: nvidia
+  containers:
+  - name: c
+    image: x
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: all

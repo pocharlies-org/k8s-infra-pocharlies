@@ -1,0 +1,33 @@
+# user: system:serviceaccount:argocd:argocd-application-controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: allow-argocd-deployment
+  namespace: comfyui
+spec:
+  template:
+    metadata:
+      labels:
+        app: allow-argocd-deployment
+        gpu.dgx-infra/role: on-demand
+        gpu.dgx-infra/pool: gb10
+    spec:
+      restartPolicy: Always
+      runtimeClassName: nvidia
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      containers:
+      - name: c
+        image: x
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+  replicas: 0
+  selector:
+    matchLabels:
+      app: allow-argocd-deployment

@@ -1,0 +1,27 @@
+# user: system:admin
+apiVersion: v1
+kind: Pod
+metadata:
+  name: deny-forged-owner-pod
+  namespace: comfyui
+  labels:
+    gpu.dgx-infra/role: on-demand
+    gpu.dgx-infra/pool: gb10
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: deny-forged-owner-pod-owner
+    uid: 00000000-0000-0000-0000-000000000001
+    controller: true
+spec:
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  containers:
+  - name: c
+    image: x
+    resources:
+      limits:
+        nvidia.com/gpu: '1'

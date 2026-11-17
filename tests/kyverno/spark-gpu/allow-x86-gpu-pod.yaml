@@ -1,0 +1,16 @@
+# user: system:admin
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-x86-gpu-pod
+  namespace: hindsight
+  labels: {}
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: ubuntu
+  containers:
+  - name: c
+    image: x
+    resources:
+      limits:
+        nvidia.com/gpu: '1'
