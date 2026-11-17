@@ -892,7 +892,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":28,"created":%s,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":%s,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -902,7 +902,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":28,"created":0,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":7,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":0,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles
