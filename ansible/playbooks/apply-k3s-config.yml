@@ -1,0 +1,47 @@
+---
+# Day 2: re-apply /etc/rancher/k3s/config.yaml on the KS-5 control planes
+# (SC-5907). The template only changes the host when this runs: merging a PR
+# applies nothing (INFRA-1006 sat merged and unapplied). bootstrap-ks5.yml
+# also hardens SSH, the firewall and tailscale; this play touches only k3s.
+#
+# The token comes from the running cluster, never from git or the transcript;
+# the three cps share it. Public SSH :22 is closed, so the tailnet inventory:
+#
+#   cd ansible
+#   export K3S_JOIN_SERVER_IP=k8s.lan.e-dani.com
+#   export K3S_TOKEN="$(ssh ubuntu@ks5-cp-1.taile0ad27.ts.net \
+#     "sudo -n sed -n 's/^token: \"\(.*\)\"$/\1/p' /etc/rancher/k3s/config.yaml")"
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/apply-k3s-config.yml --check
+#   ansible-playbook -i inventory/ks5-tailscale.ini playbooks/apply-k3s-config.yml
+#
+# serial: 1 and the flush below make the restart rolling: a cp restarts and
+# is Ready again before the next one starts, so etcd keeps quorum.
+- name: Apply k3s server config — KS-5 control planes
+  hosts: ks5_control_plane
+  become: true
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: Capture Tailscale IPv4
+      ansible.builtin.command: tailscale ip -4
+      register: tailscale_ip
+      changed_when: false
+      check_mode: false
+
+    - name: Publish tailscale_ipv4 fact
+      ansible.builtin.set_fact:
+        tailscale_ipv4: "{{ tailscale_ip.stdout_lines[0] }}"
+
+    - name: Write config.yaml and restart k3s on change
+      ansible.builtin.include_role:
+        name: k3s_control_plane
+        tasks_from: config
+
+    - name: Restart k3s now, before the next control plane
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the node to be Ready again
+      ansible.builtin.command: k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
+      changed_when: false
+      when: not ansible_check_mode

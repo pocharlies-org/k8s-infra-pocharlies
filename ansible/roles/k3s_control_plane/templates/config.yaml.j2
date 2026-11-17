@@ -29,6 +29,10 @@ etcd-snapshot-dir: /var/lib/rancher/k3s/server/db/snapshots
 # snapshot independently from all three control-plane nodes.
 kube-controller-manager-arg:
   - bind-address=0.0.0.0
+  # SC-5907 (SC-5806, «todo por eventos»): el PodGC de Kubernetes recoge los pods Failed de
+  # ReplicaSet que hoy barría sauvage-pod-reaper. 200 > estado normal medido (122 terminados el
+  # 17-11), así que solo actúa ante ráfagas; los pods de Jobs los borra su ttlSecondsAfterFinished.
+  - terminated-pod-gc-threshold=200
 kube-scheduler-arg:
   - bind-address=0.0.0.0
 kube-proxy-arg:
