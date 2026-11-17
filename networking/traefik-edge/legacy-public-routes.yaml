@@ -271,30 +271,6 @@ spec:
     - name: http
       port: 18795
 ---
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: edge-brain-public
-  namespace: traefik-edge
-  annotations:
-    external-dns.alpha.kubernetes.io/hostname: brain.e-dani.com
-    external-dns.alpha.kubernetes.io/target: 141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: 'true'
-spec:
-  entryPoints:
-  - websecure
-  ingressClassName: traefik-edge
-  routes:
-  - kind: Rule
-    match: Host(`brain.e-dani.com`)
-    services:
-    - name: skirmshop-brain
-      namespace: skirmshop-brain-prod
-      port: 80
-  tls:
-    store:
-      name: default
-      namespace: traefik-edge
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -470,17 +446,6 @@ spec:
   ingressClassName: traefik-edge
   routes:
   - kind: Rule
-    match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-feedback`)
-    priority: 2500
-    services:
-    - name: synapse-brain-feedback-handler
-      port: 8080
-  - kind: Rule
-    match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
-    services:
-    - name: synapse-admin-k8s
-      port: 18795
-  - kind: Rule
     match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)
     services:
     - name: synapse-gateway-k8s
@@ -544,11 +509,6 @@ spec:
     services:
     - name: sauvage-localhost
       port: 8080
-  - kind: Rule
-    match: Host(`qdrant.e-dani.com`)
-    services:
-    - name: sauvage-localhost
-      port: 6333
   - kind: Rule
     match: Host(`rag.e-dani.com`)
     services:

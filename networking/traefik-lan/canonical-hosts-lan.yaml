@@ -59,15 +59,7 @@ spec:
       services:
         - {name: litellm, namespace: litellm, port: 4000}
 
-    # Brain and internal dashboards.
-    - kind: Rule
-      match: Host(`brain-k8s.e-dani.com`)
-      services:
-        - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
-    - kind: Rule
-      match: Host(`brain-ingest-k8s.e-dani.com`)
-      services:
-        - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
+    # Internal dashboards.
     - kind: Rule
       match: Host(`ha-dashboard.e-dani.com`)
       services:
@@ -431,16 +423,6 @@ spec:
 
     # Synapse keeps public webhook/static path ownership before the LAN admin
     # catch-all, so split DNS does not redirect local producers to the UI.
-    - kind: Rule
-      priority: 2500
-      match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-feedback`)
-      services:
-        - {name: synapse-brain-feedback-handler, namespace: traefik-edge, port: 8080}
-    - kind: Rule
-      priority: 2400
-      match: Host(`synapse.e-dani.com`) && Path(`/webhooks/brain-audit`)
-      services:
-        - {name: synapse-admin-k8s, namespace: traefik-edge, port: 18795}
     - kind: Rule
       priority: 2300
       match: Host(`synapse.e-dani.com`) && PathPrefix(`/webhooks`)

@@ -73,16 +73,6 @@ spec:
       middlewares: *generic-sso
       services:
         - {name: ha-dashboard, namespace: ha-dashboard, port: 80}
-    - kind: Rule
-      match: Host(`brain-k8s.e-dani.com`)
-      middlewares: *generic-sso
-      services:
-        - {name: skirmshop-brain, namespace: skirmshop-brain-prod, port: 80}
-    - kind: Rule
-      match: Host(`brain-ingest-k8s.e-dani.com`)
-      middlewares: *generic-sso
-      services:
-        - {name: skirmshop-brain-ingest, namespace: skirmshop-brain-prod, port: 80}
 
     # Aurora/Keep keep their path transforms after the SSO gate.
     - kind: Rule

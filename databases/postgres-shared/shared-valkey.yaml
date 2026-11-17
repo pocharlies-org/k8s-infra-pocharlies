@@ -419,12 +419,6 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: skirmshop-brain-prod
-      ports:
-        - { protocol: TCP, port: 6379 }
-    - from:
-        - namespaceSelector:
-            matchLabels:
               kubernetes.io/metadata.name: skirmshop
           podSelector:
             matchLabels:

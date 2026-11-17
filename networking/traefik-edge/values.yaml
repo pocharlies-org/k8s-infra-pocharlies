@@ -106,7 +106,6 @@ providers:
       - litellm
       - n8n
       - harbor
-      - skirmshop-brain-prod
       - cv
       - blog
       - web
@@ -150,7 +149,6 @@ providers:
       - litellm
       - n8n
       - harbor
-      - skirmshop-brain-prod
       - cv
       - blog
       - web
