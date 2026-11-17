@@ -108,7 +108,7 @@ class TestManifests(unittest.TestCase):
         )
         pod_rules = [r for r in rules if "pods" in r.get("resources", [])]
         self.assertEqual(len(pod_rules), 1)
-        self.assertEqual(sorted(pod_rules[0]["verbs"]), ["get", "list", "patch", "watch"])
+        self.assertEqual(sorted(pod_rules[0]["verbs"]), ["list", "patch", "watch"])
 
     def test_deployment_sin_bucle_de_reloj_ni_exec(self):
         deploys = self.by_kind("Deployment", "shared-valkey-master-labeler")

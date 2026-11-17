@@ -18,6 +18,9 @@ on:
         description: "Image tag (default: ci-<short-sha>)"
         required: false
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: harbor.lan.e-dani.com
   IMAGE: homelab/valkey-master-labeler
@@ -33,7 +36,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compute tag
         id: t
-        run: echo "tag=${{ inputs.tag || format('ci-{0}', github.sha) }}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ inputs.tag || format('ci-{0}', github.sha) }}
+        run: |
+          [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || { echo "tag no válido: $TAG" >&2; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Configure remote buildkit builders (uno por arch)
         run: |
           docker buildx rm vml-multi 2>/dev/null || true
@@ -48,11 +55,15 @@ jobs:
           HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
         run: echo "$HARBOR_PASSWORD" | docker login "$REGISTRY" -u "$HARBOR_USER" --password-stdin
       - name: Build & push
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
         run: |
           docker buildx build \
             --platform "$PLATFORM" \
-            --tag "$REGISTRY/$IMAGE:${{ steps.t.outputs.tag }}" \
+            --tag "$REGISTRY/$IMAGE:$TAG" \
             --push \
             "$CONTEXT"
       - name: Summary
-        run: echo "Pushed \`$REGISTRY/$IMAGE:${{ steps.t.outputs.tag }}\` — re-pinear el digest en los dos Deployment (INFRA-1300)" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
+        run: echo "Pushed \`$REGISTRY/$IMAGE:$TAG\` — re-pinear el digest en los dos Deployment (INFRA-1300)" >> "$GITHUB_STEP_SUMMARY"

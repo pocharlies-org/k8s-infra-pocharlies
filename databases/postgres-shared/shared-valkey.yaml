@@ -288,10 +288,12 @@ metadata:
 rules:
   # SC-5880: reducción de privilegio. Cae `pods/exec` (ya no se hace
   # `kubectl exec <pod> -- valkey-cli role`): la pregunta va a Sentinel
-  # (`SENTINEL get-master-addr-by-name`). El watch de pods pide `watch`.
+  # (`SENTINEL get-master-addr-by-name`). El watch de pods pide `watch`; `get`
+  # no lo usa nadie. Sin `resourceNames` en `patch`: ataría el Role a 3 réplicas
+  # y un pod nuevo de un escalado se quedaría sin etiquetar en silencio.
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch", "patch"]
+    verbs: ["list", "watch", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -348,9 +350,8 @@ spec:
             - { name: MASTER_NAME, value: shared-cache-master }
             - { name: SENTINEL_HOST, value: shared-valkey-sentinel }
             - { name: SENTINEL_PORT, value: "26379" }
-            # Sentinel arranca con requirepass (start-sentinel.sh): el AUTH
-            # del labeler usa la misma clave que usaba el bucle viejo para
-            # hablar con Sentinel vía valkey-cli.
+            # Sentinel arranca con requirepass (start-sentinel.sh) y esa clave
+            # es `sentinel-password` de shared-valkey-acl.
             - name: SENTINEL_PASSWORD
               valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-password } }
             - { name: POD_SELECTOR, value: app=shared-valkey }
