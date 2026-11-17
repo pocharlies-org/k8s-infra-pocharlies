@@ -10,8 +10,8 @@
 # procese y `paseo` fuera del allowlist de traefik-edge: no hay ruta pública por sauvage.
 #
 # Sin sso-chain (como paseo.e-dani.com en LAN, DGX-1314: LAN = Dani). Backlot es de SOLO LECTURA (nunca
-# escribe en proyectos, no tiene ruta de escritura) y no lee identidad de ninguna cabecera, así que no hay
-# cabecera que borrar ni que forjar.
+# escribe en proyectos, no tiene ruta de escritura) y no lee identidad de ninguna cabecera: no hay identidad
+# que forjar. Sí se quitan Cookie y Authorization (abajo) para que la sesión SSO del navegador no llegue a él.
 #
 # Host reescrito a `localhost`: el TrustedHostMiddleware de Backlot (backlot/server.py) solo admite
 # localhost/127.0.0.1 como defensa contra DNS-rebinding en su uso local. Reescribir aquí es cumplir su
