@@ -33,6 +33,7 @@ data:
       rewrite name exact borradores.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact brain-ingest-k8s.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact brain-k8s.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact cine.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact correo.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact dgx-synapse-mcp.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact dgx.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
