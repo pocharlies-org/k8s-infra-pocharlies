@@ -7,7 +7,8 @@ Lo que la hace segura, y lo que este test fija:
   - ninguna ruta pública: ni un host `cine` en traefik-edge, ni clase de ingreso que el borde procese, ni
     el ns `paseo` en el allowlist del borde;
   - el único middleware es el que reescribe el Host a `localhost` (el TrustedHostMiddleware upstream de
-    Backlot no admite otro). Ninguna escritura llega aquí: Backlot es de solo lectura y las acciones van
+    Backlot no admite otro) y quita Cookie y Authorization (la cookie SSO no va a un tablero sin login, security
+    DGX-1677 §9.3). Ninguna escritura llega aquí: Backlot es de solo lectura y las acciones van
     por el dashboard tras sso-chain.
 """
 import json
@@ -43,9 +44,9 @@ class CineLanRouteContract(unittest.TestCase):
         desde = " || ".join(f"ClientIP(`{cidr}`)" for cidr in TRUSTED)
         self.assertEqual(self.regla["match"], f"Host(`{HOST}`) && ({desde})")
 
-    def test_el_unico_middleware_reescribe_el_host_a_localhost(self):
+    def test_el_unico_middleware_reescribe_el_host_y_quita_la_cookie_sso(self):
         self.assertEqual(self.mw["metadata"]["namespace"], "traefik-lan")
-        self.assertEqual(self.mw["spec"], {"headers": {"customRequestHeaders": {"Host": "localhost"}}})
+        self.assertEqual(self.mw["spec"], {"headers": {"customRequestHeaders": {"Host": "localhost", "Cookie": "", "Authorization": ""}}})
         self.assertEqual(self.regla["middlewares"], [{"name": self.mw["metadata"]["name"], "namespace": "traefik-lan"}])
 
     def test_al_service_backlot_del_ns_paseo(self):

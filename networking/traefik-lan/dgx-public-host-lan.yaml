@@ -157,8 +157,10 @@ spec:
     # Va la página (/nova, la pantalla Expo) para que la carga lleve al login, y la API entera (todos los métodos):
     # crea un pod que entra en un Meet con la cuenta de Google de Nova y el estado es la transcripción (security).
     # La app del iPhone manda su propio Bearer (cliente dgx-app), que oauth2-proxy acepta.
+    # DGX-1676: /cine y /api/cine (producciones de OpenMontage) por la misma razón: todo /api/cine va tras
+    # ESCRITURA_CLUSTER (crea agentes en paseo-0 y lee sus guiones), y sin sso-chain el JWT no llega.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`) || Path(`/cine`) || PathPrefix(`/api/cine`))
       priority: 420
       middlewares:
         - name: dgx-strip-identity-headers
