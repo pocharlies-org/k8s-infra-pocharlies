@@ -15,7 +15,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
-            "social", "workspace", "gsc", "offers", "sauvage", "hermes",
+            "social", "workspace", "gsc", "sauvage", "hermes",
             "dgx-control", "workspace-envio", "workspace-borrador", "alphalink",
             "hindsight-tienda", "nova",
         }
@@ -94,11 +94,11 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             )
             return result, log.read_text().splitlines()
 
-    def test_reconciler_creates_exactly_eighteen_roles_without_assigning_them(self):
+    def test_reconciler_creates_exactly_seventeen_roles_without_assigning_them(self):
         result, calls = self._run_reconciler()
         self.assertEqual(0, result.returncode, result.stderr)
         creations = [call for call in calls if call.startswith("create roles ")]
-        self.assertEqual(18, len(creations))
+        self.assertEqual(17, len(creations))
         self.assertTrue(any("-s name=agentgateway-write:dgx-control " in call for call in creations))
         # INFRA-676: the two Gmail send/draft roles are created like the rest.
         self.assertTrue(any("-s name=agentgateway-write:workspace-envio " in call for call in creations))
@@ -107,14 +107,14 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertTrue(any("-s name=agentgateway-write:correo-ejecutor " in call for call in creations))
         # INFRA-1224/INFRA-1234: the literal route role of /nova, same family.
         self.assertTrue(any("-s name=agentgateway-write:nova " in call for call in creations))
-        self.assertIn('"roles":18,"created":18,"human_assigned":false,"service_account_grants":0', result.stdout)
+        self.assertIn('"roles":17,"created":17,"human_assigned":false,"service_account_grants":0', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
 
     def test_reconciler_is_idempotent_when_the_roles_exist(self):
         result, calls = self._run_reconciler(existing=True)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse(any(call.startswith("create roles ") for call in calls))
-        self.assertIn('"roles":18,"created":0,"human_assigned":false,"service_account_grants":0', result.stdout)
+        self.assertIn('"roles":17,"created":0,"human_assigned":false,"service_account_grants":0', result.stdout)
 
     def test_workspace_envio_is_held_by_exactly_hermes_enviar(self):
         # INFRA-676: the permission to send mail has ONE reviewed holder, the

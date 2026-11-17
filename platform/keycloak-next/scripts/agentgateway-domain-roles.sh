@@ -11,8 +11,8 @@ ADMIN_CONFIG=/tmp/kcadm-domain-roles.config
 # is created inert: the gateway already gates refusal_lambda_set on it,
 # and it has no entry in
 # ALLOWED_SERVICE_ACCOUNTS, so nobody may hold it and those tools stay denied.
-ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova}"
-EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:offers,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova"
+ROLE_NAMES="${ROLE_NAMES:-agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova}"
+EXPECTED_ROLE_NAMES="agentgateway-write:synapse,agentgateway-write:media,agentgateway-write:picqer,agentgateway-write:skirmshop-plugins,agentgateway-write:shopify,agentgateway-write:social,agentgateway-write:workspace,agentgateway-write:gsc,agentgateway-write:sauvage,agentgateway-write:alphalink,agentgateway-write:hermes,agentgateway-write:dgx-control,agentgateway-write:workspace-envio,agentgateway-write:workspace-borrador,agentgateway-write:correo-ejecutor,agentgateway-write:hindsight-tienda,agentgateway-write:nova"
 # Dedicated confidential clients reviewed to hold exactly one domain role each,
 # as "<role>=<service-account-username>". The client itself is reconciled by a
 # later PostSync hook (chat-agentgateway-client.sh); this hook only tolerates
@@ -158,5 +158,5 @@ for role in ${ROLE_NAMES}; do
 done
 IFS="${old_ifs}"
 
-printf '{"role_family":"agentgateway-write-domain","roles":18,"created":%s,"human_assigned":false,"service_account_grants":%s,"grants_revoked":%s}\n' \
+printf '{"role_family":"agentgateway-write-domain","roles":17,"created":%s,"human_assigned":false,"service_account_grants":%s,"grants_revoked":%s}\n' \
   "${created}" "${granted}" "${revoked}"

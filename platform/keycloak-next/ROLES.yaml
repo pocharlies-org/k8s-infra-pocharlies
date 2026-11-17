@@ -203,15 +203,12 @@
     },
     {
       "name": "agentgateway-read:offers",
-      "status": "active",
-      "meaning": "Lectura de la ruta /offers de AgentGateway (INFRA-23).",
-      "grantees": [
-        "service-account-agentgateway-mcp",
-        "service-account-openclaw-readonly-agentgateway"
-      ],
+      "status": "removed",
+      "meaning": "Retirado (SC-5827, 17-11-2026): era la lectura de la ruta /offers de AgentGateway (INFRA-23). offers-mcp se retiró con el Brain (dictamen C7, catalog/offers/search 0 llamadas); la ruta responde 404 desde el merge de la PR del gateway.",
+      "grantees": [],
       "privilege": {
-        "allows": "Llamar a las tools de solo lectura de la ruta /offers de AgentGateway.",
-        "denies": "Cualquier tool de escritura de /offers (exige agentgateway-write o agentgateway-write:<dominio>) y cualquier otra ruta."
+        "allows": "Nada: la ruta /offers ya no existe.",
+        "denies": "Todo; ningún reconciliador lo crea ni lo concede."
       },
       "origin": "agentgateway-read-grants.sh (PostSync agentgateway-read-grants-job.yaml; INFRA-44, matriz R2 del CTO 2026-09-12)"
     },
@@ -646,12 +643,12 @@
     },
     {
       "name": "agentgateway-write:offers",
-      "status": "active",
-      "meaning": "Escrituras enumeradas del dominio offers en AgentGateway (write por dominio).",
+      "status": "removed",
+      "meaning": "Retirado (SC-5827, 17-11-2026): eran las escrituras del dominio offers (import/link/dismiss). offers-mcp se retiró con el Brain (dictamen C7); sin grantees nunca tuvo concesionarios vivos. El borrado del rol del realm lo hace security tras el merge.",
       "grantees": [],
       "privilege": {
-        "allows": "Las tools de escritura explícitamente enumeradas del dominio offers, con GATEWAY_WRITE activo en la ruta.",
-        "denies": "Escrituras de otros dominios, el write global agentgateway-write y cualquier lectura que no esté concedida por su rol agentgateway-read:<ruta>."
+        "allows": "Nada: la ruta /offers ya no existe.",
+        "denies": "Todo; ningún reconciliador lo crea ni lo concede."
       },
       "origin": "agentgateway-domain-roles.sh (PostSync agentgateway-domain-roles-job.yaml)"
     },

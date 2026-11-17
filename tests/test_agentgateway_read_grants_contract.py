@@ -15,11 +15,11 @@ READ_ROUTES = [
     "alphalink",
     "analytics", "atlassian", "dgx-control", "gsc", "hindsight-claude-personal", "hindsight-codigo", "hindsight-shopify-contenido", "hindsight-tienda",
     "image",
-    "merchant", "offers", "photos", "picqer", "plaud", "shopify", "shopify-admin",
+    "merchant", "photos", "picqer", "plaud", "shopify", "shopify-admin",
     "skills", "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
     "synapse-tools", "tts", "weight", "workspace",
 ]
-OPENCLAW_ROUTES = ["gsc", "offers", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
+OPENCLAW_ROUTES = ["gsc", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
 
 READ_ROLE_NAMES = [f"agentgateway-read:{route}" for route in READ_ROUTES]
 OPENCLAW_ROLE_NAMES = [f"agentgateway-read:{route}" for route in OPENCLAW_ROUTES]
@@ -406,7 +406,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_matrix_is_immutable_and_exactly_the_reviewed_routes(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertEqual(28, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain
+        self.assertEqual(27, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain; SC-5827: - offers
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
@@ -461,30 +461,30 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_ensure_from_empty_creates_roles_maps_grants_and_verifies_tokens(self):
         result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
-        self.assertIn('"roles":28,"created":28', result.stdout)  # matrix 28 (SC-4304 + INFRA-402 - SC-5492)
+        self.assertIn('"roles":27,"created":27', result.stdout)  # matrix 28 (SC-4304 + INFRA-402 - SC-5492 - SC-5827)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertIn('"tokens_verified":true', result.stdout)
-        self.assertEqual(28, journal.count("create roles "))
+        self.assertEqual(27, journal.count("create roles "))
         self.assertEqual(1, journal.count("create clients/mcp-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create clients/oc-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + nova + 28 reads (INFRA-1234, SC-5492)
+        self.assertEqual(29, len(state_files["scope-mcp"].split()))  # write + nova + 27 reads (INFRA-1234, SC-5492, SC-5827)
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its seven reviewed roles on that client.
-        self.assertEqual(7, len(state_files["scope-oc"].split()))
-        self.assertEqual(29, len(state_files["grants-mcp-sa"].split()))  # write + nova + 28 reads (INFRA-1234, SC-5492)
-        self.assertEqual(7, len(state_files["grants-oc-sa"].split()))
+        self.assertEqual(6, len(state_files["scope-oc"].split()))
+        self.assertEqual(28, len(state_files["grants-mcp-sa"].split()))  # nova + 27 reads (INFRA-1234, SC-5492, SC-5827)
+        self.assertEqual(6, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
         result, journal, state_files = self.run_reconciler(
             mode="ensure", seed=seed_full_state
         )
-        self.assertIn('"roles":28,"created":0', result.stdout)
+        self.assertIn('"roles":27,"created":0', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertNotIn("create roles ", journal)
         self.assertNotIn("create clients/", journal)
@@ -881,7 +881,7 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
             mode="rollback", seed=seed_full_state
         )
         self.assertIn('"roles_deleted":28,"present":false', result.stdout)
-        self.assertEqual(28, journal.count("delete roles/agentgateway-read:"))
+        self.assertEqual(27, journal.count("delete roles/agentgateway-read:"))
         self.assertNotIn("delete roles/agentgateway-write", journal)
         self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
         self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
