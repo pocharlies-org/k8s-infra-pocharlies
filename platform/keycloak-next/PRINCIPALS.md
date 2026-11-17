@@ -467,7 +467,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "client": "agentgateway-mcp",
       "owner": "DevOps",
       "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova).",
+      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado; SC-5827: − offers, offers-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -480,7 +480,6 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
-        "agentgateway-read:offers",
         "agentgateway-read:photos",
         "agentgateway-read:picqer",
         "agentgateway-read:plaud",
@@ -800,7 +799,6 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send.",
       "realm_roles": [
         "agentgateway-read:gsc",
-        "agentgateway-read:offers",
         "agentgateway-read:plaud",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:studio",

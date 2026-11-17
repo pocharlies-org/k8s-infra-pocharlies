@@ -15,7 +15,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
-            "social", "workspace", "gsc", "offers", "sauvage", "hermes",
+            "social", "workspace", "gsc", "sauvage", "hermes",
             "dgx-control", "workspace-envio", "workspace-borrador", "alphalink",
             "hindsight-tienda", "nova",
         }

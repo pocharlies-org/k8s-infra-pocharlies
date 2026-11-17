@@ -164,7 +164,7 @@ class RoleCatalogShapeTest(unittest.TestCase):
         mcp = "service-account-agentgateway-mcp"
         held = {name for name, entry in catalog.items() if mcp in entry["grantees"]}
         reads = {name for name in held if name.startswith("agentgateway-read:")}
-        self.assertEqual(len(reads), 28)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos; SC-5492: - brain
+        self.assertEqual(len(reads), 27)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos; SC-5492: - brain; SC-5827: - offers
         self.assertEqual(held - reads, {"agentgateway-write",
                                         "agentgateway-write:nova",
                                         "default-roles-edani"})

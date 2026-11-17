@@ -339,8 +339,8 @@ read matrix:
   `agentgateway-read:plaud`).
 - Grants them individually — never via groups (SC-44 C6): the
   `agentgateway-mcp` service account receives all 22; the
-  `openclaw-readonly-agentgateway` service account receives its seven reviewed
-  routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
+  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  routes (`synapse`, `synapse-tools`, `studio`, `gsc`,
   `plaud`, `skirmshop-plugins`). `synapse-sre-orchestrator`,
   `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
   none.

@@ -15,11 +15,11 @@ READ_ROUTES = [
     "alphalink",
     "analytics", "atlassian", "dgx-control", "gsc", "hindsight-claude-personal", "hindsight-codigo", "hindsight-shopify-contenido", "hindsight-tienda",
     "image",
-    "merchant", "offers", "photos", "picqer", "plaud", "shopify", "shopify-admin",
+    "merchant", "photos", "picqer", "plaud", "shopify", "shopify-admin",
     "skills", "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
     "synapse-tools", "tts", "weight", "workspace",
 ]
-OPENCLAW_ROUTES = ["gsc", "offers", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
+OPENCLAW_ROUTES = ["gsc", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
 
 READ_ROLE_NAMES = [f"agentgateway-read:{route}" for route in READ_ROUTES]
 OPENCLAW_ROLE_NAMES = [f"agentgateway-read:{route}" for route in OPENCLAW_ROUTES]
