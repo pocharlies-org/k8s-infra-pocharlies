@@ -757,6 +757,9 @@ spec:
 # or sets NVIDIA_VISIBLE_DEVICES to a device (GB10 unified memory: the last two are
 # enough without the resource). It "targets a Spark" if it tolerates dedicated=llm
 # (the taint every Spark carries) or names a Spark in spec.nodeName.
+# One pod is not made by a controller: gpu-operator's validator DaemonSet (init
+# cuda-validation) creates gpu-operator/nvidia-cuda-validator-* itself with its own SA
+# after every node boot; only that SA, that namespace and that label pass (DGX-1672).
 # Keep the DaemonSet list in step with TRUSTED_GPU_SYSTEM_DAEMONSETS (dgx-infra
 # services/dashboard/gpu_arbiter.py) and the resident list with compute_mode.py.
 apiVersion: kyverno.io/v1
@@ -774,7 +777,8 @@ metadata:
     policies.kyverno.io/description: >
       Denies hand-made GPU loads on the Sparks. GPU pods there must be created by a
       Kubernetes controller for a queue lane (gpu.dgx-infra/role on-demand|resident,
-      pool gb10), a GPU system DaemonSet or a listed LLM resident; GPU workloads must
+      pool gb10), a GPU system DaemonSet or a listed LLM resident (sole exception:
+      gpu-operator's nvidia-cuda-validator pod, by its validator SA); GPU workloads must
       be created by ArgoCD or the dashboard queue; GPU Jobs must end on their own
       (activeDeadlineSeconds and ttlSecondsAfterFinished). DGX-1665.
 spec:
@@ -810,14 +814,17 @@ spec:
         - name: allowed
           variable:
             jmesPath: >-
-              (request.userInfo.username == 'system:kube-controller-manager' || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:'))
-              && request.object.metadata.ownerReferences[0].kind != null
-              && (
-                (request.object.metadata.ownerReferences[0].kind == 'DaemonSet' && contains(['gpu-operator','monitoring'], request.namespace))
-                || (contains(['on-demand','resident'], request.object.metadata.labels."gpu.dgx-infra/role" || '') && request.object.metadata.labels."gpu.dgx-infra/pool" == 'gb10')
-                || (request.namespace == 'llm' && contains(['qwen38-flash-next-head','qwen38-flash-next-worker','qwen38-flash-next-worker-dgx3'], request.object.metadata.labels.app || ''))
-                || (request.namespace == 'ai-lab' && request.object.metadata.labels.app == 'qwen38-lab')
+              (
+                (request.userInfo.username == 'system:kube-controller-manager' || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:'))
+                && request.object.metadata.ownerReferences[0].kind != null
+                && (
+                  (request.object.metadata.ownerReferences[0].kind == 'DaemonSet' && contains(['gpu-operator','monitoring'], request.namespace))
+                  || (contains(['on-demand','resident'], request.object.metadata.labels."gpu.dgx-infra/role" || '') && request.object.metadata.labels."gpu.dgx-infra/pool" == 'gb10')
+                  || (request.namespace == 'llm' && contains(['qwen38-flash-next-head','qwen38-flash-next-worker','qwen38-flash-next-worker-dgx3'], request.object.metadata.labels.app || ''))
+                  || (request.namespace == 'ai-lab' && request.object.metadata.labels.app == 'qwen38-lab')
+                )
               )
+              || (request.namespace == 'gpu-operator' && request.userInfo.username == 'system:serviceaccount:gpu-operator:nvidia-operator-validator' && request.object.metadata.labels.app == 'nvidia-cuda-validator')
       preconditions:
         all:
           - key: "{{ spark }}"

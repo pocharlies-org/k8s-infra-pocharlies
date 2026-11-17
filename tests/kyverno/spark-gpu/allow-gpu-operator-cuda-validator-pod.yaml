@@ -1,0 +1,38 @@
+# user: system:serviceaccount:gpu-operator:nvidia-operator-validator
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-gpu-operator-cuda-validator-pod
+  namespace: gpu-operator
+  labels:
+    app: nvidia-cuda-validator
+  ownerReferences:
+  - apiVersion: nvidia.com/v1
+    kind: ClusterPolicy
+    name: cluster-policy
+    uid: 00000000-0000-0000-0000-000000000001
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  nodeName: dgx3
+  restartPolicy: OnFailure
+  serviceAccountName: nvidia-operator-validator
+  runtimeClassName: nvidia
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  initContainers:
+  - name: cuda-validation
+    image: nvcr.io/nvidia/gpu-operator:v26.3.1
+    command: ['sh', '-c']
+    args: ['vectorAdd']
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: all
+  containers:
+  - name: nvidia-cuda-validator
+    image: nvcr.io/nvidia/gpu-operator:v26.3.1
+    command: ['sh', '-c']
+    args: ['echo cuda workload validation is successful']
