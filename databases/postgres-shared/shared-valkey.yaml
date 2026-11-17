@@ -340,6 +340,9 @@ spec:
         # (patrón canónico build-bge-embedding.yml); fijada por digest (INFRA-1300).
         - name: labeler
           image: harbor.e-dani.com/homelab/valkey-master-labeler:v2@sha256:6b0ac2028de1d6e044a64793d5af08838a989e806a63c362adb69541a61b0188
+          # El ENTRYPOINT de la imagen, explícito: el `command: [/bin/sh, -c]` del bucle viejo es del field manager
+          # `kubectl` (un apply a mano) y el server-side apply de ArgoCD no lo borra al quitarlo del manifiesto (17-11).
+          command: ["python", "-m", "valkey_master_labeler.main"]
           env:
             - { name: NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
             - { name: MASTER_NAME, value: shared-cache-master }
