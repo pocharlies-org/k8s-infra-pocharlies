@@ -226,7 +226,9 @@ class LabelerTest(unittest.TestCase):
         # tests/test_valkey_master_labeler_contract.py.
         container = labeler_container()
         self.assertNotIn("args", container)
-        self.assertNotIn("command", container)
+        # El ENTRYPOINT de la imagen, explícito (no un shell): el `/bin/sh -c` viejo lo posee otro field manager
+        # y el server-side apply de ArgoCD no lo borra si el manifiesto deja de declararlo.
+        self.assertEqual(container.get("command"), ["python", "-m", "valkey_master_labeler.main"])
         self.assertTrue(
             container["image"].startswith("harbor.e-dani.com/homelab/valkey-master-labeler"),
             container["image"],
