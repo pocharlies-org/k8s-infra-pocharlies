@@ -932,3 +932,60 @@ spec:
               - key: "{{ ends }}"
                 operator: Equals
                 value: false
+---
+# POLICY: job-ttl-default (SC-5907, SC-5806 «todo por eventos»)
+# Every Job admitted without spec.ttlSecondsAfterFinished gets 86400: the Job and its pods
+# go 24 h after they finish, through the kube-controller-manager's ttl-after-finished
+# controller. This replaces the kube-system/sauvage-pod-reaper CronJob and its
+# cluster-wide ClusterRole (pods get,list,delete). Failed pods of ReplicaSets, the
+# other thing the reaper swept, go through the PodGC (terminated-pod-gc-threshold=200,
+# ansible/roles/k3s_control_plane).
+# - A ttl the owner set (0 included) is never touched: the +() anchor only adds.
+# - Jobs that ArgoCD tracks (annotation argocd.argoproj.io/tracking-id) are left alone
+#   unless they are hooks: a synced Job deleted by its TTL is "Missing" to ArgoCD,
+#   and selfHeal would create and RUN it again every day (libreplay db-migrate/seed,
+#   restore-drill, llm qwen38fn-tp3-* on 17-11). Hooks are ArgoCD's to delete anyway.
+# - On a Spark GPU Job without ttl, the 86400 also satisfies the ttl half of
+#   spark-gpu-jobs-must-end (Kyverno validates the mutated object);
+#   activeDeadlineSeconds is still required there.
+# - failurePolicy Ignore: if Kyverno is down the Job is admitted without a ttl and the
+#   PodGC threshold bounds what it leaves behind.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: job-ttl-default
+  annotations:
+    policies.kyverno.io/title: Jobs Clean Up After Themselves
+    policies.kyverno.io/description: >
+      Sets ttlSecondsAfterFinished 86400 on Jobs created without one, except
+      ArgoCD-tracked Jobs that are not hooks, so finished Jobs and their pods are
+      deleted by Kubernetes 24 h after they end.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481): solo admisión,
+  # failurePolicy Ignore, los defaults del webhook declarados tal cual.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: ttl-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [Job]
+              operations: [CREATE]
+      preconditions:
+        any:
+          - key: "{{ request.object.metadata.annotations.\"argocd.argoproj.io/tracking-id\" || '' }}"
+            operator: Equals
+            value: ""
+          - key: "{{ request.object.metadata.annotations.\"argocd.argoproj.io/hook\" || request.object.metadata.annotations.\"helm.sh/hook\" || '' }}"
+            operator: NotEquals
+            value: ""
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            +(ttlSecondsAfterFinished): 86400

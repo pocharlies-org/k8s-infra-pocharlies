@@ -112,7 +112,6 @@ resources:
   - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
   - kubernetes/workloads/company-dreaming-cronjob.yaml
-  - kubernetes/workloads/sauvage-pod-reaper.yaml
   - kubernetes/node-capacity-alerts.yaml
 
 # INFRA-1365: el Job de migración (platform/guarda-pins) lleva su código como
