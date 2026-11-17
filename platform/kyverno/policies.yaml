@@ -948,8 +948,9 @@ spec:
 # - On a Spark GPU Job without ttl, the 86400 also satisfies the ttl half of
 #   spark-gpu-jobs-must-end (Kyverno validates the mutated object);
 #   activeDeadlineSeconds is still required there.
-# - failurePolicy Ignore: if Kyverno is down the Job is admitted without a ttl and the
-#   PodGC threshold bounds what it leaves behind.
+# - failurePolicy Ignore: this rule adds no blocking path. (Job CREATE is already
+#   behind mutate/validate.kyverno.svc-fail through the Pod policies' autogen, so a
+#   Kyverno outage stops Jobs with or without this policy; security on #558.)
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
