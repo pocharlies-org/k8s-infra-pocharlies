@@ -33,7 +33,7 @@ CONTROL_SET = [("GET", p) for p in (
     "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/hermes-sessions",
     "/api/app/secure/x",
     "/api/app/pagos/lista", "/api/app/alertas/a_x", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
-    "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel",
+    "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel", "/api/studio/agent/sessions",
     "/api/secretaria/despacho/temas", "/despacho-secretaria",
 )]
 # Escrituras del backend (regla 350): solo por POST; los GET de esas rutas se compran abajo, abiertos.
