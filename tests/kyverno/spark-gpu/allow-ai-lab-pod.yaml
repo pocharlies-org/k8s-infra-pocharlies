@@ -1,0 +1,28 @@
+# user: system:serviceaccount:kube-system:replicaset-controller
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-ai-lab-pod
+  namespace: ai-lab
+  labels:
+    app: qwen38-lab
+    gpu.dgx-infra/pool: lab
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: allow-ai-lab-pod-owner
+    uid: 00000000-0000-0000-0000-000000000001
+    controller: true
+spec:
+  runtimeClassName: nvidia
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  containers:
+  - name: c
+    image: x
+    resources:
+      limits:
+        nvidia.com/gpu: '1'

@@ -1,0 +1,19 @@
+# user: system:admin
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-cpu-pod-on-dgx3
+  namespace: comfyui
+  labels: {}
+spec:
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  containers:
+  - name: c
+    image: x
+    env:
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: void

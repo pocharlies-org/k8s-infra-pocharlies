@@ -1,0 +1,25 @@
+# user: system:admin
+apiVersion: v1
+kind: Pod
+metadata:
+  name: deny-incident-pod
+  namespace: llm
+  labels:
+    app: omnivoice-train
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: dgx3
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  containers:
+  - name: train
+    image: x
+    command:
+    - sleep
+    - infinity
+    resources:
+      limits:
+        nvidia.com/gpu: '1'

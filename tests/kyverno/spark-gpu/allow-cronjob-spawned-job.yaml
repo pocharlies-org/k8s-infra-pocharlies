@@ -1,0 +1,31 @@
+# user: system:serviceaccount:kube-system:cronjob-controller
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: allow-cronjob-spawned-job
+  namespace: comfyui
+spec:
+  template:
+    metadata:
+      labels:
+        app: allow-cronjob-spawned-job
+        gpu.dgx-infra/role: on-demand
+        gpu.dgx-infra/pool: gb10
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      containers:
+      - name: c
+        image: x
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 600

@@ -747,3 +747,188 @@ spec:
           spec:
             securityContext:
               fsGroupChangePolicy: OnRootMismatch
+---
+# POLICY: spark-gpu-queue-only (DGX-1665, Dani 17-11-2026)
+# GPU on the NVIDIA Sparks (nvidia-dgx, gx10-ec3d, dgx3) only through the queue: no GPU
+# pod or workload is created by hand. Origin: a bare `kubectl apply` pod
+# (llm/omnivoice-train, sleep infinity) held dgx3's GPU after its run, the arbiter
+# aborted ComfyUI's lease (late_gpu_blocker) and the whole creative window ran nothing.
+# A pod "uses the GPU" if it asks for nvidia.com/gpu, runs with runtimeClassName nvidia
+# or sets NVIDIA_VISIBLE_DEVICES to a device (GB10 unified memory: the last two are
+# enough without the resource). It "targets a Spark" if it tolerates dedicated=llm
+# (the taint every Spark carries) or names a Spark in spec.nodeName.
+# Keep the DaemonSet list in step with TRUSTED_GPU_SYSTEM_DAEMONSETS (dgx-infra
+# services/dashboard/gpu_arbiter.py) and the resident list with compute_mode.py.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: spark-gpu-queue-only
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/title: GPU On The Sparks Only Through The Queue
+    # The Pod rule judges pods by their creator; autogen would apply it to Deployments too.
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: GPU
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob
+    policies.kyverno.io/description: >
+      Denies hand-made GPU loads on the Sparks. GPU pods there must be created by a
+      Kubernetes controller for a queue lane (gpu.dgx-infra/role on-demand|resident,
+      pool gb10), a GPU system DaemonSet or a listed LLM resident; GPU workloads must
+      be created by ArgoCD or the dashboard queue; GPU Jobs must end on their own
+      (activeDeadlineSeconds and ttlSecondsAfterFinished). DGX-1665.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Enforce
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: spark-gpu-pods-only-from-controllers
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: allowed
+          variable:
+            jmesPath: >-
+              (request.userInfo.username == 'system:kube-controller-manager' || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:'))
+              && request.object.metadata.ownerReferences[0].kind != null
+              && (
+                (request.object.metadata.ownerReferences[0].kind == 'DaemonSet' && contains(['gpu-operator','monitoring'], request.namespace))
+                || (contains(['on-demand','resident'], request.object.metadata.labels."gpu.dgx-infra/role" || '') && request.object.metadata.labels."gpu.dgx-infra/pool" == 'gb10')
+                || (request.namespace == 'llm' && contains(['qwen38-flash-next-head','qwen38-flash-next-worker','qwen38-flash-next-worker-dgx3'], request.object.metadata.labels.app || ''))
+                || (request.namespace == 'ai-lab' && request.object.metadata.labels.app == 'qwen38-lab')
+              )
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        message: >-
+          DGX-1665: GPU on the Sparks only through the queue. A GPU pod there must
+          come from a queue lane, a GPU system DaemonSet or a listed LLM resident,
+          created by its controller; a pod applied by hand is refused. Launch the
+          work through the dashboard queue (gpu_arbiter), e.g. POST
+          /api/voicelab/train for an OmniVoice LoRA.
+        deny:
+          conditions:
+            all:
+              - key: "{{ allowed }}"
+                operator: Equals
+                value: false
+    - name: spark-gpu-workloads-only-from-gitops-or-queue
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet, Job, CronJob]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec.template.spec || request.object.spec.jobTemplate.spec.template.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: allowed
+          variable:
+            jmesPath: >-
+              contains(['system:serviceaccount:argocd:argocd-application-controller','system:serviceaccount:control-nexus:dgx-dashboard','system:kube-controller-manager'], request.userInfo.username)
+              || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:')
+              || starts_with(request.userInfo.username, 'system:serviceaccount:gpu-operator:')
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        message: >-
+          DGX-1665: GPU workloads on the Sparks are created only by ArgoCD (a GitOps
+          lane) or the dashboard queue, never by hand. Add a lane by PR or launch the
+          work through the queue.
+        deny:
+          conditions:
+            all:
+              - key: "{{ allowed }}"
+                operator: Equals
+                value: false
+    - name: spark-gpu-jobs-must-end
+      match:
+        any:
+          - resources:
+              kinds: [Job]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec.template.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: ends
+          variable:
+            jmesPath: >-
+              request.object.spec.activeDeadlineSeconds != null && request.object.spec.activeDeadlineSeconds <= `21600`
+              && request.object.spec.ttlSecondsAfterFinished != null && request.object.spec.ttlSecondsAfterFinished <= `86400`
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        message: >-
+          DGX-1665: a GPU Job on the Sparks must end on its own: set
+          activeDeadlineSeconds (at most 21600) and ttlSecondsAfterFinished (at most
+          86400).
+        deny:
+          conditions:
+            all:
+              - key: "{{ ends }}"
+                operator: Equals
+                value: false

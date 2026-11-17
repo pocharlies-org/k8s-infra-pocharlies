@@ -1,0 +1,30 @@
+# user: system:serviceaccount:control-nexus:dgx-dashboard
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deny-dashboard-job-without-deadline
+  namespace: comfyui
+spec:
+  template:
+    metadata:
+      labels:
+        app: deny-dashboard-job-without-deadline
+        gpu.dgx-infra/role: on-demand
+        gpu.dgx-infra/pool: gb10
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      containers:
+      - name: c
+        image: x
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+  ttlSecondsAfterFinished: 86400
