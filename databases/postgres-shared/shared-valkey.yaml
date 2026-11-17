@@ -337,8 +337,7 @@ spec:
         # repo). Level-triggered: lectura de Sentinel al arrancar, SUBSCRIBE
         # `+switch-master` y watch de los pods; sin bucle de reloj. La imagen
         # se construye con .github/workflows/build-valkey-master-labeler.yml
-        # (patrón canónico build-bge-embedding.yml). Falta re-pinear el
-        # digest tras el primer push (INFRA-1300).
+        # (patrón canónico build-bge-embedding.yml); fijada por digest (INFRA-1300).
         - name: labeler
           image: harbor.e-dani.com/homelab/valkey-master-labeler:v1@sha256:6997a0ca91c41c8902abfe64294a772aabdb5625267d76b06b43eb00923f515a
           env:
@@ -355,6 +354,12 @@ spec:
           resources:
             requests: { cpu: 20m, memory: 64Mi }
             limits: { memory: 192Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

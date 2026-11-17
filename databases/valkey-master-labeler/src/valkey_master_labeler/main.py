@@ -51,14 +51,19 @@ def load_config():
     }
 
 
-def sentinel_client(cfg):
+def sentinel_client(cfg, socket_timeout=5):
+    """Comandos: timeout de 5 s. Pub/sub: `socket_timeout=None` — `listen()` bloquea
+    hasta que llega un mensaje; con timeout lanzaría TimeoutError en reposo y el
+    `+switch-master` caería en el hueco de la resuscripción. Keepalive TCP detecta
+    un Sentinel muerto."""
     return redis.Redis(
         host=cfg["sentinel_host"],
         port=cfg["sentinel_port"],
         password=cfg["sentinel_password"],
         decode_responses=True,
-        socket_timeout=5,
+        socket_timeout=socket_timeout,
         socket_connect_timeout=5,
+        socket_keepalive=True,
     )
 
 
@@ -101,6 +106,8 @@ def pubsub_loop(sentinel, cfg, trigger):
             backoff = BACKOFF_START
             log.info("subscrito a %s en %s:%s", SWITCH_MASTER_CHANNEL,
                      cfg["sentinel_host"], cfg["sentinel_port"])
+            # Un failover mientras no estábamos suscritos no deja mensaje: releer.
+            trigger()
             for message in pubsub.listen():
                 if message.get("type") != "message":
                     continue
@@ -155,7 +162,8 @@ def main():
     def trigger():
         event.set()
 
-    threading.Thread(target=pubsub_loop, args=(sentinel, cfg, trigger), daemon=True).start()
+    threading.Thread(target=pubsub_loop, args=(sentinel_client(cfg, socket_timeout=None), cfg, trigger),
+                     daemon=True).start()
     threading.Thread(target=watch_loop, args=(k8s, cfg, trigger), daemon=True).start()
 
     log.info(
@@ -163,16 +171,24 @@ def main():
         cfg["namespace"], cfg["master_name"], cfg["sentinel_host"],
         cfg["sentinel_port"], cfg["pod_selector"],
     )
+    serve(event, lambda: reconcile(k8s, sentinel, cfg))
+
+
+def serve(event, do_reconcile):
+    """Una reconciliación al arrancar y otra por cada evento (pubsub o watch).
+
+    `clear()` ANTES de reconciliar: un evento que llega durante la pasada deja el
+    flag puesto y provoca otra; uno ya atendido no vuelve a despertar."""
     backoff = BACKOFF_START
     while True:
+        event.clear()
         try:
-            reconcile(k8s, sentinel, cfg)
+            do_reconcile()
             backoff = BACKOFF_START
         except Exception as exc:
             log.error("reconciliación fallida (%s); reintento en %.0fs", exc, backoff)
-            event.wait(backoff)
+            time.sleep(backoff)
             backoff = min(backoff * 2, BACKOFF_MAX)
-            event.set()
             continue
         # Sin reloj: dormido hasta que un evento (pubsub/watch) despierta.
         event.wait()

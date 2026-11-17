@@ -300,7 +300,7 @@ jobs:
       - name: Install YAML parser
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the valkey master labeler (SC-5880)
-        run: python3 -m unittest tests/test_valkey_master_labeler_contract.py -v
+        run: python3 -m unittest tests/test_valkey_master_labeler_contract.py tests/test_valkey_master_labeler_loop.py -v
 
   longhorn-strict-local-contract:
     runs-on: arc-k8s
