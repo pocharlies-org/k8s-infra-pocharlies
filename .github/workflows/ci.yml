@@ -286,6 +286,22 @@ jobs:
       - name: Validate shared Valkey startup scripts (INFRA-859)
         run: python3 -m unittest tests/test_shared_valkey_startup_contract.py
 
+  # SC-5880: decisión pura del etiquetador de master valkey (qué pod
+  # etiquetar dada la dirección de Sentinel) y los contratos del manifiesto
+  # (Role sin pods/exec, NetworkPolicy del 26379, Services *-master intactos).
+  # La decisión es stdlib; el YAML parser es para los contratos de manifiesto.
+  valkey-master-labeler-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the valkey master labeler (SC-5880)
+        run: python3 -m unittest tests/test_valkey_master_labeler_contract.py tests/test_valkey_master_labeler_loop.py -v
+
   longhorn-strict-local-contract:
     runs-on: arc-k8s
     steps:

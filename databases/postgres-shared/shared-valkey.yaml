@@ -286,12 +286,12 @@ metadata:
     app: shared-valkey-master-labeler
     app.kubernetes.io/component: shared-valkey
 rules:
+  # SC-5880: reducción de privilegio. Cae `pods/exec` (ya no se hace
+  # `kubectl exec <pod> -- valkey-cli role`): la pregunta va a Sentinel
+  # (`SENTINEL get-master-addr-by-name`). El watch de pods pide `watch`.
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "patch"]
-  - apiGroups: [""]
-    resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["get", "list", "watch", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -333,37 +333,33 @@ spec:
       enableServiceLinks: false
       nodeSelector: { workload: core }
       containers:
+        # SC-5880: componente único (databases/valkey-master-labeler, este
+        # repo). Level-triggered: lectura de Sentinel al arrancar, SUBSCRIBE
+        # `+switch-master` y watch de los pods; sin bucle de reloj. La imagen
+        # se construye con .github/workflows/build-valkey-master-labeler.yml
+        # (patrón canónico build-bge-embedding.yml); fijada por digest (INFRA-1300).
         - name: labeler
-          image: alpine/k8s:1.32.5
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -u
-              PODS="shared-valkey-0 shared-valkey-1 shared-valkey-2"
-              echo "shared-valkey-master-labeler started"
-              while true; do
-                for p in $PODS; do
-                  role=$(kubectl -n databases exec "$p" -c valkey -- sh -c 'valkey-cli -p 6379 --user sentinel -a "$SENTINEL_VALKEY_PASSWORD" --no-auth-warning role' 2>/dev/null | head -1)
-                  case "$role" in
-                    master) kubectl -n databases label pod "$p" valkey-role=master --overwrite >/dev/null 2>&1 ;;
-                    slave)  kubectl -n databases label pod "$p" valkey-role=replica --overwrite >/dev/null 2>&1 ;;
-                    *) : ;;
-                  esac
-                  # INFRA-822: log every role change (the labeler is the only
-                  # witness of who was master when; the 04-07 and 10-10 loops
-                  # were invisible in its logs).
-                  var="PREV_$(printf '%s' "$p" | tr - _)"
-                  prev=$(eval "echo \${$var:-}")
-                  if [ "$role" != "$prev" ]; then
-                    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $p role: ${prev:-unknown} -> ${role:-none}"
-                    eval "$var=\$role"
-                  fi
-                done
-                sleep 20
-              done
+          image: harbor.e-dani.com/homelab/valkey-master-labeler:v2@sha256:6b0ac2028de1d6e044a64793d5af08838a989e806a63c362adb69541a61b0188
+          env:
+            - { name: NAMESPACE, valueFrom: { fieldRef: { fieldPath: metadata.namespace } } }
+            - { name: MASTER_NAME, value: shared-cache-master }
+            - { name: SENTINEL_HOST, value: shared-valkey-sentinel }
+            - { name: SENTINEL_PORT, value: "26379" }
+            # Sentinel arranca con requirepass (start-sentinel.sh): el AUTH
+            # del labeler usa la misma clave que usaba el bucle viejo para
+            # hablar con Sentinel vía valkey-cli.
+            - name: SENTINEL_PASSWORD
+              valueFrom: { secretKeyRef: { name: shared-valkey-acl, key: sentinel-password } }
+            - { name: POD_SELECTOR, value: app=shared-valkey }
           resources:
-            requests: { cpu: 20m, memory: 48Mi }
-            limits: { memory: 128Mi }
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 192Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -385,6 +381,15 @@ spec:
               app: shared-valkey
       ports:
         - { protocol: TCP, port: 6379 }
+        - { protocol: TCP, port: 26379 }
+    # SC-5880: el etiquetador habla solo con Sentinel (get-master-addr-by-name
+    # y SUBSCRIBE +switch-master); ya no necesita pods/exec porque no entra en
+    # los pods valkey — por eso solo se le abre 26379, no 6379.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: shared-valkey-master-labeler
+      ports:
         - { protocol: TCP, port: 26379 }
     # blackbox-exporter TCP probe (VMProbe shared-datastores-tcp in
     # k8s-observability): service-level reachability alerting for the shared
