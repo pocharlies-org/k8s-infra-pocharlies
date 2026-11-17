@@ -88,6 +88,9 @@ class SharedValkeyAclContractTest(unittest.TestCase):
         self.assertEqual(policy["spec"]["ingress"], [
             {"from": [{"podSelector": {"matchLabels": {"app": "shared-valkey"}}}],
              "ports": [TCP(6379), TCP(26379)]},
+            # SC-5880: el etiquetador de master habla solo con Sentinel (26379).
+            {"from": [{"podSelector": {"matchLabels": {"app": "shared-valkey-master-labeler"}}}],
+             "ports": [TCP(26379)]},
             {"from": [namespace_peer("monitoring", pod={"app.kubernetes.io/name": "prometheus-blackbox-exporter"})],
              "ports": [TCP(6379)]},
             {"from": [namespace_peer("skirmshop", pod={"app.kubernetes.io/instance": "affiliate"})],
