@@ -95,8 +95,6 @@ class SharedValkeyAclContractTest(unittest.TestCase):
              "ports": [TCP(6379)]},
             {"from": [namespace_peer("skirmshop", pod={"app.kubernetes.io/instance": "affiliate"})],
              "ports": [TCP(6379)]},
-            {"from": [namespace_peer("skirmshop-brain-prod")],
-             "ports": [TCP(6379)]},
             {"from": [namespace_peer("skirmshop", pod={"app": "firecrawl-api"})],
              "ports": [TCP(6379)]},
             {"from": [namespace_peer(

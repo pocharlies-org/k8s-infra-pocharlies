@@ -21,7 +21,7 @@ kubectl get pods -A -o json | jq -r '
 echo "== stateful pods =="
 kubectl get pods -A -o json | jq -r '
   .items[]
-  | select((.metadata.name | test("postgres|rabbitmq|qdrant|falkor|brain"; "i")) or (.metadata.namespace | test("databases|brain"; "i")))
+  | select((.metadata.name | test("postgres|rabbitmq"; "i")) or (.metadata.namespace | test("databases"; "i")))
   | select(.status.phase != "Succeeded")
   | [.metadata.namespace, .metadata.name, (.status.phase // "Unknown"), (.spec.nodeName // "<pending>")] | @tsv
 '

@@ -1,0 +1,156 @@
+/home/dibanez/.local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:300: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the "fixture" caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+s.ssss.s................................................................ [  8%]
+..................................................s.................. [ 16%]
+........................................................................ [ 24%]
+........................................................................ [ 33%]
+.........................FF..............................ssssssssss..F................ [ 43%]
+................................................................ [ 50%]
+........................................................................ [ 59%]
+.......................................... [ 63%]
+..................................................................................................................... [ 77%]
+...........................................................F.........s.. [ 85%]
+....................FF................................................ [ 94%]
+............................................F......                      [100%]
+=================================== FAILURES ===================================
+___________________ ApiInterno404Contract.test_edge_404_rule ___________________
+
+self = <test_dgx_api_interno_404_contract.ApiInterno404Contract testMethod=test_edge_404_rule>
+
+    def test_edge_404_rule(self):
+>       self._assert_rule(_docs(EDGE), EDGE_IR)
+
+tests/test_dgx_api_interno_404_contract.py:77: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_dgx_api_interno_404_contract.py:61: in _assert_rule
+    self.assertGreater(prio, max(others),
+E   AssertionError: 500 not greater than 600 : edge-dgx-dashboard-public: /api/interno must be the highest-priority rule (precede 200/400/450); others=[100, 350, 400, 450, 460, 600]
+___________________ ApiInterno404Contract.test_lan_404_rule ____________________
+
+self = <test_dgx_api_interno_404_contract.ApiInterno404Contract testMethod=test_lan_404_rule>
+
+    def test_lan_404_rule(self):
+>       self._assert_rule(_docs(LAN), LAN_IR)
+
+tests/test_dgx_api_interno_404_contract.py:80: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_dgx_api_interno_404_contract.py:61: in _assert_rule
+    self.assertGreater(prio, max(others),
+E   AssertionError: 500 not greater than 600 : lan-dgx-dashboard-public-host: /api/interno must be the highest-priority rule (precede 200/400/450); others=[100, 300, 350, 400, 415, 420, 430, 450, 460, 600]
+____________ DgxOauth2SignoutContract.test_deployment_relee_el_cfg _____________
+
+self = <test_dgx_oauth2_signout_contract.DgxOauth2SignoutContract testMethod=test_deployment_relee_el_cfg>
+
+    def test_deployment_relee_el_cfg(self):
+        """oauth2-proxy solo lee el .cfg al arrancar: el config-rev tiene que subir con él."""
+        docs = _docs(PROXY)
+        dep = next(d for d in docs if d.get("kind") == "Deployment")
+        rev = dep["spec"]["template"]["metadata"]["annotations"]["e-dani.com/config-rev"]
+>       self.assertTrue(rev.startswith("2026-10-19"), f"config-rev sin subir: {rev}")
+E       AssertionError: False is not true : config-rev sin subir: 2026-11-10-refresh-4m
+
+tests/test_dgx_oauth2_signout_contract.py:78: AssertionError
+_ OnChangeCoverageTest.test_no_onepassword_externalsecret_here_opts_out_of_onchange _
+
+self = <test_onepassword_quota_floor_contract.OnChangeCoverageTest testMethod=test_no_onepassword_externalsecret_here_opts_out_of_onchange>
+
+    def test_no_onepassword_externalsecret_here_opts_out_of_onchange(self):
+        seen = 0
+        for p, d, spec in repo_externalsecrets():
+            if (spec.get("secretStoreRef") or {}).get("name") not in STORES:
+                continue
+            seen += 1
+            policy = spec.get("refreshPolicy")
+            name = d["metadata"]["name"]
+            if name in PERIODIC_IN_THIS_REPO:
+                continue
+            self.assertTrue(onchange_ok(spec), f"{p.relative_to(ROOT)}::{name} refreshPolicy={policy}")
+>       self.assertGreater(seen, 0, "scan found no onepassword ExternalSecret: the glob broke")
+E       AssertionError: 0 not greater than 0 : scan found no onepassword ExternalSecret: the glob broke
+
+tests/test_onepassword_quota_floor_contract.py:68: AssertionError
+_____ test_paseo_public_route_requires_sso_chain_outside_trusted_networks ______
+
+    def test_paseo_public_route_requires_sso_chain_outside_trusted_networks():
+        path = "networking/traefik-edge/paseo-public.yaml"
+        assert f"  - {path}\n" in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+        route = ingress(path, "edge-paseo-public")
+        assert route["metadata"]["annotations"] == {
+            "external-dns.alpha.kubernetes.io/hostname": "paseo.e-dani.com",
+            "external-dns.alpha.kubernetes.io/target": "141.94.73.52,141.94.73.50,145.239.194.168,57.129.17.172",
+            "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+        }
+        assert route["spec"]["ingressClassName"] == "traefik-edge"
+        assert_paseo_rules_are_sso_gated_outside_trusted_networks(
+            route, {"name": "paseo-edge-x86", "namespace": "traefik-edge", "port": 6767}
+        )
+>       assert_x86_externalname(path, "paseo-edge-x86")
+
+tests/test_public_panels_lan_contract.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'networking/traefik-edge/paseo-public.yaml', name = 'paseo-edge-x86'
+
+    def assert_x86_externalname(path, name):
+        [service] = [
+            item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == name
+        ]
+        assert service["metadata"]["name"] == name
+        assert service["spec"]["type"] == "ExternalName"
+>       assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+E       AssertionError: assert 'paseo.paseo....cluster.local' == 'x86.taile0ad27.ts.net'
+E         
+E         - x86.taile0ad27.ts.net
+E         + paseo.paseo.svc.cluster.local
+
+tests/test_public_panels_lan_contract.py:133: AssertionError
+_________ test_paseo_lan_route_points_at_the_x86_externalname_on_6767 __________
+
+    def test_paseo_lan_route_points_at_the_x86_externalname_on_6767():
+        path = "networking/traefik-lan/paseo-lan.yaml"
+        assert f"  - {path}\n" in (ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+        route = ingress(path, "lan-paseo")
+        assert "ingressClassName" not in route["spec"]
+        assert_paseo_rules_are_sso_gated_outside_trusted_networks(route, {"name": "paseo-lan-x86", "port": 6767})
+        assert route["spec"]["tls"] == {"secretName": "wildcard-edani-tls"}
+>       assert_x86_externalname(path, "paseo-lan-x86")
+
+tests/test_public_panels_lan_contract.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = 'networking/traefik-lan/paseo-lan.yaml', name = 'paseo-lan-x86'
+
+    def assert_x86_externalname(path, name):
+        [service] = [
+            item for item in documents(path) if item.get("kind") == "Service" and item["metadata"]["name"] == name
+        ]
+        assert service["metadata"]["name"] == name
+        assert service["spec"]["type"] == "ExternalName"
+>       assert service["spec"]["externalName"] == "x86.taile0ad27.ts.net"
+E       AssertionError: assert 'paseo.paseo....cluster.local' == 'x86.taile0ad27.ts.net'
+E         
+E         - x86.taile0ad27.ts.net
+E         + paseo.paseo.svc.cluster.local
+
+tests/test_public_panels_lan_contract.py:133: AssertionError
+_ VeleroOperabilityContractTest.test_all_schedules_keep_pvc_fsb_and_reference_policy _
+
+self = <test_velero_operability_contract.VeleroOperabilityContractTest testMethod=test_all_schedules_keep_pvc_fsb_and_reference_policy>
+
+    def test_all_schedules_keep_pvc_fsb_and_reference_policy(self):
+        schedule_count = SCHEDULES.count("kind: Schedule")
+>       self.assertEqual(schedule_count, 4)
+E       AssertionError: 3 != 4
+
+tests/test_velero_operability_contract.py:123: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_dgx_api_interno_404_contract.py::ApiInterno404Contract::test_edge_404_rule
+FAILED tests/test_dgx_api_interno_404_contract.py::ApiInterno404Contract::test_lan_404_rule
+FAILED tests/test_dgx_oauth2_signout_contract.py::DgxOauth2SignoutContract::test_deployment_relee_el_cfg
+FAILED tests/test_onepassword_quota_floor_contract.py::OnChangeCoverageTest::test_no_onepassword_externalsecret_here_opts_out_of_onchange
+FAILED tests/test_public_panels_lan_contract.py::test_paseo_public_route_requires_sso_chain_outside_trusted_networks
+FAILED tests/test_public_panels_lan_contract.py::test_paseo_lan_route_points_at_the_x86_externalname_on_6767
+FAILED tests/test_velero_operability_contract.py::VeleroOperabilityContractTest::test_all_schedules_keep_pvc_fsb_and_reference_policy
+7 failed, 834 passed, 18 skipped, 2216 subtests passed in 326.26s (0:05:26)

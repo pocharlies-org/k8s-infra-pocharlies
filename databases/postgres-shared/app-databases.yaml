@@ -440,7 +440,7 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
-# SC-5489: comercio del Brain sobre pgvector (sustituye a Qdrant/FalkorDB). El esquema lo crea el Brain.
+# SC-5489: comercio sobre pgvector (sustituye a Qdrant/FalkorDB). El esquema lo crea rag-app (SC-5827).
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
