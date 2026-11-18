@@ -120,7 +120,7 @@ class VeleroOperabilityContractTest(unittest.TestCase):
 
     def test_all_schedules_keep_pvc_fsb_and_reference_policy(self):
         schedule_count = SCHEDULES.count("kind: Schedule")
-        self.assertEqual(schedule_count, 4)
+        self.assertEqual(schedule_count, 3)
         self.assertEqual(SCHEDULES.count("defaultVolumesToFsBackup: true"), schedule_count)
         self.assertEqual(SCHEDULES.count("name: velero-fsb-volume-policy"), schedule_count)
         self.assertNotIn("defaultVolumesToFsBackup: false", SCHEDULES)

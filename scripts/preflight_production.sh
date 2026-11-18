@@ -47,8 +47,6 @@ spec:
     - databases
     - longhorn-system
     - skirmshop
-    - skirmshop-brain-prod
-    - skirmshop-brain-stg
     - traefik-edge
     - external-dns
     - cert-manager

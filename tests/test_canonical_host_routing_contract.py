@@ -37,8 +37,6 @@ CANONICAL_LAN_HOSTS = {
     "argocd.e-dani.com",
     "aurora-api.e-dani.com",
     "aurora.e-dani.com",
-    "brain-ingest-k8s.e-dani.com",
-    "brain-k8s.e-dani.com",
     "dgx-synapse-mcp.e-dani.com",
     "firecrawl.e-dani.com",
     "grafana.e-dani.com",

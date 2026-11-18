@@ -397,6 +397,17 @@ data:
     ALTER TABLE catalogo.product_return OWNER TO catalogo;
     ALTER TABLE catalogo.catalog_document OWNER TO catalogo;
     ALTER TABLE catalogo.commerce_document OWNER TO catalogo;
+
+    -- SC-5827 (C9): el exporter de CNPG (cnpg_metrics_exporter) necesita SELECT
+    -- sobre catalogo.product para la serie de frescura del webhook
+    -- (catalogo-freshness-queries.yaml). El rol lo crea el operador; protegido
+    -- para que el Job no falle antes de que exista.
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cnpg_metrics_exporter') THEN
+        GRANT USAGE ON SCHEMA catalogo TO cnpg_metrics_exporter;
+        GRANT SELECT ON catalogo.product TO cnpg_metrics_exporter;
+      END IF;
+    END $$;
 ---
 apiVersion: batch/v1
 kind: Job

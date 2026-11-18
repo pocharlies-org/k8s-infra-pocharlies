@@ -35,7 +35,6 @@ resources:
   - networking/traefik-edge/harbor-ingressroute.yaml
   - networking/traefik-edge/langfuse-public.yaml
   - networking/traefik-edge/legacy-public-routes.yaml
-  - networking/traefik-edge/synapse-brain-feedback-handler.yaml
   - networking/traefik-edge/crosslink-ingress.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/horarios-alphalink-public.yaml
@@ -108,7 +107,6 @@ resources:
   - storage/minio/dgx-studio-identity.yaml
   - networking/traefik-edge/synapse-email-attachments-public.yaml
   - networking/traefik-edge/videovigilancia-public.yaml
-  - networking/traefik-edge/brain-shopify-webhooks-public.yaml
   - buildkit
   - kubernetes/apps/sauvage-bot
   - kubernetes/workloads/sauvage-zombie-watchdog.yaml
