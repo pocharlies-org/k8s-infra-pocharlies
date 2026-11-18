@@ -44,6 +44,24 @@ spec:
           operator: Equal
           value: llm
           effect: NoSchedule
+        # SC-5935: dgx3 flapea a NotReady (INFRA-1434, lease timeout del k3s-agent) y sufre halts térmicos (DGX-1624).
+        # Sin estas toleraciones explícitas el pod llevaba las implícitas (DefaultTolerationSeconds) a 300s: un flap que
+        # duraba más de 5 min hacía que el node-controller EXPULSARA el pod; como el deployment es Recreate + PVC
+        # local-path RWO fijado a dgx3, el reemplazo quedaba Pending en el nodo caído -> 0 réplicas disponibles >15 min ->
+        # KubePodNotReady + KubernetesDeploymentUnavailable disparaban la regla Keep deployment-degraded (falsos positivos
+        # del 16-11: churn de pods ContainerStatusUnknown cada ~20 min). Con tolerationSeconds=600 un flap de hasta ~10 min
+        # NO expulsa el pod: kubelet re-adopciona/reinicia el contenedor al reconectar (restartPolicy Always) y el
+        # deployment no pierde la réplica -> no salta la alerta. Una caída sostenida real (halt térmico, ~78 min) sigue
+        # expulsando a los 10 min y, con el nodo ido, available=0 >15 min -> la alerta SÍ salta. El umbral (600s) queda
+        # por debajo del for: 15m de las alertas, así que no enmascara una caída de verdad.
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 600
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 600
       automountServiceAccountToken: false
       # Pod-level seccomp Unconfined is required for rootlesskit user-namespace
       # setup. The container-level override alone is insufficient because k3s/runc
