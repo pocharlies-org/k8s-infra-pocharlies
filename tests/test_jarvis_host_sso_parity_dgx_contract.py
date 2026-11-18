@@ -53,6 +53,7 @@ MAQUINA = [
     ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
     ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide la ventana (HMAC V2)
     ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
+    ("POST", "/api/creative/cine/producciones"),  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio)
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
