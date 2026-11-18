@@ -5,7 +5,7 @@
 # the dashboard media gateway. Priority 400 wins for the bucket prefix so the
 # SAME URL works on LAN/Tailscale and on the internet (traefik-edge carve-out
 # at networking/traefik-edge/labs-public.yaml). No auth middleware: the labs
-# bucket is anonymous-download on purpose (throwaway demos only).
+# bucket is throwaway demos only. Backend: objectstore-edge gateway (OVH, INFRA-1175).
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -17,12 +17,12 @@ spec:
     - websecure
   routes:
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && PathPrefix(`/labs`)
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/labs/`)
       priority: 400
       services:
-        - name: minio-s3
-          namespace: minio
-          port: 9000
+        - name: objectstore-edge
+          namespace: objectstore-edge
+          port: 8000
   tls:
     store:
       name: default

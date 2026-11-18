@@ -4,7 +4,8 @@
 # de traefik-lan, donde lan-dgx-s3-media-public-host (prio 300) se tragaría la ruta;
 # priority 400 gana para el prefijo, como labs-lan.yaml. `pub/` es público (también
 # en traefik-edge/artifacts-public.yaml); `lan/` solo con el ClientIP de la ruta
-# skirmshop-s3.lan.e-dani.com que lo servía antes.
+# skirmshop-s3.lan.e-dani.com que lo servía antes. Backend: gateway objectstore-edge (OVH
+# Object Storage, INFRA-1175).
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -18,16 +19,16 @@ spec:
       match: Host(`s3.e-dani.com`) && PathPrefix(`/artifacts/pub/`)
       priority: 400
       services:
-        - name: skirmshop-drive-s3
-          namespace: backup-hub
-          port: 9000
+        - name: objectstore-edge
+          namespace: objectstore-edge
+          port: 8000
     - kind: Rule
       match: Host(`s3.e-dani.com`) && PathPrefix(`/artifacts/lan/`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
       priority: 400
       services:
-        - name: skirmshop-drive-s3
-          namespace: backup-hub
-          port: 9000
+        - name: objectstore-edge
+          namespace: objectstore-edge
+          port: 8000
   tls:
     store:
       name: default

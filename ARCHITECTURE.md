@@ -64,7 +64,11 @@ automático `prune: false`, `selfHeal: true`):
 ## 5. Cómo se construye aquí
 
 Host nuevo = IngressRoute en `networking/traefik-{edge,lan}/` + línea en `kustomization.yaml` + rewrite en AdGuard + (edge)
-`wildcard-cert`/TLS store. **Un cambio de naturaleza destructiva** (KS-5, OVH reinstall) exige las confirmaciones
+`wildcard-cert`/TLS store. **Objeto por URL** (público o LAN, INFRA-1175) = línea en `GATEWAY_ALLOW` del gateway
+`objectstore-edge` (repo `k8s-objectstore-edge-pocharlies`; bucket privado en OVH Object Storage) + IngressRoute aquí
+con `PathPrefix(/<bucket>/<prefijo>/)` hacia `objectstore-edge-ext:8000` (edge) u `objectstore-edge.objectstore-edge:8000`
+(lan), y el middleware que toque (basic auth, SSO, ClientIP). Nunca ACL `public-read` en OVH ni un MinIO: el byte público
+en el host de OVH se salta el borde. **Un cambio de naturaleza destructiva** (KS-5, OVH reinstall) exige las confirmaciones
 explícitas del README (`CONFIRM_OVH_REINSTALL=…`) y `docs/runbook.md`. `docs/architecture.md` describe el estado
 objetivo KS-5; el estado actual lo manda el cluster. StorageClass nueva = fichero en kubernetes/storage/ + línea en el
 kustomization.yaml raíz. El kustomization.yaml de kubernetes/storage/ no lo consume ninguna Application (solo

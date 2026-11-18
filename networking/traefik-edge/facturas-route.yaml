@@ -1,0 +1,27 @@
+---
+# https://s3.e-dani.com/facturas/<file>: PDFs del bucket `facturas` de OVH Object Storage, detrás
+# del basic auth `facturas-auth` (facturas-public.yaml). Backend: gateway objectstore-edge
+# (INFRA-1175); el bucket es privado en OVH, así que el basic auth no se puede saltar por el host
+# de OVH. Priority 300 gana al catch-all SSO de s3.e-dani.com (100).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: facturas-public
+  namespace: traefik-edge
+  labels: {app.kubernetes.io/part-of: skirmshop, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints: [websecure]
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/facturas/`)
+      priority: 300
+      middlewares:
+        - name: facturas-auth
+      services:
+        - name: objectstore-edge-ext
+          port: 8000
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
