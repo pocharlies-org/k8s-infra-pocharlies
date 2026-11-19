@@ -248,31 +248,48 @@ spec:
 
         # «Copia buena» = la última completada en el catálogo barman
         # (cnpg_collector_last_available_backup_timestamp; coincide con
-        # .status.lastSuccessfulBackup). Dos ramas, una alerta:
+        # .status.lastSuccessfulBackup). Tres ramas, una alerta:
         # - sin copia buena en +26h (schedule: diaria 03:00 UTC, ver
         #   scheduledbackup.yaml);
         # - última copia fallida (failed_ts > available_ts), el equivalente en
         #   métricas de LastBackupSucceeded=False.
+        # - la métrica no existe en ningún pod (absent): «no sé si hay copia»
+        #   suena igual que «no hay copia».
         # Un Backup enquistado en walArchivingFailing (como el de las 03:00 del
         # 29-10-2026) no mueve ninguno de los dos timestamps y bloquea al
         # ScheduledBackup siguiente: lo caza la primera rama.
+        #
+        # Por qué la tercera rama (INFRA-1457, medido el 19-11): del 27-10 al
+        # 16-11 no hubo copia buena en el catálogo y la alerta dejó de sonar el
+        # 30-10 (Keep: último firing 30-10 07:08). Con la cola de copia
+        # atascada, la consulta del catálogo del collector fallaba y la métrica
+        # desaparecía de los dos pods: sin series, `time() - max(...)` no
+        # evalúa y la alerta se queda muda — ceguera de 17 días sobre un
+        # problema que ella misma había cazado el día anterior. Si solo
+        # sobrevive la réplica no pasa: exporta 0 y la primera rama dispara.
+        # Lo que no cubrían las dos primeras ramas es la ausencia total, y es
+        # lo que cierra absent(). (PostgresSharedMetricsMissing no puede
+        # cubrirlo: mira cnpg_backends_total, que seguía fluyendo.)
         - alert: PostgresSharedBackupStale
           expr: >-
             (time() - max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}) > 93600)
             or
             (max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"}) > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}))
+            or
+            absent(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
           for: 10m
           labels:
             severity: critical
             area: database
             component: postgres-shared
           annotations:
-            summary: postgres-shared sin copia buena (fallida o +26h)
+            summary: postgres-shared sin copia buena (fallida, +26h o métrica ausente)
             description: >-
-              La última copia falló o no hay una copia buena desde hace +26h.
-              Como el 22-10-2026: la copia de las 03:12 falló y tardó un día en
-              verse. Revisa
+              La última copia falló, no hay una copia buena desde hace +26h, o
+              la métrica de copia no existe en ningún pod (ceguera: como del
+              27-10 al 16-11-2026, cola atascada y alerta muda 17 días). Revisa
               `kubectl get backups.postgresql.cnpg.io -n databases` (ojo: el
-              nombre corto `backup` resuelve a Longhorn, no a CNPG) y el
-              `backupPhase` en los logs del operador cnpg-system;
-              walArchivingFailing que no avanza bloquea la siguiente copia.
+              nombre corto `backup` resuelve a Longhorn, no a CNPG), el
+              `backupPhase` en los logs del operador cnpg-system y
+              `cnpg_collector_errors_total`; walArchivingFailing que no avanza
+              bloquea la siguiente copia y tumba la consulta del catálogo.
