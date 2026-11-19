@@ -1,12 +1,12 @@
 ---
-# Public path carve-out for lab/demo artifacts served from the main MinIO:
+# Public path carve-out for lab/demo artifacts in the OVH Object Storage bucket "labs",
+# served by the objectstore-edge gateway since INFRA-1175 (before: the main MinIO):
 #   https://s3.e-dani.com/labs/<key>
-# NO auth middleware on purpose: only the "labs" bucket has anonymous
-# (download) read, and it holds only throwaway demos. Priority 300 beats the
+# NO auth middleware on purpose: the bucket holds only throwaway demos and the
+# gateway allowlist serves it whole (objects only, no listing). Priority 300 beats the
 # s3.e-dani.com SSO catch-all (100) and LAN bypass (200), same pattern as
 # synapse-email-attachments-public.yaml and facturas-public.yaml.
-# traefik-edge does not watch the minio namespace, hence the ExternalName hop
-# (reuses minio-s3-ext, already defined in this namespace).
+# ExternalName hop: objectstore-edge-ext.yaml.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -18,12 +18,12 @@ spec:
   ingressClassName: traefik-edge
   routes:
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && PathPrefix(`/labs`)
+      match: Host(`s3.e-dani.com`) && PathPrefix(`/labs/`)
       priority: 300
       services:
-        - name: minio-s3-ext
+        - name: objectstore-edge-ext
           namespace: traefik-edge
-          port: 9000
+          port: 8000
   tls:
     store:
       name: default

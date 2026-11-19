@@ -1,0 +1,17 @@
+---
+# INFRA-1175: backend de las URLs de objetos (s3.e-dani.com/{artifacts/pub,facturas,labs} y
+# skirmshop-s3.e-dani.com): el gateway de lectura de OVH Object Storage
+# (pocharlies-org/k8s-objectstore-edge-pocharlies, ns objectstore-edge). traefik-edge solo observa
+# su allowlist de namespaces, de ahí el ExternalName local (patrón de minio-s3-ext). Qué objetos
+# salen lo decide la allowlist GATEWAY_ALLOW del gateway; quién llega, cada IngressRoute.
+apiVersion: v1
+kind: Service
+metadata:
+  name: objectstore-edge-ext
+  namespace: traefik-edge
+spec:
+  type: ExternalName
+  externalName: objectstore-edge.objectstore-edge.svc.cluster.local
+  ports:
+    - name: http
+      port: 8000
