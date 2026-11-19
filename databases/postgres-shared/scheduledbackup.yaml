@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: shared-infrastructure
     app.kubernetes.io/component: backup-schedule
 spec:
-  schedule: "0 0 3 * * *"
+  schedule: "0 0 5 * * *"
   backupOwnerReference: self
   cluster:
     name: postgres-shared-nvme
