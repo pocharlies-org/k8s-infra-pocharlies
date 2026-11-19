@@ -50,6 +50,12 @@ spec:
       default_statistics_target: "100"
       log_statement: "ddl"
       log_min_duration_statement: "1000"
+      # SC-5999 (2026-11-19): los incidentes Keep datastore-shared (alerta
+      # PostgresSharedBackendsWaiting) llegaban sin poder atribuir el bloqueo:
+      # con log_statement=ddl y sin log_lock_waits, un VACUUM FULL o cualquier
+      # espera de lock >deadlock_timeout (1 s) no dejaba rastro. Con esto el log
+      # dice «process N still waiting for Lock on ...» con bloqueado y bloqueador.
+      log_lock_waits: "on"
       # Logical replication prerequisites (Fase 2 of synapse-stack migration).
       # max_replication_slots kept at upstream CNPG default (32) to avoid regression;
       # max_wal_senders bumped from default 10 to 20 to cover 7 synapse role PUBLICATIONs
