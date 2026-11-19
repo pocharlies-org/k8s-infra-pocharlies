@@ -15,10 +15,17 @@
 # puesto (`rolconnlimit > 0`): -1 es ilimitado y no tiene 80% que vigilar.
 #
 # Series exportadas — el exporter compone el nombre como
-# `<collector>_<query>_<column>` (patrón de idle-sessions-queries.yaml):
+# `<collector>_<query>_<column>`:
 #   cnpg_role_connections_conn_limit{rolname}
 #   cnpg_role_connections_backends{rolname}
 # Las consume la alerta `PostgresSharedRoleConnectionsHigh` de monitoring.yaml.
+#
+# OJO (medido en vivo el 19/11 al desplegar esta consulta): el collector de CNPG
+# descarta la consulta entera con «Columns number mismatch» si el número de
+# columnas del SELECT no coincide con el de entradas de `metrics` — las columnas
+# de etiqueta NO se añaden "gratis": hay que declararlas también ellas, con
+# `usage: "LABEL"` (parser.go: ColumnUsage LABEL → variable label, mappings.go).
+# De ahí la entrada `rolname` abajo con usage LABEL.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -42,6 +49,9 @@ data:
       target_databases:
         - postgres
       metrics:
+        - rolname:
+            usage: "LABEL"
+            description: "Nombre del rol (etiqueta variable de las dos metricas)"
         - conn_limit:
             usage: "GAUGE"
             description: "connectionLimit del rol en el servidor (ALTER ROLE ... CONNECTION LIMIT); solo roles con limite puesto"
