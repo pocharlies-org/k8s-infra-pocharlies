@@ -110,7 +110,17 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
       ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
       ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
       ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
-      ("POST", "/api/creative/cine/producciones")]  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio); el navegador va por /api/cine, tras SSO
+      ("POST", "/api/creative/cine/producciones"),  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio); el navegador va por /api/cine, tras SSO
+      ("GET", "/api/creative/cine/producciones"),  # DGX-1719: el flujo de /cine por comandos del bot (HMAC V2 clase studio, dgx.cine.gates-machine.v1)
+      ("GET", "/api/creative/cine/producciones/huerto-1a2b/estado"),
+      ("GET", "/api/creative/cine/producciones/huerto-1a2b/actividad"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/aprobar"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/cambios"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/mensaje"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/reanudar"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/archivar"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/parar"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas")]
 
 
 LAN_DANI = [("dgx-lan-identidad-dani", "traefik-lan"), ("dgx-edge-proof", "traefik-lan")]
