@@ -170,6 +170,15 @@ spec:
       # SC-5827 C9: frescura de la proyeccion de catalogo (webhook propio de rag-app).
       - name: postgres-shared-catalogo-freshness
         key: queries
+      # INFRA-1295 P3: ociosa mas antigua por rol (guardia del idle_session_timeout).
+      # La consulta y su alerta (PostgresSharedOldestIdleSession) entraron con #545
+      # pero este cable se olvidó: sin él la metrica no se exporta y la alerta esta
+      # muda. Corregido en INFRA-1464 al cablear la consulta de roles.
+      - name: postgres-shared-idle-sessions
+        key: queries
+      # INFRA-1464: backends y connectionLimit por rol (guardia de saturacion por rol).
+      - name: postgres-shared-role-connections
+        key: queries
 
   managed:
     roles:
