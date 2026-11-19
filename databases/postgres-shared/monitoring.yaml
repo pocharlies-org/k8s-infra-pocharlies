@@ -141,6 +141,39 @@ spec:
               rolling update de cualquier consumidor puede agotar el cluster y
               provocar `too many clients`.
 
+        # INFRA-1464 (SC-6032): saturación POR ROL. Las dos reglas de arriba son
+        # ciegas a este fallo: el 17-19/11 el clúster estaba sano (~314/500) y lo
+        # que saturó fue el connectionLimit del rol `hindsight` (pool 40 +
+        # migraciones de startup sobre un límite de 50) → «too many connections
+        # for role» → CrashLoop del api → cron de consolidación caído. Compara
+        # backends del rol contra SU límite (custom query
+        # role-connections-queries.yaml), por instancia: el límite de rol es por
+        # postmaster, igual que max_connections, de ahí el `on (pod, rolname)`.
+        # 80% del límite: con hindsight (100) avisa a partir de 80, cuando aún
+        # quedan 20 para el arranque de migraciones que fue lo que faltó.
+        - alert: PostgresSharedRoleConnectionsHigh
+          expr: >-
+            max by (pod, rolname) (cnpg_role_connections_backends{namespace="databases"})
+            / on (pod, rolname) group_left()
+            max by (pod, rolname) (cnpg_role_connections_conn_limit{namespace="databases"})
+            > 0.80
+          for: 5m
+          labels:
+            severity: warning
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: el rol {{ $labels.rolname }} pasa del 80% de su connectionLimit
+            description: >-
+              {{ $labels.rolname }} lleva 5m con {{ $value | humanizePercentage }}
+              de su connectionLimit en {{ $labels.pod }}. Si el rol es el de una
+              app con pool grande (hindsight: pool 40 + migraciones de arranque),
+              el siguiente restart entra en CrashLoop con «too many connections
+              for role». Comprueba el límite en
+              `spec.managed.roles` de databases/postgres-shared/cluster.yaml
+              (git) y sube el límite declarándolo allí, nunca con psql a mano
+              (CNPG lo revierte en el siguiente reconcile).
+
         - alert: PostgresSharedIdleInTransaction
           expr: >-
             max by (datname, usename) (

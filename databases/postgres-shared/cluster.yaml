@@ -164,6 +164,15 @@ spec:
       # SC-5827 C9: frescura de la proyeccion de catalogo (webhook propio de rag-app).
       - name: postgres-shared-catalogo-freshness
         key: queries
+      # INFRA-1295 P3: ociosa mas antigua por rol (guardia del idle_session_timeout).
+      # La consulta y su alerta (PostgresSharedOldestIdleSession) entraron con #545
+      # pero este cable se olvidó: sin él la metrica no se exporta y la alerta esta
+      # muda. Corregido en INFRA-1464 al cablear la consulta de roles.
+      - name: postgres-shared-idle-sessions
+        key: queries
+      # INFRA-1464: backends y connectionLimit por rol (guardia de saturacion por rol).
+      - name: postgres-shared-role-connections
+        key: queries
 
   managed:
     roles:
@@ -403,12 +412,22 @@ spec:
         comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
       # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
       # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
-      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=40 (values de k8s-hindsight-pocharlies, INFRA-942 19-10)
-      # con 1 réplica de API; 50 deja margen para las migraciones del arranque y el rollout.
+      # INFRA-1464 (SC-6032): 50 → 100. Con 50 el arranque del api no tiene margen:
+      # abre el pool de escritura (HINDSIGHT_API_DB_POOL_MAX_SIZE=40, INFRA-942) y las
+      # migraciones de startup (`run_migrations_for_schemas`) abren conexiones extra por
+      # esquema; al reiniciarse con el pool del proceso anterior aún vivo, sus propias
+      # conexiones bloquean las migraciones → «FATAL: too many connections for role
+      # hindsight» → CrashLoopBackOff → servicio sin endpoints → cron
+      # `hindsight-consolidacion` cae (Keep CRON-19991, SC-5921 17/11 y SC-6031 19/11).
+      # 100 cubre pool 40 + migraciones + solape de rollout con margen; el tope sigue
+      # en el servidor (patrón `horarios`/`catalogo`) y el clúster lo aguanta
+      # (max_connections 500 por instancia, uso total medido ~314, SC-5295).
+      # El workaround del 19/11 dejó 100 a mano en el servidor; este valor es ya la
+      # fuente de verdad (CNPG revierte a lo que diga aquí en cada reconcile).
       - name: hindsight
         ensure: present
         login: true
-        connectionLimit: 50
+        connectionLimit: 100
         passwordSecret:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."

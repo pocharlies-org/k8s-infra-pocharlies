@@ -16,6 +16,7 @@ resources:
   - aurora-rca-coverage-queries.yaml
   - catalogo-freshness-queries.yaml
   - idle-sessions-queries.yaml
+  - role-connections-queries.yaml
   - shared-rabbitmq.yaml
   - shared-rabbitmq-ext.yaml
   - synapse-rmq-sauvage.yaml
