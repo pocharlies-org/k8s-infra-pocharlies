@@ -2,7 +2,7 @@
 # SC-5375: bunker navegable de proyectos y agentes, servido por la app ArgoCD oficinas.
 # Backend independiente: no monta el home ni reinicia los pods de Paseo o company.
 #
-# Service ExternalName al DNS del svc, como jira-epic-trigger-public.yaml (SC-5091). NO EndpointSlice:
+# Service ExternalName al DNS del svc (patrón de SC-5091). NO EndpointSlice:
 # argocd-cm excluye EndpointSlice/Endpoints de todo el clúster, así que ArgoCD no lo aplica y Traefik da 503.
 # Keycloak (sso-chain) SIEMPRE: la vista enseña nombres de sesión y claves de Jira, y su
 # /api/ask habla con Hermes. El oauth2-proxy de sso-chain usa el callback central de auth-next y la cookie de
