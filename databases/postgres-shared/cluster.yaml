@@ -415,10 +415,17 @@ spec:
       # SC-5489: comercio (catálogo, precios, ofertas). SC-5827: el Brain murió; el rol
       # `catalogo` es ahora el writer de rag-app (dueña de la proyección desde su webhook).
       # Rol propio, no `skirmshop` (que es dueño de sii y skirmbooks). Item `catalogo-db`, sembrado por security.
+      # SC-5985: con 20 reventó el 18-11 (CRON-19899): dos jobs del cronjob
+      # `rag-picqer-price-sync` instantiatedos por Synapse a la vez (15:07 y 15:13,
+      # el segundo con el primero aún en retry) + el writer de rag-app pasaron de 20
+      # y el job murió con «too many connections for role "catalogo"». El pool de
+      # Prisma del job no va acotado en la URL, así que el tope sigue en el servidor
+      # (patrón de `horarios`/`hindsight`): 40 da margen a dos jobs concurrentes y
+      # rag-app; max_connections del clúster es 500 y el uso total medido ~314.
       - name: catalogo
         ensure: present
         login: true
-        connectionLimit: 20
+        connectionLimit: 40
         passwordSecret:
           name: catalogo-db-credentials
         comment: "Comercio (catálogo, precios, ofertas) sobre pgvector. Dueña: rag-app (skirmshopshopifyapp) desde SC-5827. SC-5489."
