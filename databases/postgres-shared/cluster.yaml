@@ -50,6 +50,12 @@ spec:
       default_statistics_target: "100"
       log_statement: "ddl"
       log_min_duration_statement: "1000"
+      # SC-5999 (2026-11-19): los incidentes Keep datastore-shared (alerta
+      # PostgresSharedBackendsWaiting) llegaban sin poder atribuir el bloqueo:
+      # con log_statement=ddl y sin log_lock_waits, un VACUUM FULL o cualquier
+      # espera de lock >deadlock_timeout (1 s) no dejaba rastro. Con esto el log
+      # dice «process N still waiting for Lock on ...» con bloqueado y bloqueador.
+      log_lock_waits: "on"
       # Logical replication prerequisites (Fase 2 of synapse-stack migration).
       # max_replication_slots kept at upstream CNPG default (32) to avoid regression;
       # max_wal_senders bumped from default 10 to 20 to cover 7 synapse role PUBLICATIONs
@@ -412,18 +418,16 @@ spec:
         comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
       # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
       # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
-      # INFRA-1464 (SC-6032): 50 → 100. Con 50 el arranque del api no tiene margen:
-      # abre el pool de escritura (HINDSIGHT_API_DB_POOL_MAX_SIZE=40, INFRA-942) y las
-      # migraciones de startup (`run_migrations_for_schemas`) abren conexiones extra por
-      # esquema; al reiniciarse con el pool del proceso anterior aún vivo, sus propias
-      # conexiones bloquean las migraciones → «FATAL: too many connections for role
-      # hindsight» → CrashLoopBackOff → servicio sin endpoints → cron
-      # `hindsight-consolidacion` cae (Keep CRON-19991, SC-5921 17/11 y SC-6031 19/11).
-      # 100 cubre pool 40 + migraciones + solape de rollout con margen; el tope sigue
-      # en el servidor (patrón `horarios`/`catalogo`) y el clúster lo aguanta
-      # (max_connections 500 por instancia, uso total medido ~314, SC-5295).
-      # El workaround del 19/11 dejó 100 a mano en el servidor; este valor es ya la
-      # fuente de verdad (CNPG revierte a lo que diga aquí en cada reconcile).
+      # SC-6031 (CRON-19991, 19-11): con 50 el arranque de la API reventaba con
+      # «too many connections for role "hindsight"» → CrashLoopBackOff de hindsight-api →
+      # service sin endpoints → los CronJobs hindsight-consolidacion y codigo-ev fallaban
+      # con Connection refused. El límite es por instancia y en el primario se juntan:
+      # pool de escritura 40 (HINDSIGHT_API_DB_POOL_MAX_SIZE) + migraciones del arranque +
+      # el pool del anterior pod aún drenando durante el reinicio (el bucle de crashes se
+      # canibalizaba: cada arranque nuevo competía con los ~40 del moribundo). El pool de
+      # lectura (40) va al réplica postgres-shared-ro, donde el mismo límite también cuenta.
+      # 100 = 40 de pool + solapamiento de rollout/crash-loop + margen de migraciones.
+      # Máximos por rol sobre un clúster de max_connections=500: no desplaza a los demás.
       - name: hindsight
         ensure: present
         login: true
