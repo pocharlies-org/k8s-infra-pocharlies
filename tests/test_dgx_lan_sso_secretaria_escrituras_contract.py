@@ -15,8 +15,9 @@ DGX-1314 (Dani, 27-10): en el Traefik de LAN no hay SSO, LAN = Dani: desde casa 
 cadena LAN_DANI (su identidad estampada + prueba).
 DGX-1539 (Dani, 12-11): lo que autoriza con el JWT vuelve a sso-chain también desde casa (400/350,
 como antes de DGX-1314): sin Bearer `puede_operar` sale false para todos y el configurador se apaga.
-Los POST del quiosco siguen en el bypass (así estaban antes de DGX-1314; el mando dgx3 web va tras
-SSO y su variante /machine con HMAC no).
+Los POST del quiosco web (DGX-1575) suben también a la 350: el backend los protege con
+ESCRITURA_CLUSTER (JWT /edani-admins, como el mando dgx3 web) y en el bypass siempre daban 403;
+sus variantes /machine con HMAC siguen abiertas (así estaban antes de DGX-1314).
 DGX-809 (spec PM 04-11): en el borde ya no hay bypass de casa (fuera la 200 de dgx/s3 y las
 400/300 de jarvis): una IP de casa que llama al borde es tratada como externa (100.64.0.0/10 =
 tailnet y CGNAT, DGX-1429) y TODO pide sso-chain, incluidas las lecturas y las máquinas con HMAC,
@@ -51,7 +52,12 @@ DE_CASA = ("192.168.50.23", "100.101.102.103", "10.42.3.4")
 PERFILES = ("secretaria", "secretaria-dani", "secretaria-leila", "secretaria-casa")
 
 ESCRITURAS = [("POST", p) for p in ("/api/activity/power", "/api/llm/uncensored",
-                                     "/api/llm/dgx3/mode")]  # DGX-1054: el mando LLM|creative de dgx3
+                                     "/api/llm/dgx3/mode",
+                                     # DGX-1575: el quiosco web escribe el ConfigMap kiosco y el backend
+                                     # lo protege con ESCRITURA_CLUSTER (JWT /edani-admins) — como el mando
+                                     # dgx3 web, va tras sso-chain también por casa; solo sus /machine (HMAC)
+                                     # se quedan abiertas. En el bypass el guarda siempre respondía 403.
+                                     "/api/kiosco/vista", "/api/kiosco/escritorio")]  # DGX-1054: el mando LLM|creative de dgx3
 # Los POST del quiosco van en la lista de abiertos por casa (no estaban en la 350 pre-DGX-1314).
 SECRETARIA = [
     ("GET", "/despacho-secretaria"),
@@ -99,7 +105,6 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
 )] + [("POST", "/api/alarma/estado"), ("POST", "/api/pagos/x"),  # máquina con HMAC: siguen abiertas
       ("POST", "/api/llm/dgx3/mode/machine"),  # DGX-1095: la ventana de dgx3 sin navegador (HMAC V2); el web, tras SSO
       ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide, Dani toca dos veces (HMAC V2 clase hermes)
-      ("POST", "/api/kiosco/vista"), ("POST", "/api/kiosco/escritorio"),  # DGX-1449: quioscos, sin sesión por casa (como antes de DGX-1314)
       ("POST", "/api/kiosco/vista/machine"),
       ("POST", "/api/kiosco/observed/machine"),
       ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
