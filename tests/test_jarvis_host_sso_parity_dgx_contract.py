@@ -54,6 +54,16 @@ MAQUINA = [
     ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide la ventana (HMAC V2)
     ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
     ("POST", "/api/creative/cine/producciones"),  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio)
+    ("GET", "/api/creative/cine/producciones"),  # DGX-1719: el flujo de /cine por comandos del bot (HMAC V2 clase studio, dgx.cine.gates-machine.v1)
+    ("GET", "/api/creative/cine/producciones/huerto-1a2b/estado"),
+    ("GET", "/api/creative/cine/producciones/huerto-1a2b/actividad"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/aprobar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/cambios"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/mensaje"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/reanudar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/archivar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/parar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas"),
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
