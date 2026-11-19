@@ -9,6 +9,22 @@
 #   - Ya no es una API S3: sin listado, sin escritura, sin URLs prefirmadas ni el usuario
 #     `talenom-369` (muere con el MinIO; usuario OVH por consumidor = security, SC-5876). Los enlaces
 #     temporales se firman contra https://s3.sbg.io.cloud.ovh.net (skill s3-drive-sharing).
+# TEMPORAL (INFRA-1175): el restic del droplet alphalink (scripts/alphalink/alphalink-backup.sh) escribe
+# por API S3 con su credencial de MinIO en skirmshop-s3.e-dani.com/alphalink-backups. Esa ruta sigue al
+# MinIO de backup-hub hasta mover el repo restic a OVH con un usuario OVH propio (security, SC-5876);
+# muere con la onda 5 junto con este ExternalName.
+apiVersion: v1
+kind: Service
+metadata:
+  name: skirmshop-drive-s3-ext
+  namespace: traefik-edge
+spec:
+  type: ExternalName
+  externalName: skirmshop-drive-s3.backup-hub.svc.cluster.local
+  ports:
+    - name: s3
+      port: 9000
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -28,6 +44,11 @@ spec:
       services:
         - name: objectstore-edge-ext
           port: 8000
+    - kind: Rule
+      match: Host(`skirmshop-s3.e-dani.com`) && (Path(`/alphalink-backups`) || PathPrefix(`/alphalink-backups/`))
+      services:
+        - name: skirmshop-drive-s3-ext
+          port: 9000
   tls:
     store:
       name: default
