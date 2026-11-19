@@ -142,6 +142,19 @@ spec:
               ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
               ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
               ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
+            # --- SC-6040: CONNECTION LIMIT del rol hindsight -------------------
+            # El API de Hindsight abre dos pools (escritura 40 + lectura 40 = 80
+            # conexiones, k8s-hindsight-pocharlies/k8s/values.yaml). El rol se
+            # creó el 17-10 (INFRA-940) con CONNECTION LIMIT 50 sin hogar en
+            # GitOps: en una ronda de consolidación el pool no puede crecer de
+            # 50, el acquire de asyncpg agota su timeout (30 s), el poller se
+            # auto-apaga ("shutting worker down so the task is recovered on
+            # restart") y la API queda caída ~14 min por ciclo — 16 reinicios
+            # del 17 al 19-11, causa de SC-6035 y SC-6031. 100 = 80 de los dos
+            # pools + margen de los cron. Idempotente (atributo de rol, no GUC).
+            # Para revertir: ALTER ROLE hindsight CONNECTION LIMIT -1;
+            - -c
+            - ALTER ROLE hindsight CONNECTION LIMIT 100;
             # Limpieza única del backlog tras los ALTER (INFRA-1295 P1): los
             # ALTER solo afectan a sesiones nuevas, así que las ociosas ya
             # acumuladas mueren aquí. Idempotente: en syncs posteriores
