@@ -406,10 +406,13 @@ spec:
       # SC-6031 (CRON-19991, 19-11): con 50 el arranque de la API reventaba con
       # «too many connections for role "hindsight"» → CrashLoopBackOff de hindsight-api →
       # service sin endpoints → los CronJobs hindsight-consolidacion y codigo-ev fallaban
-      # con Connection refused. El 50 de INFRA-942 dimensionó UN pool (HINDSIGHT_API_DB_POOL_MAX_SIZE=40);
-      # el split reader/writer añadió un segundo pool (HINDSIGHT_API_READ_DB_POOL_MAX_SIZE=40) y el
-      # requisito pasó a 80 + migraciones del arranque. 100 = 80 de pools + margen de migraciones
-      # y rollout. Máximos por rol sobre un clúster de max_connections=500: no desplaza a los demás.
+      # con Connection refused. El límite es por instancia y en el primario se juntan:
+      # pool de escritura 40 (HINDSIGHT_API_DB_POOL_MAX_SIZE) + migraciones del arranque +
+      # el pool del anterior pod aún drenando durante el reinicio (el bucle de crashes se
+      # canibalizaba: cada arranque nuevo competía con los ~40 del moribundo). El pool de
+      # lectura (40) va al réplica postgres-shared-ro, donde el mismo límite también cuenta.
+      # 100 = 40 de pool + solapamiento de rollout/crash-loop + margen de migraciones.
+      # Máximos por rol sobre un clúster de max_connections=500: no desplaza a los demás.
       - name: hindsight
         ensure: present
         login: true
