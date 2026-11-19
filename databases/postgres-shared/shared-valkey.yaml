@@ -468,6 +468,11 @@ spec:
                   # k8s/control-nexus/dashboard-productor-deployment.yaml, SC-2716):
                   # calcula las ranuras de presentación y las publica en dash:v1:*.
                   - dgx-dashboard-productor
+                  # Controlador del LLM de los Sparks (dgx-infra
+                  # k8s/control-nexus/dashboard-gpu-controller-deployment.yaml, DGX-1716):
+                  # lock gb10 y leases del árbitro, y las órdenes del eje dgx3. Sin esta
+                  # entrada su reconcile se queda esperando el lock (connection refused).
+                  - dgx-gpu-controller
       ports:
         - { protocol: TCP, port: 6379 }
     - from:
