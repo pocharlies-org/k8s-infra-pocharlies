@@ -834,6 +834,7 @@ spec:
             operator: Equals
             value: true
       validate:
+        allowExistingViolations: true
         message: >-
           DGX-1665: GPU on the Sparks only through the queue. A GPU pod there must
           come from a queue lane, a GPU system DaemonSet or a listed LLM resident,
@@ -883,6 +884,7 @@ spec:
             operator: Equals
             value: true
       validate:
+        allowExistingViolations: true
         message: >-
           DGX-1665: GPU workloads on the Sparks are created only by ArgoCD (a GitOps
           lane) or the dashboard queue, never by hand. Add a lane by PR or launch the
@@ -929,6 +931,7 @@ spec:
             operator: Equals
             value: true
       validate:
+        allowExistingViolations: true
         message: >-
           DGX-1665: a GPU Job on the Sparks must end on its own: set
           activeDeadlineSeconds (at most 21600) and ttlSecondsAfterFinished (at most
