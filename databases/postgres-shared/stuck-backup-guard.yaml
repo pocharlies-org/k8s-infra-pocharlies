@@ -1,0 +1,136 @@
+# INFRA-1032: guardia anti-atasco de copias CNPG (patrón: kubernetes/workloads/sauvage-zombie-watchdog.yaml).
+# Un Backup hijo del ScheduledBackup en fase no terminal corta el reconcile del ScheduledBackup entero
+# (operador CNPG v1.29.1, scheduledbackup_controller.go; upstream #4361/#10385/#10745) y la copia diaria
+# deja de salir días. Borrar el CR atascado NO recrea la franja del día (lastScheduleTime ya registrado),
+# por eso la guardia borra el atasco Y crea un Backup suyo (guard-retry-*) que NO es hijo.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+rules:
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["backups"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cnpg-scheduled-backup-guard
+subjects:
+  - kind: ServiceAccount
+    name: cnpg-scheduled-backup-guard
+    namespace: databases
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: cnpg-scheduled-backup-guard
+        spec:
+          serviceAccountName: cnpg-scheduled-backup-guard
+          restartPolicy: Never
+          enableServiceLinks: false
+          containers:
+            - name: guard
+              image: alpine/k8s:1.32.5
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  memory: 256Mi
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  now="$(date -u +%s)"
+                  # busybox date no parsea ISO con -d: el corte se calcula desde epoch y se compara lexicográficamente.
+                  cut30="$(date -u -d "@$((now - 1800))" +%Y-%m-%dT%H:%M:%SZ)"
+                  cut15="$(date -u -d "@$((now - 900))" +%Y-%m-%dT%H:%M:%SZ)"
+                  cut7d="$(date -u -d "@$((now - 604800))" +%Y-%m-%dT%H:%M:%SZ)"
+                  today="$(date -u +%Y-%m-%d)"
+                  work="$(mktemp -d)"
+                  trap 'rm -rf "$work"' EXIT
+
+                  list_backups() {
+                    kubectl get backups.postgresql.cnpg.io -n databases -l "$1" \
+                      -o custom-columns=NAME:.metadata.name,CLUSTER:.spec.cluster.name,PHASE:.status.phase,CREATED:.metadata.creationTimestamp \
+                      --no-headers 2>/dev/null || true
+                  }
+
+                  list_backups 'cnpg.io/scheduled-backup' > "$work/all"
+                  list_backups 'cnpg.io/guard-retry=true' >> "$work/all"
+
+                  # Atascos: walArchivingFailing > 30 min (terminal en la práctica, el operador no la despeja),
+                  # failed > 15 min; y housekeeping de guard-retry-* de hace más de 7 días.
+                  awk -v c30="$cut30" -v c15="$cut15" -v c7="$cut7d" '
+                    ($3=="walArchivingFailing" && $4!="" && $4<c30) ||
+                    ($3=="failed" && $4!="" && $4<c15) ||
+                    ($1 ~ /^guard-retry-/ && $4!="" && $4<c7) {print $1}
+                  ' "$work/all" > "$work/del"
+                  while read -r name; do
+                    [ -n "$name" ] || continue
+                    kubectl delete backups.postgresql.cnpg.io -n databases "$name" --wait=false
+                    echo "GUARD: deleted stuck backup $name"
+                  done < "$work/del"
+
+                  # Estado tras los borrados, por cluster con backups de hoy.
+                  list_backups 'cnpg.io/scheduled-backup' > "$work/live"
+                  list_backups 'cnpg.io/guard-retry=true' >> "$work/live"
+                  awk -v today="$today" '$4 ~ "^"today {print $2}' "$work/live" | sort -u > "$work/clusters"
+                  while read -r cluster; do
+                    [ -n "$cluster" ] || continue
+                    awk -v c="$cluster" -v today="$today" '$2==c && $4 ~ "^"today' "$work/live" > "$work/rows"
+                    if awk '$3=="completed"{found=1} END{exit !found}' "$work/rows"; then
+                      echo "GUARD: cluster $cluster already completed today, nothing to do"
+                      continue
+                    fi
+                    attempts="$(wc -l < "$work/rows" | tr -d ' ')"
+                    if [ "$attempts" -ge 4 ]; then
+                      echo "GUARD: cluster $cluster has $attempts attempts today, not retrying"
+                      continue
+                    fi
+                    stamp="$(date -u +%Y%m%d%H%M)"
+                    name="guard-retry-$cluster-$stamp"
+                    kubectl apply -f - <<EOF
+                  apiVersion: postgresql.cnpg.io/v1
+                  kind: Backup
+                  metadata:
+                    name: $name
+                    namespace: databases
+                    labels:
+                      cnpg.io/guard-retry: "true"
+                  spec:
+                    method: barmanObjectStore
+                    cluster:
+                      name: $cluster
+                  EOF
+                    echo "GUARD: created $name (cluster $cluster, attempts today before this one: $attempts)"
+                  done < "$work/clusters"
