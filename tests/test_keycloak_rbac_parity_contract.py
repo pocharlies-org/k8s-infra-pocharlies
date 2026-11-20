@@ -215,6 +215,10 @@ class RoleCatalogParityTest(unittest.TestCase):
             # shared session-plane SA (grant and client scope ride
             # agentgateway-read-grants.sh; the chat hook never inspects it).
             "agentgateway-write:nova=service-account-agentgateway-mcp",
+            # INFRA-1493: the scoped write role of nova-atlassian (grant and
+            # client scope ride hindsight-reader-client.sh, wave 24; the chat
+            # hook never inspects it).
+            "agentgateway-write:atlassian-nova=service-account-nova-atlassian",
         }, guarded_elsewhere)
 
 

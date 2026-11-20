@@ -3,9 +3,12 @@
 socialmedia-hindsight lee el banco `personal` (agentgateway-read:hindsight-personal).
 Las cinco de Nova (INFRA-1245, veredicto de security INFRA-1248 de 10-11-2026):
 nova-hindsight-tienda, -claude-personal, -personal y -cloudblue (los bancos) y
-nova-atlassian (las lecturas de Jira/Confluence). Un principal por (servicio,
+nova-atlassian (las lecturas de Jira/Confluence y, desde INFRA-1493, sus tres
+escrituras de Jira por /atlassian con el rol acotado
+agentgateway-write:atlassian-nova — enmienda a C2 del veredicto INFRA-1248; nunca
+el write pelado). Un principal por (servicio,
 banco) por veredicto de security de 02-11: una credencial filtrada abre
-exactamente un banco. Ninguna identidad lleva rol de escritura alguno (C2 del
+exactamente un banco. Ninguna identidad lleva otro rol de escritura (C2 del
 veredicto; las rutas hindsight son de solo lectura por diseño). El veredicto de
 05-11 retiró las otras dos que este PR traía: jarvis-hindsight (banco `tienda`:
 pedidos y correo de clientes con datos personales; el TTS de Alexa los diría a
@@ -42,13 +45,16 @@ CLAUDE_PERSONAL_ROLE = "agentgateway-read:hindsight-claude-personal"
 PERSONAL_ROLE = "agentgateway-read:hindsight-personal"
 CLOUDBLUE_ROLE = "agentgateway-read:hindsight-cloudblue"
 ATLASSIAN_ROLE = "agentgateway-read:atlassian"
+# INFRA-1493 (veredicto de security, enmienda a C2 de INFRA-1248): el único rol
+# de escritura de la tabla, acotado a las tres escrituras de Jira de Nova.
+ATLASSIAN_NOVA_WRITE_ROLE = "agentgateway-write:atlassian-nova"
 CLIENTS = {
     "socialmedia-hindsight": [PERSONAL_ROLE],
     "nova-hindsight-tienda": [TIENDA_ROLE],
     "nova-hindsight-claude-personal": [CLAUDE_PERSONAL_ROLE],
     "nova-hindsight-personal": [PERSONAL_ROLE],
     "nova-hindsight-cloudblue": [CLOUDBLUE_ROLE],
-    "nova-atlassian": [ATLASSIAN_ROLE],
+    "nova-atlassian": [ATLASSIAN_ROLE, ATLASSIAN_NOVA_WRITE_ROLE],
     # SC-5237 (veredicto de security, 10-11-2026): la identidad de lectura de
     # synapse-adapter-brain-summary (brain.summarize de family sobre el banco
     # personal, synapse#337), misma puerta personal que socialmedia-hindsight.
@@ -92,27 +98,36 @@ class HindsightReaderReconcilerTest(ScopedClientContractMixin, unittest.TestCase
         ("nova-hindsight-personal", PERSONAL_ROLE, "the agentgateway-read-grants hook owns it"),
         ("nova-hindsight-cloudblue", CLOUDBLUE_ROLE, "the agentgateway-read-grants hook owns it"),
         ("nova-atlassian", ATLASSIAN_ROLE, "the agentgateway-read-grants hook owns it"),
+        ("nova-atlassian", ATLASSIAN_NOVA_WRITE_ROLE, "the agentgateway-domain-roles hook owns it"),
     ]
     UNREVIEWED_CASES = [
         ("socialmedia-hindsight", "agentgateway-write"),
         ("socialmedia-hindsight", TIENDA_ROLE),
-        # C2 del veredicto INFRA-1248: cada client de Nova lleva ÚNICAMENTE su
-        # rol de lectura; ni un write ni el rol del banco hermano.
+        # C2 del veredicto INFRA-1248 (enmendado solo en lo acotado por
+        # INFRA-1493): cada client de Nova lleva ÚNICAMENTE su rol de lectura y,
+        # en nova-atlassian, el write acotado de su fila; ni el write pelado ni
+        # el rol del banco hermano.
         ("nova-hindsight-tienda", "agentgateway-write"),
         ("nova-hindsight-tienda", PERSONAL_ROLE),
         ("nova-hindsight-claude-personal", "agentgateway-write"),
         ("nova-hindsight-personal", TIENDA_ROLE),
         ("nova-hindsight-cloudblue", "agentgateway-write"),
+        ("nova-atlassian", "agentgateway-write"),
         ("nova-atlassian", PERSONAL_ROLE),
     ]
     AUDIT_NO_MAPPER_CLIENT = "socialmedia-hindsight"
     ROLLBACK_CLIENT = "socialmedia-hindsight"
 
     def fixed_scope_extra_checks(self, own, script):
-        # Ningún conjunto revisado nombra un rol de escritura: las rutas
-        # hindsight son de solo lectura por diseño (analysis del config vivo).
+        # Ningún conjunto revisado nombra un rol de escritura salvo la fila de
+        # nova-atlassian (INFRA-1493): su único write acotado
+        # agentgateway-write:atlassian-nova. Las rutas hindsight son de solo
+        # lectura por diseño y el write pelado no aparece en la tabla.
         table = own.split('case "${CLIENT_ID}" in', 1)[1].split("esac", 1)[0]
-        self.assertNotIn("agentgateway-write", table)
+        # El único nombre de la familia write que aparece es el acotado, dos
+        # veces (REVIEWED_ROLES y WRITE_ROLE_NAME de la fila nova-atlassian).
+        self.assertEqual(2, table.count("agentgateway-write:atlassian-nova"))
+        self.assertNotIn('agentgateway-write"', table)
 
 
 class HindsightReaderManifestContractTest(unittest.TestCase):
