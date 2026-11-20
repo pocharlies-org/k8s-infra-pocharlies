@@ -133,6 +133,26 @@ spec:
         - name: dgx-dashboard-ui
           namespace: control-nexus
           port: 80
+    # DGX-1742 (security S-3, nota-security-cine-panel.md §15.8 de dgx-infra): Backlot
+    # (https://cine.lan.e-dani.com) escribe en /api/cine con fetch(credentials: 'include') y el
+    # navegador manda antes un preflight OPTIONS, que nunca lleva cookie: tras sso-chain recibía
+    # un 302 a Keycloak y el POST no salía (medido por security el 20-11). Solo el preflight entra
+    # sin sso-chain; lo contesta el CORSMiddleware del dashboard (lista cerrada de un origen) y no
+    # devuelve datos. El GET/POST que viene detrás no casa aquí (Method) y sigue por la 400/100 con
+    # sso-chain. Prioridad 450: por encima de la 400 que lleva /api/cine; no se cruza con la 450 de
+    # mensajería (otras rutas). Strip y prueba de borde como toda ruta al dashboard (DGX-729).
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && Method(`OPTIONS`) && PathPrefix(`/api/cine`)
+      priority: 450
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-edge
+        - name: dgx-edge-proof
+          namespace: traefik-edge
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # Consola de mensajería (página, assets propios, API y SSE
     # /api/messages/stream) → dgx-messages, para TODO origen y siempre tras
     # sso-chain: la identidad X-Auth-Request-User la estampa el forwardAuth
