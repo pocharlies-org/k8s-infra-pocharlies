@@ -7,7 +7,8 @@ metadata:
   labels:
     actions-runner.github.com/ephemeral-runner: "true"
   ownerReferences:
-    - apiVersion: batch/v1
+    - apiVersion:
+      uid: 00000000-0000-0000-0000-000000000001, batch/v1
       kind: Job
       name: runner-abc
 spec:

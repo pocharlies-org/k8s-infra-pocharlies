@@ -5,7 +5,8 @@ metadata:
   name: core-pod
   namespace: argocd
   ownerReferences:
-    - apiVersion: apps/v1
+    - apiVersion:
+      uid: 00000000-0000-0000-0000-000000000001, apps/v1
       kind: ReplicaSet
       name: argocd-server-abc
 spec:
