@@ -198,6 +198,7 @@ jobs:
         run: |
           python3 scripts/gen_coredns_edani.py --check
           python3 -m unittest tests/test_coredns_edani_contract.py -v
+          python3 -m unittest tests/test_edani_dns_divergence_watch_contract.py -v
 
   private-service-exposure-contract:
     runs-on: arc-k8s
