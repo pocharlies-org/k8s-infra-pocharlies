@@ -5,8 +5,8 @@ metadata:
   name: share-manager-pvc-1234
   namespace: longhorn-system
   ownerReferences:
-    - apiVersion:
-      uid: 00000000-0000-0000-0000-000000000001, longhorn.io/v1beta2
+    - apiVersion: longhorn.io/v1beta2
+      uid: 00000000-0000-0000-0000-000000000001
       kind: ShareManager
       name: pvc-1234
 spec:

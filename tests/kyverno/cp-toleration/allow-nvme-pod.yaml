@@ -5,8 +5,8 @@ metadata:
   name: vmsingle-rca-pod
   namespace: monitoring
   ownerReferences:
-    - apiVersion:
-      uid: 00000000-0000-0000-0000-000000000001, operator.victoriametrics.com/v1beta1
+    - apiVersion: operator.victoriametrics.com/v1beta1
+      uid: 00000000-0000-0000-0000-000000000001
       kind: VMSingle
       name: vmsingle-rca
 spec:

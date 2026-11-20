@@ -5,8 +5,8 @@ metadata:
   name: node-agent-abcde
   namespace: velero
   ownerReferences:
-    - apiVersion:
-      uid: 00000000-0000-0000-0000-000000000001, apps/v1
+    - apiVersion: apps/v1
+      uid: 00000000-0000-0000-0000-000000000001
       kind: DaemonSet
       name: node-agent
 spec:
