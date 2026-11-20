@@ -176,8 +176,9 @@ spec:
     # La app del iPhone manda su propio Bearer (cliente dgx-app), que oauth2-proxy acepta.
     # DGX-1676: /cine y /api/cine (producciones de OpenMontage) por la misma razón: todo /api/cine va tras
     # ESCRITURA_CLUSTER (crea agentes en paseo-0 y lee sus guiones), y sin sso-chain el JWT no llega.
+    # DGX-1751: POST /api/arreglar/auditoria (botón «Arreglar con Claude» de /skirmshop) igual: lanza una sesión en paseo-0.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`) || Path(`/cine`) || PathPrefix(`/api/cine`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`) || Path(`/cine`) || PathPrefix(`/api/cine`) || Path(`/api/arreglar/auditoria`))
       priority: 420
       middlewares:
         - name: dgx-strip-identity-headers
