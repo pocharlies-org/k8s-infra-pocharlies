@@ -1000,3 +1000,72 @@ spec:
         patchStrategicMerge:
           spec:
             +(ttlSecondsAfterFinished): 86400
+---
+# POLICY: arc-runner-ttl (INFRA-1488, Dani 20-11-2026: «todo runner con timeout, que no
+# queden zombis»). Every EphemeralRunner of every ARC scale set (any namespace, present
+# or future) is born with cleanup.kyverno.io/ttl, so Kyverno's cleanup controller deletes
+# it 12 h after creation whatever state it is stuck in (Failed, pod in Init or Pending,
+# runner hung after its job). Deleting the EphemeralRunner is ARC's own scale-down path:
+# its finalizers deregister the runner from GitHub and remove the pod, and the
+# EphemeralRunnerSet creates a fresh one if the pool still needs it.
+# - Armed per object at admission, no cron sweep (SC-5617 «todo por eventos»).
+# - 12 h: GitHub already ends any job at 6 h (default timeout-minutes 360), so a runner
+#   still alive at 12 h is a zombie or a warm runner idle half a day; recycling the
+#   latter is harmless. shortcut: the clock starts at creation, not at job start, so a
+#   job that lands on a runner idle ~12 h can be cut; upgrade to arming the TTL on the
+#   workflow_job in_progress event if that ever shows up in CI.
+# - Add-only (+()): a TTL set by hand on a runner wins.
+# - failurePolicy Ignore: a Kyverno outage never blocks ARC from creating runners.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: arc-runner-ttl
+  annotations:
+    policies.kyverno.io/title: ARC Runners Expire
+    policies.kyverno.io/description: >
+      Labels every ARC EphemeralRunner with cleanup.kyverno.io/ttl 12h at creation, so
+      Kyverno's cleanup controller deletes any runner still around 12 h later.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: ttl-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [actions.github.com/v1alpha1/EphemeralRunner]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              +(cleanup.kyverno.io/ttl): 12h
+---
+# The cleanup controller only expires kinds it can list, watch and delete (INFRA-1488).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:cleanup-controller:arc-runners
+  labels:
+    rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
+rules:
+  - apiGroups: [actions.github.com]
+    resources: [ephemeralrunners]
+    verbs: [get, list, watch, delete]
+---
+# Read-only for the reports controller, which watches every kind a policy matches.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:reports-controller:arc-runners
+  labels:
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"
+rules:
+  - apiGroups: [actions.github.com]
+    resources: [ephemeralrunners]
+    verbs: [get, list, watch]
