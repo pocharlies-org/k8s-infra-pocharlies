@@ -1000,3 +1000,72 @@ spec:
         patchStrategicMerge:
           spec:
             +(ttlSecondsAfterFinished): 86400
+---
+# POLICY 13: guard del plano de control (SC-6096, mitigacion SC-6094)
+# ks5-cp-1/2/3 llevan node-role.kubernetes.io/control-plane:NoSchedule (registro:
+# kubernetes/node-labels/labels-job.yaml, aplicado a mano). Antes de SC-6096 estos nodos no
+# tenian taint alguno y cualquier carga aterrizaba en el plano de control; ks5-cp-3 se
+# saturaba con el Postgres compartido y el almacen de metricas encima. Esta mutacion añade
+# la toleracion SOLO a la allowlist, declarada por el propio pod:
+#   - nodeSelector workload=core  -> clase plataforma de la casa (ArgoCD, CNPG, rabbitmq,
+#     valkey, nats, harbor, keycloak, loki, vmalert... ~90 cargas que ya viven en el pool ks5)
+#   - nodeSelector node-pool=ks5-nvme -> anclados al pool NVMe (postgres compartido,
+#     vmsingle-rca)
+#   - pods de DaemonSet -> deben correr en todos los nodos (longhorn, velero node-agent,
+#     alloy, node-exporter; traefik-edge y coredns-local ya la traen)
+#   - namespace longhorn-system -> instance/share-managers, creados por el operador, no por DS
+# Todo lo demas (despliegues de negocio, pods ad-hoc, runners efimeros de CI — SC-6076) no
+# puede programarse aqui y aterriza en atlantic/ubuntu/sauvage.
+# failurePolicy Ignore (patron de la casa): si Kyverno cae, un pod de la allowlist se queda
+# sin toleracion y queda Pending (visible, un borrado lo recrea) en lugar de bloquear toda
+# creacion de pods del cluster.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: control-plane-toleration-allowlist
+  annotations:
+    policies.kyverno.io/title: Toleracion del plano de control solo para la allowlist
+    policies.kyverno.io/description: >
+      Los nodos ks5-cp-* llevan taint node-role.kubernetes.io/control-plane:NoSchedule.
+      La toleracion se añade en admision solo a pods que declaran vivir aqui (nodeSelector
+      workload=core o node-pool=ks5-nvme), a pods de DaemonSet y a pods de longhorn-system.
+      Ningun otro pod puede programarse en ks5-cp-1/2/3.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: add-control-plane-toleration
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      # preconditions (no conditions): patron de job-ttl-default, y verificado con la CLI
+      # (tests/kyverno/cp-toleration/run-offline.sh) — las `conditions` nuevas no se
+      # evaluaban en la regla mutate.
+      preconditions:
+        any:
+          - key: "{{ request.object.spec.nodeSelector.workload || '' }}"
+            operator: Equals
+            value: "core"
+          - key: "{{ request.object.spec.nodeSelector.\"node-pool\" || '' }}"
+            operator: Equals
+            value: "ks5-nvme"
+          - key: "{{ length((request.object.metadata.ownerReferences || `[]`)[?kind=='DaemonSet']) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.namespace }}"
+            operator: Equals
+            value: "longhorn-system"
+      mutate:
+        patchStrategicMerge:
+          spec:
+            tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule

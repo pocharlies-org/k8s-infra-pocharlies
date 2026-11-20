@@ -1,0 +1,14 @@
+# user: system:serviceaccount:kube-system:daemon-set-controller
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-agent-abcde
+  namespace: velero
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: node-agent
+spec:
+  containers:
+    - name: node-agent
+      image: harbor.lan.e-dani.com/library/velero:v1.0.0
