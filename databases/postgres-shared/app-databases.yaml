@@ -197,6 +197,26 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
+# SKIRM-510: base de tests de skirmshop-affiliate-api. `vitest.globalSetup.ts`
+# ejecuta `prisma migrate deploy` contra `affiliate_test`, y Prisma intenta
+# crearla si no existe — el usuario de la app `skirmshop` no tiene (ni debe
+# tener) CREATEDB, así que la base se declara aquí como todas: el operador
+# CNPG la crea como superusuario y skirmshop queda dueño, suficiente para
+# aplicar migraciones. Los datos son efímeros: los reescribe `npm test`.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: affiliate-test
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: affiliate_test
+  owner: skirmshop
+  cluster:
+    name: postgres-shared-nvme
+---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
