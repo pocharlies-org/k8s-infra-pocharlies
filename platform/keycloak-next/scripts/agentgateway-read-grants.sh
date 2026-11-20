@@ -48,8 +48,10 @@ umask 077
 # owned by hindsight-reader-client.sh (wave 24, one PostSync Job per client);
 # same rule as SC-699/INFRA-477: this hook only asserts the extra holders are
 # reviewed and never resolves the Nova clients. The other two Nova identities
-# ride roles that are NOT in this matrix: hindsight-personal belongs to the
-# wave-25 holder-set hook (agentgateway-hindsight-personal-grants) and
+# ride roles that are NOT in this matrix: the holder set of hindsight-personal
+# belongs to the wave-25 hook (agentgateway-hindsight-personal-grants; this
+# hook only grants and scopes it for the shared SA since SC-6113, see
+# PERSONAL_READ_ROLE_NAME) and
 # hindsight-cloudblue has no holder-set reconciler at all (INFRA-974 left it
 # out of the matrix on purpose; declared in ROLES.yaml).
 
@@ -66,6 +68,21 @@ WRITE_ROLE_NAME="${WRITE_ROLE_NAME:-agentgateway-write}"
 # (wave 19); este hook lo concede al SA compartido y lo mapea en el client scope, como
 # hizo INFRA-45 con agentgateway-write.
 NOVA_WRITE_ROLE_NAME="${NOVA_WRITE_ROLE_NAME:-agentgateway-write:nova}"
+# SC-6113 (2026-11-20, decision of Dani, owner of the bank `personal`: «el personal
+# quiero que se pueda consultar» — every Claude session reads claude-personal AND
+# personal): the route role of /hindsight-personal rides the shared plane. The SA
+# is the one the auth-proxy (127.0.0.1:8790) of the Claude CLI sessions in paseo-0
+# and company-0 uses; until now /hindsight-personal answered it 403. Like
+# agentgateway-write:nova, this hook grants it to the shared SA, maps it into the
+# client scope (fullScopeAllowed=false: without the mapping the grant does not
+# travel) and pins it in the exact minted token. The role itself is owned by the
+# catalog (created by security in SC-4051) and its COMPLETE holder set by
+# agentgateway-hindsight-personal-grants.sh (wave 25), where the shared SA is a
+# reviewed holder; that is why it stays out of READ_ROLE_NAMES (no creation, no
+# exclusivity check here, no deletion on rollback). Exact agentgateway-mcp
+# token with the flag off since then: agentgateway-write + the 27 reads +
+# agentgateway-write:nova + this role = 30; grants owned here = 29.
+PERSONAL_READ_ROLE_NAME="${PERSONAL_READ_ROLE_NAME:-agentgateway-read:hindsight-personal}"
 OPENCLAW_BASE_ROLE="${OPENCLAW_BASE_ROLE:-cto-office-send}"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-read-grants-admin.config
@@ -101,12 +118,13 @@ CLIENT_CONFIG=/tmp/kcadm-read-grants-client.config
 # bank `claude-personal`, contract mcp.hindsight.reads, read-only by design, bank
 # fixed by the backend URL path). Security ruling SC-4051: the bank is the memory
 # of the Claude sessions of the machine plane, and its consumers ARE the Claude
-# sessions (shared SA), so it may travel in the shared plane — unlike the PERSONAL
-# bank: agentgateway-read:hindsight-personal is deliberately NOT in this matrix
-# (personal conversations must not widen to every consumer of the shared plane);
-# its three dedicated holders are declared in ROLES.yaml (precedent
-# hindsight-cloudblue). The read matrix is 27 roles since then: reviewed MCP
-# token set 28 (write + 27 reads).
+# sessions (shared SA), so it may travel in the shared plane. The PERSONAL bank
+# was kept out of the shared plane by the same verdict; SC-6113 (Dani, 20-11-2026)
+# reverses that for this SA only — see PERSONAL_READ_ROLE_NAME below. It is
+# still NOT in READ_ROLE_NAMES: this hook neither creates it, nor checks its
+# holder set, nor deletes it on rollback (all three belong to the catalog and to
+# the wave-25 hook agentgateway-hindsight-personal-grants). The read matrix is
+# 27 roles since then: reviewed MCP token set 28 (write + 27 reads).
 # SC-4304 (2026-11-02): + agentgateway-read:hindsight-codigo (route
 # /hindsight-codigo — k8s-agentgateway-pocharlies#248; Hindsight bank `codigo`:
 # the source code of the company's registry repos, one document per file,
@@ -286,6 +304,7 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
 [ "${OPENCLAW_CLIENT_ID}" = "openclaw-readonly-agentgateway" ] || fail "OPENCLAW_CLIENT_ID is immutable"
 [ "${WRITE_ROLE_NAME}" = "agentgateway-write" ] || fail "WRITE_ROLE_NAME is immutable"
 [ "${NOVA_WRITE_ROLE_NAME}" = "agentgateway-write:nova" ] || fail "NOVA_WRITE_ROLE_NAME is immutable"
+[ "${PERSONAL_READ_ROLE_NAME}" = "agentgateway-read:hindsight-personal" ] || fail "PERSONAL_READ_ROLE_NAME is immutable"
 [ "${OPENCLAW_BASE_ROLE}" = "cto-office-send" ] || fail "OPENCLAW_BASE_ROLE is immutable"
 [ "${READ_ROLE_NAMES}" = "${EXPECTED_READ_ROLE_NAMES}" ] || \
   fail "READ_ROLE_NAMES is immutable; update the reviewed matrix and the AgentGateway enforce stories together"
@@ -590,11 +609,11 @@ mcp_wanted_scope() {
   # travelling in tokens once fullScopeAllowed is off. The service account has
   # held the grant since the write-role reconciler; only the mapping was
   # missing (SC-100 defect 6 family).
-  printf '%s,%s,%s' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}"
+  printf '%s,%s,%s,%s' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}"
 }
 
 mcp_wanted_scope_lines() {
-  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | tr ',' '\n'
+  printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}" | tr ',' '\n'
 }
 
 ensure_client_scopes() {
@@ -613,14 +632,14 @@ verify_client_scopes() {
 }
 
 ensure_sa_grants() {
-  grant_missing_roles "users/${MCP_SA_ID}/role-mappings/realm" "$(grant_names "${MCP_SA_ID}")" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME}"
+  grant_missing_roles "users/${MCP_SA_ID}/role-mappings/realm" "$(grant_names "${MCP_SA_ID}")" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME},${PERSONAL_READ_ROLE_NAME}"
   grant_missing_roles "users/${OC_SA_ID}/role-mappings/realm" "$(grant_names "${OC_SA_ID}")" "${OPENCLAW_READ_ROLE_NAMES}"
 }
 
 verify_sa_grants() {
   mcp_grants="$(grant_names "${MCP_SA_ID}")"
-  assert_wanted_mapped "${mcp_grants}" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME}"
-  assert_mapped_within "${mcp_grants}" "$(printf '%s\n%s\n%s\n%s\n' default-roles-edani "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | tr ',' '\n')"
+  assert_wanted_mapped "${mcp_grants}" "${READ_ROLE_NAMES},${NOVA_WRITE_ROLE_NAME},${PERSONAL_READ_ROLE_NAME}"
+  assert_mapped_within "${mcp_grants}" "$(printf '%s\n%s\n%s\n%s\n%s\n' default-roles-edani "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}" | tr ',' '\n')"
 
   oc_grants="$(grant_names "${OC_SA_ID}")"
   assert_wanted_mapped "${oc_grants}" "${OPENCLAW_READ_ROLE_NAMES}"
@@ -663,7 +682,7 @@ mint_claims() {
 mcp_token_expected_on() {
   # fullScopeAllowed=true: the reviewed 24 plus the three measured defaults,
   # which pass the scope filter while the flag is on (INFRA-46 measurement).
-  printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" \
+  printf '%s\n%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" \
     | comma_list_sorted
 }
 
@@ -671,7 +690,7 @@ mcp_token_expected_off() {
   # fullScopeAllowed=false: the defaults do not travel (measured on
   # openclaw-readonly-agentgateway: exactly its reviewed set), so the exact
   # expected set is the reviewed 24 alone.
-  printf '%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" | comma_list_sorted
+  printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}" | comma_list_sorted
 }
 
 check_mcp_token() {
@@ -798,7 +817,7 @@ fullscope_rollback() {
       fail "minted token is missing the measured realm default ${default_role} while fullScopeAllowed=true"
   done
   assert_mapped_within "$(printf '%s\n' "${actual}" | tr ',' '\n')" \
-    "$(printf '%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' '\n')"
+    "$(printf '%s\n%s\n%s\n%s\n%s\n' "${WRITE_ROLE_NAME}" "${READ_ROLE_NAMES}" "${NOVA_WRITE_ROLE_NAME}" "${PERSONAL_READ_ROLE_NAME}" "${TOKEN_DEFAULT_ROLE_NAMES}" | tr ',' '\n')"
   unset claims actual
   printf '{"reconciler":"agentgateway-read-grants","mode":"fullscope-rollback","fullscope_allowed_agentgateway_mcp":true,"tokens_verified":true}\n'
 }
@@ -834,7 +853,12 @@ rollback_roles() {
   # any member outside the reviewed matrix aborts before the first deletion.
   # The agentgateway-write role, its service-account grant and its client
   # scope mapping are NOT touched here: they predate this reconciler
-  # (write-role job) and are needed while fullScopeAllowed=false. To restore
+  # (write-role job) and are needed while fullScopeAllowed=false. Neither are
+  # the SA grant and scope mapping of agentgateway-read:hindsight-personal
+  # (SC-6113): the role is not in READ_ROLE_NAMES and its holder set belongs to
+  # the wave-25 hook, so withdrawing it is a reviewed change to both hooks
+  # (plus removing the grant and scope mapping), never a side effect of this
+  # rollback. To restore
   # the pre-INFRA-45 flag, run manual/agentgateway-fullscope-rollback-job.yaml
   # (RUNBOOK section 11) — the two Jobs are order-independent.
   old_ifs="${IFS}"
@@ -892,7 +916,7 @@ case "${MODE}" in
     assert_all_roles_exclusive
     ensure_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":%s,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n' \
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":%s,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n' \
       "${CREATED_ROLES}"
     ;;
   audit)
@@ -902,7 +926,7 @@ case "${MODE}" in
     verify_sa_grants
     assert_mcp_fullscope_off
     verify_minted_tokens
-    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":0,"grants_agentgateway_mcp":28,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n'
+    printf '{"reconciler":"agentgateway-read-grants","roles":27,"created":0,"grants_agentgateway_mcp":29,"grants_openclaw_agentgateway":6,"fullscope_allowed":false,"tokens_verified":true}\n'
     ;;
   rollback)
     rollback_roles
