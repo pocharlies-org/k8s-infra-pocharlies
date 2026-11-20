@@ -164,7 +164,11 @@ class RoleCatalogShapeTest(unittest.TestCase):
         mcp = "service-account-agentgateway-mcp"
         held = {name for name, entry in catalog.items() if mcp in entry["grantees"]}
         reads = {name for name in held if name.startswith("agentgateway-read:")}
-        self.assertEqual(len(reads), 27)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos; SC-5492: - brain; SC-5827: - offers
+        self.assertEqual(len(reads), 28)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + agentgateway-read:photos; SC-5492: - brain; SC-5827: - offers; SC-6113: + hindsight-personal (outside the read-grants matrix)
+        # SC-6113 (decision of Dani, 20-11-2026): the personal bank rides the
+        # shared session plane; hindsight-cloudblue still does not.
+        self.assertIn("agentgateway-read:hindsight-personal", reads)
+        self.assertNotIn("agentgateway-read:hindsight-cloudblue", reads)
         self.assertEqual(held - reads, {"agentgateway-write",
                                         "agentgateway-write:nova",
                                         "default-roles-edani"})

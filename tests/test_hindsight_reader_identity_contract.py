@@ -183,6 +183,16 @@ class HindsightReaderCatalogContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-hindsight-personal-grants.sh").read_text()
         self.assertIn("service-account-nova-hindsight-personal", script.split("REVIEWED_SERVICE_ACCOUNTS=", 1)[1].split("\n", 1)[0])
 
+    def test_personal_grants_hook_reviews_the_shared_session_plane(self):
+        # SC-6113 (decisión de Dani, 20-11-2026): todas las sesiones de Claude
+        # consultan `personal`; la SA compartida del auth-proxy entra en el
+        # conjunto revisado del hook que posee los titulares (wave 25) y el
+        # hook wave 20 la concede y la mapea en el scope del client.
+        script = (BASE / "scripts" / "agentgateway-hindsight-personal-grants.sh").read_text()
+        self.assertIn("service-account-agentgateway-mcp", script.split("REVIEWED_SERVICE_ACCOUNTS=", 1)[1].split("\n", 1)[0])
+        read_grants = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
+        self.assertIn('PERSONAL_READ_ROLE_NAME="${PERSONAL_READ_ROLE_NAME:-' + PERSONAL_ROLE + '}"', read_grants)
+
     def test_refused_identities_exist_nowhere(self):
         # Security's ruling of 05-11-2026: `tienda` holds customer orders and
         # email with personal data; the voice surface does not read it, and

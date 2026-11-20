@@ -13,13 +13,15 @@ Three pieces, one frontier:
 * agentgateway-hindsight-personal-grants.sh — owns the COMPLETE direct holder
   set of the role: the two humans pinned by subject (OWU-80 discipline), the
   reviewed service accounts (the two Hermes secretarias, from SC-4304 S6
-  of 05-11-2026 the whatsappmcp message-search principal, and from
-  INFRA-1245/INFRA-1248 of 10-11-2026 Nova's voice-agent identity), revocation of
-  every other holder (the chat SA
+  of 05-11-2026 the whatsappmcp message-search principal, from
+  INFRA-1245/INFRA-1248 of 10-11-2026 Nova's voice-agent identity, from SC-5237
+  the synapse brain-summary reader and, from SC-6113 of 20-11-2026 (decision of
+  Dani, owner of the bank), the shared session plane
+  service-account-agentgateway-mcp), revocation of every other holder (the chat SA
   bypass of SC-4051 is what this closes), no group mappings, and revoke of the
   manual scope mapping in the chat-agentgateway client. Rollback removes only
   the two human grants.
-* the catalog declarations (ROLES.yaml grantees == the seven holders,
+* the catalog declarations (ROLES.yaml grantees == the eight holders,
   PRINCIPALS.md realm_roles in parity, ROUTE-ROLES.md row for the new route),
   which the keycloak-role-drift sweep checks against the live realm and the
   SC-4414 guard checks against the grant surface.
@@ -50,6 +52,9 @@ HOLDERS = {
     "service-account-socialmedia-hindsight",
     "service-account-nova-hindsight-personal",
     "service-account-synapse-hindsight-personal",
+    # SC-6113 (Dani, 20-11-2026): the shared session plane — the JWT of the
+    # auth-proxy (127.0.0.1:8790) of the Claude CLI sessions.
+    "service-account-agentgateway-mcp",
 }
 CHAT_SA = "service-account-chat-agentgateway"
 
@@ -163,9 +168,12 @@ class HindsightPersonalGrantsContractTest(unittest.TestCase):
         self.assertIn(
             'REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,'
             'service-account-socialmedia-hindsight,service-account-nova-hindsight-personal,'
-            'service-account-synapse-hindsight-personal"',
+            'service-account-synapse-hindsight-personal,service-account-agentgateway-mcp"',
             script,
         )
+        # SC-6113: the shared session plane is a reviewed holder by decision of
+        # Dani (20-11-2026), recorded in the header.
+        self.assertIn("SC-6113", script)
         # the chat SA is the revoked holder (sidecar bypass closure) and its
         # client's manual scope mapping is revoked with it
         self.assertIn('REVOKED_SERVICE_ACCOUNTS="service-account-chat-agentgateway"', script)
@@ -212,6 +220,7 @@ case "$line" in
     printf 'id-social,service-account-socialmedia-hindsight\\n'
     printf 'id-nova,service-account-nova-hindsight-personal\\n'
     printf 'id-synapse,service-account-synapse-hindsight-personal\\n'
+    printf 'id-mcp,service-account-agentgateway-mcp\\n'
     exit 0 ;;
   *"roles/$ROLE --fields id"*) echo role-uuid; exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
@@ -221,6 +230,7 @@ case "$line" in
   *"users/id-social/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-nova/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-synapse/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
+  *"users/id-mcp/role-mappings/realm"*) echo "$ROLE"; exit 0 ;;
   *"users/id-chat/role-mappings/realm"*) exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields username"*) echo me@e-dani.com; exit 0 ;;
   *"users/e51253a7-c137-4c6c-9fb9-af9cecd3b147 --fields enabled"*) echo true; exit 0 ;;
@@ -240,6 +250,7 @@ case "$line" in
   *"get users -q username=service-account-socialmedia-hindsight"*) echo id-social; exit 0 ;;
   *"get users -q username=service-account-nova-hindsight-personal"*) echo id-nova; exit 0 ;;
   *"get users -q username=service-account-synapse-hindsight-personal"*) echo id-synapse; exit 0 ;;
+  *"get users -q username=service-account-agentgateway-mcp"*) echo id-mcp; exit 0 ;;
   *"get users -q username=service-account-chat-agentgateway"*) echo id-chat; exit 0 ;;
   *"get clients -q clientId=chat-agentgateway"*) echo chat-uuid; exit 0 ;;
   *"clients/chat-uuid/scope-mappings/realm"*) exit 0 ;;
@@ -267,7 +278,7 @@ exit 1
             proc.returncode, 0,
             "audit failed with the prefix-colliding realm: " + proc.stderr,
         )
-        self.assertIn('"holders_reviewed":7', proc.stdout)
+        self.assertIn('"holders_reviewed":8', proc.stdout)
 
     def test_manifest_is_a_hardened_postsync_job(self):
         manifest = GRANTS_JOB.read_text()
@@ -309,7 +320,7 @@ class WiringContractTest(unittest.TestCase):
 
 
 class CatalogDeclarationContractTest(unittest.TestCase):
-    def test_roles_yaml_grantees_are_exactly_the_seven_holders(self):
+    def test_roles_yaml_grantees_are_exactly_the_eight_holders(self):
         catalog = json.loads((BASE / "ROLES.yaml").read_text())
         entry = {r["name"]: r for r in catalog["roles"]}[ROLE]
         self.assertEqual(set(entry["grantees"]), HOLDERS)
