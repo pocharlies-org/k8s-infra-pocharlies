@@ -108,6 +108,7 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
       ("POST", "/api/kiosco/vista/machine"),
       ("POST", "/api/kiosco/observed/machine"),
       ("POST", "/api/kiosco/escritorio/machine"),  # DGX-1449: el puente garagepi confirma el escritorio (HMAC V2)
+      ("POST", "/api/arreglar/keep"),  # DGX-1751: el RCA de Aurora, firmado por synapse-adapter-supervisor (HMAC V2 clase synapse); el botón va por /api/arreglar/auditoria, tras SSO
       ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
       ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
       ("POST", "/api/creative/cine/producciones"),  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio); el navegador va por /api/cine, tras SSO
