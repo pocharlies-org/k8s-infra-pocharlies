@@ -198,7 +198,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui; INFRA-402: + photos), agentgateway-write y el rol de ruta agentgateway-write:nova (INFRA-1224). |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; INFRA-402: + photos), agentgateway-read:hindsight-personal fuera de la matriz (SC-6113, decisión de Dani 20-11-2026: todas las sesiones de Claude consultan también el banco `personal`; deja sin efecto para este SA la regla de SC-4051 que lo excluía), agentgateway-write y el rol de ruta agentgateway-write:nova (INFRA-1224). |
 | `service-account-agentgateway-smoke-operator` | sa | DevOps | activo | Fixture de solo lectura del smoke de la frontera de escritura del AgentGateway (INFRA-1189, C7 de la épica INFRA-218): el OPERATOR_TOKEN de `scripts/smoke-write-role.sh` — exactamente agentgateway-read:social y agentgateway-read:workspace y ningún agentgateway-write*. Creado por su PostSync, nunca a mano. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). Desde SC-4304 S6 no lee la memoria personal: perdió el grant de SC-4051 para cerrar la vía del sidecar (veredicto security 03-11-2026). |
@@ -466,8 +466,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "sa",
       "client": "agentgateway-mcp",
       "owner": "DevOps",
-      "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado; SC-5827: − offers, offers-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova).",
+      "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44; SC-6113 para hindsight-personal), agentgateway-hindsight-personal-grants.sh (SC-6113: titular revisado), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
+      "purpose": "Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado; SC-5827: − offers, offers-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova). Además agentgateway-read:hindsight-personal, fuera de la matriz (SC-6113, decisión de Dani, dueño del banco, 20-11-2026: «el personal quiero que se pueda consultar»; todas las sesiones de Claude, que llaman con este JWT por el auth-proxy 127.0.0.1:8790 de paseo-0 y company-0, consultan claude-personal y personal; deja sin efecto para este SA la regla de SC-4051 «los bancos personales no viajan en el SA compartido»). Riesgo: el SA lo comparten todas las sesiones del auth-proxy, también las que el router manda a proveedores fuera del clúster (la misma exposición que ya tiene claude-personal).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -476,6 +476,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:gsc",
         "agentgateway-read:hindsight-claude-personal",
         "agentgateway-read:hindsight-codigo",
+        "agentgateway-read:hindsight-personal",
         "agentgateway-read:hindsight-shopify-contenido",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
