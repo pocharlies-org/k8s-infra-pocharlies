@@ -1,0 +1,17 @@
+# user: system:serviceaccount:arc-systems:arc-gha-rs-manager
+apiVersion: v1
+kind: Pod
+metadata:
+  name: runner-ephemeral-abc
+  namespace: arc-systems
+  labels:
+    actions-runner.github.com/ephemeral-runner: "true"
+  ownerReferences:
+    - apiVersion: batch/v1
+      uid: 00000000-0000-0000-0000-000000000001
+      kind: Job
+      name: runner-abc
+spec:
+  containers:
+    - name: runner
+      image: harbor.lan.e-dani.com/library/arc-runner:1.0.0

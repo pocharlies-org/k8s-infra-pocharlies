@@ -1,0 +1,17 @@
+# user: system:serviceaccount:monitoring:vm-operator
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vmsingle-rca-pod
+  namespace: monitoring
+  ownerReferences:
+    - apiVersion: operator.victoriametrics.com/v1beta1
+      uid: 00000000-0000-0000-0000-000000000001
+      kind: VMSingle
+      name: vmsingle-rca
+spec:
+  nodeSelector:
+    node-pool: ks5-nvme
+  containers:
+    - name: vmsingle
+      image: harbor.lan.e-dani.com/library/victoriametrics-victoria-metrics-single:v1.0.0

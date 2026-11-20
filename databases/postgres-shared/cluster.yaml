@@ -557,6 +557,14 @@ spec:
         operator: Exists
         effect: NoExecute
         tolerationSeconds: 300
+      # SC-6096: los nodos ks5-cp-* llevan ahora taint control-plane:NoSchedule. Las PVCs
+      # de este cluster son local-path atadas a ks5-cp-2/3 (no se mueven a otro nodo), asi
+      # que la toleracion se declara aqui explicita (patron de kubernetes/scheduling/
+      # README.md para BDs del pool ks5) y no se deja solo al allowlist de Kyverno:
+      # si la policy faltara, el primario no podria resucitar.
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     nodeSelector:
       kubernetes.io/arch: amd64
       # 2026-07-29: required anti-affinity (above) stopped co-location but still
