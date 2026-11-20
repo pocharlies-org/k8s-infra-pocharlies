@@ -135,6 +135,23 @@ spec:
         - name: dgx-messages
           namespace: messages
           port: http
+    # DGX-1742 (security S-3): el gemelo LAN de la regla OPTIONS 450 del edge. Backlot solo se
+    # abre en casa y, en casa, AdGuard resuelve dgx.e-dani.com a este VIP: el preflight de sus
+    # escrituras llega aquí, y sin esta regla caería en la 420 de /api/cine (sso-chain → 302).
+    # Solo el preflight, solo /api/cine y solo el host al que llama Backlot (dgx.e-dani.com);
+    # el GET/POST de detrás sigue por la 420 con sso-chain.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && Method(`OPTIONS`) && PathPrefix(`/api/cine`)
+      priority: 450
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # DGX-1539: /api/identidad (con qué usuario está la sesión) solo lee el Bearer verificado
     # (DGX-807) y la 300 de DGX-1314 estampa cabeceras, que el backend no cree: sin sso-chain el
     # chip de la app diría «cuenta» siempre. Como Nova (420): strip + sso-chain + prueba de borde.
