@@ -112,6 +112,18 @@ spec:
                       echo "GUARD: cluster $cluster already completed today, nothing to do"
                       continue
                     fi
+                    # SC-6103: no crear un retry mientras el operador ya tiene un backup suyo en curso hoy.
+                    # El 20-11-2026 la guardia corrió a las 05:00, justo cuando nacía el daily: creó un
+                    # guard-retry 7 s después y el operador arrancó los dos a la vez (carrera). Dos
+                    # barman-cloud-backup de 227 GB en paralelo sobre la misma réplica no acababan ninguno,
+                    # saturaban el I/O (scrape del exporter con timeout, cola atascada) y cada tick de la
+                    # guardia creaba otro retry: tormenta sobre el atasco. Un atasco real de fase terminal
+                    # (walArchivingFailing/failed) lo borra la regla de arriba; uno enquistado en
+                    # pending/running +26 h lo caza PostgresSharedBackupStale y lo despeja IT.
+                    if awk '$3=="pending" || $3=="running"{found=1} END{exit !found}' "$work/rows"; then
+                      echo "GUARD: cluster $cluster has a backup in progress today, nothing to do"
+                      continue
+                    fi
                     attempts="$(wc -l < "$work/rows" | tr -d ' ')"
                     if [ "$attempts" -ge 4 ]; then
                       echo "GUARD: cluster $cluster has $attempts attempts today, not retrying"
