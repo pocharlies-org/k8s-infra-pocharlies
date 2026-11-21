@@ -5,7 +5,6 @@ No tocar a mano: se regenera.
 
 ## Raices (bases)
 
-- `${BRIDGE_IMAGE}` -> `harbor.e-dani.com/homelab/brain-mcp`
 - `ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION}` -> `harbor.e-dani.com/homelab/dgx-infra/chat`
 - `nginx:1.27-alpine` -> `harbor.e-dani.com/homelab/dgx-dashboard-ui`
 - `nginxinc/nginx-unprivileged:1.30.6-alpine-slim@sha256:4ac59c85c8c46d9e91eaabd2122cda4923ba380cf11f4138e389f069bcdc77a3` -> `harbor.e-dani.com/homelab/correo-app`
@@ -13,8 +12,7 @@ No tocar a mano: se regenera.
 - `node:22-bookworm` -> `harbor.e-dani.com/homelab/dgx-infra/chat`
 - `node:22.23.3-alpine3.24@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402` -> `harbor.e-dani.com/homelab/correo-app`
 - `nvcr.io/nvidia/pytorch:25.06-py3` -> `harbor.e-dani.com/homelab/dgx-infra/omnivoice`
-- `python:3.12-slim` -> `harbor.e-dani.com/homelab/dgx-dashboard-backend`, `harbor.e-dani.com/homelab/dgx-messages`
-- `python:3.12-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf` -> `harbor.e-dani.com/homelab/offers-mcp`
+- `python:3.12-slim` -> `harbor.e-dani.com/homelab/dgx-dashboard-backend`, `harbor.e-dani.com/homelab/dgx-gpu-controller`, `harbor.e-dani.com/homelab/dgx-messages`
 - `python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1` -> `harbor.e-dani.com/homelab/correo-core`, `harbor.e-dani.com/homelab/correo-telegram`
 
 ## Imagenes
@@ -25,12 +23,10 @@ No tocar a mano: se regenera.
 - `ghcr.io/pocharlies-org/sugiere` (espejo) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/agent-jake-browser-mcp-server` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/bambulab-openclaw` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/bge-m3-embedding` (propia) — bases: sin_dato; despliegues: 6
+- `harbor.e-dani.com/homelab/bge-m3-embedding` (propia) — bases: sin_dato; despliegues: 4
 - `harbor.e-dani.com/homelab/blog` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/brain-mcp` (propia) — bases: `${BRIDGE_IMAGE}`; despliegues: 1
 - `harbor.e-dani.com/homelab/codex-arcade` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/comfyui` (propia) — bases: sin_dato; despliegues: 3
-- `harbor.e-dani.com/homelab/comfyui-rtx` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/company-crm` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/control-panel-bff` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/control-panel-ui` (propia) — bases: sin_dato; despliegues: 1
@@ -42,15 +38,17 @@ No tocar a mano: se regenera.
 - `harbor.e-dani.com/homelab/cv-oracle` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-dashboard-backend` (propia) — bases: `python:3.12-slim`; despliegues: 6
 - `harbor.e-dani.com/homelab/dgx-dashboard-ui` (propia) — bases: `nginx:1.27-alpine`, `node:22-alpine`; despliegues: 1
+- `harbor.e-dani.com/homelab/dgx-gpu-controller` (propia) — bases: `python:3.12-slim`; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-infra/chat` (propia) — bases: `ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION}`, `node:22-bookworm`; despliegues: 4
+- `harbor.e-dani.com/homelab/dgx-infra/hindsight-decision` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-infra/ofimatica` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/dgx-infra/omnivoice` (propia) — bases: `nvcr.io/nvidia/pytorch:25.06-py3`; despliegues: 1
+- `harbor.e-dani.com/homelab/dgx-infra/omnivoice` (propia) — bases: `nvcr.io/nvidia/pytorch:25.06-py3`; despliegues: 2
 - `harbor.e-dani.com/homelab/dgx-infra/omnivoice-audio` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-infra/voicelab` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-messages` (propia) — bases: `python:3.12-slim`; despliegues: 1
 - `harbor.e-dani.com/homelab/dgx-node-metrics` (propia) — bases: sin_dato; despliegues: 2
 - `harbor.e-dani.com/homelab/dgx-synapse-mcp` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/eg2-embedding` (propia) — bases: sin_dato; despliegues: 1
+- `harbor.e-dani.com/homelab/ezviz-gateway` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/frigate-assets` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/galan-proposal-chat` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/galan-proposal-site` (propia) — bases: sin_dato; despliegues: 1
@@ -73,13 +71,15 @@ No tocar a mano: se regenera.
 - `harbor.e-dani.com/homelab/minio` (espejo) — bases: sin_dato; despliegues: 3
 - `harbor.e-dani.com/homelab/nova` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/nova-avatar` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/offers-mcp` (propia) — bases: `python:3.12-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf`; despliegues: 1
+- `harbor.e-dani.com/homelab/objectstore-edge` (propia) — bases: sin_dato; despliegues: 1
+- `harbor.e-dani.com/homelab/oficinas` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/onepassword-connect-api` (espejo) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/onepassword-connect-sync` (espejo) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/partcrafter-api` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/paseo-atlantic` (propia) — bases: sin_dato; despliegues: 3
+- `harbor.e-dani.com/homelab/paseo-atlantic` (propia) — bases: sin_dato; despliegues: 7
 - `harbor.e-dani.com/homelab/photos-mcp` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/picqer-mcp` (propia) — bases: sin_dato; despliegues: 1
+- `harbor.e-dani.com/homelab/playwright-mcp-chrome` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/redis` (espejo) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/serpientetool-backend` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/serpientetool-frontend` (propia) — bases: sin_dato; despliegues: 1
@@ -97,7 +97,6 @@ No tocar a mano: se regenera.
 - `harbor.e-dani.com/homelab/skirmbooks-aeat-browser` (propia) — bases: sin_dato; despliegues: 2
 - `harbor.e-dani.com/homelab/skirmbooks-backend` (propia) — bases: sin_dato; despliegues: 62
 - `harbor.e-dani.com/homelab/skirmbooks-ui` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/skirmshop-brain-v2` (propia) — bases: sin_dato; despliegues: 19
 - `harbor.e-dani.com/homelab/skirmshop-labels-correos-adapter` (propia) — bases: sin_dato; despliegues: 2
 - `harbor.e-dani.com/homelab/skirmshop-labels-correos-express-adapter` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/skirmshop-labels-event-gateway` (propia) — bases: sin_dato; despliegues: 1
@@ -120,18 +119,20 @@ No tocar a mano: se regenera.
 - `harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/skirmshop-picker` (propia) — bases: sin_dato; despliegues: 5
 - `harbor.e-dani.com/homelab/skirmshop-serial-numbers` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/skirmshopshopifyapp` (propia) — bases: sin_dato; despliegues: 4
+- `harbor.e-dani.com/homelab/skirmshopshopifyapp` (propia) — bases: sin_dato; despliegues: 5
 - `harbor.e-dani.com/homelab/stt-mcp` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/stt-turbo` (propia) — bases: sin_dato; despliegues: 1
-- `harbor.e-dani.com/homelab/synapse` (propia) — bases: sin_dato; despliegues: 30
+- `harbor.e-dani.com/homelab/synapse` (propia) — bases: sin_dato; despliegues: 31
 - `harbor.e-dani.com/homelab/synapse-document-intake` (propia) — bases: sin_dato; despliegues: 3
 - `harbor.e-dani.com/homelab/tesla-control-mcp` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/teslamate-mcp` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/tomorrowland-app` (propia) — bases: sin_dato; despliegues: 1
+- `harbor.e-dani.com/homelab/trellis2-api` (propia) — bases: sin_dato; despliegues: 3
 - `harbor.e-dani.com/homelab/update-watch-forker` (propia) — bases: sin_dato; despliegues: 3
 - `harbor.e-dani.com/homelab/uriel-poster` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/uriel-proposal-chat` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/uriel-proposal-site` (propia) — bases: sin_dato; despliegues: 1
+- `harbor.e-dani.com/homelab/valkey-master-labeler` (propia) — bases: sin_dato; despliegues: 2
 - `harbor.e-dani.com/homelab/videovigilancia` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/web-edani` (propia) — bases: sin_dato; despliegues: 1
 - `harbor.e-dani.com/homelab/weight-resolver` (propia) — bases: sin_dato; despliegues: 1
@@ -163,7 +164,6 @@ No tocar a mano: se regenera.
 - `backup-hub/Deployment/skirmshop-drive-s3` <- `harbor.e-dani.com/homelab/minio`
 - `bambulab/Deployment/bambulab-openclaw` <- `harbor.e-dani.com/homelab/bambulab-openclaw`
 - `blog/Deployment/blog-web` <- `harbor.e-dani.com/homelab/blog`
-- `brain-mcp/Deployment/brain-mcp` <- `harbor.e-dani.com/homelab/brain-mcp`
 - `chat/CronJob/chat-tools-check` <- `harbor.e-dani.com/homelab/dgx-infra/chat`
 - `chat/CronJob/open-webui-hindsight-ingest` <- `harbor.e-dani.com/homelab/dgx-infra/chat`
 - `chat/CronJob/reconcile-chat-catalog` <- `harbor.e-dani.com/homelab/dgx-infra/chat`
@@ -171,9 +171,9 @@ No tocar a mano: se regenera.
 - `codex-dense/Deployment/arcade-frontend` <- `harbor.e-dani.com/homelab/codex-arcade`
 - `comfyui/Deployment/comfyui` <- `harbor.e-dani.com/homelab/comfyui`
 - `comfyui/Deployment/comfyui-image-cache` <- `harbor.e-dani.com/homelab/comfyui`
-- `comfyui/Deployment/comfyui-rtx` <- `harbor.e-dani.com/homelab/comfyui-rtx`
 - `comfyui/Deployment/dgx3-provision` <- `harbor.e-dani.com/homelab/comfyui`
 - `comfyui/Deployment/krea2-trainer-gb10` <- `harbor.e-dani.com/homelab/krea2-trainer-gb10`
+- `comfyui/Deployment/omnivoice-trainer-gb10` <- `harbor.e-dani.com/homelab/dgx-infra/omnivoice`
 - `company-crm/Deployment/company-crm` <- `harbor.e-dani.com/homelab/company-crm`
 - `company-metrics-mcp/Deployment/company-metrics-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `control-nexus/CronJob/ci-watch` <- `harbor.e-dani.com/homelab/dgx-dashboard-backend`
@@ -182,6 +182,7 @@ No tocar a mano: se regenera.
 - `control-nexus/Deployment/dgx-dashboard-productor` <- `harbor.e-dani.com/homelab/dgx-dashboard-backend`
 - `control-nexus/Deployment/dgx-dashboard-ui` <- `harbor.e-dani.com/homelab/dgx-dashboard-ui`
 - `control-nexus/Deployment/dgx-dashboard-worker` <- `harbor.e-dani.com/homelab/dgx-dashboard-backend`
+- `control-nexus/Deployment/dgx-gpu-controller` <- `harbor.e-dani.com/homelab/dgx-gpu-controller`
 - `control-nexus/Deployment/dgx-studio-bot` <- `harbor.e-dani.com/homelab/dgx-dashboard-backend`
 - `control-nexus/Deployment/op-dgx-spark-bot` <- `harbor.e-dani.com/homelab/dgx-dashboard-backend`
 - `correo/Deployment/correo` <- `harbor.e-dani.com/homelab/correo-core`
@@ -190,17 +191,20 @@ No tocar a mano: se regenera.
 - `cv/Deployment/cv-dani` <- `harbor.e-dani.com/homelab/cv-dani`
 - `cv/Deployment/cv-manu` <- `harbor.e-dani.com/homelab/cv-manu`
 - `cv/Deployment/cv-oracle` <- `harbor.e-dani.com/homelab/cv-oracle`
+- `databases/Deployment/shared-valkey-master-labeler` <- `harbor.e-dani.com/homelab/valkey-master-labeler`
 - `databases/StatefulSet/shared-rabbitmq` <- `harbor.e-dani.com/homelab/shared-rabbitmq`
 - `dgx-synapse-mcp/Deployment/dgx-synapse-mcp` <- `harbor.e-dani.com/homelab/dgx-synapse-mcp`
 - `document-intake/Deployment/synapse-document-intake` <- `harbor.e-dani.com/homelab/synapse-document-intake`
 - `document-intake/Deployment/synapse-document-intake-consumer` <- `harbor.e-dani.com/homelab/synapse-document-intake`
 - `document-intake/Deployment/synapse-document-intake-relay` <- `harbor.e-dani.com/homelab/synapse-document-intake`
+- `frigate/Deployment/ezviz-gateway` <- `harbor.e-dani.com/homelab/ezviz-gateway`
 - `frigate/Deployment/frigate` <- `harbor.e-dani.com/homelab/frigate-assets`
 - `grok-mcp/Deployment/grok-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-bridge`
 - `gsc-mcp/Deployment/gsc-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `ha-dashboard/Deployment/ha-dashboard` <- `harbor.e-dani.com/homelab/ha-dashboard`
 - `hermes/Deployment/hermes-gateway` <- `harbor.e-dani.com/homelab/hermes-agent`, `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `hindsight-tienda-writer-mcp/Deployment/hindsight-tienda-writer-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
+- `hindsight/Deployment/hindsight-decision` <- `harbor.e-dani.com/homelab/dgx-infra/hindsight-decision`
 - `jarvis/Deployment/jarvis-alexa` <- `harbor.e-dani.com/homelab/jarvis-alexa`
 - `jarvis/Deployment/jarvis-backend` <- `harbor.e-dani.com/homelab/jarvis-backend`
 - `libreplay/Deployment/libreplay-minio` <- `harbor.e-dani.com/homelab/minio`
@@ -210,11 +214,8 @@ No tocar a mano: se regenera.
 - `litellm/Deployment/plan-gateway` <- `harbor.e-dani.com/homelab/litellm`
 - `llm/Deployment/bge-m3-embedding` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
 - `llm/Deployment/bge-m3-embedding-cpu` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
-- `llm/Deployment/bge-m3-embedding-creative` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
 - `llm/Deployment/bge-reranker` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
 - `llm/Deployment/bge-reranker-cpu` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
-- `llm/Deployment/bge-reranker-creative` <- `harbor.e-dani.com/homelab/bge-m3-embedding`
-- `llm/Deployment/eg2-embedding-pilot` <- `harbor.e-dani.com/homelab/eg2-embedding`
 - `llm/Deployment/gliner2-extract` <- `harbor.e-dani.com/homelab/gliner2-extract`
 - `llm/Deployment/omnivoice-audio` <- `harbor.e-dani.com/homelab/dgx-infra/omnivoice-audio`
 - `llm/Deployment/omnivoice-tts-nvfp4` <- `harbor.e-dani.com/homelab/dgx-infra/omnivoice`
@@ -228,42 +229,29 @@ No tocar a mano: se regenera.
 - `monitoring/DaemonSet/dgx-node-exporter-cpu` <- `harbor.e-dani.com/homelab/dgx-node-metrics`
 - `nova/Deployment/nova` <- `harbor.e-dani.com/homelab/nova`
 - `nova/Deployment/nova-avatar` <- `harbor.e-dani.com/homelab/nova-avatar`
-- `offers-mcp/Deployment/offers-mcp` <- `harbor.e-dani.com/homelab/offers-mcp`
+- `objectstore-edge/Deployment/objectstore-edge` <- `harbor.e-dani.com/homelab/objectstore-edge`
+- `oficinas/Deployment/oficinas` <- `harbor.e-dani.com/homelab/oficinas`
 - `ofimatica/Deployment/ofimatica` <- `harbor.e-dani.com/homelab/dgx-infra/ofimatica`
 - `onepassword-connect/Deployment/onepassword-connect` <- `harbor.e-dani.com/homelab/onepassword-connect-api`, `harbor.e-dani.com/homelab/onepassword-connect-sync`
 - `onepassword-mcp/Deployment/onepassword-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `onepassword-mcp/Deployment/onepassword-mcp-admin` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `partcrafter/Deployment/partcrafter-image-cache` <- `harbor.e-dani.com/homelab/partcrafter-api`
 - `paseo/CronJob/company-dreaming` <- `harbor.e-dani.com/homelab/paseo-atlantic`
+- `paseo/CronJob/update-watch-host-versions` <- `harbor.e-dani.com/homelab/paseo-atlantic`
+- `paseo/Deployment/backlot` <- `harbor.e-dani.com/homelab/paseo-atlantic`
+- `paseo/Deployment/hermes-shell` <- `harbor.e-dani.com/homelab/paseo-atlantic`
 - `paseo/StatefulSet/company` <- `harbor.e-dani.com/homelab/paseo-atlantic`
 - `paseo/StatefulSet/paseo` <- `harbor.e-dani.com/homelab/paseo-atlantic`
+- `paseo/StatefulSet/render3d` <- `harbor.e-dani.com/homelab/paseo-atlantic`
 - `photos-mcp/Deployment/photos-mcp` <- `harbor.e-dani.com/homelab/photos-mcp`
 - `picqer-mcp/Deployment/picqer-mcp` <- `harbor.e-dani.com/homelab/picqer-mcp`
 - `plaud-mcp/Deployment/plaud-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
+- `playwright-mcp/Deployment/playwright-mcp` <- `harbor.e-dani.com/homelab/playwright-mcp-chrome`
 - `serpientetool/Deployment/serpientetool-backend` <- `harbor.e-dani.com/homelab/serpientetool-backend`
 - `serpientetool/Deployment/serpientetool-frontend` <- `harbor.e-dani.com/homelab/serpientetool-frontend`
 - `shopify-admin-mcp/Deployment/shopify-admin-mcp` <- `harbor.e-dani.com/homelab/shopify-admin-mcp`
 - `shopify-mcp/Deployment/shopify-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `skills-catalog/Deployment/skills-mcp` <- `harbor.e-dani.com/homelab/k8s-skills-catalog-pocharlies`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-architecture-sync` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-audit` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-claude-session-graph` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-feedback-audit` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-knowledge-pages` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-memory-promotion` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-claude` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-evaluation` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-personal` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-skirmshop` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-open-webui-ingest` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-pages-reconcile` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-personal-graph-enrichment` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-personal-payload-indexes` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-personal-payload-normalization` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-reembed-truncated` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/CronJob/skirmshop-brain-reembed-watchdog` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/Deployment/skirmshop-brain` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
-- `skirmshop-brain-prod/Deployment/skirmshop-brain-ingest` <- `harbor.e-dani.com/homelab/skirmshop-brain-v2`
 - `skirmshop/CronJob/affiliate-gdpr-prune` <- `harbor.e-dani.com/homelab/shopify-affiliate-app`
 - `skirmshop/CronJob/affiliate-sync-discounts` <- `harbor.e-dani.com/homelab/shopify-affiliate-app`
 - `skirmshop/CronJob/back-in-stock-preorder-coverage-reconcile` <- `harbor.e-dani.com/homelab/shopify-back-in-stock`
@@ -276,16 +264,15 @@ No tocar a mano: se regenera.
 - `skirmshop/CronJob/labels-ops-edit-hold-reconciler` <- `harbor.e-dani.com/homelab/skirmshop-labels-ops-edit-hold-reconciler`
 - `skirmshop/CronJob/labels-pickup-point-reminder` <- `harbor.e-dani.com/homelab/skirmshop-labels-pickup-point-reminder`
 - `skirmshop/CronJob/labels-tracking-poll-scheduler` <- `harbor.e-dani.com/homelab/skirmshop-labels-tracking-poll-scheduler`
-- `skirmshop/CronJob/picker-picklist-close` <- `harbor.e-dani.com/homelab/skirmshop-picker`
 - `skirmshop/CronJob/picker-purchase-recommend` <- `harbor.e-dani.com/homelab/skirmshop-picker`
 - `skirmshop/CronJob/picker-purchase-signals` <- `harbor.e-dani.com/homelab/skirmshop-picker`
 - `skirmshop/CronJob/picker-retention` <- `harbor.e-dani.com/homelab/skirmshop-picker`
+- `skirmshop/CronJob/rag-nl-llm-matcher` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
+- `skirmshop/CronJob/rag-picqer-price-sync` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
 - `skirmshop/CronJob/rag-provider-sourcing-backfill` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
-- `skirmshop/CronJob/rag-reconcile-summary` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
 - `skirmshop/CronJob/rag-taxonomy-canonicalize` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
 - `skirmshop/CronJob/shopify-picqer-order-audit` <- `harbor.e-dani.com/homelab/shopify-sync-app`
 - `skirmshop/CronJob/shopify-sync-warehouse` <- `harbor.e-dani.com/homelab/shopify-sync-app`
-- `skirmshop/CronJob/shopify-sync-weights` <- `harbor.e-dani.com/homelab/shopify-sync-app`
 - `skirmshop/CronJob/sii-invoicing` <- `harbor.e-dani.com/homelab/shopify-sii-app`
 - `skirmshop/CronJob/sii-monthly-report` <- `harbor.e-dani.com/homelab/shopify-sii-app`
 - `skirmshop/CronJob/skirmbooks-accounting-sweep` <- `harbor.e-dani.com/homelab/skirmbooks-backend`
@@ -336,9 +323,12 @@ No tocar a mano: se regenera.
 - `skirmshop/Deployment/labels-telegram-optin-ingest` <- `harbor.e-dani.com/homelab/skirmshop-labels-telegram-optin-ingest`
 - `skirmshop/Deployment/labels-tracking-ingestion` <- `harbor.e-dani.com/homelab/skirmshop-labels-tracking-ingestion`
 - `skirmshop/Deployment/labels-ups-adapter` <- `harbor.e-dani.com/homelab/skirmshop-labels-ups-adapter`
+- `skirmshop/Deployment/labels-valkey-master-labeler` <- `harbor.e-dani.com/homelab/valkey-master-labeler`
 - `skirmshop/Deployment/labels-whatsapp-optin-ingest` <- `harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest`
+- `skirmshop/Deployment/picker-fulfillment` <- `harbor.e-dani.com/homelab/skirmshop-picker`
 - `skirmshop/Deployment/rag-app` <- `harbor.e-dani.com/homelab/skirmshopshopifyapp`
 - `skirmshop/Deployment/serial-app` <- `harbor.e-dani.com/homelab/skirmshop-serial-numbers`
+- `skirmshop/Deployment/shopify-sync-weight-receiver` <- `harbor.e-dani.com/homelab/shopify-sync-app`
 - `skirmshop/Deployment/sii-app` <- `harbor.e-dani.com/homelab/shopify-sii-app`
 - `skirmshop/Deployment/skirmbooks-accounting-derived` <- `harbor.e-dani.com/homelab/skirmbooks-backend`
 - `skirmshop/Deployment/skirmbooks-accounting-entry` <- `harbor.e-dani.com/homelab/skirmbooks-backend`
@@ -393,14 +383,15 @@ No tocar a mano: se regenera.
 - `synapse/CronJob/synapse-outbox-gc` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/CronJob/synapse-sre-weekly` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-analisis` <- `harbor.e-dani.com/homelab/synapse`
-- `synapse/Deployment/synapse-adapter-brain-summary` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-expenses` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-gmail` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-hindsight` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-imessage` <- `harbor.e-dani.com/homelab/synapse`
+- `synapse/Deployment/synapse-adapter-k8s` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-messaging-contact-sync` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-messaging-media` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-messaging-send` <- `harbor.e-dani.com/homelab/synapse`
+- `synapse/Deployment/synapse-adapter-ops-explainer` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-ops-explainer-dlq-monitor` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-plaud` <- `harbor.e-dani.com/homelab/synapse`
 - `synapse/Deployment/synapse-adapter-reminders` <- `harbor.e-dani.com/homelab/synapse`
@@ -427,6 +418,9 @@ No tocar a mano: se regenera.
 - `traefik-edge/Deployment/uriel-chat` <- `harbor.e-dani.com/homelab/uriel-proposal-chat`
 - `traefik-edge/Deployment/uriel-poster` <- `harbor.e-dani.com/homelab/uriel-poster`
 - `traefik-edge/Deployment/uriel-site` <- `harbor.e-dani.com/homelab/uriel-proposal-site`
+- `trellis/Deployment/trellis` <- `harbor.e-dani.com/homelab/trellis2-api`
+- `trellis/Deployment/trellis-image-cache` <- `harbor.e-dani.com/homelab/trellis2-api`
+- `trellis/Deployment/trellis-multiview` <- `harbor.e-dani.com/homelab/trellis2-api`
 - `tts-mcp/Deployment/tts-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
 - `update-watch/CronJob/browser-harness-daily-update` <- `harbor.e-dani.com/homelab/gh-token-refresher`, `harbor.e-dani.com/homelab/update-watch-forker`
 - `update-watch/CronJob/github-token-refresh` <- `harbor.e-dani.com/homelab/gh-token-refresher`
@@ -436,10 +430,9 @@ No tocar a mano: se regenera.
 - `web/Deployment/web-edani` <- `harbor.e-dani.com/homelab/web-edani`
 - `weight-mcp/Deployment/weight-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-bridge`
 - `weight-resolver/Deployment/weight-resolver` <- `harbor.e-dani.com/homelab/weight-resolver`
-- `whatsapp-mcp/CronJob/brain-windows` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
 - `whatsapp-mcp/CronJob/sauvage-verificacion-diaria` <- `harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion`
 - `whatsapp-mcp/CronJob/whatsapp-voice-backfill` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
-- `whatsapp-mcp/CronJob/whatsapp-voice-transcribe` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
+- `whatsapp-mcp/Deployment/brain-windows` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
 - `whatsapp-mcp/Deployment/correo-bridge` <- `harbor.e-dani.com/homelab/whatsappmcp-correo-bridge`
 - `whatsapp-mcp/Deployment/instagram-connector` <- `harbor.e-dani.com/homelab/whatsappmcp-instagram-connector`
 - `whatsapp-mcp/Deployment/mcp-server` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
@@ -457,4 +450,5 @@ No tocar a mano: se regenera.
 - `whatsapp-mcp/Deployment/whatsapp-mcp-minio` <- `harbor.e-dani.com/homelab/minio`
 - `whatsapp-mcp/Deployment/whatsapp-pairing` <- `harbor.e-dani.com/homelab/whatsappmcp-whatsapp-connector`
 - `whatsapp-mcp/Deployment/whatsapp-synapse-bridge` <- `harbor.e-dani.com/homelab/whatsappmcp-whatsapp-synapse-bridge`
+- `whatsapp-mcp/Deployment/whatsapp-voice-transcribe` <- `harbor.e-dani.com/homelab/whatsappmcp-mcp-server`
 - `workspace-mcp/Deployment/workspace-mcp` <- `harbor.e-dani.com/homelab/mcp-stdio-pool-bridge`
