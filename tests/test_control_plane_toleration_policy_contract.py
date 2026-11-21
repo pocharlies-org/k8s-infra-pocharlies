@@ -6,8 +6,9 @@ scheduled there (SC-6094: shared Postgres + metrics store saturated ks5-cp-3). T
 toleration is added at admission only to the allowlist — pods declaring workload=core or
 node-pool=ks5-nvme, DaemonSet pods and longhorn-system pods. The behaviour is exercised by
 tests/kyverno/cp-toleration/run-offline.sh (Kyverno CLI); this file pins the shape that
-must not drift: admission only, failurePolicy Ignore (house pattern), the single rule, the
-four allowlist conditions, the exact toleration, and every fixture present.
+must not drift: admission only, failurePolicy Ignore (house pattern), the two mutate rules
+(SC-6196: json6902 appends, never a strategic-merge that would replace the tolerations list),
+the four allowlist conditions, the exact toleration, and every fixture present.
 """
 import pathlib
 import unittest
@@ -34,13 +35,21 @@ class TestControlPlaneTolerationPolicyContract(unittest.TestCase):
         self.assertIs(pol["spec"]["background"], False)
         self.assertEqual(pol["spec"]["webhookConfiguration"]["failurePolicy"], "Ignore")
 
-    def test_single_mutate_rule_on_pod_create(self):
+    def test_two_mutate_rules_on_pod_create(self):
+        # SC-6196: two rules (tolerations present / absent), both json6902 APPENDS. Never
+        # patchStrategicMerge again: Kyverno's strategic merge has no merge key for
+        # tolerations, it REPLACED the list and left the dgx-gpu-mem-exporter Pending on
+        # dgx3 without its dedicated=llm (DEPL-20166).
         rules = policy()["spec"]["rules"]
-        self.assertEqual([r["name"] for r in rules], ["add-control-plane-toleration"])
-        rule = rules[0]
-        match = rule["match"]["any"][0]["resources"]
-        self.assertEqual(match["kinds"], ["Pod"])
-        self.assertEqual(match["operations"], ["CREATE"])
+        self.assertEqual([r["name"] for r in rules],
+                         ["add-control-plane-toleration",
+                          "add-control-plane-toleration-when-absent"])
+        for rule in rules:
+            match = rule["match"]["any"][0]["resources"]
+            self.assertEqual(match["kinds"], ["Pod"])
+            self.assertEqual(match["operations"], ["CREATE"])
+            self.assertNotIn("patchStrategicMerge", rule["mutate"])
+            self.assertIn("patchesJson6902", rule["mutate"])
 
     def test_allowlist_preconditions(self):
         # preconditions, not conditions: the CLI (run-offline.sh) showed the new `conditions`
@@ -58,12 +67,21 @@ class TestControlPlaneTolerationPolicyContract(unittest.TestCase):
         self.assertEqual(conds[3]["value"], "longhorn-system")
 
     def test_toleration_is_the_control_plane_noschedule(self):
-        tol = policy()["spec"]["rules"][0]["mutate"]["patchStrategicMerge"]["spec"]["tolerations"]
-        self.assertEqual(tol, [{
+        tol = {
             "key": "node-role.kubernetes.io/control-plane",
             "operator": "Exists",
             "effect": "NoSchedule",
-        }])
+        }
+        rules = policy()["spec"]["rules"]
+        # present: appended to the list the pod already has
+        ops = yaml.safe_load(rules[0]["mutate"]["patchesJson6902"])
+        self.assertEqual(ops, [{"path": "/spec/tolerations/-", "op": "add", "value": tol}])
+        # absent: the list is created with the single toleration
+        ops = yaml.safe_load(rules[1]["mutate"]["patchesJson6902"])
+        self.assertEqual(ops, [{"path": "/spec/tolerations", "op": "add", "value": [tol]}])
+        # the two rules are complementary on the presence of tolerations
+        self.assertEqual(rules[0]["preconditions"]["all"][0]["operator"], "GreaterThan")
+        self.assertEqual(rules[1]["preconditions"]["all"][0]["operator"], "Equals")
 
     def test_labels_job_registers_the_taint(self):
         job = (ROOT / "kubernetes" / "node-labels" / "labels-job.yaml").read_text()
@@ -80,7 +98,8 @@ class TestControlPlaneTolerationPolicyContract(unittest.TestCase):
 
     def test_fixtures_exist(self):
         for name in ("allow-core-pod", "allow-nvme-pod", "allow-daemonset-pod",
-                     "allow-longhorn-sharemanager", "deny-plain-pod", "deny-runner-pod"):
+                     "allow-longhorn-sharemanager", "deny-plain-pod", "deny-runner-pod",
+                     "keep-daemonset-pod-with-tolerations"):
             path = FIXTURES / f"{name}.yaml"
             self.assertTrue(path.is_file(), path)
             self.assertTrue(path.read_text().startswith("# user: "), path)

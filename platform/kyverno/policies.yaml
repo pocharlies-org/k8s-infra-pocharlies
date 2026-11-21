@@ -1107,8 +1107,14 @@ spec:
   webhookConfiguration:
     failurePolicy: Ignore
   rules:
+    # SC-6196: dos reglas con patchesJson6902 en lugar de patchStrategicMerge. El merge
+    # estrategico de Kyverno REEMPLAZABA la lista de toleraciones (no tiene clave de merge) y
+    # dejo Pending al dgx-gpu-mem-exporter en dgx3: el pod perdia su dedicated=llm y no
+    # cabia en ningun nodo (DEPL-20166). Ahora la toleracion del plano de control se ANADE a
+    # las que el pod ya declara. Son dos reglas porque json6902 no puede anadir bajo
+    # /spec/tolerations/- si el campo todavia no existe.
     - name: add-control-plane-toleration
-      match:
+      match: &cp-toleration-match
         any:
           - resources:
               kinds: [Pod]
@@ -1118,7 +1124,11 @@ spec:
       # (tests/kyverno/cp-toleration/run-offline.sh) — las `conditions` nuevas no se
       # evaluaban en la regla mutate.
       preconditions:
-        any:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: GreaterThan
+            value: 0
+        any: &cp-toleration-allowlist
           - key: "{{ request.object.spec.nodeSelector.workload || '' }}"
             operator: Equals
             value: "core"
@@ -1132,9 +1142,27 @@ spec:
             operator: Equals
             value: "longhorn-system"
       mutate:
-        patchStrategicMerge:
-          spec:
-            tolerations:
+        patchesJson6902: |-
+          - path: /spec/tolerations/-
+            op: add
+            value:
+              key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+    - name: add-control-plane-toleration-when-absent
+      match: *cp-toleration-match
+      skipBackgroundRequests: true
+      preconditions:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: Equals
+            value: 0
+        any: *cp-toleration-allowlist
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/tolerations
+            op: add
+            value:
               - key: node-role.kubernetes.io/control-plane
                 operator: Exists
                 effect: NoSchedule
