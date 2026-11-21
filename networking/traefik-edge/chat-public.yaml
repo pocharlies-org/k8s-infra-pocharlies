@@ -167,20 +167,27 @@ spec:
           port: 80
     # OWU-116 (S1 de OWU-95): ruta bearer de la app nativa (openwebui-ios), con
     # el MISMO match literal que la hermana LAN (dgx-infra
-    # k8s/apps/chat/ingressroute.yaml) — contrato entre repos: un prefijo nuevo
-    # que necesite S3 = una entrada mas aqui Y alli, nunca un renombrado. Los
-    # prefijos son las rutas REALES de OWUI v0.11.4: SIN StripPrefix ni
-    # reescritura. HeaderRegexp(`^Bearer `) deja «sin token → 302 por la cadena
-    # generica» (criterio 1.3). priority 100 (precedente SC-2732). Solo
-    # chat-strip-auth-request: SIN sso-chat-chain (la app autentica con su JWT
-    # propio de OWUI, obtenido por el exchange nativo — OWU-115) y SIN
-    # chat-drop-authorization (aqui el Authorization SÍ hace falta).
-    # OWU-134 (app Chat/Conduit, mismo cliente openwebui-ios): entran con Path()
-    # EXACTO /api/v1/auths/ (usuario actual), /api/config y los settings/info
-    # del propio usuario. NUNCA PathPrefix(/api/v1/auths/) ni /api/v1/users/:
-    # signin/signup/ldap/mfa siguen tras la cadena SSO (scripts/s1-bearer-check.sh A.n).
+    # k8s/apps/chat/ingressroute.yaml) — contrato entre repos: el match se toca
+    # en los dos ficheros a la vez, nunca un renombrado. HeaderRegexp(`^Bearer `)
+    # deja «sin token → 302 por la cadena generica» (criterio 1.3). priority 100
+    # (precedente SC-2732). Solo chat-strip-auth-request: SIN sso-chat-chain (la
+    # app autentica con su JWT propio de OWUI, obtenido por el exchange nativo —
+    # OWU-115) y SIN chat-drop-authorization (aqui el Authorization SÍ hace falta).
+    # OWU-95 (P32, 20-11): la regla es de CLASE — CUALQUIER /api/* con bearer
+    # llega a OWUI, que es quien valida el token (bearer invalido → 401 de OWUI,
+    # nunca 302). La lista exacta de OWU-134 se queda atras: OWUI sirve cada
+    # ruta bajo /api/x y su alias /api/v1/x, la app nativa llama a las rutas
+    # canonicas (/api/chats, /api/users/me, /api/version, /api/auths/status) y
+    # caian en la cadena SSO (302) — medido 20-11 en los dos bordes. El resto
+    # (el chat por cookie, sin bearer) sigue intacto por sso-chat-chain. Guarda
+    # actualizada en el mismo paso: dgx-infra scripts/s1-bearer-check.sh.
+    # Cota para la revision de security (frontera de privilegios): con bearer
+    # cualquier /api/* alcanza OWUI sin pasar la SSO, tambien /api/auths/signin;
+    # el auto-registro esta cerrado en produccion (features.enable_signup=false,
+    # medido 20-11 por /api/config) y chat-strip-auth-request sigue borrando las
+    # X-Auth-Request-* hostiles (OWU-115).
     - kind: Rule
-      match: Host(`chat.e-dani.com`) && HeaderRegexp(`Authorization`, `^Bearer `) && ( PathPrefix(`/api/models`) || PathPrefix(`/api/chat/completions`) || PathPrefix(`/api/v1/chats`) || PathPrefix(`/api/v1/files`) || PathPrefix(`/api/v1/auths/oauth`) || Path(`/api/v1/auths/`) || Path(`/api/config`) || Path(`/api/v1/users/user/settings`) || Path(`/api/v1/users/user/settings/update`) || Path(`/api/v1/users/user/info`) || Path(`/api/v1/users/user/info/update`) )
+      match: Host(`chat.e-dani.com`) && HeaderRegexp(`Authorization`, `^Bearer `) && PathPrefix(`/api/`)
       priority: 100
       middlewares:
         - name: chat-strip-auth-request
