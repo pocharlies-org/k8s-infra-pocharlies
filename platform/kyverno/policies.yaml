@@ -1107,6 +1107,11 @@ spec:
   webhookConfiguration:
     failurePolicy: Ignore
   rules:
+    # SC-6199: con toleraciones ya declaradas, la toleracion del plano se ANADE con
+    # patchesJson6902. patchStrategicMerge sobre spec.tolerations REMPLAZA la lista entera
+    # (no tiene merge key) y borraba las toleraciones que el pod traia: los pods nuevos de
+    # DaemonSet perdian dedicated=llm / role=edge y quedaban Pending (alloy en dgx3,
+    # dgx-gpu-mem-exporter, velero node-agent).
     - name: add-control-plane-toleration
       match:
         any:
@@ -1114,10 +1119,46 @@ spec:
               kinds: [Pod]
               operations: [CREATE]
       skipBackgroundRequests: true
-      # preconditions (no conditions): patron de job-ttl-default, y verificado con la CLI
-      # (tests/kyverno/cp-toleration/run-offline.sh) — las `conditions` nuevas no se
-      # evaluaban en la regla mutate.
       preconditions:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: GreaterThan
+            value: 0
+        any:
+          - key: "{{ request.object.spec.nodeSelector.workload || '' }}"
+            operator: Equals
+            value: "core"
+          - key: "{{ request.object.spec.nodeSelector.\"node-pool\" || '' }}"
+            operator: Equals
+            value: "ks5-nvme"
+          - key: "{{ length((request.object.metadata.ownerReferences || `[]`)[?kind=='DaemonSet']) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.namespace }}"
+            operator: Equals
+            value: "longhorn-system"
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/tolerations/-
+            op: add
+            value:
+              key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+    # Sin toleraciones (o lista vacia) no hay nada que conservar: aqui el strategic merge
+    # es seguro porque crea la lista en lugar de sustituirla.
+    - name: add-control-plane-toleration-to-pod-without-tolerations
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      preconditions:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: Equals
+            value: 0
         any:
           - key: "{{ request.object.spec.nodeSelector.workload || '' }}"
             operator: Equals

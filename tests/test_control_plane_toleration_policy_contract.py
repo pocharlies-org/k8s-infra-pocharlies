@@ -6,8 +6,16 @@ scheduled there (SC-6094: shared Postgres + metrics store saturated ks5-cp-3). T
 toleration is added at admission only to the allowlist — pods declaring workload=core or
 node-pool=ks5-nvme, DaemonSet pods and longhorn-system pods. The behaviour is exercised by
 tests/kyverno/cp-toleration/run-offline.sh (Kyverno CLI); this file pins the shape that
-must not drift: admission only, failurePolicy Ignore (house pattern), the single rule, the
-four allowlist conditions, the exact toleration, and every fixture present.
+must not drift: admission only, failurePolicy Ignore (house pattern), the two rules split by
+whether the pod already declares tolerations, the four allowlist conditions, the exact
+toleration, and every fixture present.
+
+SC-6199: the original single rule mutated with patchStrategicMerge, which REPLACES
+spec.tolerations (the list has no merge key) and wiped the tolerations every new DaemonSet
+pod brought — alloy lost dedicated=llm and could not schedule on dgx3, dgx-gpu-mem-exporter
+and the velero node-agent were the other victims. A pod that already declares tolerations
+must be appended to (patchesJson6902), never replaced: the strategic merge is only allowed
+on the rule that fires when the list is absent or empty.
 """
 import pathlib
 import unittest
@@ -34,36 +42,66 @@ class TestControlPlaneTolerationPolicyContract(unittest.TestCase):
         self.assertIs(pol["spec"]["background"], False)
         self.assertEqual(pol["spec"]["webhookConfiguration"]["failurePolicy"], "Ignore")
 
-    def test_single_mutate_rule_on_pod_create(self):
+    def test_two_mutate_rules_on_pod_create(self):
         rules = policy()["spec"]["rules"]
-        self.assertEqual([r["name"] for r in rules], ["add-control-plane-toleration"])
-        rule = rules[0]
-        match = rule["match"]["any"][0]["resources"]
-        self.assertEqual(match["kinds"], ["Pod"])
-        self.assertEqual(match["operations"], ["CREATE"])
+        self.assertEqual(
+            [r["name"] for r in rules],
+            ["add-control-plane-toleration", "add-control-plane-toleration-to-pod-without-tolerations"],
+        )
+        for rule in rules:
+            match = rule["match"]["any"][0]["resources"]
+            self.assertEqual(match["kinds"], ["Pod"])
+            self.assertEqual(match["operations"], ["CREATE"])
+
+    def test_rules_are_split_by_existing_tolerations(self):
+        # SC-6199: the strategic merge may only touch pods that declare no tolerations;
+        # for the rest the toleration is appended with a JSON6902 add.
+        rules = {r["name"]: r for r in policy()["spec"]["rules"]}
+        append = rules["add-control-plane-toleration"]
+        init = rules["add-control-plane-toleration-to-pod-without-tolerations"]
+        self.assertEqual(append["preconditions"]["all"], [{
+            "key": "{{ length(request.object.spec.tolerations || `[]`) }}",
+            "operator": "GreaterThan",
+            "value": 0,
+        }])
+        self.assertEqual(init["preconditions"]["all"], [{
+            "key": "{{ length(request.object.spec.tolerations || `[]`) }}",
+            "operator": "Equals",
+            "value": 0,
+        }])
+        self.assertNotIn("patchStrategicMerge", append["mutate"])
+        self.assertIn("patchStrategicMerge", init["mutate"])
 
     def test_allowlist_preconditions(self):
         # preconditions, not conditions: the CLI (run-offline.sh) showed the new `conditions`
-        # block is not evaluated on a mutate rule.
-        conds = policy()["spec"]["rules"][0]["preconditions"]["any"]
-        keys = [c["key"] for c in conds]
-        self.assertEqual(keys, [
+        # block is not evaluated on a mutate rule. Both rules carry the same allowlist.
+        keys_expected = [
             "{{ request.object.spec.nodeSelector.workload || '' }}",
             '{{ request.object.spec.nodeSelector."node-pool" || \'\' }}',
             "{{ length((request.object.metadata.ownerReferences || `[]`)[?kind=='DaemonSet']) }}",
             "{{ request.namespace }}",
-        ])
-        self.assertEqual(conds[0]["value"], "core")
-        self.assertEqual(conds[1]["value"], "ks5-nvme")
-        self.assertEqual(conds[3]["value"], "longhorn-system")
+        ]
+        for rule in policy()["spec"]["rules"]:
+            conds = rule["preconditions"]["any"]
+            self.assertEqual([c["key"] for c in conds], keys_expected)
+            self.assertEqual(conds[0]["value"], "core")
+            self.assertEqual(conds[1]["value"], "ks5-nvme")
+            self.assertEqual(conds[3]["value"], "longhorn-system")
 
     def test_toleration_is_the_control_plane_noschedule(self):
-        tol = policy()["spec"]["rules"][0]["mutate"]["patchStrategicMerge"]["spec"]["tolerations"]
-        self.assertEqual(tol, [{
+        tol = {
             "key": "node-role.kubernetes.io/control-plane",
             "operator": "Exists",
             "effect": "NoSchedule",
-        }])
+        }
+        rules = {r["name"]: r for r in policy()["spec"]["rules"]}
+        ops = yaml.safe_load(rules["add-control-plane-toleration"]["mutate"]["patchesJson6902"])
+        self.assertEqual(ops, [{"path": "/spec/tolerations/-", "op": "add", "value": tol}])
+        self.assertEqual(
+            rules["add-control-plane-toleration-to-pod-without-tolerations"]["mutate"]
+            ["patchStrategicMerge"]["spec"]["tolerations"],
+            [tol],
+        )
 
     def test_labels_job_registers_the_taint(self):
         job = (ROOT / "kubernetes" / "node-labels" / "labels-job.yaml").read_text()
@@ -80,6 +118,7 @@ class TestControlPlaneTolerationPolicyContract(unittest.TestCase):
 
     def test_fixtures_exist(self):
         for name in ("allow-core-pod", "allow-nvme-pod", "allow-daemonset-pod",
+                     "allow-daemonset-pod-with-tolerations",
                      "allow-longhorn-sharemanager", "deny-plain-pod", "deny-runner-pod"):
             path = FIXTURES / f"{name}.yaml"
             self.assertTrue(path.is_file(), path)

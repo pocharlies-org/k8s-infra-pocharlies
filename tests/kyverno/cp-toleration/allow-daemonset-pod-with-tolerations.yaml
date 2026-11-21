@@ -1,0 +1,27 @@
+# user: system:serviceaccount:kube-system:daemon-set-controller
+# SC-6199: un pod de DaemonSet que ya trae toleraciones (alloy: dedicated=llm para dgx3).
+# La politica debe ANADIR la del plano de control sin borrar las declaradas; run-offline.sh
+# comprueba el recurso parcheado, no solo el pass de la regla.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alloy-abcde
+  namespace: monitoring
+  ownerReferences:
+    - apiVersion: apps/v1
+      uid: 00000000-0000-0000-0000-000000000002
+      kind: DaemonSet
+      name: alloy
+spec:
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: llm
+      effect: NoSchedule
+    - key: role
+      operator: Equal
+      value: edge
+      effect: NoSchedule
+  containers:
+    - name: alloy
+      image: harbor.lan.e-dani.com/library/alloy:v1.0.0
