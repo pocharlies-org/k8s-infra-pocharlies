@@ -13,14 +13,21 @@
 # se lo pone la Kyverno job-ttl-default.
 #
 # Si el PVC se perdiera, borrar el Job y dejar que ArgoCD lo relance: vuelve a
-# crear usuario e índice contra el server recién inicializado. Igual tras un
-# cambio de este template: el Job es inmutable (prune=false), hay que borrar el
-# viejo para que ArgoCD cree el nuevo.
+# crear usuario e índice contra el server recién inicializado.
+#
+# `sync-options: Force=true,Replace=true` (ArgoCD): el template de un Job es
+# inmutable y la app k8s-infra tiene prune=false, así que un `apply` normal de un
+# cambio de este template falla ("field is immutable"); `Replace` a secas es un
+# PUT que el API también rechaza. Con Force+Replace es el propio ArgoCD quien
+# borra y recrea el Job de forma declarativa al sincronizar — sin mutación
+# imperativa contra el vivo. Es seguro aquí porque el Job es idempotente.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: devpi-bootstrap
   namespace: devpi
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
   labels:
     app.kubernetes.io/name: devpi
 spec:
