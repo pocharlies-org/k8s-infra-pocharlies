@@ -7,6 +7,7 @@ resources:
   - networking/dns/coredns-custom.yaml
   - networking/dns/coredns-sauvage.yaml
   - networking/dns/coredns-local.yaml
+  - networking/dns/edani-dns-divergence-watch.yaml
   - networking/metallb/ippool.yaml
   - networking/traefik-lan/tls-store.yaml
   - networking/traefik-lan/harbor-registry-direct.yaml
