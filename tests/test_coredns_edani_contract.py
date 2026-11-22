@@ -120,6 +120,50 @@ class CorednsEdaniContractTest(unittest.TestCase):
         """C4a: the ConfigMap no longer tells a human to add names by hand."""
         self.assertNotIn("Add the name here", COREDNS_FILE.read_text(encoding="utf-8"))
 
+    def test_committed_block_independent_reader_pins_to_lan(self) -> None:
+        """Regresion INFRA-902 (C1/C2 estatico): un lector independiente del bloque
+        commiteado -- no el regex del generador -- coincide con las fijaciones que
+        declara el generador (--list-fixed) y todo destino es la LAN: el Service
+        traefik-lan en las lineas `rewrite`, la VIP en las de `hosts`. Es la
+        comprobacion que qa midio a mano con grep (55 rewrite + 2 hosts == 57)."""
+        text = COREDNS_FILE.read_text(encoding="utf-8")
+        start = text.index("  edani-public-lan.server: |")
+        end = text.index("  x86-taile0ad27.server: |", start)
+        region = text[start:end]
+        rewrite_re = re.compile(r"^\s*rewrite name exact (\S+) (\S+)\s*$")
+        hosts_re = re.compile(r"^\s*(\d{1,3}(?:\.\d{1,3}){3}) (\S+\.e-dani\.com)\s*$")
+        rewrites: dict[str, str] = {}
+        hosts: dict[str, str] = {}
+        for line in region.splitlines():
+            m = rewrite_re.match(line)
+            if m:
+                rewrites[m.group(1)] = m.group(2)
+                continue
+            m = hosts_re.match(line)
+            if m:
+                hosts[m.group(2)] = m.group(1)
+        found = gen.find_edani_hosts()
+        expected = (found - set(gen.load_exclusions()) - gen.HOSTS_PINNED) | (gen.HOSTS_PINNED & found)
+        self.assertEqual(set(rewrites) | set(hosts), expected)
+        self.assertEqual(len(rewrites) + len(hosts), len(expected))
+        # Ningun destino puede ser una IP publica ni otro Service: la fijacion es
+        # exactamente lo que impide la divergencia INFRA-896.
+        self.assertEqual(set(rewrites.values()), {"traefik-lan.traefik-lan.svc.cluster.local"})
+        self.assertEqual(set(hosts.values()), {"192.168.50.240"})
+
+    def test_architecture_md_documents_generated_block(self) -> None:
+        """Regresion INFRA-902 (C4b): ARCHITECTURE.md sigue nombrando el generador,
+        la lista de exclusiones con `reason`, el job de CI y el bloque ts.net que
+        no se toca. qa lo midio con `git grep -l gen_coredns_edani ARCHITECTURE.md`."""
+        doc = (ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        for needle in (
+            "gen_coredns_edani.py",
+            "coredns-edani-exclusions.yaml",
+            "coredns-edani-guard",
+            "x86-taile0ad27.server",
+        ):
+            self.assertIn(needle, doc)
+
 
 if __name__ == "__main__":
     unittest.main()
