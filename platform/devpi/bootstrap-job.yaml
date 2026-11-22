@@ -2,7 +2,10 @@
 # usuario `company` y el índice `company/internal` con la política fijada por el
 # architect — lectura anónima, escritura solo `@company`, y SIN bases: el índice
 # no es espejo del PyPI público (los paquetes públicos los resuelve uv directo
-# desde pypi.org; `root/pypi` no se usa ni se referencia).
+# desde pypi.org). Además BORRA el índice mirror `root/pypi` que `devpi-init`
+# crea por defecto (criterio A3): mientras existe, el server se trae la lista de
+# proyectos de pypi.org y la indexa (medido en el primer arranque: 946 708
+# proyectos encolados). Nada del contrato lo referencia.
 #
 # El server fija la contraseña de root en su primer init (entrypoint de la
 # imagen, desde el mismo ExternalSecret), así que el Job espera a que la API
@@ -10,7 +13,9 @@
 # se lo pone la Kyverno job-ttl-default.
 #
 # Si el PVC se perdiera, borrar el Job y dejar que ArgoCD lo relance: vuelve a
-# crear usuario e índice contra el server recién inicializado.
+# crear usuario e índice contra el server recién inicializado. Igual tras un
+# cambio de este template: el Job es inmutable (prune=false), hay que borrar el
+# viejo para que ArgoCD cree el nuevo.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -35,12 +40,13 @@ spec:
       containers:
         - name: bootstrap
           image: docker.io/jonasal/devpi-client:7.3.0@sha256:5988832d86d48b63934bc408c8eea210bdcb97b64de75fbc595e7900d2974fe6
-          # El entrypoint de la imagen hace `devpi use $DEVPI_URL` y luego
-          # exec de lo que sigue; con DEVPI_USER vacío no hace login, que es lo
-          # que queremos (el login con root lo da el script, al reintentos).
+          # Ojo: `command` pisa el ENTRYPOINT de la imagen (que hacía
+          # `devpi use $DEVPI_URL` antes del exec), así que el script hace su
+          # propio `devpi use`. La URL va sin índice: `root/pypi` se borra más
+          # abajo y una URL con índice inexistente rompería el `devpi use`.
           env:
             - name: DEVPI_URL
-              value: http://devpi/root/pypi
+              value: http://devpi/
             - name: HOME
               value: /tmp
             - name: DEVPI_ROOT_PASSWORD
@@ -58,11 +64,11 @@ spec:
             - -eu
             - -c
             - |
-              until devpi login root --password="$DEVPI_ROOT_PASSWORD" >/dev/null 2>&1; do
+              until devpi use "$DEVPI_URL" >/dev/null 2>&1 && devpi login root --password="$DEVPI_ROOT_PASSWORD" >/dev/null 2>&1; do
                 echo "esperando la API de devpi..."
                 sleep 5
               done
-              if devpi user -a company password="$DEVPI_PUBLISH_TOKEN" >/dev/null 2>&1; then
+              if devpi user -c company password="$DEVPI_PUBLISH_TOKEN" >/dev/null 2>&1; then
                 echo "usuario company creado"
               else
                 echo "usuario company ya existía (se conserva su contraseña)"
@@ -72,8 +78,16 @@ spec:
               else
                 echo "índice company/internal ya existía"
               fi
-              devpi index -s company/internal read=:anonymous write=@company >/dev/null
+              # La política se pasa como keyvalues posicionales (el cliente 7.x
+              # no tiene `-s` en `devpi index`).
+              devpi index company/internal read=:anonymous write=@company >/dev/null
               echo "política aplicada: read=:anonymous write=@company"
+              # A3: fuera el mirror por defecto del PyPI público (ver cabecera).
+              if devpi index -d -y root/pypi >/dev/null 2>&1; then
+                echo "mirror root/pypi eliminado"
+              else
+                echo "root/pypi ya no existía"
+              fi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
