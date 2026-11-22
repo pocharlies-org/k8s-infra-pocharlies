@@ -168,3 +168,32 @@ data:
             app.kubernetes.io/name: drill-restore
         action:
           type: skip
+      # SC-6246 (22-11): los perfiles de Chrome de Nova (sesión de Google = credencial)
+      # viven en `longhorn-encrypted`, cuya SC pide un Secret por PVC (`${pvc.name}`).
+      # El data mover de velero clona el PVC en el ns `velero` sin ese Secret: el clon
+      # no se aprovisiona nunca y el DataUpload muere en "timeout on preparing data
+      # upload" (medido: los dos DataUploads del weekly 20261122, y el del 15-11).
+      # La snapshot SÍ funciona (es detached y no strict-local); lo que no puede ser
+      # es el clon. La copia por kopia tampoco: los PVCs están desmontados a la hora
+      # del backup (los montan pods efímeros `nova-login`/reunión). Se salta la copia
+      # de contenido —no el manifiesto, que sigue copiándose— y la cobertura queda
+      # abierta en la historia hija (decisión de dueño: montar el perfil en el
+      # despliegue para kopia, o Longhorn daily-backup con montaje garantizado).
+      - conditions:
+          pvcLabels:
+            velero.pocharlies.io/skip-data-copy: "true"
+        action:
+          type: skip
+      # SC-6246: frigate está parked (deployment a 0 por el árbitro, `kubectl scale`;
+      # git lleva replicas: 0 con ignoreDifferences). Sus PVCs, desmontados y en
+      # `longhorn-strict-local`: la snapshot CSI no puede crearse (el engine exige el
+      # volumen attached en su nodo) y caduca a los 10 min — falla igual con 1 GiB que
+      # con 100, medido dos domingos seguidos. Cobertura según el propio pvc.yaml del
+      # repo: `frigate-config` al grupo `default` de Longhorn (snapshot diario local);
+      # `frigate-media`, sin copia fuera de casa por decisión del dueño ("que no
+      # salgan de casa"). Si frigate se levanta, quitar esta regla devuelve kopia.
+      - conditions:
+          pvcLabels:
+            app.kubernetes.io/name: frigate
+        action:
+          type: skip
