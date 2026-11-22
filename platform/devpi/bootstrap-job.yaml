@@ -1,0 +1,90 @@
+# Bootstrap del índice (SKIRM-590). Determinista y en git, idempotente: deja el
+# usuario `company` y el índice `company/internal` con la política fijada por el
+# architect — lectura anónima, escritura solo `@company`, y SIN bases: el índice
+# no es espejo del PyPI público (los paquetes públicos los resuelve uv directo
+# desde pypi.org; `root/pypi` no se usa ni se referencia).
+#
+# El server fija la contraseña de root en su primer init (entrypoint de la
+# imagen, desde el mismo ExternalSecret), así que el Job espera a que la API
+# responda y entra con ella. No imprime secretos. Sin ttlSecondsAfterFinished:
+# se lo pone la Kyverno job-ttl-default.
+#
+# Si el PVC se perdiera, borrar el Job y dejar que ArgoCD lo relance: vuelve a
+# crear usuario e índice contra el server recién inicializado.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devpi-bootstrap
+  namespace: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  backoffLimit: 12
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devpi-bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: docker.io/jonasal/devpi-client:7.3.0@sha256:5988832d86d48b63934bc408c8eea210bdcb97b64de75fbc595e7900d2974fe6
+          # El entrypoint de la imagen hace `devpi use $DEVPI_URL` y luego
+          # exec de lo que sigue; con DEVPI_USER vacío no hace login, que es lo
+          # que queremos (el login con root lo da el script, al reintentos).
+          env:
+            - name: DEVPI_URL
+              value: http://devpi/root/pypi
+            - name: HOME
+              value: /tmp
+            - name: DEVPI_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devpi-credentials
+                  key: root_password
+            - name: DEVPI_PUBLISH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: devpi-credentials
+                  key: publish_token
+          command:
+            - /bin/sh
+            - -eu
+            - -c
+            - |
+              until devpi login root --password="$DEVPI_ROOT_PASSWORD" >/dev/null 2>&1; do
+                echo "esperando la API de devpi..."
+                sleep 5
+              done
+              if devpi user -a company password="$DEVPI_PUBLISH_TOKEN" >/dev/null 2>&1; then
+                echo "usuario company creado"
+              else
+                echo "usuario company ya existía (se conserva su contraseña)"
+              fi
+              if devpi index -c company/internal type=stage >/dev/null 2>&1; then
+                echo "índice company/internal creado (sin bases: sin mirror del PyPI público)"
+              else
+                echo "índice company/internal ya existía"
+              fi
+              devpi index -s company/internal read=:anonymous write=@company >/dev/null
+              echo "política aplicada: read=:anonymous write=@company"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

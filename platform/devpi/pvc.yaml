@@ -1,0 +1,26 @@
+# Datos de devpi (serverdir). La StorageClass `longhorn` es la default del
+# cluster, y un volumen suyo entra solo en el plan de copias: el grupo
+# `default` del RecurringJob es implícito
+# (dgx-infra/k8s/backup/longhorn-recurring/recurringjob-default.yaml) y el
+# destino default va a OVH (storage/longhorn/longhorn-default-backup.yaml).
+# Evidencia al cerrar: el Volume muestra la etiqueta
+# `recurring-job-group.longhorn.io/default: enabled`. No llevar la etiqueta
+# del grupo `no-snapshot` (esa lista es para excluir).
+#
+# RWO a propósito: un solo pod (Recreate). Si el PVC se perdiera, el
+# histórico publicado se reconstruye desde los tags de git (`uv build` +
+# re-subida), según el architect — no se automatiza.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: devpi-data
+  namespace: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
