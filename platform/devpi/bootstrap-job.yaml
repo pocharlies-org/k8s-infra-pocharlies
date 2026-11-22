@@ -85,13 +85,21 @@ spec:
               else
                 echo "índice company/internal ya existía"
               fi
-              # La política se pasa como keyvalues posicionales (el cliente 7.x
-              # no tiene `-s` en `devpi index`).
-              devpi index company/internal read=:anonymous write=@company >/dev/null
-              echo "política aplicada: read=:anonymous write=@company"
+              # Política en devpi-server 6.x (SC-6258, medido con 6.21.0 +
+              # cliente 7.3.0): las claves `read=`/`write=` de devpi <=5 ya no
+              # existen en el indexconfig (el PATCH responde 400 «unexpected
+              # keyword arguments»). La lectura anónima es el comportamiento por
+              # defecto del server sin plugin que la restrinja (pkg_read =
+              # :ANONYMOUS: + root) y la escritura es el ACL de subida: se fija
+              # `acl_upload=company` explícito, sin depender del default.
+              devpi index company/internal acl_upload=company >/dev/null
+              echo "política aplicada: acl_upload=company (lectura anónima: default del server)"
               # A3: fuera el mirror por defecto del PyPI público (ver cabecera).
-              if devpi index -d -y root/pypi >/dev/null 2>&1; then
-                echo "mirror root/pypi eliminado"
+              # `--delete` (el cliente 7.3.0 no reconoce `-d`: usage error exit 2)
+              # y antes hay que volver volatile el mirror, que el server no deja
+              # borrar non-volatile (403, medido).
+              if devpi index root/pypi volatile=True >/dev/null 2>&1; then
+                devpi index --delete -y root/pypi >/dev/null && echo "mirror root/pypi eliminado"
               else
                 echo "root/pypi ya no existía"
               fi
