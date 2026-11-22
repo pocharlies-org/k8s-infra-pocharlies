@@ -1,0 +1,119 @@
+# devpi-server (SKIRM-590, SKIRM-206 P1a). Un solo pod: el único escritor es
+# la CI (job publish-sdk) y la lectura solo hace falta cuando hay un build.
+# Sin HA a propósito — la señal de caída es la propia CI (C1/C2 y el `uv sync`
+# de cada PR rugen en cuanto el índice no responde), decisión del architect en
+# nota-architect-devpi.md.
+#
+# Imagen: no hay imagen oficial de devpi (medido: el repo devpi/devpi no
+# publica imagen, y en Docker Hub solo existen builds de terceros).
+# `jonasal/devpi-server` es la estándar de facto (multi-arch, devpi-server
+# 6.21.0 + devpi-web 5.2.0, actualizada 2026-11-17). Fijada por digest del
+# índice, convención de la casa.
+#
+# El entrypoint de la imagen hace el `devpi-init` del serverdir a primera
+# arrancada con DEVPI_PASSWORD (root) y luego lanza `devpi-server --host
+# 0.0.0.0 --port 3141 --restrict-modify=root $@`. Por eso:
+#   - DEVPI_PASSWORD entra desde el ExternalSecret: es la contraseña de root
+#     que después usa el Job de bootstrap para loguearse.
+#   - los args propios van DESPUÉS de los del entrypoint y ganan (argparse,
+#     último valor gana): el contrato del architect es el puerto 8080.
+#   - DEVPISERVER_SERVERDIR se redefine al PVC: el entrypoint comprueba ahí el
+#     marker de init y `devpi-init` escribe en esa misma ruta.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: devpi
+  name: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  replicas: 1
+  strategy:
+    # El PVC es RWO: con RollingUpdate el pod nuevo no monta mientras el viejo
+    # lo sostiene y el rollout se cuelga.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devpi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devpi
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # Chown del PVC al montar: el serverdir tiene que ser escribible por uid 1000.
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: devpi
+          image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
+          args:
+            - --host=0.0.0.0
+            - --port=8080
+            - --serverdir=/var/lib/devpi
+          env:
+            - name: DEVPISERVER_SERVERDIR
+              value: /var/lib/devpi
+            - name: DEVPI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devpi-credentials
+                  key: root_password
+            # Rootfs de solo lectura: HOME a un emptyDir (config y temporales
+            # del proceso).
+            - name: HOME
+              value: /tmp
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+          # devpi-web responde 200 en la raíz (lista de índices).
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/devpi
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: devpi-data
+        - name: tmp
+          emptyDir: {}
+---
+# El contrato con la IngressRoute LAN (pypi.e-dani.com) es este Service:80.
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: devpi
+  name: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devpi
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
