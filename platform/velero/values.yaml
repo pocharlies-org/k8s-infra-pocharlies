@@ -59,9 +59,15 @@ configuration:
 # Use node-agent for filesystem backups and CSI snapshot data movement.
 deployNodeAgent: true
 nodeAgent:
-  # Node-agent must run wherever protected Pods can land. Cover LAN, KS5 and
-  # the AlphaLink droplet (cloud; its pods reach MinIO over the tailnet overlay,
-  # measured 18-10) while excluding the remote Sauvage node whose overlay cannot.
+  # Node-agent must run wherever protected Pods can land. Cover LAN, KS5, the
+  # AlphaLink droplet (cloud; its pods reach the target over the tailnet overlay,
+  # measured 18-10) AND the remote Sauvage node (SC-6246, 22-11). Sauvage was
+  # excluded while the BSL was the on-node MinIO and its overlay could not reach
+  # it; since INFRA-1175 the BSL is OVH S3 (s3.sbg.io.cloud.ovh.net), reachable
+  # from Sauvage over the internet without the overlay. Without the agent here the
+  # weekly backup of every Sauvage Pod fails with "daemonset pod not found in
+  # running state in node sauvage" (measured: aurora-redis-0, aurora-weaviate-0,
+  # labels-label-storage, synapse-smtp). Sauvage carries taint role=edge:NoSchedule.
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -69,7 +75,7 @@ nodeAgent:
           - matchExpressions:
               - key: topology
                 operator: In
-                values: ["lan", "ovh", "cloud"]
+                values: ["lan", "ovh", "cloud", "remote"]
   tolerations:
     - key: dedicated
       operator: Equal
@@ -78,6 +84,10 @@ nodeAgent:
     - key: dedicated
       operator: Equal
       value: alpha
+      effect: NoSchedule
+    - key: role
+      operator: Equal
+      value: edge
       effect: NoSchedule
   extraArgs:
     - --node-agent-configmap=velero-node-agent-config

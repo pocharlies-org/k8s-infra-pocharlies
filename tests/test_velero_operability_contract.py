@@ -42,11 +42,15 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         self.assertEqual(section.count("loadAffinity:"), 1)
         self.assertNotIn("topology: lan", section)
 
-    def test_node_agent_covers_lan_ovh_and_cloud_but_not_remote(self):
+    def test_node_agent_covers_lan_ovh_cloud_and_remote(self):
+        # SC-6246: Sauvage (topology=remote) was excluded while the BSL was its own
+        # on-node MinIO; since INFRA-1175 the BSL is OVH S3, reachable from Sauvage.
+        # The agent must now land there (taint role=edge:NoSchedule) or every Sauvage
+        # Pod backup fails "daemonset pod not found in running state in node sauvage".
         section = VALUES.split("nodeAgent:", 1)[1].split("# Velero server", 1)[0]
-        self.assertIn('values: ["lan", "ovh", "cloud"]', section)
-        self.assertNotIn('"remote"', section)
+        self.assertIn('values: ["lan", "ovh", "cloud", "remote"]', section)
         self.assertIn("value: alpha", section)
+        self.assertIn("value: edge", section)
         self.assertIsNone(re.search(r"^  nodeSelector:\s*$", section, re.MULTILINE))
         self.assertIn("--node-agent-configmap=velero-node-agent-config", section)
         self.assertIn('cpu: "1"', section)
@@ -90,7 +94,7 @@ class VeleroOperabilityContractTest(unittest.TestCase):
         # Hay más admitidas (`capacity` existe, probado 10-11), así que una clave
         # nueva se prueba con un Backup CR antes de fiarse de esta lista; un CM
         # inválido tumba las 5 schedules vivas.
-        self.assertEqual(VOLUME_POLICY.count("type: skip"), 20)
+        self.assertEqual(VOLUME_POLICY.count("type: skip"), 22)
         self.assertIn("app.kubernetes.io/managed-by: cloudnative-pg", VOLUME_POLICY)
         for no_backup in ("app.kubernetes.io/name: vmsingle", "app.kubernetes.io/name: loki",
                           "app.kubernetes.io/instance: langfuse", "app: langfuse-events-minio",
@@ -100,7 +104,9 @@ class VeleroOperabilityContractTest(unittest.TestCase):
                           "app.kubernetes.io/name: skirmshop-drive-mirror", "component: trivy",
                           "app: ollaya", "app: bge", "app: stt-turbo", "app: gliner2-extract",
                           "app.kubernetes.io/name: sc80-restore-drill",
-                          "app.kubernetes.io/name: drill-restore"):
+                          "app.kubernetes.io/name: drill-restore",
+                          'velero.pocharlies.io/skip-data-copy: "true"',
+                          "app.kubernetes.io/name: frigate"):
             self.assertIn(no_backup, VOLUME_POLICY)
         for condicion_prohibida in ("pvcName", "usedByPods", "csiDrivers", "pvCFolumeAttributes"):
             self.assertNotIn(
