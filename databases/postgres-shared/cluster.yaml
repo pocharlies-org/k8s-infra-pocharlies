@@ -252,6 +252,16 @@ spec:
         passwordSecret:
           name: dgxbench-db-credentials
         comment: "DGX benchmark results (dgx-infra services/dashboard/bench); pool capped at 3"
+      # DGX-1022: índice en Postgres de las skills de Hermes (dgx-infra
+      # services/dashboard/skills). El dashboard es el único writer (pool max_size=3
+      # perezoso) y el Job importador no toca la BD: emite JSON por stdout.
+      # CONNECTION LIMIT 5 en role-settings.yaml.
+      - name: dgxskills
+        ensure: present
+        login: true
+        passwordSecret:
+          name: dgxskills-db-credentials
+        comment: "DGX skills index (dgx-infra services/dashboard/skills); pool capped at 3, CONNECTION LIMIT 5"
       # Synapse host stack (41 services in sauvage), migrated from docker shared-postgres
       # to CNPG (2026-06-08). Mirrors the role topology in docker: synapse_app is a NOLOGIN
       # group; the 6 login roles inherit from it. synapse_engine + synapse_admin BYPASSRLS.
