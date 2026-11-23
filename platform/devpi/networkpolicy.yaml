@@ -25,9 +25,10 @@ metadata:
   labels:
     app.kubernetes.io/name: devpi
 spec:
+  # Primario y réplicas (INFRA-1533).
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: devpi
+      app.kubernetes.io/part-of: devpi
   policyTypes:
     - Ingress
   ingress:
@@ -35,7 +36,8 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: traefik-lan
-        # El Job de bootstrap (mismo namespace) entra por el Service ClusterIP.
+        # Mismo namespace: el Job de bootstrap entra por el Service ClusterIP y las réplicas
+        # hablan con el primario.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: devpi

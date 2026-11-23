@@ -1,8 +1,12 @@
-# devpi-server (SKIRM-590, SKIRM-206 P1a). Un solo pod: el único escritor es
-# la CI (job publish-sdk) y la lectura solo hace falta cuando hay un build.
-# Sin HA a propósito — la señal de caída es la propia CI (C1/C2 y el `uv sync`
-# de cada PR rugen en cuanto el índice no responde), decisión del architect en
-# nota-architect-devpi.md.
+# devpi-server (SKIRM-590, SKIRM-206 P1a). Este es el PRIMARIO: el único que escribe.
+# Las lecturas las sirven también dos réplicas (replica.yaml), cada pod en un nodo
+# distinto del pool ks5 (INFRA-1533, Dani 23-11). Nació como un solo pod sin HA a
+# propósito; el 23-11 un NotReady de atlantic lo reprogramó en el x86, el volumen RWO
+# no se pudo enganchar (Multi-Attach y luego «mount failed: exit status 32») y el
+# índice dio 503 más de un cuarto de hora, justo cuando el monorepo de Synapse pasa a
+# instalar de aquí en cada CI, cada build de imagen y cada arranque de render3d.
+# Con el primario caído las réplicas siguen sirviendo instalaciones; solo publicar
+# necesita al primario.
 #
 # Imagen: no hay imagen oficial de devpi (medido: el repo devpi/devpi no
 # publica imagen, y en Docker Hub solo existen builds de terceros).
@@ -39,6 +43,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: devpi
+        app.kubernetes.io/part-of: devpi
     spec:
       securityContext:
         runAsNonRoot: true
@@ -48,6 +53,42 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      # Clase plataforma: pool ks5 (los tres nodos estables). La tolerancia la añade también
+      # Kyverno a workload=core (POLICY 13); se declara para no depender de que la policy esté.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: core
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      # Primario y réplicas, cada uno en su nodo: la caída de un nodo se lleva un solo pod.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/part-of: devpi
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+        # devpi exige que el fichero del secreto sea 0600; un volumen Secret con fsGroup queda 0440.
+        - name: secreto
+          image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
+          command: ["sh", "-c", "umask 077 && cp /run/secrets/devpi/replication_secret /run/devpi/secret"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          volumeMounts:
+            - name: secreto-origen
+              mountPath: /run/secrets/devpi
+              readOnly: true
+            - name: secreto
+              mountPath: /run/devpi
       containers:
         - name: devpi
           image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
@@ -55,9 +96,14 @@ spec:
             - --host=0.0.0.0
             - --port=8080
             - --serverdir=/var/lib/devpi
+            # Abre el protocolo de réplica. Vale sobre un serverdir creado como standalone.
+            - --role=primary
           env:
             - name: DEVPISERVER_SERVERDIR
               value: /var/lib/devpi
+            # El secreto compartido con el que primario y réplicas se autentican entre sí.
+            - name: DEVPISERVER_SECRETFILE
+              value: /run/devpi/secret
             - name: DEVPI_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -94,19 +140,49 @@ spec:
               mountPath: /var/lib/devpi
             - name: tmp
               mountPath: /tmp
+            - name: secreto
+              mountPath: /run/devpi
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: devpi-data
         - name: tmp
           emptyDir: {}
+        - name: secreto-origen
+          secret:
+            secretName: devpi-credentials
+            items:
+              - key: replication_secret
+                path: replication_secret
+        - name: secreto
+          emptyDir:
+            medium: Memory
 ---
-# El contrato con la IngressRoute LAN (pypi.e-dani.com) es este Service:80.
+# El contrato con la IngressRoute LAN (pypi.e-dani.com) es este Service:80. Detrás van el primario y las
+# réplicas que ya han sincronizado; una escritura que atiende una réplica la reenvía ella al primario.
 apiVersion: v1
 kind: Service
 metadata:
   namespace: devpi
   name: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/part-of: devpi
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Solo el primario: a quien se conectan las réplicas.
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: devpi
+  name: devpi-primary
   labels:
     app.kubernetes.io/name: devpi
 spec:
