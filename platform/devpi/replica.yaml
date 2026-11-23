@@ -120,6 +120,10 @@ spec:
             tcpSocket: { port: http }
             initialDelaySeconds: 15
             periodSeconds: 30
+          # Igual que el primario (deployment.yaml): 5 s atendiendo mientras Traefik deja de mandarle.
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           # Mismo motivo que en el primario (deployment.yaml): 512 MiB de Argon2 por clave y petición simultánea.
           resources:
             requests: { cpu: 100m, memory: 256Mi }
