@@ -130,9 +130,15 @@ Nº de casos: **pendiente de medir**.
   el borde público según el nodo en el que corra (en Harbor el proxy de Cloudflare corta los cuerpos de más de ~100 MB:
   413/502 en un push de capa grande — SC-2443/SC-2445; el probe libreplay alternaba al borde — INFRA-889). Un nombre que
   NO deba fijarse va en `networking/dns/coredns-edani-exclusions.yaml` con `reason` de una línea (no es recurso k8s: no va
-  al `kustomization.yaml`). El job de CI `coredns-edani-guard` (`gen_coredns_edani.py --check` +
+  al `kustomization.yaml`). Un nombre cuyo backend vive en los nodos del DC puede fijarse al `traefik-edge` del interior del
+  clúster en vez de a la LAN: se declara en `networking/dns/coredns-edani-edge-pins.yaml` (mismas reglas: `reason` de una
+  línea, no es recurso k8s) y su destino es el Service ClusterIP `traefik-edge-cluster`
+  (`networking/traefik-edge/edge-cluster-service.yaml`, delante del DaemonSet hostNetwork del edge). Es la fijación de
+  `harbor.e-dani.com`: fijar Harbor a `traefik-lan` mandaba cada capa de imagen OVH → casa → OVH a 0,25 MB/s (SKIRM-621;
+  medido 24-11: 42 MB en 170 s por la LAN vs 4 s por el edge). El job de CI `coredns-edani-guard` (`gen_coredns_edani.py --check` +
   `tests/test_coredns_edani_contract.py`) falla si un Host no está ni fijado ni excluido, si el bloque commiteado tiene
-  drift, si una exclusión no tiene `reason` o si una exclusión queda rancia. `dgx` y `s3` van fijados por `hosts` a la VIP
+  drift, si una exclusión o un pin edge no tiene `reason`, si una exclusión o un pin edge queda rancio, o si un nombre está
+  excluido y fijado a edge a la vez. `dgx` y `s3` van fijados por `hosts` a la VIP
   `192.168.50.240` (nunca por `rewrite`, que los sombrearía), alcanzable también desde los cp (medido 15-10-2026).
   Renombrar el Service `traefik-lan` rompe todas las líneas `rewrite` a la vez. El bloque `x86-taile0ad27.server` (ts.net)
   no lo toca el generador: queda byte a byte intacto.

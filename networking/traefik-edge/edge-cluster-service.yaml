@@ -1,0 +1,27 @@
+---
+# ClusterIP delante de los pods del DaemonSet traefik-edge (hostNetwork :443)
+# para que un cliente del interior del clúster alcance el edge sin salir del
+# DC. Es el destino de los nombres que scripts/gen_coredns_edani.py fija desde
+# networking/dns/coredns-edani-edge-pins.yaml (SKIRM-621: fijar
+# harbor.e-dani.com a traefik-lan hacía hairpin OVH -> casa -> OVH y los pulls
+# del registro bajaban a 0,25 MB/s). No cambia la entrada pública: el tráfico
+# de fuera sigue entrando por sauvage; este Service solo es alcanzable desde
+# dentro.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-edge-cluster
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: traefik-edge-traefik-edge
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/instance: traefik-edge-traefik-edge
+  ports:
+    - name: websecure
+      protocol: TCP
+      port: 443
+      targetPort: 443

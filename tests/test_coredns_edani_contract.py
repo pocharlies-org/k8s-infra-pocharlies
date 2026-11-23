@@ -120,12 +120,15 @@ class CorednsEdaniContractTest(unittest.TestCase):
         """C4a: the ConfigMap no longer tells a human to add names by hand."""
         self.assertNotIn("Add the name here", COREDNS_FILE.read_text(encoding="utf-8"))
 
-    def test_committed_block_independent_reader_pins_to_lan(self) -> None:
-        """Regresion INFRA-902 (C1/C2 estatico): un lector independiente del bloque
-        commiteado -- no el regex del generador -- coincide con las fijaciones que
-        declara el generador (--list-fixed) y todo destino es la LAN: el Service
-        traefik-lan en las lineas `rewrite`, la VIP en las de `hosts`. Es la
-        comprobacion que qa midio a mano con grep (55 rewrite + 2 hosts == 57)."""
+    def test_committed_block_independent_reader_pins_to_known_targets(self) -> None:
+        """Regresion INFRA-902 (C1/C2 estatico) + SKIRM-621: un lector
+        independiente del bloque commiteado -- no el regex del generador --
+        coincide con las fijaciones que declara el generador (--list-fixed) y
+        todo destino es conocido: el Service traefik-lan o el traefik-edge del
+        cluster en las lineas `rewrite`, la VIP en las de `hosts`. Varios
+        nombres a edge solo pueden ser los declarados en el fichero de edge
+        pins. Es la comprobacion que qa midio a mano con grep (hoy 56 rewrite
+        + 2 hosts == 58)."""
         text = COREDNS_FILE.read_text(encoding="utf-8")
         start = text.index("  edani-public-lan.server: |")
         end = text.index("  x86-taile0ad27.server: |", start)
@@ -148,8 +151,38 @@ class CorednsEdaniContractTest(unittest.TestCase):
         self.assertEqual(len(rewrites) + len(hosts), len(expected))
         # Ningun destino puede ser una IP publica ni otro Service: la fijacion es
         # exactamente lo que impide la divergencia INFRA-896.
-        self.assertEqual(set(rewrites.values()), {"traefik-lan.traefik-lan.svc.cluster.local"})
+        self.assertEqual(
+            set(rewrites.values()),
+            {"traefik-lan.traefik-lan.svc.cluster.local", gen.EDGE_SVC},
+        )
         self.assertEqual(set(hosts.values()), {"192.168.50.240"})
+        # A edge solo lo declarado en networking/dns/coredns-edani-edge-pins.yaml.
+        edge_pinned = {n for n, target in rewrites.items() if target == gen.EDGE_SVC}
+        self.assertEqual(edge_pinned, set(gen.load_edge_pins()) & found)
+        self.assertIn("harbor.e-dani.com", edge_pinned)
+        self.assertNotIn("harbor.lan.e-dani.com", edge_pinned)
+
+    def test_edge_pin_integrity_errors(self) -> None:
+        """Regresion SKIRM-621: el guard nombra pin edge sin reason, rancio
+        (ya no es Host() de traefik-lan) y en conflicto con una exclusion."""
+        found = gen.find_edani_hosts()
+        text = COREDNS_FILE.read_text(encoding="utf-8")
+        exclusions = gen.load_exclusions()
+        victim = "harbor.e-dani.com"
+        errors = gen.check(found, exclusions, text, {victim: None})
+        self.assertTrue(
+            any("pin edge" in e and victim in e and "sin `reason`" in e for e in errors),
+            errors,
+        )
+        errors = gen.check(found, exclusions, text, {"borrado.e-dani.com": "motivo"})
+        self.assertTrue(any("pin edge rancio" in e for e in errors), errors)
+        errors = gen.check(found, {victim: "motivo"}, text, {victim: "motivo"})
+        self.assertTrue(
+            any("excluido y fijado a edge" in e and victim in e for e in errors), errors
+        )
+        # Sin los pins edge del fichero real, el bloque commiteado deriva.
+        errors = gen.check(found, exclusions, text, {})
+        self.assertTrue(any("drift" in e for e in errors), errors)
 
     def test_architecture_md_documents_generated_block(self) -> None:
         """Regresion INFRA-902 (C4b): ARCHITECTURE.md sigue nombrando el generador,
