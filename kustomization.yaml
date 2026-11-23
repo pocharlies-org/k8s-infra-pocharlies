@@ -60,6 +60,7 @@ resources:
   - platform/devpi/externalsecret.yaml
   - platform/devpi/pvc.yaml
   - platform/devpi/deployment.yaml
+  - platform/devpi/replica.yaml
   - platform/devpi/bootstrap-job.yaml
   - platform/devpi/networkpolicy.yaml
   - networking/arc-skills-eval/namespace.yaml

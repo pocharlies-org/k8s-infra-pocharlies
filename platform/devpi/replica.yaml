@@ -1,0 +1,146 @@
+# Réplicas de lectura de devpi (INFRA-1533, Dani 23-11). Cada una guarda una copia completa del
+# índice (metadatos y ficheros, que baja sola al publicarse algo) y sigue sirviendo instalaciones
+# aunque el primario esté caído; una escritura que le llega la reenvía al primario.
+# Medido con devpi-server 6.21.0 antes de escribir esto: réplica al día a los 7-8 s de arrancar,
+# fichero nuevo en su disco 1 s después de publicarlo, `uv pip install` desde ella con el primario
+# parado, y una réplica que se reinicia con su disco sigue sirviendo sin primario.
+#
+# Sin PVC a propósito: el volumen RWO es justo lo que dejó colgado al índice el 23-11. El emptyDir
+# sobrevive a un reinicio del contenedor; si el pod se reprograma, vuelve a copiar del primario.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: devpi
+  name: devpi-replica
+  labels:
+    app.kubernetes.io/name: devpi-replica
+    app.kubernetes.io/part-of: devpi
+spec:
+  replicas: 2
+  strategy:
+    # Tres pods y tres nodos con anti-afinidad obligatoria: no hay sitio para un pod de más.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devpi-replica
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devpi-replica
+        app.kubernetes.io/part-of: devpi
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Clase plataforma: pool ks5 (los tres nodos estables). La tolerancia la añade también
+      # Kyverno a workload=core (POLICY 13); se declara para no depender de que la policy esté.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: core
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      # Primario y réplicas, cada uno en su nodo: la caída de un nodo se lleva un solo pod.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/part-of: devpi
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+        # devpi exige que el fichero del secreto sea 0600; un volumen Secret con fsGroup queda 0440.
+        - name: secreto
+          image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
+          command: ["sh", "-c", "umask 077 && cp /run/secrets/devpi/replication_secret /run/devpi/secret"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          volumeMounts:
+            - name: secreto-origen
+              mountPath: /run/secrets/devpi
+              readOnly: true
+            - name: secreto
+              mountPath: /run/devpi
+      containers:
+        - name: devpi
+          image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
+          args:
+            - --host=0.0.0.0
+            - --port=8080
+            - --serverdir=/var/lib/devpi
+          env:
+            - name: DEVPISERVER_SERVERDIR
+              value: /var/lib/devpi
+            # Con estas dos el `devpi-init` del entrypoint crea el serverdir ya como réplica.
+            - name: DEVPISERVER_ROLE
+              value: replica
+            - name: DEVPISERVER_PRIMARY_URL
+              value: http://devpi-primary.devpi.svc.cluster.local
+            - name: DEVPISERVER_SECRETFILE
+              value: /run/devpi/secret
+            # El entrypoint exige una contraseña de root para el `devpi-init`. En una réplica no
+            # sirve para nada (los usuarios llegan replicados del primario), así que no recibe la real.
+            - name: DEVPI_PASSWORD
+              value: no-se-usa-en-una-replica
+            - name: HOME
+              value: /tmp
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+          # Lista solo cuando ya tiene el índice: recién arrancada (o si arranca sin primario) responde
+          # 404 aquí y el Service no le manda a nadie.
+          readinessProbe:
+            httpGet: { path: /company/internal/+api, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/devpi
+            - name: tmp
+              mountPath: /tmp
+            - name: secreto
+              mountPath: /run/devpi
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: tmp
+          emptyDir: {}
+        - name: secreto-origen
+          secret:
+            secretName: devpi-credentials
+            items:
+              - key: replication_secret
+                path: replication_secret
+        - name: secreto
+          emptyDir:
+            medium: Memory
