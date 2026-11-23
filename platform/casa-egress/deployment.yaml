@@ -35,7 +35,7 @@ spec:
         kubernetes.io/hostname: ubuntu
       securityContext:
         # `proxy` de la imagen (uid 13). Con fsGroup, los emptyDir montados
-        # entran group-writable para él: squid escribe su spool y su pid.
+        # entran group-writable para él: squid escribe su spool y sus volcados.
         runAsNonRoot: true
         runAsUser: 13
         runAsGroup: 13
@@ -65,7 +65,7 @@ spec:
             - name: conf
               mountPath: /etc/squid-conf
               readOnly: true
-            # Rootfs de solo lectura: pid, body temporales y spool del squid.
+            # Rootfs de solo lectura: volcados en /tmp; body temporales y spool en /var/spool.
             - name: tmp
               mountPath: /tmp
             - name: spool
