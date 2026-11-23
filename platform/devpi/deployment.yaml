@@ -136,9 +136,13 @@ spec:
             tcpSocket: { port: http }
             initialDelaySeconds: 15
             periodSeconds: 30
+          # devpi deriva cada clave (réplica, login) con Argon2 de 512 MiB la primera vez que se usa, sin
+          # candado: las peticiones que llegan juntas derivan cada una la suya. Al reiniciar, las dos réplicas
+          # entran a la vez en cuanto el pod está Ready: ~130 MiB + 2×512 MiB. Con 1Gi el kernel lo mataba en
+          # bucle (23-11). 2Gi cubre las dos réplicas más un login; una tercera réplica pide subirlo 512 MiB.
           resources:
             requests: { cpu: 100m, memory: 256Mi }
-            limits: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: 500m, memory: 2Gi }
           volumeMounts:
             - name: data
               mountPath: /var/lib/devpi
