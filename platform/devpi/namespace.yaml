@@ -1,0 +1,13 @@
+# SKIRM-590 (SKIRM-206 P1a): el índice PyPI interno de la compañía.
+#
+# devpi serve el índice PEP 503 `company/internal` (lectura anónima, subida con
+# token) al que publica el SDK de Synapse y contra el que resuelve la CI. Forma
+# fijada por el architect en nota-architect-devpi.md (SKIRM-206) y ampliada con
+# réplicas de lectura en INFRA-1533: un Deployment primario con su PVC Longhorn,
+# otro con dos réplicas sin disco propio y una IngressRoute LAN; sin mirror del
+# PyPI público, sin ruta en traefik-edge y sin DNS público. Harbor quedó
+# descartado (v2.15 no sirve PyPI, medido).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devpi

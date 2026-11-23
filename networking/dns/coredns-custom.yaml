@@ -62,6 +62,7 @@ data:
       rewrite name exact paseocasa.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact paseocb.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact picqer-mcp.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
+      rewrite name exact pypi.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact sauvage-bot.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact sauvage-bot.lan.e-dani.com traefik-lan.traefik-lan.svc.cluster.local
       rewrite name exact skirmbooks.e-dani.com traefik-lan.traefik-lan.svc.cluster.local

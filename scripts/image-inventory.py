@@ -283,9 +283,18 @@ def mapa_de_workflows(runner):
             if not m_img or not m_img.group(1).startswith("homelab/"):
                 continue
             m_df = re.search(r"^\s*DOCKERFILE:\s*(\S+)\s*$", contenido, re.M)
+            valor_df = m_df.group(1) if m_df else "Dockerfile"
+            # INFRA-1475: gramatica cross-repo. Un DOCKERFILE de la forma
+            # "owner/repo:ruta" (build-nova-avatar.yml y build-weight-resolver.yml
+            # de dgx-infra construyen desde el repo de la fuente) es ya una
+            # referencia completa; sin prefijo owner/repo es una ruta dentro del
+            # repo del workflow. Se normaliza SIEMPRE a "owner/repo:ruta".
+            if re.match(r"^[\w.-]+/[\w.-]+:", valor_df):
+                ref_df = valor_df
+            else:
+                ref_df = "pocharlies-org/{}:{}".format(repo_gh, valor_df)
             pares.append((m_img.group(1)[len("homelab/"):],
-                          ("pocharlies-org/" + repo_gh, ruta_wf,
-                           m_df.group(1) if m_df else "Dockerfile")))
+                          ("pocharlies-org/" + repo_gh, ruta_wf, ref_df)))
         return pares
 
     mapa = {}
@@ -326,9 +335,12 @@ def resolver_dockerfile(runner, repo, mapa):
     if not candidatos:
         return ({"sin_dato": 'sin workflow de build que declare "IMAGE: homelab/{}" '
                             'en pocharlies-org'.format(nombre)}, None, None)
-    repo_wf, ruta_wf, ruta_df = candidatos[0]
-    return ("{}:{}".format(repo_wf, ruta_df),
-            leer_contenido(runner, repo_wf, ruta_df),
+    # ref_df ya es "owner/repo:ruta" (normalizado en mapa_de_workflows; puede
+    # apuntar a un repo distinto del del workflow: INFRA-1475).
+    repo_wf, ruta_wf, ref_df = candidatos[0]
+    df_repo, _, df_ruta = ref_df.partition(":")
+    return (ref_df,
+            leer_contenido(runner, df_repo, df_ruta),
             "{}:{}".format(repo_wf, ruta_wf))
 
 

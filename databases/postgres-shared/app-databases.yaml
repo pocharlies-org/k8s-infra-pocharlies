@@ -516,3 +516,27 @@ spec:
   extensions:
     - name: vector
       ensure: present
+---
+# DGX-1022: índice de las skills de Hermes (ficheros SKILL.md del volumen
+# hermes-data) para que el DGX Dashboard las busque y audite. Calcada a dgxbench
+# (arriba, l.379): base separada en el clúster vivo postgres-shared-nvme, dueño
+# el managed role dgxskills. El esquema (skills, skill_versions, skill_imports,
+# skill_searches) NO lo declara este CRD — lo crea de forma idempotente el
+# bootstrap de dgx-infra services/dashboard/skills/db.py con SCHEMA_VERSION,
+# igual que bench/db.py::ensure_schema(). Sin extensiones: búsqueda ILIKE
+# (a ~115 skills basta; pg_trgm sería un cambio del spec del clúster
+# compartido por ocho consumidores).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: dgxskills
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: dgxskills
+  owner: dgxskills
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme

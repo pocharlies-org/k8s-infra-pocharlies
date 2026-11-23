@@ -121,7 +121,8 @@ LECTURAS_ABIERTAS = [("GET", p) for p in (
       ("POST", "/api/creative/cine/producciones/huerto-1a2b/reanudar"),
       ("POST", "/api/creative/cine/producciones/huerto-1a2b/archivar"),
       ("POST", "/api/creative/cine/producciones/huerto-1a2b/parar"),
-      ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas")]
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas"),
+      ("POST", "/api/creative/cine/producciones/huerto-1a2b/pregunta")]  # DGX-1780: la pregunta del director a Dani (HMAC V2 clase studio)
 
 
 LAN_DANI = [("dgx-lan-identidad-dani", "traefik-lan"), ("dgx-edge-proof", "traefik-lan")]

@@ -137,6 +137,7 @@ providers:
       - stt-mcp
       - vault
       - traefik-lan
+      - canal
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -176,6 +177,7 @@ providers:
       - stt-mcp
       - vault
       - traefik-lan
+      - canal
     allowExternalNameServices: true
     allowEmptyServices: true
 

@@ -7,6 +7,7 @@ resources:
   - networking/dns/coredns-custom.yaml
   - networking/dns/coredns-sauvage.yaml
   - networking/dns/coredns-local.yaml
+  - networking/dns/edani-dns-divergence-watch.yaml
   - networking/metallb/ippool.yaml
   - networking/traefik-lan/tls-store.yaml
   - networking/traefik-lan/harbor-registry-direct.yaml
@@ -28,6 +29,7 @@ resources:
   - networking/traefik-lan/instagram-callback-lan.yaml
   - networking/traefik-lan/correo-lan.yaml
   - networking/traefik-lan/cine-lan.yaml
+  - networking/traefik-lan/pypi-lan.yaml
   - networking/traefik-alphalink/namespace.yaml
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/networkpolicy.yaml
@@ -53,6 +55,14 @@ resources:
   - platform/casa-egress/squid-config.yaml
   - platform/casa-egress/deployment.yaml
   - platform/casa-egress/networkpolicy.yaml
+  # SKIRM-590 (SKIRM-206 P1a): índice PyPI interno devpi (forma en nota-architect-devpi.md).
+  - platform/devpi/namespace.yaml
+  - platform/devpi/externalsecret.yaml
+  - platform/devpi/pvc.yaml
+  - platform/devpi/deployment.yaml
+  - platform/devpi/replica.yaml
+  - platform/devpi/bootstrap-job.yaml
+  - platform/devpi/networkpolicy.yaml
   - networking/arc-skills-eval/namespace.yaml
   - networking/arc-skills-eval/networkpolicy.yaml
   - networking/arc-skills-eval/externalsecret-arc-github-app.yaml

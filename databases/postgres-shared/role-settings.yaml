@@ -135,6 +135,7 @@ spec:
               ALTER ROLE horarios SET idle_session_timeout = '15min';
               ALTER ROLE sauvage_bot SET idle_session_timeout = '15min';
               ALTER ROLE dgxbench SET idle_session_timeout = '15min';
+              ALTER ROLE dgxskills SET idle_session_timeout = '15min';
               ALTER ROLE company_crm SET idle_session_timeout = '15min';
               ALTER ROLE company SET idle_session_timeout = '15min';
               ALTER ROLE catalogo SET idle_session_timeout = '15min';
@@ -156,6 +157,16 @@ spec:
             # Para revertir: ALTER ROLE hindsight CONNECTION LIMIT -1;
             - -c
             - ALTER ROLE hindsight CONNECTION LIMIT 100;
+            # --- DGX-1022: CONNECTION LIMIT del rol dgxskills --------------------
+            # Índice de skills de Hermes (dgx-infra services/dashboard/skills). Los
+            # únicos consumidores son backend y worker del dashboard, cada uno con un
+            # pool asyncpg max_size=3 perezoso (espejo de bench/db.py, techo fijado
+            # por el plan tras la saturación del 28-07). 5 = 3 del backend + 2 de
+            # margen: el worker solo escribe (cola de importación) y el backend lee;
+            # nunca los dos pools al máximo a la vez. Idempotente (atributo de rol,
+            # no GUC). Para revertir: ALTER ROLE dgxskills CONNECTION LIMIT -1;
+            - -c
+            - ALTER ROLE dgxskills CONNECTION LIMIT 5;
             # Limpieza única del backlog tras los ALTER (INFRA-1295 P1): los
             # ALTER solo afectan a sesiones nuevas, así que las ociosas ya
             # acumuladas mueren aquí. Idempotente: en syncs posteriores
@@ -170,7 +181,7 @@ spec:
                   'keep', 'keycloak', 'teslamate', 'langfuse',
                   'skirmbooks_ui_app', 'hindsight', 'litellm',
                   'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
-                  'aurora', 'horarios', 'sauvage_bot', 'dgxbench',
+                  'aurora', 'horarios', 'sauvage_bot', 'dgxbench', 'dgxskills',
                   'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
                   'synapse_sre_reporter', 'synapse_agent_m2m']);
           resources:

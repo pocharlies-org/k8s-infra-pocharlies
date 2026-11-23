@@ -81,7 +81,8 @@ spec:
             # GC explícito (24-09-2026): el PVC es local-path sin cuota, así que
             # el DefaultGCPolicy se calculaba sobre el disco entero del nodo
             # (916G) -> maxUsedSpace = 100GB y la caché llegó a 83G en el NVMe
-            # que comparte con el LLM. Un único policy `all` con techo de 40GB.
+            # que comparte con el LLM. Un único policy `all` con techo de 40GB y,
+            # desde INFRA-1503, suelo de 70GB libres (ver el comentario del toml).
             # No se usa --oci-worker-gc-keepstorage: ver la historia en
             # buildkitd-amd64.yaml (fija reservedSpace en las 4 políticas).
             - --config
@@ -176,12 +177,21 @@ metadata:
     app: buildkitd
     arch: arm64
 data:
+  # INFRA-1503 (21-11): el `maxUsedSpace` poda por tamaño de caché, nunca por espacio
+  # libre del nodo. dgx3 está al ~89 % crónico y su kubelet desaloja por debajo de
+  # ~46 GiB libres (umbral medido 49140993141 B): el build de las 06:35 UTC del 21-11
+  # escribió ~50 GiB de capas, el kubelet tumbó 4 pods (DiskPressure) y el GC podó
+  # después. `minFreeSpace` pone el suelo por encima de la línea de eviction: al
+  # bajar de 70 GB libres el GC poda la caché (lo no usado; lo del build en curso no
+  # se toca) antes de que el kubelet entre en disk-pressure. Mismo patrón «GC bajo
+  # presión» que buildkitd-amd64 (INFRA-937). Sin keepDuration: ver SC-2759.
   buildkitd.toml: |
     [worker.oci]
       gc = true
       [[worker.oci.gcpolicy]]
         all = true
         maxUsedSpace = "40GB"
+        minFreeSpace = "70GB"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

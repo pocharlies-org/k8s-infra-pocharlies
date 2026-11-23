@@ -1,0 +1,424 @@
+# INFRA-1412 (INFRA-902 S3): sonda de divergencia DNS de los nombres fijados de
+# e-dani.com + alerta. Cada nombre que scripts/gen_coredns_edani.py --list-fixed fija
+# debe responder desde CUALQUIER endpoint de kube-dns con IP privada (la VIP LAN
+# 192.168.50.240 o un ClusterIP 10.43.0.0/16). Si alguno responde pública, está
+# cayendo a `forward` y los clientes in-cluster vuelven al borde público (INFRA-896:
+# capas de Harbor 413/502 vía Cloudflare, la sonda libreplay al edge). Este watch lo
+# ve en un ciclo de sonda (5 min) sin esperar al incidente.
+#
+# Mecanismo decidido por el architect (nota-architect-plan.md de INFRA-902): CronJob +
+# push a vmsingle /api/v1/import/prometheus + VMRule, patrón exacto de
+# storage/longhorn/orphan-watch.yaml. NO VMProbe: el módulo dns de blackbox no puede
+# afirmar la lista blanca de IPs de respuesta ni iterar los 10 endpoints por nombre.
+# La lista de nombres es la del generador (names.txt generado con --list-fixed; el
+# contrato tests/test_edani_dns_divergence_watch_contract.py falla en CI si deriva).
+#
+# Ejecución manual (tras el deploy):
+#   kubectl create job -n monitoring --from=cronjob/edani-dns-divergence-watch edani-dns-manual-$(date +%s)
+# Forzar divergencia (C3a, solo como prueba; NUNCA dejar el env puesto en producción):
+#   editar el job creado con EXTRA_TEST_NAME=<nombre que responde pública> y verlo.
+# Métrica: edani_dns_public_answer (0/1) + edani_dns_public_answer_offender por par
+# divergente + edani_dns_probe_last_success_timestamp (diagnóstico de frescura).
+# La divergencia es dato: el job sale 0 aunque encuentre divergencia (la alerta va por
+# la VMRule); sale !=0 solo si no puede comprobar -> alarma K8sCronJobFailed (topic Crons).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+---
+# El mínimo que necesita la sonda: leer los endpoints de kube-dns (10 réplicas).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: edani-dns-divergence-watch
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: edani-dns-divergence-watch
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+data:
+  # GENERADO por scripts/gen_coredns_edani.py --list-fixed -- no editar a mano.
+  # Regenerar: python3 scripts/gen_coredns_edani.py --list-fixed
+  # El contrato de CI falla si esta lista deriva del generador (prohibida una lista
+  # propia en la sonda: sería la misma clase de fallo que combate la épica).
+  names.txt: |
+    adguard-setup.e-dani.com
+    adguard.e-dani.com
+    agentgateway-mcp-stg.e-dani.com
+    agentgateway-mcp.e-dani.com
+    alertmanager.e-dani.com
+    argocd.e-dani.com
+    aurora-api.e-dani.com
+    aurora.e-dani.com
+    bambulab.e-dani.com
+    borradores.e-dani.com
+    borradores.lan.e-dani.com
+    cine.lan.e-dani.com
+    correo.lan.e-dani.com
+    dgx-synapse-mcp.e-dani.com
+    dgx.e-dani.com
+    dgx.lan.e-dani.com
+    firecrawl.e-dani.com
+    grafana.e-dani.com
+    ha-dashboard.e-dani.com
+    harbor.e-dani.com
+    harbor.lan.e-dani.com
+    hindsight.e-dani.com
+    home-assistant.e-dani.com
+    jarvis.e-dani.com
+    keep-api.e-dani.com
+    keep.e-dani.com
+    langfuse.e-dani.com
+    libreplay.e-dani.com
+    litellm.e-dani.com
+    longhorn.e-dani.com
+    mcp-socialmedia.e-dani.com
+    minio-s3.e-dani.com
+    minio.e-dani.com
+    oficinas.e-dani.com
+    openclaw-k8s-readonly.e-dani.com
+    openclaw-k8s-webhooks.e-dani.com
+    openclaw-k8s.e-dani.com
+    openclaw.e-dani.com
+    openclaw.lan.e-dani.com
+    paseo.e-dani.com
+    paseocasa.e-dani.com
+    paseocb.e-dani.com
+    picqer-mcp.e-dani.com
+    pypi.e-dani.com
+    s3.e-dani.com
+    sauvage-bot.e-dani.com
+    sauvage-bot.lan.e-dani.com
+    skirmbooks.e-dani.com
+    skirmshop-s3-console.e-dani.com
+    skirmshop-s3.e-dani.com
+    stt-mcp.e-dani.com
+    synapse.e-dani.com
+    synapse.lan.e-dani.com
+    teslamate.e-dani.com
+    uriel.e-dani.com
+    vm.e-dani.com
+    whatsapp-pro.e-dani.com
+    whatsapp.e-dani.com
+  # Resolver DNS en stdlib: alpine/k8s:1.32.5 no trae dig (medido con `crane config`).
+  probe.py: |
+    """INFRA-1412 (INFRA-902 S3): sonda de divergencia de los nombres fijados de e-dani.com.
+
+    Todo nombre que scripts/gen_coredns_edani.py --list-fixed fija debe responder, desde
+    cualquier endpoint de kube-dns, con IP privada (la VIP de la LAN 192.168.50.240 o un
+    ClusterIP 10.43.0.0/16). Si responde con una IP pública está cayendo a `forward` y los
+    clientes in-cluster vuelven a caer al borde público (clase de fallo INFRA-896: capas de
+    Harbor 413/502 vía Cloudflare, la sonda libreplay al edge).
+
+    Este job, cada 5 minutos:
+      1. lee los nombres fijados de NAMES_FILE (names.txt generado con --list-fixed; el test
+         de contrato tests/test_edani_dns_divergence_watch_contract.py falla en CI si deriva
+         del generador -- prohibida una lista propia, sería la misma clase de fallo);
+      2. consulta cada nombre x cada endpoint de kube-dns (A) con el resolver stdlib:
+         alpine/k8s:1.32.5 no trae dig (medido con `crane config alpine/k8s:1.32.5`);
+      3. empuja a vmsingle /api/v1/import/prometheus: edani_dns_public_answer (0/1),
+         edani_dns_public_answer_offender por par divergente (name, endpoint, answer) y
+         edani_dns_probe_last_success_timestamp. La VMRule EdaniDnsPublicAnswer (ns
+         monitoring) alerta con el gauge en 1.
+
+    Un nombre que no responde (NXDOMAIN/SERVFAIL/timeout) se registra pero NO mueve el
+    gauge: el gauge afirma respuestas públicas (criterio C3). La divergencia es dato: el
+    job sale 0 aunque encuentre divergencia; sale !=0 solo si no puede comprobar (sin
+    endpoints, push fallido) -> alarma K8sCronJobFailed (topic Crons).
+
+    EXTRA_TEST_NAME (nombres separados por espacios) añade nombres a la muestra: sirve
+    para forzar divergencia con un nombre que responde pública (C3a). Nunca en producción.
+    """
+    import ipaddress
+    import json
+    import os
+    import random
+    import socket
+    import struct
+    import subprocess
+    import time
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+
+    VM = os.environ.get("VM_PUSH_URL", "").rstrip("/")
+    NAMES_FILE = os.environ.get("NAMES_FILE", "/watch/names.txt")
+    EXTRA_TEST_NAME = os.environ.get("EXTRA_TEST_NAME", "")
+
+    # Misma constante que scripts/gen_coredns_edani.py (el test de contrato las cruza).
+    LAN_VIP = "192.168.50.240"
+    SVC_NET = ipaddress.ip_network("10.43.0.0/16")
+    DNS_TIMEOUT = 2.0
+
+
+    def _skip_name(data, i):
+        """Posición tras el nombre DNS que empieza en i (maneja punteros de compresión)."""
+        while True:
+            if i >= len(data):
+                raise ValueError("nombre fuera de rango")
+            ln = data[i]
+            if ln & 0xC0:
+                return i + 2
+            if ln == 0:
+                return i + 1
+            i += 1 + ln
+
+
+    def parse_response(data, tid):
+        """(rcode, [ipv4]) de una respuesta DNS a nuestra consulta A. ValueError si no es válida."""
+        if len(data) < 12:
+            raise ValueError("respuesta corta")
+        rid, flags, _qd, an, _ns, _ar = struct.unpack(">HHHHHH", data[:12])
+        if rid != tid:
+            raise ValueError("id no coincide")
+        rcode = flags & 0x0F
+        i = _skip_name(data, 12)  # qname del eco de la pregunta
+        i += 4  # qtype + qclass
+        ips = []
+        for _ in range(an):
+            i = _skip_name(data, i)
+            if i + 10 > len(data):
+                raise ValueError("respuesta truncada")
+            rtype, _rclass, _ttl, rdlen = struct.unpack(">HHIH", data[i:i + 10])
+            i += 10
+            if rtype == 1 and rdlen == 4 and i + 4 <= len(data):
+                ips.append(socket.inet_ntoa(data[i:i + 4]))
+            i += rdlen
+        return rcode, ips
+
+
+    def dns_query_a(server, name, timeout=DNS_TIMEOUT):
+        """Consulta A de `name` al servidor `server`:53 -> (rcode, [ipv4])."""
+        tid = random.randrange(1, 65536)
+        qname = b"".join(bytes([len(p)]) + p.encode("ascii") for p in name.strip(".").split(".")) + b"\x00"
+        pkt = struct.pack(">HHHHHH", tid, 0x0100, 1, 0, 0, 0) + qname + struct.pack(">HH", 1, 1)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(timeout)
+            s.sendto(pkt, (server, 53))
+            data, _ = s.recvfrom(4096)
+        return parse_response(data, tid)
+
+
+    def answer_is_public(ips):
+        """True si alguna A responde fuera de la lista blanca (VIP LAN / CIDR de servicios)."""
+        for ip in ips:
+            a = ipaddress.ip_address(ip)
+            if str(a) != LAN_VIP and a not in SVC_NET:
+                return True
+        return False
+
+
+    def kube_dns_endpoints():
+        """IPs de los endpoints de kube-dns (Role: get endpoints en kube-system)."""
+        r = subprocess.run(
+            ["kubectl", "-n", "kube-system", "get", "endpoints", "kube-dns", "-o", "json"],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode:
+            raise SystemExit("kubectl get endpoints kube-dns -> %s" % r.stderr.strip())
+        subsets = json.loads(r.stdout).get("subsets", [])
+        ips = [a["ip"] for s in subsets for a in s.get("addresses", [])]
+        if not ips:
+            raise SystemExit("kube-dns sin endpoints: no se puede comprobar nada")
+        return ips
+
+
+    def push(lines):
+        """POST de métricas en formato Prometheus a vmsingle, con reintentos."""
+        body = "\n".join(lines) + "\n"
+        for attempt in (1, 2, 3):
+            try:
+                req = urllib.request.Request(
+                    VM + "/api/v1/import/prometheus", data=body.encode(),
+                    headers={"Content-Type": "text/plain"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    resp.read()
+                return
+            except Exception as exc:
+                if attempt == 3:
+                    raise SystemExit("push a vmsingle fallido: %s" % exc)
+                time.sleep(2 * attempt)
+
+
+    def main():
+        with open(NAMES_FILE, encoding="utf-8") as fh:
+            names = [ln.strip() for ln in fh if ln.strip() and not ln.lstrip().startswith("#")]
+        names += [n for n in EXTRA_TEST_NAME.split() if n]
+        eps = kube_dns_endpoints()
+        print("sonda: %d nombres x %d endpoints kube-dns" % (len(names), len(eps)))
+
+        def check(pair):
+            name, ep = pair
+            try:
+                rcode, ips = dns_query_a(ep, name)
+            except Exception as exc:
+                return (name, ep, "error", str(exc))
+            if not ips:
+                return (name, ep, "sin_respuesta", "rcode=%d" % rcode)
+            if answer_is_public(ips):
+                return (name, ep, "publica", ",".join(ips))
+            return None
+
+        offenders = []
+        misses = 0
+        with ThreadPoolExecutor(max_workers=16) as ex:
+            for res in ex.map(check, [(n, e) for n in names for e in eps]):
+                if res is None:
+                    continue
+                if res[2] == "publica":
+                    offenders.append(res)
+                else:
+                    misses += 1
+                    print("SIN RESPUESTA/ERROR: %s @ %s (%s: %s)" % res)
+
+        gauge = 1 if offenders else 0
+        for name, ep, _kind, detail in offenders:
+            print("DIVERGENCIA: %s @ %s responde %s" % (name, ep, detail))
+        print("resultado: gauge=%d divergentes=%d sin_respuesta=%d de %d consultas"
+              % (gauge, len(offenders), misses, len(names) * len(eps)))
+
+        if VM:
+            lines = [
+                "edani_dns_public_answer %d" % gauge,
+                "edani_dns_probe_last_success_timestamp %d" % int(time.time()),
+            ]
+            for name, ep, _kind, detail in offenders:
+                lines.append('edani_dns_public_answer_offender{name="%s",endpoint="%s",answer="%s"} 1'
+                             % (name, ep, detail))
+            push(lines)
+            print("metricas empujadas a", VM)
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+spec:
+  # Sonda sintética de monitorización (precedente libreplay-lan-synthetic): no hay
+  # fuente de evento para «una respuesta DNS cambió». 57 nombres x 10 endpoints.
+  schedule: "*/5 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 240
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Un intento por hueco y TTL corto (precedente postgres-rw-connectivity-probe):
+      # el job no debe quedar Failed bloqueando olas de ArgoCD (DGX-626).
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: monitoring
+            app.kubernetes.io/component: edani-dns-divergence-watch
+        spec:
+          serviceAccountName: edani-dns-divergence-watch
+          restartPolicy: Never
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: probe
+              image: alpine/k8s:1.32.5
+              command: ["python3", "/watch/probe.py"]
+              env:
+                - name: VM_PUSH_URL
+                  value: "http://vmsingle-vm-victoria-metrics-k8s-stack.monitoring.svc:8428"
+                - name: NAMES_FILE
+                  value: "/watch/names.txt"
+                # Solo para pruebas puntuales (C3a): nombres extra que se esperan
+                # públicos. Vacío en producción.
+                - name: EXTRA_TEST_NAME
+                  value: ""
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: watch
+                  mountPath: /watch
+                  readOnly: true
+          volumes:
+            - name: watch
+              configMap:
+                name: edani-dns-divergence-watch
+---
+# Precedente de VMRule en ns monitoring: kubernetes/node-capacity-alerts.yaml.
+# Sin `for`: el criterio C3 exige el firing en un ciclo de la sonda y la respuesta
+# DNS es determinista (un 1 no es flap). Si la sonda muere, el gauge deja de
+# actualizarse y K8sCronJobFailed (topic Crons) avisa del job; el gauge en 1 se
+# resuelve solo con la primera pasada sana tras arreglar el pin.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: edani-dns-divergence-watch
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+spec:
+  groups:
+    - name: edani.dns
+      rules:
+        - alert: EdaniDnsPublicAnswer
+          expr: edani_dns_public_answer == 1
+          labels:
+            severity: warning
+            area: dns
+          annotations:
+            summary: "Un nombre e-dani.com fijado responde con IP pública desde kube-dns"
+            description: >-
+              La sonda edani-dns-divergence-watch ha visto algún nombre de los fijados
+              por scripts/gen_coredns_edani.py --list-fixed responder con una IP fuera
+              de 192.168.50.240 / 10.43.0.0/16 desde algún endpoint de kube-dns: los
+              clientes in-cluster vuelven a caer al borde público (clase INFRA-896).
+              Los detalles están en edani_dns_public_answer_offender{name,endpoint,answer}.
+              Revisa el bloque e-dani.com:53 de networking/dns/coredns-custom.yaml
+              (Host nuevo sin ejecutar gen_coredns_edani.py --write, CoreDNS sin
+              recargar, rewrite rota) y el sync de la app k8s-infra.

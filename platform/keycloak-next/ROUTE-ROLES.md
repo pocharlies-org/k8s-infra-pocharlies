@@ -11,7 +11,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **53 rutas, 89 gates** en esta matriz (SC-5827, 17-11-2026: − fila `offers`, retirada del gateway con offers-mcp (dictamen C7, el Brain se apaga); SC-5492, 15-11-2026: − filas `brain` y
+  Hoy: **53 rutas, 90 gates** en esta matriz (INFRA-1493, 20-11-2026: + gate `atlassian` × `agentgateway-write:atlassian-nova` (3 tools de Jira de Nova), declarado por delante del config vivo — pendiente del merge de la PR de escrituras de INFRA-1382 en k8s-agentgateway; el verificador lo señala hasta que la regla despliegue; SC-5827, 17-11-2026: − fila `offers`, retirada del gateway con offers-mcp (dictamen C7, el Brain se apaga); SC-5492, 15-11-2026: − filas `brain` y
   `chat-brain`, retiradas del gateway con brain-mcp en k8s-agentgateway-pocharlies#287;
   INFRA-1234, 09-11-2026: + fila `nova`,
   declarada por delante del config vivo — pendiente del merge de
@@ -148,7 +148,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
 | `company-metrics` | `/company-metrics` | `company-metrics-read` | `company-metrics-read` (5) |
 | `chat-atlassian` | `/chat-atlassian` | — | `agentgateway-write` (40) |
-| `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40) |
+| `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40), `agentgateway-write:atlassian-nova` (3) |
 | `1password` | `/1password` | — | `agentgateway-write` (8) |
 | `claude-sessions-read` | `/claude-sessions` | `agentgateway-read:claude-sessions` | — |
 | `claude-sessions-write` | `/claude-sessions` | `agentgateway-write:claude-sessions` | — |
@@ -526,6 +526,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/atlassian",
       "require": ["agentgateway-read:atlassian"],
       "tools": {
+        "agentgateway-write:atlassian-nova": ["jira_add_comment", "jira_create_issue", "jira_edit_comment"],
         "agentgateway-write": ["confluence_add_comment", "confluence_add_inline_comment", "confluence_add_label", "confluence_copy_page", "confluence_create_page", "confluence_create_page_from_template", "confluence_delete_attachment", "confluence_delete_page", "confluence_move_page", "confluence_reply_to_comment", "confluence_set_page_restrictions", "confluence_update_page", "confluence_update_page_section", "confluence_upload_attachment", "confluence_upload_attachments", "jira_add_comment", "jira_add_issues_to_sprint", "jira_add_watcher", "jira_add_worklog", "jira_assign_issue", "jira_batch_create_issues", "jira_batch_create_versions", "jira_create_customer_request", "jira_create_issue", "jira_create_issue_link", "jira_create_remote_issue_link", "jira_create_sprint", "jira_create_version", "jira_delete_issue", "jira_edit_comment", "jira_link_to_epic", "jira_move_issue", "jira_move_issues_to_backlog", "jira_remove_issue_link", "jira_remove_watcher", "jira_transition_issue", "jira_update_issue", "jira_update_proforma_form_answers", "jira_update_sprint", "jira_update_version"]
       }
     },

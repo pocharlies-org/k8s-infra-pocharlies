@@ -1,0 +1,30 @@
+# user: system:serviceaccount:kube-system:daemon-set-controller
+# SC-6196 (DEPL-20166): un pod de DaemonSet que YA declara toleraciones (el
+# dgx-gpu-mem-exporter trae nvidia.com/gpu y dedicated=llm) debe CONSERVARLAS y ademas
+# recibir la del plano de control. Con patchStrategicMerge el pod salia de admision con la
+# lista reemplazada (solo la del control-plane) y se quedaba Pending: sin dedicated=llm no
+# cabia en los Sparks (taint dedicated=llm:NoSchedule).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dgx-gpu-mem-exporter-abcde
+  namespace: monitoring
+  ownerReferences:
+    - apiVersion: apps/v1
+      uid: 00000000-0000-0000-0000-000000000002
+      kind: DaemonSet
+      name: dgx-gpu-mem-exporter
+spec:
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    - key: dedicated
+      operator: Equal
+      value: llm
+      effect: NoSchedule
+  containers:
+    - name: exporter
+      image: harbor.e-dani.com/homelab/dgx-node-metrics:v1.0.0

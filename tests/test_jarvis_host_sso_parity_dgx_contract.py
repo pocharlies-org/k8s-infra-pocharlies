@@ -64,6 +64,7 @@ MAQUINA = [
     ("POST", "/api/creative/cine/producciones/huerto-1a2b/archivar"),
     ("POST", "/api/creative/cine/producciones/huerto-1a2b/parar"),
     ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/pregunta"),  # DGX-1780: la pregunta del director a Dani (HMAC V2 clase studio)
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (

@@ -60,6 +60,14 @@ spec:
               for node in ks5-cp-1 ks5-cp-2 ks5-cp-3; do
                 kubectl label node "$node" node-role.kubernetes.io/control-plane=true node-role.kubernetes.io/etcd=true --overwrite
                 kubectl label node "$node" node-pool=ks5-nvme storage=nvme storage-longhorn=true db-storage=fast workload=core workload.openclaw=true ingress=true topology=ovh region=ovh-rbx --overwrite
+                # SC-6096 (guard SC-6094): hasta aqui estos nodos NO tenian taint alguno y
+                # cualquier carga podia aterrizar en el plano de control (ks5-cp-3 llego a
+                # load1 >13 con el Postgres compartido y el almacen de metricas encima).
+                # NoSchedule, no NoExecute: no desaloja lo ya desplegado. La allowlist de
+                # toleraciones la aplica el ClusterPolicy control-plane-toleration-allowlist
+                # (platform/kyverno/policies.yaml): workload=core, node-pool=ks5-nvme,
+                # DaemonSets y longhorn-system. Nada mas programa aqui.
+                kubectl taint node "$node" node-role.kubernetes.io/control-plane:NoSchedule --overwrite
               done
 
               # SC-6061: clase de computo para la saturacion de nodo. Los nodos con

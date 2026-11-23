@@ -1,0 +1,27 @@
+# Índice PyPI interno (SKIRM-590, SKIRM-206). Solo LAN/tailnet: ninguna ruta en
+# traefik-edge y ningún registro DNS público (criterio A4) — por eso el exclude
+# de external-dns, como en canonical-hosts-lan. El pin de resolución lo genera
+# scripts/gen_coredns_edani.py desde este Host.
+#
+# Contratos literales (nota-architect-devpi.md): lectura
+# https://pypi.e-dani.com/company/internal/+simple/ (anónima), subida
+# https://pypi.e-dani.com/company/internal/ (token).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pypi-lan
+  namespace: traefik-lan
+  labels:
+    app.kubernetes.io/part-of: devpi
+  annotations:
+    external-dns.alpha.kubernetes.io/exclude: "true"
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`pypi.e-dani.com`)
+      services:
+        - {name: devpi, namespace: devpi, port: 80}
+  tls:
+    secretName: wildcard-edani-tls

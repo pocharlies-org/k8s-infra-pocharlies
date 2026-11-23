@@ -43,7 +43,7 @@
     ],
     "origen": "el repositorio GitHub pocharlies-org/sugiere no existe: espejo de un upstream",
     "refs": [
-      "@sha256:dff96d125fe50884403466c649dcac5ca19ffdd103576e391cffbcfd7fe434ea"
+      "@sha256:20077a3b937668153ec2f724063e7993c1ed8dbf0952e11f2b02e787ff41214b"
     ],
     "repo": "ghcr.io/pocharlies-org/sugiere"
   },
@@ -146,10 +146,8 @@
     "deployments": [
       "llm/Deployment/bge-m3-embedding",
       "llm/Deployment/bge-m3-embedding-cpu",
-      "llm/Deployment/bge-m3-embedding-creative",
       "llm/Deployment/bge-reranker",
-      "llm/Deployment/bge-reranker-cpu",
-      "llm/Deployment/bge-reranker-creative"
+      "llm/Deployment/bge-reranker-cpu"
     ],
     "descomprimido": {
       "sin_dato": "omitido por tamano (3497081137 bytes comprimidos)"
@@ -157,8 +155,6 @@
     "dockerfile": "pocharlies-org/dgx-infra:Dockerfile",
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:35970c6788b80b42a70894da2c76f80b66f8d89c9810df4c454e09857e66d42f",
-      "@sha256:982582b87738ecb1613b199ce96c4e54bf9d71cc05c648019c06d7a996e84449",
       "@sha256:9c0a3e6a7b0753784381cd17646a7364e69d5ee5a22fbdb7cb72810b4866ddcb",
       "@sha256:fc0b0d7f979e2cf92ab903b4c8210e46f8b5a61ab09f43d352189336f268db36"
     ],
@@ -202,47 +198,6 @@
     "resuelta": "harbor.e-dani.com/homelab/blog@sha256:6decd8bb94d6ba5eab793234de29d66dcdcb60b4f96325050ba4c6140f3c9ca9"
   },
   {
-    "base_digest": [
-      {
-        "digest": {
-          "sin_dato": "crane digest fallo tras 2 intentos"
-        },
-        "imagen": "${BRIDGE_IMAGE}"
-      }
-    ],
-    "build_fecha": "2026-11-03T11:24:00.710470238Z",
-    "capas_top": [
-      {
-        "digest": "sha256:6393b52c52b13a610dd900a297b5d9ea95e041c92bdfb1f0681452d0237f7664",
-        "tamano": 56883160
-      },
-      {
-        "digest": "sha256:df736340692d217b57cd447c94f978f9a91ce3e8805b225e78374eae3aff864c",
-        "tamano": 49885461
-      },
-      {
-        "digest": "sha256:3c5439d0ae62993af4cc4e21b8c777297e81bc40e200d4633c85a3e0f977a3bc",
-        "tamano": 28247437
-      }
-    ],
-    "clase": "propia",
-    "comprimido": 170451186,
-    "deployments": [
-      "brain-mcp/Deployment/brain-mcp"
-    ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (170451186 bytes comprimidos)"
-    },
-    "dockerfile": "pocharlies-org/k8s-brain-mcp-pocharlies:Dockerfile",
-    "plataforma": "linux/amd64",
-    "refs": [
-      "@sha256:5519ab0589131cb2d6ec0f643e9e8bb84880f99e93a741f93b417aa0a483bc0d"
-    ],
-    "repo": "harbor.e-dani.com/homelab/brain-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/brain-mcp@sha256:ed1a9700b5ef458df7ceb77880c4d494338fae6ddfff7213db50d36468022061",
-    "workflow": "pocharlies-org/k8s-brain-mcp-pocharlies:.github/workflows/release.yml"
-  },
-  {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
@@ -281,11 +236,11 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-08-22T17:04:20.930517595Z",
+    "build_fecha": "2026-11-18T11:14:53.68483348Z",
     "capas_top": [
       {
-        "digest": "sha256:c199be2455d89c220cabfce26130b7d23349eeaccd969f5dbcb54b12d88944ed",
-        "tamano": 3175341242
+        "digest": "sha256:7e7bdbad10dd5131267e9f4b582014947b571b494dbe2069c7ccca2674233473",
+        "tamano": 3490285583
       },
       {
         "digest": "sha256:9095c5d96059581329b0965419ae5833af55fded16a2240af20acd82726ee880",
@@ -297,60 +252,23 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 15065856587,
+    "comprimido": 15554437580,
     "deployments": [
       "comfyui/Deployment/comfyui",
       "comfyui/Deployment/comfyui-image-cache",
       "comfyui/Deployment/dgx3-provision"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (15065856587 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (15554437580 bytes comprimidos)"
     },
     "dockerfile": "pocharlies-org/dgx-infra:Dockerfile",
     "plataforma": "linux/arm64",
     "refs": [
-      "@sha256:b171617397a12384549f403218b22d2b475726dbbd914b34f420dd34be84878c"
+      "@sha256:38fa73711cafd4f0b60934b087933bbc5d25ed2e4cdea227efb5f6b1944ef628"
     ],
     "repo": "harbor.e-dani.com/homelab/comfyui",
-    "resuelta": "harbor.e-dani.com/homelab/comfyui@sha256:4c4e8f5c544fc715ebcea2f171ab4a6b8808d3369cf9eed4c7ff1be935e2205a",
+    "resuelta": "harbor.e-dani.com/homelab/comfyui@sha256:aa6d4bb440985dbf2bc32f000a9bbf66fe5b558fb3aa7c2ac65120baf50beaae",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-comfyui-dgx2-arm64.yml"
-  },
-  {
-    "base_digest": {
-      "sin_dato": "sin Dockerfile que leer"
-    },
-    "build_fecha": "2026-10-08T01:25:06.771689655+02:00",
-    "capas_top": [
-      {
-        "digest": "sha256:4c25548d6dd7defafd971d3869fe2846593d33b98e35a22cf4514598e6891fcd",
-        "tamano": 3725301827
-      },
-      {
-        "digest": "sha256:a449b4f856fdb66e8333b6a8216e389de2c40f0b53690c13d8bdaa06938a2b3e",
-        "tamano": 3266990528
-      },
-      {
-        "digest": "sha256:f0b57e25b80acbd2ac4678759ac604db39617cb60beb8251216fb1826eca461f",
-        "tamano": 2553224904
-      }
-    ],
-    "clase": "propia",
-    "comprimido": 12225072915,
-    "deployments": [
-      "comfyui/Deployment/comfyui-rtx"
-    ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (12225072915 bytes comprimidos)"
-    },
-    "dockerfile": {
-      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/comfyui-rtx\" en pocharlies-org"
-    },
-    "plataforma": "linux/amd64",
-    "refs": [
-      "@sha256:c00531871c09b7590b65c86a4e70bc57087229879e90ebd474fb38dbe06d8162"
-    ],
-    "repo": "harbor.e-dani.com/homelab/comfyui-rtx",
-    "resuelta": "harbor.e-dani.com/homelab/comfyui-rtx@sha256:4d8c906d018debd9b3492b6783eae23b47fd88accf83fa254144bbac56443327"
   },
   {
     "base_digest": {
@@ -391,15 +309,15 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T10:09:45.944042291+01:00",
+    "build_fecha": "2026-11-20T17:59:21.448133507+01:00",
     "capas_top": [
       {
         "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
         "tamano": 29856132
       },
       {
-        "digest": "sha256:b8e4e35078e305ec930c9d52aee0c8b9f8c20e0a7c4ad032167e3b6738f9f700",
-        "tamano": 13434315
+        "digest": "sha256:4187a9a05327681f8c47e29aed64848c5a2d2c66904aad4df25ac70846d594a0",
+        "tamano": 13524944
       },
       {
         "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
@@ -407,26 +325,26 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 56773705,
+    "comprimido": 56900432,
     "deployments": [
       "skirmshop/Deployment/control-panel-bff"
     ],
-    "descomprimido": 164485632,
+    "descomprimido": 164864512,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/control-panel-bff\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:5f4fda559150807e23787a5a1f462b0f390c04b5eff55f7b39141c16447d04ca"
+      "@sha256:5f0e84b639f017daca55b923cc7aff3298d0cf59ae0d6d3085f48ce118349048"
     ],
     "repo": "harbor.e-dani.com/homelab/control-panel-bff",
-    "resuelta": "harbor.e-dani.com/homelab/control-panel-bff@sha256:64572f56d9b40c3194d237193713ea19eeb7241dbaf5428af34811687d3a2762"
+    "resuelta": "harbor.e-dani.com/homelab/control-panel-bff@sha256:cbe06a0cff88a56d48387e3298ddf9ebd667c3f73b32d43d9807b8beff95db3c"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T23:18:26.312116503+01:00",
+    "build_fecha": "2026-11-20T18:25:13.051277556+01:00",
     "capas_top": [
       {
         "digest": "sha256:400c1de759f415b6b2a0ba96bcef3e516f26171d5930757dcddc3d6971bf3e81",
@@ -442,20 +360,20 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 21052173,
+    "comprimido": 21211521,
     "deployments": [
       "skirmshop/Deployment/control-panel-ui"
     ],
-    "descomprimido": 49577472,
+    "descomprimido": 50210304,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/control-panel-ui\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:651027d28f2fd30d1ea7c8202df3386681d4bfc34179f98e41187ab97a08cb97"
+      "@sha256:e28d56e484e0789269af21e3a716b583b4191f059118d364f9c3668895904b2e"
     ],
     "repo": "harbor.e-dani.com/homelab/control-panel-ui",
-    "resuelta": "harbor.e-dani.com/homelab/control-panel-ui@sha256:f04db3a6eb6add0d4dd31fe9a8a008ae5260cc31beee7db522290c19d12e56ac"
+    "resuelta": "harbor.e-dani.com/homelab/control-panel-ui@sha256:1bed7b82682dc40189d61db727d6a632ff86888f0fdf616601cdb11c888daf08"
   },
   {
     "base_digest": [
@@ -690,23 +608,23 @@
         "imagen": "python:3.12-slim"
       }
     ],
-    "build_fecha": "2026-11-11T10:33:20.518723682Z",
+    "build_fecha": "2026-11-20T20:05:19.312164932Z",
     "capas_top": [
       {
-        "digest": "sha256:13a9fbe335921ad8a0103f35a75259b4efdf15f2ba5e817c8052c8adfd02d069",
-        "tamano": 190885955
+        "digest": "sha256:fd8dde38bb08f6bb1094e1010326e6c56d6cca9ead39dbead84566b5fd6f2aae",
+        "tamano": 190885923
       },
       {
-        "digest": "sha256:5076a965073fed68c8a682ce3b3b2543d981236b7b6a36dcccecc728c1d32fab",
-        "tamano": 63371681
+        "digest": "sha256:7e3afd44a3c87f904762f508bc5ec3dec3c3f86bbb48dded445a16b6177c2fd4",
+        "tamano": 62743731
       },
       {
-        "digest": "sha256:e407e05786ed0f5ae2e606870746842198073289d048e20658bf617997440343",
-        "tamano": 37872307
+        "digest": "sha256:a3d2fce7e8cb790a7625ea0efcdb34f11e614281742007cb0d5bb1378894382c",
+        "tamano": 40423496
       }
     ],
     "clase": "propia",
-    "comprimido": 335400371,
+    "comprimido": 337323562,
     "deployments": [
       "control-nexus/CronJob/ci-watch",
       "control-nexus/Deployment/dgx-dashboard-backend",
@@ -716,15 +634,15 @@
       "control-nexus/Deployment/op-dgx-spark-bot"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (335400371 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (337323562 bytes comprimidos)"
     },
     "dockerfile": "pocharlies-org/dgx-infra:services/dashboard/Dockerfile",
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:6c0427a5a60624f8ba79e28a9ced7380920c4f5ac206278fd2c33d38d36f9b85"
+      "@sha256:cc53c93282857c4ed83859271b859a0110019c0454b1ea5bbd56b494dd72a816"
     ],
     "repo": "harbor.e-dani.com/homelab/dgx-dashboard-backend",
-    "resuelta": "harbor.e-dani.com/homelab/dgx-dashboard-backend@sha256:fd2d6d1cb7c36ba5755465279babb6328574510936f7dd1c2c50f259f69e71a7",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-dashboard-backend@sha256:4a78a1e26d4e57b75f07132baa4779570de8b7b35bec3d6c7ed6c37ef4f52d1c",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-dashboard-backend.yml"
   },
   {
@@ -734,19 +652,19 @@
         "imagen": "nginx:1.27-alpine"
       },
       {
-        "digest": "sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202",
+        "digest": "sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a",
         "imagen": "node:22-alpine"
       }
     ],
-    "build_fecha": "2026-11-11T08:57:30.123110647Z",
+    "build_fecha": "2026-11-20T20:07:01.349220512Z",
     "capas_top": [
       {
         "digest": "sha256:39c2ddfd6010082a4a646e7ca44e95aca9bf3eaebc00f17f7ccc2954004f2a7d",
         "tamano": 15522356
       },
       {
-        "digest": "sha256:0d5f2965b243bb3f404159de3faf43fe5e48345687512e989da793454447a729",
-        "tamano": 12183323
+        "digest": "sha256:ba5b9d4c37f78ccef2faa779885a3117c946a2a31f175500a8c5487ed54d5b89",
+        "tamano": 13274235
       },
       {
         "digest": "sha256:f18232174bc91741fdf3da96d85011092101a032a93a388b79e99e69c2d5c870",
@@ -754,19 +672,58 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 35216651,
+    "comprimido": 36360496,
     "deployments": [
       "control-nexus/Deployment/dgx-dashboard-ui"
     ],
-    "descomprimido": 79639552,
+    "descomprimido": 82551296,
     "dockerfile": "pocharlies-org/dgx-infra:services/dashboard/Dockerfile.ui",
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:788f663a5b547552b60ec50f0bec234d99097418c25889593f49925a30ed364c"
+      "@sha256:91479603b64eeddf8c6ed7315b043037d7ffcc34a5e54c85557ac45d33bb713f"
     ],
     "repo": "harbor.e-dani.com/homelab/dgx-dashboard-ui",
-    "resuelta": "harbor.e-dani.com/homelab/dgx-dashboard-ui@sha256:9336aa802517c55531ab5fe41a7608359b8f6c52133d536863b67d5da93c2429",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-dashboard-ui@sha256:fabdd418a8c08b70c2dd597c35299c7915b80b13d8678593c6f7fc15b84d51b5",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-dashboard-ui.yml"
+  },
+  {
+    "base_digest": [
+      {
+        "digest": "sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
+        "imagen": "python:3.12-slim"
+      }
+    ],
+    "build_fecha": "2026-11-20T09:04:57.266879338Z",
+    "capas_top": [
+      {
+        "digest": "sha256:aef6d1239ccb1247524caa0899ba649bc26dc7ffffccd2d7de8cee9ed2bcb8b0",
+        "tamano": 190885789
+      },
+      {
+        "digest": "sha256:f696284b47872e798af830cff150a5f31187f1eed50fac1a03faaa25a611bdf4",
+        "tamano": 62741943
+      },
+      {
+        "digest": "sha256:1302acf77cfd5f32882ac625018db87dd0c0b7cde161c366ea44e9805604ac09",
+        "tamano": 40368267
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 337266409,
+    "deployments": [
+      "control-nexus/Deployment/dgx-gpu-controller"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (337266409 bytes comprimidos)"
+    },
+    "dockerfile": "pocharlies-org/dgx-infra:services/dashboard/Dockerfile",
+    "plataforma": "linux/amd64",
+    "refs": [
+      "@sha256:6d09df1e795fd85c859b89de23e04a8d5214d9ff1c8ab5009bed16abc862e970"
+    ],
+    "repo": "harbor.e-dani.com/homelab/dgx-gpu-controller",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-gpu-controller@sha256:bc1393b896c67d44b8868f13549b31e8005d3a7185b27939389e1473099ca8bd",
+    "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-gpu-controller.yml"
   },
   {
     "base_digest": [
@@ -777,7 +734,7 @@
         "imagen": "ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION}"
       },
       {
-        "digest": "sha256:7702d8aa4d5910871692af4480eb3ba86f23047a6417a44d857d06c95d060d3f",
+        "digest": "sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb",
         "imagen": "node:22-bookworm"
       }
     ],
@@ -822,6 +779,42 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
+    "build_fecha": "2026-11-20T09:00:56.523803991Z",
+    "capas_top": [
+      {
+        "digest": "sha256:c617b5dcb2355a9bee025089c14cde7f649f2b56eb9efb99e9844cd2f5d8a844",
+        "tamano": 3725301810
+      },
+      {
+        "digest": "sha256:884da6b65b964324b2380e779c3178d5db3f2f41ec8a97fef99c0706b70176e5",
+        "tamano": 1238247617
+      },
+      {
+        "digest": "sha256:433730fe175b05a2bf576773352d51d3683d2757603c25b75ae86586504cbc66",
+        "tamano": 65766514
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 5123921336,
+    "deployments": [
+      "hindsight/Deployment/hindsight-decision"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (5123921336 bytes comprimidos)"
+    },
+    "dockerfile": "pocharlies-org/dgx-infra:Dockerfile",
+    "plataforma": "linux/amd64",
+    "refs": [
+      "@sha256:8979696ff727fc8dfce0cae2bc0f3e329ccab5cc5f74d230cb58b8b15dc4d030"
+    ],
+    "repo": "harbor.e-dani.com/homelab/dgx-infra/hindsight-decision",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-infra/hindsight-decision@sha256:81a4a00cd16c5dd0e61be25807cfcbd3da96a27f6cc8a04a3c1f0f6f4ad10731",
+    "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-hindsight-decision.yml"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
     "build_fecha": "2026-10-20T19:49:52.510125877Z",
     "capas_top": [
       {
@@ -859,15 +852,15 @@
         "imagen": "nvcr.io/nvidia/pytorch:25.06-py3"
       }
     ],
-    "build_fecha": "2026-11-10T19:59:20.098474518Z",
+    "build_fecha": "2026-11-19T07:21:26.127171249Z",
     "capas_top": [
       {
         "digest": "sha256:59131d7b7ce4da7384a07c7934f9421f0463d0a83def6965a523a9d1c437e9c8",
         "tamano": 5106208526
       },
       {
-        "digest": "sha256:4b718ef9acf35a69d751b55e9df6e4e8654d0435a7c5bad5eea46b9007e3394b",
-        "tamano": 3286719935
+        "digest": "sha256:7c05090a978834bb8b59bdc7f78a7c14b9783d17f7a1497e010a088339caaa86",
+        "tamano": 3294245720
       },
       {
         "digest": "sha256:9542cff6d3343f34e56bf07b3d14afc32c9f58c6b8b83a22500678a26cd6a86a",
@@ -875,20 +868,22 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 16616192186,
+    "comprimido": 16624487168,
     "deployments": [
+      "comfyui/Deployment/omnivoice-trainer-gb10",
       "llm/Deployment/omnivoice-tts-nvfp4"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (16616192186 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (16624487168 bytes comprimidos)"
     },
     "dockerfile": "pocharlies-org/dgx-infra:services/xtts/Dockerfile.blackwell-nightly",
     "plataforma": "linux/arm64",
     "refs": [
-      "@sha256:7b77e3c524281448ab666473795fe9cded9bba4059bfbd46e72a48d4b06bb6fd"
+      ":ci-72c973506f0d91d529e9909ade8f46730f6e2639-1",
+      "@sha256:67349a062ada822547fb293065de48764d012ab7f78e8cec6c2a5f4182be5f77"
     ],
     "repo": "harbor.e-dani.com/homelab/dgx-infra/omnivoice",
-    "resuelta": "harbor.e-dani.com/homelab/dgx-infra/omnivoice@sha256:e9d7df4f0d28adc1a8e36dc7847ded21956bbde20450331697aa173a3a08f5e8",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-infra/omnivoice@sha256:53e92a922bae4bc1ba3e70af7a0e5ab1d139829b3b603c6f4eaa1387e901c20e",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-omnivoice-backend.yml"
   },
   {
@@ -970,15 +965,15 @@
         "imagen": "python:3.12-slim"
       }
     ],
-    "build_fecha": "2026-11-10T23:49:34.739863339Z",
+    "build_fecha": "2026-11-17T13:41:07.305322467Z",
     "capas_top": [
       {
         "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
         "tamano": 29856132
       },
       {
-        "digest": "sha256:248b34222bd5c0b369d2235fe05bdf075ba10a5f508c5017c452176f80031246",
-        "tamano": 25922207
+        "digest": "sha256:619fe3046bf82ad59aad414c4312c3dff6dd1e43c67f82980dea155877e76eb7",
+        "tamano": 26039776
       },
       {
         "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
@@ -986,18 +981,18 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 72863938,
+    "comprimido": 72981002,
     "deployments": [
       "messages/Deployment/dgx-messages"
     ],
-    "descomprimido": 215087616,
+    "descomprimido": 215503872,
     "dockerfile": "pocharlies-org/dgx-messages:Dockerfile",
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:af6c60292c9db8611fe771296453acbcab31e6a802cc08fbd917cc34d989a4aa"
+      "@sha256:2c7b667c3160d333e2748668dc07cfcdb22048103cf6cef2f55aaebd2ec70a5d"
     ],
     "repo": "harbor.e-dani.com/homelab/dgx-messages",
-    "resuelta": "harbor.e-dani.com/homelab/dgx-messages@sha256:68743e1a9976fd7b92a4278e191b09763a276e2e3b6915310a83ce8a5b5af4c4",
+    "resuelta": "harbor.e-dani.com/homelab/dgx-messages@sha256:09383f7833ba81168e55780adf36839e254b39f34c25fbba16396c85f27e6a8b",
     "workflow": "pocharlies-org/dgx-messages:.github/workflows/build.yml"
   },
   {
@@ -1040,75 +1035,73 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-04T12:05:10.478034974+02:00",
+    "build_fecha": "2026-11-18T02:08:52.384292953+01:00",
     "capas_top": [
       {
-        "digest": "sha256:26c307b5e35a59ce911f5fde5b9458120ec8734e831ea2da5649a9ad14abfd3d",
-        "tamano": 29780765
+        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
+        "tamano": 29785419
       },
       {
-        "digest": "sha256:66d23515299f734fa4163469299575b4f45db3c07ccd42ba49d48a63cd427469",
-        "tamano": 27103254
+        "digest": "sha256:df79d931cd67092e2b8e48d8f6369922571efe4ee0f9af71636ce36600481492",
+        "tamano": 12110931
       },
       {
-        "digest": "sha256:b952fe9f6810de5dac5d24a3983aee5fce3884f7359a533ba325e48ecb745994",
-        "tamano": 12116037
+        "digest": "sha256:00a475ecf1ad0bdfc0fdbae90adc4d1f1f811bec66c1e1345c3342783fa29c92",
+        "tamano": 9501966
       }
     ],
     "clase": "propia",
-    "comprimido": 70303346,
+    "comprimido": 52703406,
     "deployments": [
       "dgx-synapse-mcp/Deployment/dgx-synapse-mcp"
     ],
-    "descomprimido": 206175232,
+    "descomprimido": 150616576,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/dgx-synapse-mcp\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:ed132110e87da6143f54930a0cf08386011369d8f31c08271760c7961decbec8"
+      "@sha256:8a453942d88d194a9bf26af0fa498af6fc85ed022c1d81432220b98aa091d622"
     ],
     "repo": "harbor.e-dani.com/homelab/dgx-synapse-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/dgx-synapse-mcp@sha256:e568fb82fdf54f306c8ad542facb329174d1dc1ad909e39ed95abfa9a489491e"
+    "resuelta": "harbor.e-dani.com/homelab/dgx-synapse-mcp@sha256:268aabf42396de4c707c03ef57a3b42fe4552a56f02aa03398f5d958c79b22b7"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-03T13:12:00.490307541Z",
+    "build_fecha": "2026-11-17T21:05:30.862817194Z",
     "capas_top": [
       {
-        "digest": "sha256:0fc8f4962a1e349d8b60017427e903b00bfd041d22757e1bac5a5ec1e4088e68",
-        "tamano": 412006402
+        "digest": "sha256:84e4c852fcf81f532c5fce17c1a82566420ad640e89b8729c6d1886292118974",
+        "tamano": 171367715
       },
       {
-        "digest": "sha256:f2be67225471500c788ce88c597eb5ea8336e912ad1ca4815650e0281afe2034",
-        "tamano": 29843579
+        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+        "tamano": 28247982
       },
       {
-        "digest": "sha256:b524bb3aba7394d85233f3a0a742b8f1b56179e8f61492f73d42a1ff118623b7",
-        "tamano": 12121436
+        "digest": "sha256:46f1fb9ae6ca87f8a6fd23a2401ff91ed843d23a0b9330e4b6b59778649e1561",
+        "tamano": 16326466
       }
     ],
     "clase": "propia",
-    "comprimido": 455286077,
+    "comprimido": 232989416,
     "deployments": [
-      "llm/Deployment/eg2-embedding-pilot"
+      "frigate/Deployment/ezviz-gateway"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (455286077 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (232989416 bytes comprimidos)"
     },
     "dockerfile": {
-      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/eg2-embedding\" en pocharlies-org"
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/ezviz-gateway\" en pocharlies-org"
     },
-    "plataforma": {
-      "sin_dato": "manifiesto simple sin indice OCI"
-    },
+    "plataforma": "linux/amd64",
     "refs": [
-      ":cpu-20261103d"
+      "@sha256:e4d843a29889d810af14ec09064e4e6189ac17b014d7701972823753d8435b4c"
     ],
-    "repo": "harbor.e-dani.com/homelab/eg2-embedding",
-    "resuelta": "harbor.e-dani.com/homelab/eg2-embedding@sha256:3997f1b7815fc28bcb70b6d2cfa06b8cebc80f0ad6cc5dc5998990b7136d4553"
+    "repo": "harbor.e-dani.com/homelab/ezviz-gateway",
+    "resuelta": "harbor.e-dani.com/homelab/ezviz-gateway@sha256:f7dbcee5222dc2e0bf588c129ef19d6a1d648ddb263b30dc9989959957f646d0"
   },
   {
     "base_digest": {
@@ -1257,23 +1250,23 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-04T09:59:24.405255747Z",
+    "build_fecha": "2026-11-11T20:58:26.808343791Z",
     "capas_top": [
       {
-        "digest": "sha256:6b37362b3da78869050b894b799ad4df04f1f3b52774087db0d81151570244c8",
-        "tamano": 29830418
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:05870ac656260e1138fa891b6a300e1431f96941b003f9804805cc4a67969284",
-        "tamano": 27263268
+        "digest": "sha256:3a467179966c79e9f4e90c9c61a141f3d49b9c31a52164a2363b50d7f49b536c",
+        "tamano": 27299473
       },
       {
-        "digest": "sha256:e360d85fdc0f3910a4fe48ba2bb0865d5e618392ea8abfa424e66575e45273c0",
-        "tamano": 12120738
+        "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
+        "tamano": 12122550
       }
     ],
     "clase": "propia",
-    "comprimido": 73486445,
+    "comprimido": 70571867,
     "deployments": [
       "control-nexus/CronJob/github-token-refresh",
       "update-watch/CronJob/browser-harness-daily-update",
@@ -1281,14 +1274,15 @@
       "update-watch/CronJob/litellm-fork-update",
       "update-watch/CronJob/peekaboo-fork-update"
     ],
-    "descomprimido": 205568512,
+    "descomprimido": 205687296,
     "dockerfile": "pocharlies-org/dgx-infra:Dockerfile",
     "plataforma": "linux/amd64",
     "refs": [
-      ":ci-52b766c2179bae0d2f4ae65a30eeefb4ce294b03"
+      ":ci-52b766c2179bae0d2f4ae65a30eeefb4ce294b03",
+      ":ci-58faddae1c0c363754e0da219c519fdb8245d912-1"
     ],
     "repo": "harbor.e-dani.com/homelab/gh-token-refresher",
-    "resuelta": "harbor.e-dani.com/homelab/gh-token-refresher@sha256:c9686b657e7546ce55f6c36bcc521f2db44723ec1f0f861313805494ff704a61",
+    "resuelta": "harbor.e-dani.com/homelab/gh-token-refresher@sha256:9fb389b9bc65981e90f36975d00ce34811ee7f364fae5544a9d3e1739be8c994",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-gh-token-refresher.yml"
   },
   {
@@ -1369,7 +1363,7 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T07:51:00.017439959Z",
+    "build_fecha": "2026-11-17T00:29:23.671516082Z",
     "capas_top": [
       {
         "digest": "sha256:abfa994b2daa16834b9dd948b3530952dce26ff8e70762ef9b865e7486d49a94",
@@ -1385,22 +1379,22 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 1122072363,
+    "comprimido": 1122224498,
     "deployments": [
       "hermes/Deployment/hermes-gateway"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (1122072363 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (1122224498 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/hermes-agent\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      ":fork-d923a5e-p131ee81"
+      ":fork-d923a5e-p3a96b32"
     ],
     "repo": "harbor.e-dani.com/homelab/hermes-agent",
-    "resuelta": "harbor.e-dani.com/homelab/hermes-agent@sha256:c76b9f1c5d30269b2946990264536efae052695ce025c4809530e16eb504de26"
+    "resuelta": "harbor.e-dani.com/homelab/hermes-agent@sha256:8a90eb12329f5927c69241c035eb077dc781d6ff2c56e5b787f7415b4a615ca3"
   },
   {
     "base_digest": {
@@ -1477,73 +1471,73 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-02T13:27:41.504919273Z",
+    "build_fecha": "2026-11-13T03:25:20.820486009Z",
     "capas_top": [
       {
-        "digest": "sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5",
-        "tamano": 29855236
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:8c976096ecfdab208052d41a4ea8e5a572c37c1b33fcc8000d4691b60c8372fd",
-        "tamano": 21359531
+        "digest": "sha256:8fdefab8fee3005a966e4c3b895fe4d76c2370fdbd45592172890b046a06b7b2",
+        "tamano": 20625015
       },
       {
-        "digest": "sha256:7f6eb18eadd9f4c40f12554449b2b25a5eb9a9ab71a2cd81f14ce05ddbb2674b",
-        "tamano": 16495536
+        "digest": "sha256:68cf9e8170bde01b16302d79cbe6182595606a677c76fc2f2149366473cc943d",
+        "tamano": 16307056
       }
     ],
     "clase": "propia",
-    "comprimido": 102327439,
+    "comprimido": 85476664,
     "deployments": [
       "jarvis/Deployment/jarvis-alexa"
     ],
-    "descomprimido": 249139712,
+    "descomprimido": 235696640,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/jarvis-alexa\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:d25f042bfb2c05eedeab9accad653d2f0310ffa8be28e559b53ed749bed81c08"
+      "@sha256:f8bc792b4e9b8df2a66b733840aa82b9dada66d4e165e97e4ee8c1b0fc5e2f12"
     ],
     "repo": "harbor.e-dani.com/homelab/jarvis-alexa",
-    "resuelta": "harbor.e-dani.com/homelab/jarvis-alexa@sha256:6f96e7e3f54fc89593b25cc6d08e982fc814ab41c59a2e116b3b0e94c221c784"
+    "resuelta": "harbor.e-dani.com/homelab/jarvis-alexa@sha256:90dc28816c2465d45346804a8920207d7b31cf6ffc1f915b15f5f043bbbc4f41"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-05T13:32:41.1215855Z",
+    "build_fecha": "2026-11-13T21:31:54.663444186Z",
     "capas_top": [
       {
-        "digest": "sha256:8d44db2427d9e2c203926a1da457c5d3ae505132fd331d00676c27f5fd1fffaa",
-        "tamano": 243695217
+        "digest": "sha256:c76a741a8969bcf2aae1382061f05194a84a14846d982dd33df18e928adcf0ee",
+        "tamano": 184759349
       },
       {
-        "digest": "sha256:c9adfc5943c7b825df7f5d1c34a488fa3aac1c261612cb33a19b98253b415cb5",
-        "tamano": 95757877
+        "digest": "sha256:833246449fa9d91adc4ab3d53fba664e1cd86db3e0fe5e5b5bb5cbbec159605f",
+        "tamano": 160420119
       },
       {
-        "digest": "sha256:8e3d787d3782581e1302abe59db2ea282138fc624da5abf30455f87541922401",
-        "tamano": 89116763
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       }
     ],
     "clase": "propia",
-    "comprimido": 488034643,
+    "comprimido": 409246441,
     "deployments": [
       "jarvis/Deployment/jarvis-backend"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (488034643 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (409246441 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/jarvis-backend\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:44670db91ce2ea84ce2da974b8b56a02bb6c62277e50543ff9bb775d0a9a8aa1"
+      "@sha256:e1dbe3807da7ad7508e0d4f97ba2f33ec1fa884ad54d354f68e967bbb877b578"
     ],
     "repo": "harbor.e-dani.com/homelab/jarvis-backend",
-    "resuelta": "harbor.e-dani.com/homelab/jarvis-backend@sha256:b72607f6d95c0deaa3ccafc43edd67bfa44f3ab71de1ad8efb7ca59d098284c9"
+    "resuelta": "harbor.e-dani.com/homelab/jarvis-backend@sha256:e043882f51acb66569ac1a1e6ccc99764dcafce0de12bebe77c6aa6f8e2d245b"
   },
   {
     "base_digest": {
@@ -1584,7 +1578,7 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-08T18:21:23.928316868Z",
+    "build_fecha": "2026-11-20T03:23:08.656166443Z",
     "capas_top": [
       {
         "digest": "sha256:fcee4287e7471f5e8205497b94a77eb15bdeb968183eda622fd555924ea2c5eb",
@@ -1600,22 +1594,22 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 184752520,
+    "comprimido": 184763848,
     "deployments": [
       "skills-catalog/Deployment/skills-mcp"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (184752520 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (184763848 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/k8s-skills-catalog-pocharlies\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      ":v0.1.10"
+      ":v0.1.14"
     ],
     "repo": "harbor.e-dani.com/homelab/k8s-skills-catalog-pocharlies",
-    "resuelta": "harbor.e-dani.com/homelab/k8s-skills-catalog-pocharlies@sha256:c308e0989aca44a7b8eb3844236011c4a1b2938ad991b02faa5957ecf79c02da"
+    "resuelta": "harbor.e-dani.com/homelab/k8s-skills-catalog-pocharlies@sha256:f16a770ed7f22d495131f0b1d9d480cfa2b317fe6132c2cc7ed0291ccdafa10f"
   },
   {
     "base_digest": {
@@ -1733,41 +1727,40 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-07-02T10:49:45.330254271+02:00",
+    "build_fecha": "2026-11-12T13:24:18.160535837Z",
     "capas_top": [
       {
-        "digest": "sha256:22382b70628fb075d06679f90f76cdee843ac0989d05ccb1973106727daa841e",
-        "tamano": 56525635
+        "digest": "sha256:5d0c6c5710f1cdc2a30a47c236d5a75ab16d2785fc0aed022b46273ffafd13c6",
+        "tamano": 49885577
       },
       {
-        "digest": "sha256:3de69d675a4de6c71e2311f1e547de804e6e68f051a0b9e17e6283d500894468",
-        "tamano": 49937593
+        "digest": "sha256:e8f3d30c5a503001eca11bfc7036d0f6fd7205bfad5c9612344abe29f02b66ef",
+        "tamano": 44979690
       },
       {
-        "digest": "sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
-        "tamano": 28237639
+        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+        "tamano": 28247982
       }
     ],
     "clase": "propia",
-    "comprimido": 173840000,
+    "comprimido": 149889668,
     "deployments": [
       "agentgateway/Deployment/sauvage-admin-mcp",
       "grok-mcp/Deployment/grok-mcp",
       "weight-mcp/Deployment/weight-mcp"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (173840000 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (149889668 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/mcp-stdio-bridge\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      ":v0.2.0",
-      "@sha256:bf8133d638cea9b170d9ff0faf6666f6e83bffeee706d77d8674b48535fef41a"
+      "@sha256:d7d02671a9193321c4d4d6aa7967883ed80dc16f6e20739ec2fc3666d57129b6"
     ],
     "repo": "harbor.e-dani.com/homelab/mcp-stdio-bridge",
-    "resuelta": "harbor.e-dani.com/homelab/mcp-stdio-bridge@sha256:7a60752b51acb29e59fcf3160ebe3e909d1fef38c02a6e3854cdf8ef0699c7a7"
+    "resuelta": "harbor.e-dani.com/homelab/mcp-stdio-bridge@sha256:ae99bbee66d1c0a13f5569b0e722b22a3da50c1d52b9149b136c2a412fec0c2e"
   },
   {
     "base_digest": {
@@ -1811,15 +1804,16 @@
     "descomprimido": {
       "sin_dato": "omitido por tamano (164065072 bytes comprimidos)"
     },
-    "dockerfile": "pocharlies-org/k8s-agentgateway-pocharlies:Dockerfile",
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/mcp-stdio-pool-bridge\" en pocharlies-org"
+    },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:31b249d12fe1ca8e27a3fbcb2d785a512270a37e1d548c558e83ef212be5301a",
+      "@sha256:e0bd1dacf02a252349c20581c235d5f70117c5ea3d488f5b2b84ea117b5c0639",
       "@sha256:fa0dc8989b91911ca1507e99a286868fcfe677e0dedec30416043aa1b447ffa4"
     ],
     "repo": "harbor.e-dani.com/homelab/mcp-stdio-pool-bridge",
-    "resuelta": "harbor.e-dani.com/homelab/mcp-stdio-pool-bridge@sha256:0958a31d43bc56549360bcb4855c44a22f8c7c9f8bde28673d17cfa0a31160fb",
-    "workflow": "pocharlies-org/k8s-agentgateway-pocharlies:.github/workflows/release-puente.yml"
+    "resuelta": "harbor.e-dani.com/homelab/mcp-stdio-pool-bridge@sha256:0958a31d43bc56549360bcb4855c44a22f8c7c9f8bde28673d17cfa0a31160fb"
   },
   {
     "clase": "espejo",
@@ -1840,7 +1834,7 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-11T10:01:21.323496263Z",
+    "build_fecha": "2026-11-20T16:21:24.385281894Z",
     "capas_top": [
       {
         "digest": "sha256:0b7d3a3e426e9705dc982abdb92d22edc8085d616b52cfbc689fe1f6742fe164",
@@ -1856,12 +1850,12 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 130221417,
+    "comprimido": 130233605,
     "deployments": [
       "nova/Deployment/nova"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (130221417 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (130233605 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/nova\" en pocharlies-org"
@@ -1870,37 +1864,37 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:20da2aa3384e2d4e453430838384dd61472d784307c8434055f50e6299cbe513"
+      "@sha256:24b02aa1df7d1fd3d55868a7782c213d6726ad8c00dc17e1da34d51cc699c7be"
     ],
     "repo": "harbor.e-dani.com/homelab/nova",
-    "resuelta": "harbor.e-dani.com/homelab/nova@sha256:20da2aa3384e2d4e453430838384dd61472d784307c8434055f50e6299cbe513"
+    "resuelta": "harbor.e-dani.com/homelab/nova@sha256:24b02aa1df7d1fd3d55868a7782c213d6726ad8c00dc17e1da34d51cc699c7be"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T11:48:39.227101398Z",
+    "build_fecha": "2026-11-20T15:45:23.594948093Z",
     "capas_top": [
       {
-        "digest": "sha256:a4fa110143b080cf06b0d25c69816775a2112cdb21553669d73c4c111c5fb698",
-        "tamano": 2938317638
+        "digest": "sha256:e96212e8266a02d4fd6a1c7c0c8c26a1c216f4c3bf62890bcb50d9180b0114de",
+        "tamano": 2936306997
       },
       {
-        "digest": "sha256:13803f4db87ab09ff5bb2c634e9d9225e5cd1a435491c3310b2765fbf492fa72",
-        "tamano": 1499557171
+        "digest": "sha256:b5f40e1e83e2754f8c6bb5dd2b3d17fe195779bd615c0d9f3cae5a93ce2f175b",
+        "tamano": 1499237715
       },
       {
-        "digest": "sha256:001c5252f3f1640a416dc126eeffbe9e9b171ff97277899b5ee6a7a5042536cc",
-        "tamano": 76517824
+        "digest": "sha256:f3abaab98388e0cc72fffc78e22d658c783d340abb930e9fb75c3b6fc30a025d",
+        "tamano": 76517953
       }
     ],
     "clase": "propia",
-    "comprimido": 4562560600,
+    "comprimido": 4560230997,
     "deployments": [
       "nova/Deployment/nova-avatar"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (4562560600 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (4560230997 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/nova-avatar\" en pocharlies-org"
@@ -1909,47 +1903,82 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:de9f854df646d578f03781674012406dda72a0932dcc72a7f9c3bf1c2b75c4ec"
+      "@sha256:e4745183defcb5282d2bda367b17035311413365eaadb4a7edbb404261c65cfc"
     ],
     "repo": "harbor.e-dani.com/homelab/nova-avatar",
-    "resuelta": "harbor.e-dani.com/homelab/nova-avatar@sha256:de9f854df646d578f03781674012406dda72a0932dcc72a7f9c3bf1c2b75c4ec"
+    "resuelta": "harbor.e-dani.com/homelab/nova-avatar@sha256:e4745183defcb5282d2bda367b17035311413365eaadb4a7edbb404261c65cfc"
   },
   {
-    "base_digest": [
-      {
-        "digest": "sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf",
-        "imagen": "python:3.12-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf"
-      }
-    ],
-    "build_fecha": "2026-08-23T05:11:41.269603782Z",
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-19T03:34:41.888395329Z",
     "capas_top": [
       {
-        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
-        "tamano": 29785419
+        "digest": "sha256:3ff534b9febbcd21d9ff0e67814cda2acc42557264c3d8922f4857a9a8df2205",
+        "tamano": 34154670
       },
       {
-        "digest": "sha256:a85b46d126b59e57792bbc7d648ddbfd2cf6c7c20451bebaa81c452abd725209",
-        "tamano": 23486184
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:df79d931cd67092e2b8e48d8f6369922571efe4ee0f9af71636ce36600481492",
-        "tamano": 12110931
+        "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
+        "tamano": 12122550
       }
     ],
     "clase": "propia",
-    "comprimido": 71755184,
+    "comprimido": 77563257,
     "deployments": [
-      "offers-mcp/Deployment/offers-mcp"
+      "objectstore-edge/Deployment/objectstore-edge"
     ],
-    "descomprimido": 209388544,
-    "dockerfile": "pocharlies-org/k8s-offers-mcp-pocharlies:Dockerfile",
+    "descomprimido": 199366656,
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/objectstore-edge\" en pocharlies-org"
+    },
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
+    "refs": [
+      "@sha256:a7ff08f6514be881cb4dd9413774d5ba7249bbc9484c85108ae587926740f747"
+    ],
+    "repo": "harbor.e-dani.com/homelab/objectstore-edge",
+    "resuelta": "harbor.e-dani.com/homelab/objectstore-edge@sha256:a7ff08f6514be881cb4dd9413774d5ba7249bbc9484c85108ae587926740f747"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-20T03:30:43.07510075Z",
+    "capas_top": [
+      {
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
+      },
+      {
+        "digest": "sha256:00a03832d60f6e70b96a22f3a430d135874b8611883011efb621246fbf02d191",
+        "tamano": 29627849
+      },
+      {
+        "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
+        "tamano": 12122550
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 73361104,
+    "deployments": [
+      "oficinas/Deployment/oficinas"
+    ],
+    "descomprimido": 167346688,
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/oficinas\" en pocharlies-org"
+    },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:ad057d23f252caebeef9fb747b2250cec62cabfffea7aa5052966473c5fa68a9"
+      "@sha256:8c6b9df414e705e93715fd8309232a3b9cc81f38bd265a608947b0fe7307614b"
     ],
-    "repo": "harbor.e-dani.com/homelab/offers-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/offers-mcp@sha256:c16922eff322b81373049660211f7d66cc3e5c927d7b5dfc2f0592ffa9ffe949",
-    "workflow": "pocharlies-org/k8s-offers-mcp-pocharlies:.github/workflows/release.yml"
+    "repo": "harbor.e-dani.com/homelab/oficinas",
+    "resuelta": "harbor.e-dani.com/homelab/oficinas@sha256:00a9490703989dfacc7ea90c3f42552df50c1f3a5aff77f1e8a88d8bb47a318d"
   },
   {
     "clase": "espejo",
@@ -2032,8 +2061,12 @@
     "comprimido": 606225031,
     "deployments": [
       "paseo/CronJob/company-dreaming",
+      "paseo/CronJob/update-watch-host-versions",
+      "paseo/Deployment/backlot",
+      "paseo/Deployment/hermes-shell",
       "paseo/StatefulSet/company",
-      "paseo/StatefulSet/paseo"
+      "paseo/StatefulSet/paseo",
+      "paseo/StatefulSet/render3d"
     ],
     "descomprimido": {
       "sin_dato": "omitido por tamano (606225031 bytes comprimidos)"
@@ -2044,6 +2077,7 @@
     "plataforma": "linux/amd64",
     "refs": [
       "@sha256:6e94762849d4c95b1cb85677c32ab7367022d2cd4f4208a994125b8a0a1d34a1",
+      "@sha256:aaa3467450a94cdcbf6443121a7afab8a0bcad359afe054f6c14fef0e95e3488",
       "@sha256:e8f28fe9c08c9274bc9c1f28ac0c5c0776d806604f87df4bdfb6adc26f3bc8e3"
     ],
     "repo": "harbor.e-dani.com/homelab/paseo-atlantic",
@@ -2053,29 +2087,27 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-03T05:50:49.308463928Z",
+    "build_fecha": "2026-11-13T21:33:16.455728074Z",
     "capas_top": [
       {
-        "digest": "sha256:6502270a1011c2ae0a954ead7feee89da1d89e851ac14857ca70a72de889bf4f",
-        "tamano": 64457801
+        "digest": "sha256:3914b0bc758993459e057381ef0f278be3620132e0c3075f14c3a91eeea03049",
+        "tamano": 32055747
       },
       {
-        "digest": "sha256:6fc242d221a673263eabd14a9ad9584d3177c96e5cb504c891497338e2f912f5",
-        "tamano": 29855236
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:f574edac59d9f092df596f54e5b52656c803fd3ae30825b8ee5a189ed05f63d3",
-        "tamano": 12121979
+        "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
+        "tamano": 12122550
       }
     ],
     "clase": "propia",
-    "comprimido": 112806125,
+    "comprimido": 80470821,
     "deployments": [
       "photos-mcp/Deployment/photos-mcp"
     ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (112806125 bytes comprimidos)"
-    },
+    "descomprimido": 232536064,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/photos-mcp\" en pocharlies-org"
     },
@@ -2083,36 +2115,36 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      ":v0.1.0"
+      "@sha256:be616b8f207313a953485bb8d96b152a186d5c20c1bacfcf1bf86c278e673e5b"
     ],
     "repo": "harbor.e-dani.com/homelab/photos-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/photos-mcp@sha256:49a9c03a7573fd746ff0d49f7ca68a8e0a8a94d7d0283484ac0ccb46a6d474e7"
+    "resuelta": "harbor.e-dani.com/homelab/photos-mcp@sha256:be616b8f207313a953485bb8d96b152a186d5c20c1bacfcf1bf86c278e673e5b"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-04T00:15:05.699079892Z",
+    "build_fecha": "2026-11-15T04:12:36.880238077Z",
     "capas_top": [
       {
-        "digest": "sha256:6b37362b3da78869050b894b799ad4df04f1f3b52774087db0d81151570244c8",
-        "tamano": 29830418
+        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
+        "tamano": 29785419
       },
       {
-        "digest": "sha256:2ef051dd315e5bd20078f4195a8ecf2bfec2ffebe9f2488bf02683a39c870b64",
-        "tamano": 27109468
+        "digest": "sha256:2de782576707bcaab16d3d7c78e41200e0a9e08070c1e7d5932d86f94b3292e8",
+        "tamano": 19756940
       },
       {
-        "digest": "sha256:e360d85fdc0f3910a4fe48ba2bb0865d5e618392ea8abfa424e66575e45273c0",
-        "tamano": 12120738
+        "digest": "sha256:df79d931cd67092e2b8e48d8f6369922571efe4ee0f9af71636ce36600481492",
+        "tamano": 12110931
       }
     ],
     "clase": "propia",
-    "comprimido": 78702555,
+    "comprimido": 72463271,
     "deployments": [
       "picqer-mcp/Deployment/picqer-mcp"
     ],
-    "descomprimido": 218862592,
+    "descomprimido": 150628352,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/picqer-mcp\" en pocharlies-org"
     },
@@ -2120,10 +2152,48 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:8a359d45c4cd64e4634eb6547efae805eeff719ec139fd09bcfb92ddef6f5636"
+      "@sha256:159e17e0e02efca201825c16c4cd87dc8659c51b1d1b2d973b1a3ac19f5d9dc5"
     ],
     "repo": "harbor.e-dani.com/homelab/picqer-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/picqer-mcp@sha256:8a359d45c4cd64e4634eb6547efae805eeff719ec139fd09bcfb92ddef6f5636"
+    "resuelta": "harbor.e-dani.com/homelab/picqer-mcp@sha256:159e17e0e02efca201825c16c4cd87dc8659c51b1d1b2d973b1a3ac19f5d9dc5"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-15T07:53:42.383300359Z",
+    "capas_top": [
+      {
+        "digest": "sha256:512b25593afebae0efed2883d6a9c59d2208fcecea9cb0f6d9d38b89579c8203",
+        "tamano": 238370618
+      },
+      {
+        "digest": "sha256:55f63954662ae6035baca61714e965b811600e793a102f478988a6eae143effc",
+        "tamano": 190835054
+      },
+      {
+        "digest": "sha256:0e8883aaabf3ce6db4e19fffa38cf72e94d10c1e1eb08d564ed73b34000fe356",
+        "tamano": 150540370
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 664828710,
+    "deployments": [
+      "playwright-mcp/Deployment/playwright-mcp"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (664828710 bytes comprimidos)"
+    },
+    "dockerfile": "pocharlies-org/k8s-playwright-mcp-pocharlies:Dockerfile",
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
+    "refs": [
+      "@sha256:140bd27b29cb8cd737c62f01b226bae36310151433853b736af793398aaf0f96"
+    ],
+    "repo": "harbor.e-dani.com/homelab/playwright-mcp-chrome",
+    "resuelta": "harbor.e-dani.com/homelab/playwright-mcp-chrome@sha256:140bd27b29cb8cd737c62f01b226bae36310151433853b736af793398aaf0f96",
+    "workflow": "pocharlies-org/k8s-playwright-mcp-pocharlies:.github/workflows/build-image.yml"
   },
   {
     "clase": "espejo",
@@ -2247,27 +2317,27 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-13T16:08:45.578090055Z",
+    "build_fecha": "2026-11-15T03:59:46.313042665Z",
     "capas_top": [
       {
-        "digest": "sha256:ecc510c1e359bdc007b39802570bb7e4dec7d6ebccf357c3201a74299113e05e",
-        "tamano": 29843350
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:9120605b1b55f3706fed30ba97be629b67869522316b78977c1ea0fabb32eb4a",
-        "tamano": 23896823
+        "digest": "sha256:8e5c57298117e714846fee0ec701400040c4a11a89fcf5ba3b7104486f03a450",
+        "tamano": 24099984
       },
       {
-        "digest": "sha256:6912e23eb44595b44dc6d9882b34f305ad6f6e9667cec70b13e5dbc4f8cd97f4",
-        "tamano": 12121637
+        "digest": "sha256:2dc99d2d0a39fce31e37615eb4c932e16dcc4c2b0ce9993714280081b5dbe085",
+        "tamano": 12122550
       }
     ],
     "clase": "propia",
-    "comprimido": 72355464,
+    "comprimido": 72530679,
     "deployments": [
       "shopify-admin-mcp/Deployment/shopify-admin-mcp"
     ],
-    "descomprimido": 210915328,
+    "descomprimido": 211391488,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-admin-mcp\" en pocharlies-org"
     },
@@ -2275,78 +2345,78 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:40c455aec71918aad59f88e1cc257ee11781763afaf736831b2de44bc62cfed7"
+      "@sha256:279dc760ac30308cd5dbc290903612bbd7bcfbe16ab95fe91adc258b72ca0d55"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-admin-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-admin-mcp@sha256:40c455aec71918aad59f88e1cc257ee11781763afaf736831b2de44bc62cfed7"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-admin-mcp@sha256:279dc760ac30308cd5dbc290903612bbd7bcfbe16ab95fe91adc258b72ca0d55"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-20T23:32:05.875226486Z",
+    "build_fecha": "2026-11-15T12:52:16.069621797Z",
     "capas_top": [
       {
-        "digest": "sha256:42a06a2c5a7ac48ca550527f6393fd5c91a71d99ce0640849c56c2d1e08741de",
-        "tamano": 149237572
+        "digest": "sha256:9d6d13191cee040506db9d5616dec326121b7759e7efbf18ae2cc4cfa3fa841a",
+        "tamano": 148261401
       },
       {
-        "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
-        "tamano": 43229397
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
-        "digest": "sha256:dcb5b0a99fbd0e8df730bffa8b58d1aa76016ef710770a736684f2163488ce03",
-        "tamano": 6711285
+        "digest": "sha256:bbeec3c2785268bcb5e9f0934e3d205dffcd516647497546e1a03aa2a8bf1020",
+        "tamano": 6711287
       }
     ],
     "clase": "propia",
-    "comprimido": 205034193,
+    "comprimido": 217067572,
     "deployments": [
       "skirmshop/CronJob/affiliate-gdpr-prune",
       "skirmshop/CronJob/affiliate-sync-discounts",
       "skirmshop/Deployment/affiliate-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (205034193 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (217067572 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-affiliate-app\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      ":v0.7.1"
+      ":k8s-20261115"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-affiliate-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-affiliate-app@sha256:3b8366e2943b73f17a2b944e7e2614a8936aca8526a7188f3cca9759368a24a3"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-affiliate-app@sha256:736369a54ffedf8b1b1c99bc6b983c9cfbfd7ed9daac32dab6b9bf955be64ebc"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-08T22:14:57.694121534Z",
+    "build_fecha": "2026-11-16T17:52:24.08138219Z",
     "capas_top": [
       {
-        "digest": "sha256:0576528cd4a956702eb42c95d108772be512b253180688e11e5d0eda9307481e",
-        "tamano": 230967456
+        "digest": "sha256:f8d3a8464c819a0f37a482f4ef678a927cb9fd91eb3dee9d9780e4589178ca69",
+        "tamano": 130126036
       },
       {
         "digest": "sha256:5d0c6c5710f1cdc2a30a47c236d5a75ab16d2785fc0aed022b46273ffafd13c6",
         "tamano": 49885577
       },
       {
-        "digest": "sha256:75eefcd55cf76f581b5950f843cbd34888128ca70d1d29843807d6c7b2380eec",
-        "tamano": 49639190
+        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+        "tamano": 28247982
       }
     ],
     "clase": "propia",
-    "comprimido": 377339239,
+    "comprimido": 216872542,
     "deployments": [
       "skirmshop/CronJob/back-in-stock-preorder-coverage-reconcile",
       "skirmshop/CronJob/back-in-stock-preorder-hold-reconcile",
       "skirmshop/Deployment/back-in-stock-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (377339239 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (216872542 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-back-in-stock\" en pocharlies-org"
@@ -2355,11 +2425,10 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:2ed73bd4d395786df1572e794e4f0c6121ffe3738db992c50e0d80db10129771",
-      "@sha256:bc2881c45a8e89ea8052daaeda2ba84518776acb4fb6e6c2d87149a86d87c7b2"
+      "@sha256:0571359832530a9d44e4a62e4b91514fc721bb923962c28540c1894b596104ca"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-back-in-stock",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-back-in-stock@sha256:bc2881c45a8e89ea8052daaeda2ba84518776acb4fb6e6c2d87149a86d87c7b2"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-back-in-stock@sha256:0571359832530a9d44e4a62e4b91514fc721bb923962c28540c1894b596104ca"
   },
   {
     "base_digest": {
@@ -2443,52 +2512,54 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-07-15T11:29:36.863793495+02:00",
+    "build_fecha": "2026-11-18T06:10:23.085048009Z",
     "capas_top": [
       {
-        "digest": "sha256:6739ef9e699d1bc2c436af9b2001ebee9e52726123286037156f17c930f76f54",
-        "tamano": 50640869
+        "digest": "sha256:b747efbefe6014e8a16adf66de20a8c82190e1fb8607afbf759d8de5fc2f2a88",
+        "tamano": 91412956
       },
       {
         "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
         "tamano": 43229397
       },
       {
-        "digest": "sha256:9942f401805c6a4250c1eed32cfc6301477f08aa7220a6fbd9f386c5c2f32929",
-        "tamano": 27263484
+        "digest": "sha256:71caef5caf8be92c598904059c9d7b9e1d529a89dfd51b702bdb9471ba561371",
+        "tamano": 27263545
       }
     ],
     "clase": "propia",
-    "comprimido": 135608208,
+    "comprimido": 179507530,
     "deployments": [
       "skirmshop/Deployment/bundles-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (135608208 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (179507530 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-bundle-app\" en pocharlies-org"
     },
-    "plataforma": "linux/amd64",
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
     "refs": [
-      "@sha256:a24f4338c497044ad939efe38f5c545ea5b4eaa9630cc4ad13e5d421f31d2784"
+      "@sha256:a6d66a963dae5a023690c7708bbbe97220203b1468460102e83afead7d0973b0"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-bundle-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-bundle-app@sha256:1793ebf6064810124a44e700ba984c3c64d27955f4c41c9f3d205a093438c939"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-bundle-app@sha256:a6d66a963dae5a023690c7708bbbe97220203b1468460102e83afead7d0973b0"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-11T05:07:36.54452396Z",
+    "build_fecha": "2026-11-17T13:41:56.786131245Z",
     "capas_top": [
       {
-        "digest": "sha256:ccaeb0b6de40463db15d17b8eb4f806753ca61c8f79715e6e4a455583c12e1e4",
-        "tamano": 90792777
+        "digest": "sha256:61f182dc44d1055d5cef4a8928f21c58c2e4ea20ff1980dba3bd5712a9610cf5",
+        "tamano": 90804653
       },
       {
-        "digest": "sha256:2a9491572f6e8f9c3be47a2d17b7dcd30f264003f2cbeedf9359544b3ca5396c",
-        "tamano": 56222326
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
         "digest": "sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17",
@@ -2496,13 +2567,13 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 152463157,
+    "comprimido": 152499025,
     "deployments": [
       "skirmshop/CronJob/collections-tree-reorder-collections",
       "skirmshop/Deployment/collections-tree-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (152463157 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (152499025 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-collections-tree-app\" en pocharlies-org"
@@ -2511,78 +2582,77 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:e9dd256050ac1bb8ec204e058921924d5580584c4c8240166b09b1308d96025f"
+      "@sha256:e459dc329757dcc979ff8737395084c4b1924b9e961a35ecf6567cfb87499e3a"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-collections-tree-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-collections-tree-app@sha256:e9dd256050ac1bb8ec204e058921924d5580584c4c8240166b09b1308d96025f"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-collections-tree-app@sha256:e459dc329757dcc979ff8737395084c4b1924b9e961a35ecf6567cfb87499e3a"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-05T10:33:12.862257889Z",
+    "build_fecha": "2026-11-18T04:30:30.851987635Z",
     "capas_top": [
       {
-        "digest": "sha256:8519904bae45d47c1742ad26092e5f6ab69ad0604d6f22fa0b96b2092787fdcb",
-        "tamano": 158094222
+        "digest": "sha256:78e64b6a4798b667988ef77b06251af374f409abbe6d374a73d2eadc4b64f349",
+        "tamano": 156857932
       },
       {
-        "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
-        "tamano": 43229397
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
-        "digest": "sha256:4e295dc014d00de349289c4c177c10278cd6427b6105e22002b38a3e493bdbfd",
-        "tamano": 11581335
+        "digest": "sha256:a1d63fde65cdd489102819e155d4d0fb708271af0736cbe453ff4a08eb038101",
+        "tamano": 5436077
       }
     ],
     "clase": "propia",
-    "comprimido": 221551953,
+    "comprimido": 224710631,
     "deployments": [
       "skirmshop/CronJob/sii-invoicing",
       "skirmshop/CronJob/sii-monthly-report",
       "skirmshop/Deployment/sii-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (221551953 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (224710631 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-sii-app\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:364c60d6706594b7a327e4b9d00d076fb4c73147911890baf0392f16c093e178",
-      "@sha256:e4dae70f434eb0f8cc996fae6c97ada7ef6a61f084783193ef437bde34095bd6"
+      "@sha256:5664bb92c89323ed7053419c7665419581cda9c5b0eb891d421aac562867a1c2"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-sii-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-sii-app@sha256:eb782ac2cb6ac2bf0536d07b2ed5f1f9d575f31f21d122b6537110ea3c088361"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-sii-app@sha256:94cf0c2917020b309007c1272b26d89826f0ea519f9766d42120b980d7be56b0"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-20T16:32:41.8719284Z",
+    "build_fecha": "2026-11-17T14:20:03.404410121Z",
     "capas_top": [
       {
-        "digest": "sha256:d22c69a95cf463f4cb74462bd2899597ce505d82bd4c01ceddf7845e12f13856",
-        "tamano": 49837030
+        "digest": "sha256:0c4023204e5b4bcd551170279c40ff58285cc8ea87ddf9ff25cb3713e6ecda79",
+        "tamano": 49903774
       },
       {
-        "digest": "sha256:7fd1ebe418b5079d4aa36f416af9b143d127bc75b0155d71cb5fd559b5e04d39",
-        "tamano": 28249323
+        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+        "tamano": 28247982
       },
       {
-        "digest": "sha256:b117ef5d593ab5e3ba6213ae270bf573191aa0c7ec704597c0601a3df385056f",
-        "tamano": 2350041
+        "digest": "sha256:aa4e8910862263c3bad50c754fb555bbbb7661c41e35ba703ae082ec6749c175",
+        "tamano": 1713055
       }
     ],
     "clase": "propia",
-    "comprimido": 82205215,
+    "comprimido": 79928226,
     "deployments": [
       "skirmshop/CronJob/shopify-picqer-order-audit",
       "skirmshop/CronJob/shopify-sync-warehouse",
-      "skirmshop/CronJob/shopify-sync-weights"
+      "skirmshop/Deployment/shopify-sync-weight-receiver"
     ],
-    "descomprimido": 216302592,
+    "descomprimido": 216424448,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-sync-app\" en pocharlies-org"
     },
@@ -2590,49 +2660,49 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:006a19c483e40fb9865a47b14371e4db1eff0c1d5433241256410a913fa947ab",
-      "@sha256:565e920b8acfd9031dee9e64e46b8f1326e183059f38e1755225774f5becb78b",
-      "@sha256:5a1fc60b3139e5b359cf618e554d6af557a34a14ec51aff01c6a1e451c5753d9"
+      "@sha256:279a0922cfa3cd6c3a0de11259078ea46a46a3a83f59c7b1c9e715684aebb2ae",
+      "@sha256:7ac29cdc04036a5019025cee7e1a881d212d08a242a51b8408da382c10f55d80",
+      "@sha256:e920667f6e58063cd380e5bf4182763ccc71ebb176b568554a93f8d73284770e"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-sync-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-sync-app@sha256:5a1fc60b3139e5b359cf618e554d6af557a34a14ec51aff01c6a1e451c5753d9"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-sync-app@sha256:e920667f6e58063cd380e5bf4182763ccc71ebb176b568554a93f8d73284770e"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T20:21:58.271709694Z",
+    "build_fecha": "2026-11-17T13:42:00.183263324Z",
     "capas_top": [
       {
-        "digest": "sha256:2a9491572f6e8f9c3be47a2d17b7dcd30f264003f2cbeedf9359544b3ca5396c",
-        "tamano": 56222326
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
-        "digest": "sha256:5e02d23bf5eb57b1a635ca1601f5bd07e8e5fabbe62933d15cde34b2fda320e6",
-        "tamano": 44168438
+        "digest": "sha256:1f343d915ca7d3032925641a4ccc3875bfc5bf6c07ad80e0e2542b5ef2277326",
+        "tamano": 44168441
       },
       {
-        "digest": "sha256:b0870098d11627b9a9b7c94ef6b0e679e04c4b028632d30d176b255a72c34c26",
-        "tamano": 34857671
+        "digest": "sha256:4d35138583bcce1138ae4e49d47c00c7f68c9e4a45c500d29f06865b623f452c",
+        "tamano": 34855051
       }
     ],
     "clase": "propia",
-    "comprimido": 183996411,
+    "comprimido": 174040899,
     "deployments": [
       "skirmshop/Deployment/translations-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (183996411 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (174040899 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/shopify-translation-app\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:39b865996376a47ec79dfce93ca82805e15a6abe66c2450e91bea5917ad583e0"
+      "@sha256:51a4000e63237dc594f854279208c345d761db2559b878534d39a7e8b2ddf048"
     ],
     "repo": "harbor.e-dani.com/homelab/shopify-translation-app",
-    "resuelta": "harbor.e-dani.com/homelab/shopify-translation-app@sha256:d93f04a1518cc1bb5b6c4f28bc9638d9228c8ed8729425db341605938b1d3d5c"
+    "resuelta": "harbor.e-dani.com/homelab/shopify-translation-app@sha256:8fdf4e2af6148c5b8db0f4ec0c9323dea0838af6b7d622c2ef84f4e9973fb7c5"
   },
   {
     "base_digest": {
@@ -2676,23 +2746,23 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T11:01:38.782215704+01:00",
+    "build_fecha": "2026-11-19T11:57:43.782753783Z",
     "capas_top": [
       {
-        "digest": "sha256:f3e93a4a7c527913d6e8dc31984156a8fec235383a959734b8617b0d67ff1523",
-        "tamano": 370183702
+        "digest": "sha256:0d150bf06d197bef3696f2c28edad46a096c319da513a39537aa7e37ea965d61",
+        "tamano": 243722300
       },
       {
-        "digest": "sha256:80564c796c20c7cfd81cd663fd144f3587cb58c0d3352dc81c9114f9a454d6ef",
-        "tamano": 145225500
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
       },
       {
-        "digest": "sha256:4831516dd0cb86845f5f902cb9b9d25b5c853152c337eb57e4737a9b7e2a2eb9",
-        "tamano": 28228487
+        "digest": "sha256:8fdefab8fee3005a966e4c3b895fe4d76c2370fdbd45592172890b046a06b7b2",
+        "tamano": 20625015
       }
     ],
     "clase": "propia",
-    "comprimido": 599946474,
+    "comprimido": 326669914,
     "deployments": [
       "skirmshop/CronJob/skirmbooks-accounting-sweep",
       "skirmshop/CronJob/skirmbooks-banking-balance-recompute",
@@ -2758,27 +2828,27 @@
       "skirmshop/Deployment/skirmbooks-tax-sii"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (599946474 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (326669914 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmbooks-backend\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:f82c8ffcc178ea866a9471bfee5f27d4d249dd9882e54289e123a42bbb33ee35"
+      "@sha256:9d9cc9b7f37ee5f0b77f6cca3ed4e9ed0bdd1fb92fbfa1a0e5c51cf0e556a45d"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmbooks-backend",
-    "resuelta": "harbor.e-dani.com/homelab/skirmbooks-backend@sha256:c9204770c5af18795fc1ca893b9557e3215ec427aa137508993560dcdedcb487"
+    "resuelta": "harbor.e-dani.com/homelab/skirmbooks-backend@sha256:2a9a544405fdebb82e9af196e831da6c45a305019e8b087fd9a7ac9bcaf7d84c"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T01:55:37.421540351Z",
+    "build_fecha": "2026-11-16T08:28:36.717113969Z",
     "capas_top": [
       {
-        "digest": "sha256:9149d57c1efc0d5ecf1e762cf64c42f0f88d477c84e27fadda7027f17ef2cf71",
-        "tamano": 64575091
+        "digest": "sha256:08d44bb86ecbd7bffd6df65ec2e3bf276e94c7180747fdfc2a707abbbcc34957",
+        "tamano": 68992480
       },
       {
         "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
@@ -2790,96 +2860,36 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 113524645,
+    "comprimido": 117946601,
     "deployments": [
       "skirmshop/Deployment/skirmbooks-ui"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (113524645 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (117946601 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmbooks-ui\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:c231e59a0724db4cf8722d37677bc3442db225e82fe4ebf1e2b816eebd0a5d70"
+      "@sha256:da6d6a3e8c8f572b5b6962d41c78fa62e970081617b3aa898b32e366f094f8e3"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmbooks-ui",
-    "resuelta": "harbor.e-dani.com/homelab/skirmbooks-ui@sha256:3a9208fe2f71019fcafcc3c7f038a84675a294a98dd6c414be91df274edea070"
+    "resuelta": "harbor.e-dani.com/homelab/skirmbooks-ui@sha256:185a905652bedc670afb3aaf9df6a8fb3cdb5d882718b5f5a46d72a7323909fb"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T12:56:31.538231886Z",
-    "capas_top": [
-      {
-        "digest": "sha256:129edd2943126d3aff15873e0bb7e6ca374a82637b488f703a4823d2e424e94e",
-        "tamano": 130736593
-      },
-      {
-        "digest": "sha256:e1b07acf978abc480731c260a36a144a46905591cf64a3b047597e951db6905b",
-        "tamano": 116176043
-      },
-      {
-        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
-        "tamano": 29785419
-      }
-    ],
-    "clase": "propia",
-    "comprimido": 293684835,
-    "deployments": [
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-architecture-sync",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-audit",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-claude-session-graph",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-feedback-audit",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-knowledge-pages",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-memory-promotion",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-claude",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-evaluation",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-personal",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-neural-gardener-skirmshop",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-open-webui-ingest",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-pages-reconcile",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-personal-graph-enrichment",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-personal-payload-indexes",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-personal-payload-normalization",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-reembed-truncated",
-      "skirmshop-brain-prod/CronJob/skirmshop-brain-reembed-watchdog",
-      "skirmshop-brain-prod/Deployment/skirmshop-brain",
-      "skirmshop-brain-prod/Deployment/skirmshop-brain-ingest"
-    ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (293684835 bytes comprimidos)"
-    },
-    "dockerfile": {
-      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-brain-v2\" en pocharlies-org"
-    },
-    "plataforma": {
-      "sin_dato": "manifiesto simple sin indice OCI"
-    },
-    "refs": [
-      "@sha256:5ad05d5fccbcd2ec331d74c684ac1756ff5108ff1b3383b235d4d346bece64f2",
-      "@sha256:924ac08f322cf429ec401c39b68b5d89db7f3e77ae9cb13227fde3ffb2051c53",
-      "@sha256:9e31c5911e74314d0d6e0b8f24e2daf302d7f6e92b8cfa39f8af0e5dbf2f1acf",
-      "@sha256:a6aa145741ee20861d13111d33ec5df8a2ab064f98f8b8e83015cace84b2cd6b"
-    ],
-    "repo": "harbor.e-dani.com/homelab/skirmshop-brain-v2",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-brain-v2@sha256:a6aa145741ee20861d13111d33ec5df8a2ab064f98f8b8e83015cace84b2cd6b"
-  },
-  {
-    "base_digest": {
-      "sin_dato": "sin Dockerfile que leer"
-    },
-    "build_fecha": "2026-11-11T03:47:19.153569975Z",
+    "build_fecha": "2026-11-15T04:01:52.215827866Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:b37f010416ddca547063edfbf6db9daf4a4a4dddd747729ee12c14d860925174",
-        "tamano": 8296384
+        "digest": "sha256:bd05384e12c40e6691e1eb154d4af54f0c697fb69c9f5ae5639fa2cb3238b4a3",
+        "tamano": 8297359
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -2887,35 +2897,35 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 64579496,
+    "comprimido": 64580466,
     "deployments": [
       "skirmshop/CronJob/labels-correos-directory-refresh",
       "skirmshop/Deployment/labels-correos-adapter"
     ],
-    "descomprimido": 210366464,
+    "descomprimido": 210370048,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-correos-adapter\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:754bf2c3c2afc33575ca2fb4153d822907667ed0a0dabde36d62f60f23ba93bc"
+      "@sha256:49689b834d5bd6f3613c936f0399df34f699ecdf34013a4793f10f44dd3797f8"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-correos-adapter",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-correos-adapter@sha256:4b54fed005ae23901003b0d9f3d47393224cd13f98e566d158f1cf83ed388324"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-correos-adapter@sha256:f6b6d36e33f1bfc93b69ee9d64b88141251c0954faff1962ffa5a2bd218a89dd"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-07T01:00:22.61031229Z",
+    "build_fecha": "2026-11-19T16:11:47.62165453Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:4e0bfddb2bfdcffa21f33abd9f33b56f3dc787820a3120cbd1847fe8e8f1b436",
-        "tamano": 11189882
+        "digest": "sha256:547ea3d9addebf72bab40a01139e6249e1024b40390737f81eb4c4092b295bdd",
+        "tamano": 12970393
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -2923,34 +2933,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 67469266,
+    "comprimido": 69253763,
     "deployments": [
       "skirmshop/Deployment/labels-correos-express-adapter"
     ],
-    "descomprimido": 218228736,
+    "descomprimido": 231451136,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-correos-express-adapter\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:f89387e5f669ca88273c1230dc18d8cfcceca003e26044d5cfc955e2fd40ee18"
+      "@sha256:c4a31b3d792d8c10f5a9a3a0b5f676f5a3d635517f97ee01ba3028b422876064"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-correos-express-adapter",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-correos-express-adapter@sha256:a468037e771189c112eaec33f032125616ce23d59bb679d486baa10ee406d9f5"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-correos-express-adapter@sha256:a567c84c42ba67a66902b43dcfe85b5d497ae8302e7cec6b8c0c48efca39d16e"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-21T19:29:55.650988424Z",
+    "build_fecha": "2026-11-15T04:01:18.037308127Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:5fc2b05db412bb93c5cce46f416876d0df25d4a119baab4d25fa960f8a92a9d5",
-        "tamano": 6017098
+        "digest": "sha256:ea5df190a024a05bca86940d45b7266e49c4175876add92d87cabd6bdab87ce9",
+        "tamano": 6050338
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -2958,34 +2968,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 61448517,
+    "comprimido": 62333420,
     "deployments": [
       "skirmshop/Deployment/labels-event-gateway"
     ],
-    "descomprimido": 191397888,
+    "descomprimido": 194691584,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-event-gateway\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:bfd05c657d65d1bf54eb5ac32835b4da0ae2acf5ca025799e99e3bab09b46e14"
+      "@sha256:634beb072c147bbc78b398bec33506ac602af685eade7813e18cdbfb2e8ce173"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-event-gateway",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-event-gateway@sha256:81f0adff9b05d8d0f5caa55a92eb2ce18a7357cd0ef7a435159e8cc5d034cfae"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-event-gateway@sha256:11cd68c9b4b3cf1b799ea4091406aee175d0561c7d380740043e26d1d96af228"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-02T12:34:32.127061171Z",
+    "build_fecha": "2026-11-15T03:58:32.858982527Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:1c366147b45ac86977f5b2fda22b3ca2da0a34427f6a74d76d5c2c47712685b0",
-        "tamano": 4083545
+        "digest": "sha256:29adf58bfe7016fc4fa3e793a826d90889a338b3e6efc0881927a6d092a3abf4",
+        "tamano": 4092661
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -2993,20 +3003,20 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 60362926,
+    "comprimido": 60375769,
     "deployments": [
       "skirmshop/Deployment/labels-event-projector"
     ],
-    "descomprimido": 186186752,
+    "descomprimido": 186221568,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-event-projector\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:0a88c55e04af9f800f8375c0600610be195582b07b693e0d78625010deed1771"
+      "@sha256:c822ccf5e550e359ec81132c0ad4ddab297cd1e43dee803ccc0e54946d64dcea"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-event-projector",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-event-projector@sha256:a77ef40f2cfb30689585c78814ef7d570f388fe77f75560c1fdb823f5f11d319"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-event-projector@sha256:ea61a69a4c94352bff4a676b5e8607a74742a340c70b01b0d78c89ca7c868c0a"
   },
   {
     "base_digest": {
@@ -3051,15 +3061,15 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-28T05:58:03.607506915Z",
+    "build_fecha": "2026-11-15T03:58:23.902256936Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:64338a2d0a24ee515ac9fdbed3646e0811f4b88c21ee427b196bedd8153c19a3",
-        "tamano": 4052829
+        "digest": "sha256:3b1672413b1b4983b9fb3c0e386602769e8f5628bf00d3d99ab333046ee425c9",
+        "tamano": 4054713
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3067,27 +3077,27 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 60326431,
+    "comprimido": 60337814,
     "deployments": [
       "skirmshop/CronJob/labels-notification-digest",
       "skirmshop/Deployment/labels-notification-dispatcher"
     ],
-    "descomprimido": 186046976,
+    "descomprimido": 186108416,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-notification-dispatcher\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:759549795029ecfe77b202e27a00763461069d6924fdba393ba65851b4f7d755"
+      "@sha256:f36b35c51258d759c72628f782b24ce25b7449fbebbf40496bc6bdfd542bec9d"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-notification-dispatcher",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-notification-dispatcher@sha256:2b33f06fed4d6c69788901e6112647a1e7eaf7915a560836155b393c6cdaa8c3"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-notification-dispatcher@sha256:1d2fec9c2040bdd47583ecbdec77689851a24ad07c5ebc716463241330a1cd8c"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-21T19:31:02.350827925Z",
+    "build_fecha": "2026-11-15T03:58:32.858984207Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
@@ -3098,39 +3108,39 @@
         "tamano": 3623904
       },
       {
-        "digest": "sha256:e7428cb4ffb31db5a9006b61751d36556f1a429fd33a9d3c0063c77ee50ac0fc",
-        "tamano": 1386278
+        "digest": "sha256:4a61ad0dc762d31368fd4e2a35c542758bd920ef700ddc36263da7f2b9f3a3a3",
+        "tamano": 2034189
       }
     ],
     "clase": "propia",
-    "comprimido": 56692978,
+    "comprimido": 57589257,
     "deployments": [
       "skirmshop/CronJob/labels-ops-edit-hold-reconciler"
     ],
-    "descomprimido": 169703936,
+    "descomprimido": 173029376,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-ops-edit-hold-reconciler\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:472cb0a5e430254faef2bb275f2140aeb71d6bb1f9f2c3c3d83d2b951cce5849"
+      "@sha256:80dcf0d514d38ef449f09dc61f9a0d925d9a424710a06d6cdb6109b044c6a004"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-ops-edit-hold-reconciler",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-ops-edit-hold-reconciler@sha256:281ec03277a90907e80bacb5cd904c3dfd8baf29f6644daf56b6d25b0754053d"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-ops-edit-hold-reconciler@sha256:2ead6df95c9e28ce8fc166d6d094896af9e0bb45ff9252ee38ced506e50b6cf5"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-21T19:29:47.55653154Z",
+    "build_fecha": "2026-11-15T03:57:18.288322152Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:588dd2876b3dbc0326b7be4474dbf5eaa8a02089afbff0a9de59ceb9b4150c86",
-        "tamano": 4071547
+        "digest": "sha256:0485b658523fe2b9df877f7403087aef2240af44077594c0956ee18eeac9353e",
+        "tamano": 4107204
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3138,26 +3148,26 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 59502968,
+    "comprimido": 60390312,
     "deployments": [
       "skirmshop/Deployment/labels-outbox-relay"
     ],
-    "descomprimido": 183013376,
+    "descomprimido": 186312704,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-outbox-relay\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:6fc4502caa279f6a917a7c511050d7009655cb64b8065ec0b4210b9c5037a3d2"
+      "@sha256:9f0b4e5acf0bd27cea67b9ea5eeb7520ef2a506cb8c68ebdc45f7e6070190f77"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-outbox-relay",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-outbox-relay@sha256:18009f7900b822ae545beef3757e4f332b0d624ffb119fd2faa4b2746fa14e2b"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-outbox-relay@sha256:0c5d6e8fe28b184f9b7e6a6a84fefb7daa66109f005063dc951cd75a1bec3429"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T04:44:38.759516942Z",
+    "build_fecha": "2026-11-15T04:01:09.478929539Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
@@ -3168,39 +3178,39 @@
         "tamano": 3623904
       },
       {
-        "digest": "sha256:e4e741c4578aae9ca330256ada4645638e477768a02370d44e873f91a8e02e4b",
-        "tamano": 2033320
+        "digest": "sha256:a7de6e279502698abdc5c59e85d2288308be325bff3c2335f0082f156181b43c",
+        "tamano": 2034170
       }
     ],
     "clase": "propia",
-    "comprimido": 57571602,
+    "comprimido": 57572654,
     "deployments": [
       "skirmshop/CronJob/labels-pickup-point-reminder"
     ],
-    "descomprimido": 172960256,
+    "descomprimido": 172964352,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-pickup-point-reminder\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:0f48febb41eaf2d5a7bf95e1df0f7a18933c411b6654bf670d9076ce63f3558e"
+      "@sha256:e67e4fa9603b08d9e526c18f01fe9d9eeea2801c93a89ded1ddb923fff4edc64"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-pickup-point-reminder",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-pickup-point-reminder@sha256:8e98104cb9301dff4fe6e81bebd16f390497123721eb70d175272c792b37cc75"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-pickup-point-reminder@sha256:69f21de34a93fa1216ecb3af30272126779e882bba58c9282c5dd2183b9e0e87"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-07T12:52:10.149559402Z",
+    "build_fecha": "2026-11-15T03:58:18.313858745Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:4b8598a35db6f3900c0bed0202a3acb1ac176bd5b265daa4d2192ff62331d6f5",
-        "tamano": 5897810
+        "digest": "sha256:6f377f60f044e8bcc7e3abebc312998036cb52ef1670baef7afe2c45dc311ec3",
+        "tamano": 5902003
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3208,34 +3218,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 62177851,
+    "comprimido": 62185113,
     "deployments": [
       "skirmshop/Deployment/labels-routing-service"
     ],
-    "descomprimido": 194018816,
+    "descomprimido": 194037760,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-routing-service\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:38bca8dc00a06df3b267e229497dea898ff29392d79e84dbfb35048bd3fabd35"
+      "@sha256:fa7e605bcde8802e5c4633df6bdc70d3a0d91330bb53bb383d72eb688e1198bd"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-routing-service",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-routing-service@sha256:89dada9bd1f6297aa957e8540e3884950874dc1f0a70d149968611cf862028ed"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-routing-service@sha256:79416243cbd93c73883a3fde104a6a956b4ec62db36f70fdcd40761ab44eef0c"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-07T12:55:08.099001085Z",
+    "build_fecha": "2026-11-15T03:58:37.979381788Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:01df086ec65e49f98741e67eee7f0e91e98ccc07307491b743a21195841ef4bd",
-        "tamano": 4189058
+        "digest": "sha256:fc3537b9421f40d9eb30844515ecaa84455d3cd5959412a20ceb809cd2a4de66",
+        "tamano": 4192260
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3243,34 +3253,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 60469102,
+    "comprimido": 60475360,
     "deployments": [
       "skirmshop/Deployment/labels-saga-launcher"
     ],
-    "descomprimido": 186721792,
+    "descomprimido": 186755584,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-saga-launcher\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:e1aa97c7a8ceb9c47b4fd2040c70f283bfa35eecc82d7f1ebbd44fa771b0758b"
+      "@sha256:f13cdc9e9da6ddf4a115e13a16659c3512aba5cd86add762b6246946a1d275ef"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-saga-launcher",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-saga-launcher@sha256:d5bfbb7294b01130cacc118729ddafa36749165ad5e890aa9357b67c9b00f3db"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-saga-launcher@sha256:239022c28b85bf22cb264ab3bd32155d6aa76b4ff2291469157a8b92a16cc950"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-11T03:45:51.938936483Z",
+    "build_fecha": "2026-11-20T02:29:42.00868028Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:d5f45d23e296a659d3916ca22acbed6a2d061c66ae037abcb0f7d6e32f2c04fc",
-        "tamano": 13463520
+        "digest": "sha256:af873be4d79bd9d270c3de413d3477175b09efa216aa51d8f4388bf264f40387",
+        "tamano": 13519521
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3278,34 +3288,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 69746632,
+    "comprimido": 69803085,
     "deployments": [
       "skirmshop/Deployment/labels-shopify-app"
     ],
-    "descomprimido": 228400640,
+    "descomprimido": 228661760,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-shopify-app\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:1e1bc473a9550808967f89904314c1fec23265575b72ec6419965eb22517f1cb"
+      "@sha256:39c666a853d5c0d39e320280e4f0c5b05341b51854efe62507f39d709ed672a2"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-app",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-app@sha256:8d6eaddb82be8566c35a052cfc809a854f42bd2bdc729cb7bb235e3792186e49"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-app@sha256:6063b9fbbc6e86e122de08a2c945a398bfa94bb7bb2b2cd43a93502f0d6f7153"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-28T15:14:21.027171292Z",
+    "build_fecha": "2026-11-15T04:01:20.423225136Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:616ba139112f468be3ac410de3f753f6272ca2aceb0e42efa11ece3f89cb6d7b",
-        "tamano": 6218783
+        "digest": "sha256:d4754a68d1a668a8f34d7b726f22ee8ea7b88188294a420ce16876775582e7aa",
+        "tamano": 6223691
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3313,34 +3323,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 62494646,
+    "comprimido": 62506799,
     "deployments": [
       "skirmshop/Deployment/labels-shopify-fulfillment-service"
     ],
-    "descomprimido": 195531264,
+    "descomprimido": 195588096,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-shopify-fulfillment-service\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:5239d5dd6160524330baa2fec4710180e232bb5277fa45d429352e1d298694e5"
+      "@sha256:8622a0cbcd8210cb179defab0bf03617a548a9214ce26375345a6024d5808de2"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-fulfillment-service",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-fulfillment-service@sha256:fc883afeee0ef61fed90872830bd9ddf3684c9ef4c14112e2d6161add55dba9e"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-shopify-fulfillment-service@sha256:efa23016817761506a006e0cf1cd5b6097b66dd318813ecef742fe77ea1d8c6f"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-11T07:11:04.002287512Z",
+    "build_fecha": "2026-11-15T03:58:28.038818965Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:d501123c07080e5e3f6008bff9c531e83faabe1680b2e2b998c598d41b887d1b",
-        "tamano": 3898289
+        "digest": "sha256:60ec33933cf315bf371ba0ec1c0409ff9d096958a8dec22103556f9b6fde31fc",
+        "tamano": 3898250
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3348,7 +3358,7 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 60181397,
+    "comprimido": 60181357,
     "deployments": [
       "skirmshop/Deployment/labels-synapse-janitor"
     ],
@@ -3358,10 +3368,10 @@
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:b6127c2568a5f6f12c8af3e1b24734340e7e7130bf70778c0600560fe92ba43e"
+      "@sha256:a93d5061fbb7a91f537f22bff4b775bb9b50758bc8ba417e64109ca342ae4b20"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-synapse-janitor",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-synapse-janitor@sha256:acdb162e2716fff61637de5b643fffec1bb1ecb676fe4b81a28ed5a854897808"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-synapse-janitor@sha256:30d7619eab5d24f1a28e0c8d2037d19c0c742ec8bad0f63f320eb518e6fd9135"
   },
   {
     "base_digest": {
@@ -3404,15 +3414,15 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-27T12:18:45.343342146Z",
+    "build_fecha": "2026-11-15T04:01:13.176719182Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:4367b479f84a4003d5a5612465e604f23a6a352cc31ac4f65434430ef90b21d2",
-        "tamano": 3703630
+        "digest": "sha256:8d545ce1b3069eebc9a17c5cff2b6cc373a239055ccbda06c8748f9cf76ebf1e",
+        "tamano": 3720196
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3420,34 +3430,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 59977225,
+    "comprimido": 60003305,
     "deployments": [
       "skirmshop/Deployment/labels-telegram-optin-ingest"
     ],
-    "descomprimido": 184261120,
+    "descomprimido": 184345600,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-telegram-optin-ingest\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:5d491fead6c2fcf88e0833a7af382ee1effa56d4bfe66691bb2603ae44b07290"
+      "@sha256:da4e294c7f65880c6ec3bebce6f4c2fe21602ac4873ee21563572e3da5ca6613"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-telegram-optin-ingest",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-telegram-optin-ingest@sha256:390d3e8355aaa83738d12c7506d5a142bd794d24f1bed2b2e107fb19cea260b6"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-telegram-optin-ingest@sha256:9542301acf89150fd128545d1db56cf98569e4fe07dbb2d96318da0c5428fcea"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-08T19:42:02.587803317Z",
+    "build_fecha": "2026-11-15T03:58:37.233927358Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:8a11e14d5c2a1a5f9688a93fa80608459591433271f4911e56fbc84dc938db03",
-        "tamano": 4169596
+        "digest": "sha256:6f2a70b4cbb963fc331f3f3a43a405b23cc262ca8ffdfbb6075b4f3f35601bdd",
+        "tamano": 4174521
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3455,26 +3465,26 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 60449636,
+    "comprimido": 60457627,
     "deployments": [
       "skirmshop/Deployment/labels-tracking-ingestion"
     ],
-    "descomprimido": 186553344,
+    "descomprimido": 186584064,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-tracking-ingestion\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:c2a603cb58f5d98965a9a6fc2fe9c55dc68764e8425214765092fd7601e7f791"
+      "@sha256:7919e3e38d418e835a0e778fd43797da9bb8a01142384a9849f073cb5d149b2a"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-ingestion",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-ingestion@sha256:c0c432a3df405b2e2d01cd2f64b27e29f0092f1597472a84e5691c61873aec58"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-ingestion@sha256:735aa54c07adb5d2ce5c3be0c2b5195e2d66537cdb6e292a3ebdcc16ab7cf9d8"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-21T19:27:55.111959522Z",
+    "build_fecha": "2026-11-15T03:58:03.49590746Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
@@ -3485,39 +3495,39 @@
         "tamano": 3623904
       },
       {
-        "digest": "sha256:e7428cb4ffb31db5a9006b61751d36556f1a429fd33a9d3c0063c77ee50ac0fc",
-        "tamano": 1386278
+        "digest": "sha256:c675c158eb0c9e933dad5ebb7c977e133890d33a3a581d6280eda30131522900",
+        "tamano": 2034194
       }
     ],
     "clase": "propia",
-    "comprimido": 56676079,
+    "comprimido": 57551167,
     "deployments": [
       "skirmshop/CronJob/labels-tracking-poll-scheduler"
     ],
-    "descomprimido": 169565184,
+    "descomprimido": 172819968,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-tracking-poll-scheduler\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:89c7d4381b163d8d7d43ec2645102651c9a308be3298653e4865ec9d24519d68"
+      "@sha256:14450a692232598d42334c1b609c12a1e8b4c6123bc4e27874f643926600a033"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-poll-scheduler",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-poll-scheduler@sha256:b66bc67185a358cf99b641ca959182552f41e7035c5f97539babece578349707"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-tracking-poll-scheduler@sha256:168edebec203116e88a050f913439a71a6983f134e444b2e5429805f7ee3644d"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-04T20:11:26.489721919Z",
+    "build_fecha": "2026-11-20T09:29:20.076949269Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:b9cb7a93e4352d0ebc2bfa139b5a5fc67ea057835cab467d608b6c1378fb3968",
-        "tamano": 11326266
+        "digest": "sha256:be5f97f2d26ee3ea09d17bfd10266bfe278a0c0f3db13d2aa213b293f9629289",
+        "tamano": 13112275
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3525,34 +3535,34 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 67605650,
+    "comprimido": 69395832,
     "deployments": [
       "skirmshop/Deployment/labels-ups-adapter"
     ],
-    "descomprimido": 219231232,
+    "descomprimido": 232483840,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-ups-adapter\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:9812d60dbc41852476951d44c8161886b2b29d744cfe22592028a26a6290bb68"
+      "@sha256:976c6dd3cdf902b7816ed0e80f96d0610adf020d0cec8b29c9548e6843087668"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-ups-adapter",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-ups-adapter@sha256:5ce8ad4051e440c699c0208cf183c61a7611b37a22f74eaa866e8907fb57feff"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-ups-adapter@sha256:5a91e31cf950be0c84cf5f2574d6fd28693ceb42e4578dbfec5005aeb05c19c8"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-27T12:16:55.04097843Z",
+    "build_fecha": "2026-11-15T03:58:06.250952326Z",
     "capas_top": [
       {
         "digest": "sha256:2c683692384c7436fa88d4cd7481be6b45a69a4cf25896cc0e3eaa79a795c0f4",
         "tamano": 49237176
       },
       {
-        "digest": "sha256:59053f39ffd6c2e50589d01ee787507b1d8bf7b4ac154bec32dcdb937d06d899",
-        "tamano": 3699159
+        "digest": "sha256:77b85e2d5bd7d4bdd82aaa2d33ad8683aa600f23c94a50c449d221cc93200a29",
+        "tamano": 3715886
       },
       {
         "digest": "sha256:da9db072f522755cbeb85be2b3f84059b70571b229512f1571d9217b77e1087f",
@@ -3560,30 +3570,30 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 59972754,
+    "comprimido": 59998998,
     "deployments": [
       "skirmshop/Deployment/labels-whatsapp-optin-ingest"
     ],
-    "descomprimido": 184245248,
+    "descomprimido": 184329728,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-labels-whatsapp-optin-ingest\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:5b4ea49d46d0db5d64541c0a37ff25a3285fe774942d03d0b37d43acbdf5d44c"
+      "@sha256:2cf19800a6f6b602a093acf5a29f6b3aa3596a6ed3dfbe809637e93221e24a55"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest@sha256:632e63d53ae63b2bb3510e4685c04f93ad1236ed8900dd9ade065e31efeb9927"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-labels-whatsapp-optin-ingest@sha256:e06737506ee55b232236b38808ce6b03363fb27114a319463b5376c05e06e18e"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T07:06:48.712956763Z",
+    "build_fecha": "2026-11-18T19:53:48.872295094Z",
     "capas_top": [
       {
-        "digest": "sha256:333276b1052add055c4178a824069bd185a5210d1ee140ddfdf20174bcd502fa",
-        "tamano": 40722116
+        "digest": "sha256:e22956d3b6e66aa1054109b8e127a6ba8b5f2a7b53e24adbd9473f170caf42a7",
+        "tamano": 40061824
       },
       {
         "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
@@ -3595,136 +3605,144 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 84197154,
+    "comprimido": 83509286,
     "deployments": [
-      "skirmshop/CronJob/picker-picklist-close",
       "skirmshop/CronJob/picker-purchase-recommend",
       "skirmshop/CronJob/picker-purchase-signals",
       "skirmshop/CronJob/picker-retention",
+      "skirmshop/Deployment/picker-fulfillment",
       "skirmshop/Deployment/skirmshop-picker"
     ],
-    "descomprimido": 313163776,
+    "descomprimido": 306995712,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-picker\" en pocharlies-org"
     },
-    "plataforma": "linux/amd64",
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
     "refs": [
-      "@sha256:514cf6b886c5ae9e112f92717fbaee30f23636fcd686513f2b1b10276ec0264f"
+      "@sha256:3ac84419356e3b85589e9d051653798bc8a977466c34e9c0c5f247397aa3a297",
+      "@sha256:be23ccda5c68326bdde7ffe3cb4e1c5b390d690f9052801be81b989cb06f9063"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-picker",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-picker@sha256:2aa5a54ef072192d1d1e776cc33b074f728b70c0995692c108e6ef130ad56a98"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-picker@sha256:be23ccda5c68326bdde7ffe3cb4e1c5b390d690f9052801be81b989cb06f9063"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-05-25T02:07:36.400747118+02:00",
+    "build_fecha": "2026-11-15T04:43:21.742252783Z",
     "capas_top": [
       {
-        "digest": "sha256:406509695e1fca3741ff5d7b836090c70e3e3e07bca1c8d48ed1a8012e02ec3b",
-        "tamano": 162000718
+        "digest": "sha256:168b44a41416782a115f999af5869adf1248b0345374221f5045a7d73ce3066b",
+        "tamano": 135214737
       },
       {
-        "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
-        "tamano": 43229397
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
-        "digest": "sha256:6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb",
-        "tamano": 3864189
+        "digest": "sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17",
+        "tamano": 3853673
       }
     ],
     "clase": "propia",
-    "comprimido": 214847239,
+    "comprimido": 198238476,
     "deployments": [
       "skirmshop/Deployment/serial-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (214847239 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (198238476 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshop-serial-numbers\" en pocharlies-org"
     },
-    "plataforma": "linux/amd64",
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
     "refs": [
-      ":v2026.05.25-postgres"
+      "@sha256:8c60bbc1b0a328d0cae6a009047e71366e672b95024b923f7f03adb6219e7948"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshop-serial-numbers",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshop-serial-numbers@sha256:c88373f02fb3e8b70fd7ee2a8838b80e04bd7a5f39d5767dccb56f8cbfeb00f9"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshop-serial-numbers@sha256:8c60bbc1b0a328d0cae6a009047e71366e672b95024b923f7f03adb6219e7948"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-09T08:02:49.174421359Z",
+    "build_fecha": "2026-11-17T22:42:26.475096389Z",
     "capas_top": [
       {
-        "digest": "sha256:45cb4434d443de00e9ebccad416d8ec30cb9a9807ffe8b6727b44e59f8ddc514",
-        "tamano": 167129188
+        "digest": "sha256:c110518e068af47c9f6304b62ac532b02e1a736c0cd996f0c87dc77c61d046d0",
+        "tamano": 115034183
       },
       {
-        "digest": "sha256:4feea04c154301db6f4a496efa397b3db96603b1c009c797cfdde77bea8b3287",
-        "tamano": 43229397
+        "digest": "sha256:87aaee1f6667374a3b8e33a252954e01b1fac9749bb0c570022533b9120d13a1",
+        "tamano": 56249638
       },
       {
-        "digest": "sha256:e06d7a61a8c8d9793f8b556da503774f6b636882943f8f78502dacf5baec5c8f",
-        "tamano": 21217828
+        "digest": "sha256:5cfd6315d67d07bf342be573b6c0dce9bd0d95a0b56011d44f9c57aa822efa2c",
+        "tamano": 27263581
       }
     ],
     "clase": "propia",
-    "comprimido": 237627580,
+    "comprimido": 234998119,
     "deployments": [
+      "skirmshop/CronJob/rag-nl-llm-matcher",
+      "skirmshop/CronJob/rag-picqer-price-sync",
       "skirmshop/CronJob/rag-provider-sourcing-backfill",
-      "skirmshop/CronJob/rag-reconcile-summary",
       "skirmshop/CronJob/rag-taxonomy-canonicalize",
       "skirmshop/Deployment/rag-app"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (237627580 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (234998119 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/skirmshopshopifyapp\" en pocharlies-org"
     },
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:36fcf780769001b32daf143ccf37d39f2536f430727dfb0632b4bb6df54ecee5"
+      "@sha256:f2a3199ba3669c4d48b19fa0817de180c450de865ce37440a9e7968f632c3c6b"
     ],
     "repo": "harbor.e-dani.com/homelab/skirmshopshopifyapp",
-    "resuelta": "harbor.e-dani.com/homelab/skirmshopshopifyapp@sha256:1d0faac156ada81575608a0a777f211122277b6e4f0068702ed497d5b4269170"
+    "resuelta": "harbor.e-dani.com/homelab/skirmshopshopifyapp@sha256:f37f7db9113d9ee8ba2a341aeda8bf6a975315eb5de18ad43c586e9c9e6ba1b5"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-09-25T19:52:37.866556653Z",
+    "build_fecha": "2026-11-15T04:51:38.2561271Z",
     "capas_top": [
       {
-        "digest": "sha256:6b37362b3da78869050b894b799ad4df04f1f3b52774087db0d81151570244c8",
-        "tamano": 29830418
+        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
+        "tamano": 29785419
       },
       {
-        "digest": "sha256:66d66e7f4465dc3a8ff2d275c6da32e0d6c6ffb875c0f26ec3f01893a4f26845",
-        "tamano": 27297670
+        "digest": "sha256:b5a454bb770a8f1db3d2c7057fcfa978115967c0276b10c4f6e82cd9bf2d3978",
+        "tamano": 19756991
       },
       {
-        "digest": "sha256:b0dc7f87bef15c2536cb182d6c48b52f90a0522884ec9eb222f833fa97ffebf0",
-        "tamano": 12116303
+        "digest": "sha256:df79d931cd67092e2b8e48d8f6369922571efe4ee0f9af71636ce36600481492",
+        "tamano": 12110931
       }
     ],
     "clase": "propia",
-    "comprimido": 75615542,
+    "comprimido": 72452375,
     "deployments": [
       "stt-mcp/Deployment/stt-mcp"
     ],
-    "descomprimido": 220003328,
+    "descomprimido": 150557184,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/stt-mcp\" en pocharlies-org"
     },
-    "plataforma": "linux/amd64",
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
     "refs": [
-      "@sha256:60c7a3331a31e354b1869e28618ef52d62f0da5ed2dfabb5d2ed129e1c13dae5"
+      "@sha256:70fc15d5469841024212b40b9ab3070767c6d52f17ef974e1dd20c2eea52f10f"
     ],
     "repo": "harbor.e-dani.com/homelab/stt-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/stt-mcp@sha256:fb724c437c0287bba6a14b7df02e171a272735946e9065afd6a5010961b07964"
+    "resuelta": "harbor.e-dani.com/homelab/stt-mcp@sha256:70fc15d5469841024212b40b9ab3070767c6d52f17ef974e1dd20c2eea52f10f"
   },
   {
     "base_digest": {
@@ -3768,15 +3786,15 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-08T22:49:39.843158841Z",
+    "build_fecha": "2026-11-17T22:41:42.55613249Z",
     "capas_top": [
       {
-        "digest": "sha256:ca43a7b33320d2504b4d01f8c6813f166cabb20e480daf6bbacaa5bc4f362c7c",
-        "tamano": 257551682
+        "digest": "sha256:6828c11ac6ef7dbb57dac54989ea13a999b75171c03896ff3c7e56df982877e7",
+        "tamano": 257557594
       },
       {
-        "digest": "sha256:bbe954cef58dec6e83b49136e02a071da9ccba8c390a0023316947795333032e",
-        "tamano": 207268060
+        "digest": "sha256:2eca90a2c73c7813e5a0163792d5302323b56a8cccc530547bb7ed30b996f729",
+        "tamano": 207381602
       },
       {
         "digest": "sha256:ca9b89a81d32ff3832b317dae7c45f25b5eaab04d84d565b3b21b3b5514ebaf9",
@@ -3784,21 +3802,22 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 586264920,
+    "comprimido": 586376123,
     "deployments": [
       "synapse/CronJob/synapse-dlq-archive-purge",
       "synapse/CronJob/synapse-gmail-watch-renew",
       "synapse/CronJob/synapse-outbox-gc",
       "synapse/CronJob/synapse-sre-weekly",
       "synapse/Deployment/synapse-adapter-analisis",
-      "synapse/Deployment/synapse-adapter-brain-summary",
       "synapse/Deployment/synapse-adapter-expenses",
       "synapse/Deployment/synapse-adapter-gmail",
       "synapse/Deployment/synapse-adapter-hindsight",
       "synapse/Deployment/synapse-adapter-imessage",
+      "synapse/Deployment/synapse-adapter-k8s",
       "synapse/Deployment/synapse-adapter-messaging-contact-sync",
       "synapse/Deployment/synapse-adapter-messaging-media",
       "synapse/Deployment/synapse-adapter-messaging-send",
+      "synapse/Deployment/synapse-adapter-ops-explainer",
       "synapse/Deployment/synapse-adapter-ops-explainer-dlq-monitor",
       "synapse/Deployment/synapse-adapter-plaud",
       "synapse/Deployment/synapse-adapter-reminders",
@@ -3818,7 +3837,7 @@
       "synapse/Deployment/synapse-tools-mcp"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (586264920 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (586376123 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/synapse\" en pocharlies-org"
@@ -3828,27 +3847,30 @@
     },
     "refs": [
       "@sha256:09a0b42150dbc4e36fa7dd6ca8082a28bce9477126c509115242a65211561281",
+      "@sha256:196f7497b026e2d2939960c5f7e4646add91c9e8bb85b1de4b2fcfd0d80b41e0",
       "@sha256:1fd8065b70374d4b4c12458028e63a3cd26fd11746fd0921ed62fac2dcb84bc4",
       "@sha256:28694afa4c8049267885330085e047286d3ee4a4d79b1cce153456d98fe55dfa",
       "@sha256:3b156e0154d83c3cea2d19e272d1606cd934cb24175662ff2e32a4fbb3ffb9fa",
-      "@sha256:5ac39a16acc8d742f45b7cc47963f60a553b2dc333c5c65c07417e4b65824dad",
-      "@sha256:6846321c07e67cc4499e0e24eb3af9faeda2b4d05c3ae5483000f16f13402164",
-      "@sha256:6f44246460ea8a37675cc09b8c68c855487d8f36b464ddaa70a8dd8dad877ae3",
+      "@sha256:3f86f56b47815430e66bfeb05d0f62bf591bc752d589b36650ffcdcacd54c49a",
+      "@sha256:43347b57ff71316e447575c3c3fd2dbd63ec5275ef00d062a54bf29ce97a09ba",
+      "@sha256:4c107d8eaa0d612f1dde074fa28bc4463cf5e5f83f108a2ce85d449b8066dee5",
       "@sha256:6f96b07f57331894dcd03d3bf2d30b2ad98cba00eb2484b5638d84d1c5c63f06",
       "@sha256:756db1bd2df92e98a4c273a3bfda4fe1e54b77b2e110a98e7fe322e5f583bf28",
+      "@sha256:810c5cee1a665dfec58526e63c2d4b8641b8a0b056682b3fca97974df445b4f9",
       "@sha256:81913d554f2de96b3e0cac0417380f2d0aa4d29a12f2d3fda87bb5c634fe1e06",
-      "@sha256:9c2b3a695fe15e36c93c8afa4ba120f57f724995b859996b64659558a746b8fc",
+      "@sha256:81a7c6b1002e9adb6f15896892287eeedd12d46e571d04ed8e106fee400dfd0a",
+      "@sha256:8259983c5d6fe6cb22c89e785840baf49ec1321966be0dd889bad99806077960",
       "@sha256:a352330c506953cb81bea822d67620afdf7e0d59794229687cfa548f16347630",
       "@sha256:a4231aa1e5c41134b859e26a7053ffd2033bcc33d44af97babdc224260578436",
       "@sha256:c0102b24d83428d40bd7dd736e995b827c7afac84832ccbfa140a772778a070a",
       "@sha256:c1e6876d7d7b36ea891c9872415203720ecd9a7b6532dc3f956b11616c08d196",
+      "@sha256:c5e34337e0c0d05198819b0bfda602b0f3d5edb7e1e9d752eb3ca5642c2f31e0",
       "@sha256:c81927913abedaf2c1c1095949708c27b25e7ee7847ddf629f6227b5f7a5c17a",
       "@sha256:d1c711eb6bbc224cf7fcd200b66bffdc31bbd638f894628f593df320f8ff8514",
-      "@sha256:d70dffbfc5e2238ea3c2d4c0aa5149078a98b97ed3309192cc01ebededfcb181",
-      "@sha256:db7edb77186ca8ed6b7bec8b26d66f73edf36e9f014647c776b5d63cffff8243"
+      "@sha256:f0b872c3cc99c6ed2c53d4675a226dc438a3cff66626bd4aef84259d27f16acb"
     ],
     "repo": "harbor.e-dani.com/homelab/synapse",
-    "resuelta": "harbor.e-dani.com/homelab/synapse@sha256:db7edb77186ca8ed6b7bec8b26d66f73edf36e9f014647c776b5d63cffff8243"
+    "resuelta": "harbor.e-dani.com/homelab/synapse@sha256:f0b872c3cc99c6ed2c53d4675a226dc438a3cff66626bd4aef84259d27f16acb"
   },
   {
     "base_digest": {
@@ -3928,27 +3950,27 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-06T16:25:25.143502865Z",
+    "build_fecha": "2026-11-15T03:52:06.711270991Z",
     "capas_top": [
       {
-        "digest": "sha256:ecc510c1e359bdc007b39802570bb7e4dec7d6ebccf357c3201a74299113e05e",
-        "tamano": 29843350
+        "digest": "sha256:e95a6c7ea7d49b37920899b023ecd0e32796c976c1748491f76cae53ba86d13a",
+        "tamano": 29785419
       },
       {
-        "digest": "sha256:96e53f35ac4c3ec3afdb0d13f95ff496835ec56c6a52aa4ff75935bffa375d4d",
-        "tamano": 21439711
+        "digest": "sha256:fe1ef0f64415c882a6ba0e7970c45b9d5be3b190413d6327e5351bc6b99186d1",
+        "tamano": 20959729
       },
       {
-        "digest": "sha256:6912e23eb44595b44dc6d9882b34f305ad6f6e9667cec70b13e5dbc4f8cd97f4",
-        "tamano": 12121637
+        "digest": "sha256:83f62cfc7fdd5c2aea5df903abc1a739c130b78991a8ba0427be5125e4e84229",
+        "tamano": 13970212
       }
     ],
     "clase": "propia",
-    "comprimido": 65974449,
+    "comprimido": 78119923,
     "deployments": [
       "teslamate/Deployment/teslamate-mcp"
     ],
-    "descomprimido": 188444672,
+    "descomprimido": 165821952,
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/teslamate-mcp\" en pocharlies-org"
     },
@@ -3956,10 +3978,10 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:25f9acc9f4ee74e56f855d4f0ebfb2aea62c009effb4bd91e7d60f577e574557"
+      "@sha256:5a2a83638eec30fb94309ab2cec9df66e7cbaeb8563bc7beceaa7796de5e056b"
     ],
     "repo": "harbor.e-dani.com/homelab/teslamate-mcp",
-    "resuelta": "harbor.e-dani.com/homelab/teslamate-mcp@sha256:25f9acc9f4ee74e56f855d4f0ebfb2aea62c009effb4bd91e7d60f577e574557"
+    "resuelta": "harbor.e-dani.com/homelab/teslamate-mcp@sha256:5a2a83638eec30fb94309ab2cec9df66e7cbaeb8563bc7beceaa7796de5e056b"
   },
   {
     "base_digest": {
@@ -3997,6 +4019,47 @@
     ],
     "repo": "harbor.e-dani.com/homelab/tomorrowland-app",
     "resuelta": "harbor.e-dani.com/homelab/tomorrowland-app@sha256:5beb7af1733423d2a0ab4d4522855bda211da8108935786f85823a3de36a2725"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-06-10T02:00:09.025614861+02:00",
+    "capas_top": [
+      {
+        "digest": "sha256:bc02db0bf889a2f3afe87bda83393128e17dc29298dc1d9fabf1962d48af0a6b",
+        "tamano": 6294596608
+      },
+      {
+        "digest": "sha256:331ac1685176ff157ee6aab48b48c84f7f4c5842b53053b60c5684f928a86cb4",
+        "tamano": 4714605568
+      },
+      {
+        "digest": "sha256:557d105fc8723855f95ece306f0c82ae021f9ee8cb67951d1962abd5d19985e9",
+        "tamano": 3780159488
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 23208716840,
+    "deployments": [
+      "trellis/Deployment/trellis",
+      "trellis/Deployment/trellis-image-cache",
+      "trellis/Deployment/trellis-multiview"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (23208716840 bytes comprimidos)"
+    },
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/trellis2-api\" en pocharlies-org"
+    },
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
+    "refs": [
+      ":k8s-20260801"
+    ],
+    "repo": "harbor.e-dani.com/homelab/trellis2-api",
+    "resuelta": "harbor.e-dani.com/homelab/trellis2-api@sha256:2ec49e23ad22a3246eb0ca082e57c1bef2a9725cb0b10888b61122671c8b86aa"
   },
   {
     "base_digest": {
@@ -4040,36 +4103,36 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-10-08T16:14:20.710347671Z",
+    "build_fecha": "2026-11-15T17:07:54.674534879Z",
     "capas_top": [
       {
-        "digest": "sha256:de58d36eafdb3fac957078d9b6bc29e8d085dd013621fa889395d8f4bed41167",
-        "tamano": 263088300
+        "digest": "sha256:9b316fb03483a183a63cb57c118e14550961a8c81f7156236a4922e0f26e22e1",
+        "tamano": 263615396
       },
       {
-        "digest": "sha256:70d6d774f443c6f08734a272bd0b1df64621c7585a4b91271546ee71404a10a9",
-        "tamano": 165982839
+        "digest": "sha256:0ce7016524c81c2475fc71f668ad852495f2ffaf2dc1baf5c96f2754ab44227b",
+        "tamano": 165984375
       },
       {
-        "digest": "sha256:42a33b4b21a351092c099d53785395be18b39a6ece416b9fbc46d1564150541b",
-        "tamano": 79367745
+        "digest": "sha256:2a5b731020b9ce61e2d0fa2690752068baadb1c7da0630eecaa766bdea09549a",
+        "tamano": 79373801
       }
     ],
     "clase": "propia",
-    "comprimido": 554039456,
+    "comprimido": 554582919,
     "deployments": [
       "traefik-edge/Deployment/uriel-poster"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (554039456 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (554582919 bytes comprimidos)"
     },
     "dockerfile": "pocharlies-org/dgx-infra:Dockerfile",
     "plataforma": "linux/amd64",
     "refs": [
-      "@sha256:2c7d502cfc2c2811d3f3d882aa06fc075d7d525208b40e0de6f29a8283c91121"
+      "@sha256:b9b89e34a2714cc4af8a2de38920a679c0d9c25014424e2ab3b20253706e7b33"
     ],
     "repo": "harbor.e-dani.com/homelab/uriel-poster",
-    "resuelta": "harbor.e-dani.com/homelab/uriel-poster@sha256:a1f11f8ca1f6c3877784096558330e4a8b26d2b2c51c4ca450262ca343df9121",
+    "resuelta": "harbor.e-dani.com/homelab/uriel-poster@sha256:642bf151b7a62081c8adceafe6f913eb5350ccaf57fd00f8a39d4d283e4a41aa",
     "workflow": "pocharlies-org/dgx-infra:.github/workflows/build-uriel-poster.yml"
   },
   {
@@ -4141,6 +4204,41 @@
     ],
     "repo": "harbor.e-dani.com/homelab/uriel-proposal-site",
     "resuelta": "harbor.e-dani.com/homelab/uriel-proposal-site@sha256:0cfcffe0df4111bf6137c02ac7e925d14260c98f26ad2d44516fa47945bd4067"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-17T12:19:22.197610364Z",
+    "capas_top": [
+      {
+        "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+        "tamano": 29856132
+      },
+      {
+        "digest": "sha256:8fdefab8fee3005a966e4c3b895fe4d76c2370fdbd45592172890b046a06b7b2",
+        "tamano": 20625015
+      },
+      {
+        "digest": "sha256:054299c683de62cd20a378ee5a5458f40081cc4e3a7409339fbc0aaa02f23096",
+        "tamano": 13163035
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 77060571,
+    "deployments": [
+      "databases/Deployment/shared-valkey-master-labeler",
+      "skirmshop/Deployment/labels-valkey-master-labeler"
+    ],
+    "descomprimido": 237493760,
+    "dockerfile": "pocharlies-org/k8s-infra-pocharlies:Dockerfile",
+    "plataforma": "linux/amd64",
+    "refs": [
+      "@sha256:6b0ac2028de1d6e044a64793d5af08838a989e806a63c362adb69541a61b0188"
+    ],
+    "repo": "harbor.e-dani.com/homelab/valkey-master-labeler",
+    "resuelta": "harbor.e-dani.com/homelab/valkey-master-labeler@sha256:8f4cf4f3ae1c1631475bdd888ccf9c2a44c4eeffb14b87261ec7cf4f6c5d4309",
+    "workflow": "pocharlies-org/k8s-infra-pocharlies:.github/workflows/build-valkey-master-labeler.yml"
   },
   {
     "base_digest": {
@@ -4255,15 +4353,15 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-10T04:21:36.282275334Z",
+    "build_fecha": "2026-11-13T19:09:15.262239309Z",
     "capas_top": [
       {
-        "digest": "sha256:e650eaf7b0d32a4554ca5596bb1e6f5401a9b3440ea59fe8323b9f672aedc953",
-        "tamano": 101320192
+        "digest": "sha256:56e1549b33f64282e17b90e0dea635609f5222e0ce0844a58b08effaf2945706",
+        "tamano": 80320050
       },
       {
-        "digest": "sha256:5d0c6c5710f1cdc2a30a47c236d5a75ab16d2785fc0aed022b46273ffafd13c6",
-        "tamano": 49885577
+        "digest": "sha256:0c4023204e5b4bcd551170279c40ff58285cc8ea87ddf9ff25cb3713e6ecda79",
+        "tamano": 49903774
       },
       {
         "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
@@ -4271,12 +4369,12 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 196176414,
+    "comprimido": 175201245,
     "deployments": [
       "whatsapp-mcp/Deployment/correo-bridge"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (196176414 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (175201245 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-correo-bridge\" en pocharlies-org"
@@ -4285,10 +4383,10 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:61e25d1a83440bf1af1dfe7a7b1e3b0edb3ad92068070fe302f84fe358b124d2"
+      "@sha256:d3db7f7b7e4dfb355adc39b5ebb3f558cdca0176df8fbdf5cecc37c2eb9ba457"
     ],
     "repo": "harbor.e-dani.com/homelab/whatsappmcp-correo-bridge",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-correo-bridge@sha256:61e25d1a83440bf1af1dfe7a7b1e3b0edb3ad92068070fe302f84fe358b124d2"
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-correo-bridge@sha256:d3db7f7b7e4dfb355adc39b5ebb3f558cdca0176df8fbdf5cecc37c2eb9ba457"
   },
   {
     "base_digest": {
@@ -4331,11 +4429,94 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-06T04:03:00.681075564Z",
+    "build_fecha": "2026-11-17T18:09:18.993968505Z",
     "capas_top": [
       {
-        "digest": "sha256:caa43d2388f5c94d4316156c2a22fcfb5dc91adb6065d6e399a89dde3078912b",
-        "tamano": 103413745
+        "digest": "sha256:6c715bfae937f299d6d91c5b7125c53917b8bd8d6ece713ae5df50c03d35323e",
+        "tamano": 123121166
+      },
+      {
+        "digest": "sha256:0c4023204e5b4bcd551170279c40ff58285cc8ea87ddf9ff25cb3713e6ecda79",
+        "tamano": 49903774
+      },
+      {
+        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+        "tamano": 28247982
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 218356843,
+    "deployments": [
+      "whatsapp-mcp/CronJob/whatsapp-voice-backfill",
+      "whatsapp-mcp/Deployment/brain-windows",
+      "whatsapp-mcp/Deployment/mcp-server",
+      "whatsapp-mcp/Deployment/mcp-sse",
+      "whatsapp-mcp/Deployment/social-api",
+      "whatsapp-mcp/Deployment/whatsapp-voice-transcribe"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (218356843 bytes comprimidos)"
+    },
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-mcp-server\" en pocharlies-org"
+    },
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
+    "refs": [
+      "@sha256:9ea708f3798c5fe69fbf986064cc6eba7b358eb51ee8db1f440c51a83b3835d2"
+    ],
+    "repo": "harbor.e-dani.com/homelab/whatsappmcp-mcp-server",
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-mcp-server@sha256:9ea708f3798c5fe69fbf986064cc6eba7b358eb51ee8db1f440c51a83b3835d2"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-19T17:23:49.853515889Z",
+    "capas_top": [
+      {
+        "digest": "sha256:1d32b9516e809b16a39d1737a71bfe14a00e015349a5ca068b02d8ef2b88a668",
+        "tamano": 137835905
+      },
+      {
+        "digest": "sha256:57fd8d2eba14b80606c826ac999c6b6d17924157b8f7108e4cb27f86b8ca854a",
+        "tamano": 98691979
+      },
+      {
+        "digest": "sha256:0c4023204e5b4bcd551170279c40ff58285cc8ea87ddf9ff25cb3713e6ecda79",
+        "tamano": 49903774
+      }
+    ],
+    "clase": "propia",
+    "comprimido": 317089687,
+    "deployments": [
+      "whatsapp-mcp/CronJob/sauvage-verificacion-diaria"
+    ],
+    "descomprimido": {
+      "sin_dato": "omitido por tamano (317089687 bytes comprimidos)"
+    },
+    "dockerfile": {
+      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-sauvage-verificacion\" en pocharlies-org"
+    },
+    "plataforma": {
+      "sin_dato": "manifiesto simple sin indice OCI"
+    },
+    "refs": [
+      "@sha256:58c55fa7456b514004fa958f86da6d67ff1a2c6dfb3619bd0075ec827c5ad634"
+    ],
+    "repo": "harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion",
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion@sha256:58c55fa7456b514004fa958f86da6d67ff1a2c6dfb3619bd0075ec827c5ad634"
+  },
+  {
+    "base_digest": {
+      "sin_dato": "sin Dockerfile que leer"
+    },
+    "build_fecha": "2026-11-11T17:05:44.519013008Z",
+    "capas_top": [
+      {
+        "digest": "sha256:693bb12cb1c2aef8ea64083aec8a7199b359054c8a345b11b2d1dd1d3a0d31a9",
+        "tamano": 91577381
       },
       {
         "digest": "sha256:5d0c6c5710f1cdc2a30a47c236d5a75ab16d2785fc0aed022b46273ffafd13c6",
@@ -4347,97 +4528,14 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 198638663,
-    "deployments": [
-      "whatsapp-mcp/CronJob/brain-windows",
-      "whatsapp-mcp/CronJob/whatsapp-voice-backfill",
-      "whatsapp-mcp/CronJob/whatsapp-voice-transcribe",
-      "whatsapp-mcp/Deployment/mcp-server",
-      "whatsapp-mcp/Deployment/mcp-sse",
-      "whatsapp-mcp/Deployment/social-api"
-    ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (198638663 bytes comprimidos)"
-    },
-    "dockerfile": {
-      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-mcp-server\" en pocharlies-org"
-    },
-    "plataforma": {
-      "sin_dato": "manifiesto simple sin indice OCI"
-    },
-    "refs": [
-      "@sha256:bdcb5e6c8dc5fedb3eb7874defc74db7512aa3fac6e8e8c865c5d83b07f04b31"
-    ],
-    "repo": "harbor.e-dani.com/homelab/whatsappmcp-mcp-server",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-mcp-server@sha256:bdcb5e6c8dc5fedb3eb7874defc74db7512aa3fac6e8e8c865c5d83b07f04b31"
-  },
-  {
-    "base_digest": {
-      "sin_dato": "sin Dockerfile que leer"
-    },
-    "build_fecha": "2026-11-04T10:06:21.693106282Z",
-    "capas_top": [
-      {
-        "digest": "sha256:48a727a68074c5e41f948b1c4269d50b3ffa097ab691b1f702023cc6fe749886",
-        "tamano": 137835673
-      },
-      {
-        "digest": "sha256:564975570277cd9298106fbdfcc1969fd1d5b50e26cce478fad4eba7bab8a8d2",
-        "tamano": 79230828
-      },
-      {
-        "digest": "sha256:df736340692d217b57cd447c94f978f9a91ce3e8805b225e78374eae3aff864c",
-        "tamano": 49885461
-      }
-    ],
-    "clase": "propia",
-    "comprimido": 298479836,
-    "deployments": [
-      "whatsapp-mcp/CronJob/sauvage-verificacion-diaria"
-    ],
-    "descomprimido": {
-      "sin_dato": "omitido por tamano (298479836 bytes comprimidos)"
-    },
-    "dockerfile": {
-      "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-sauvage-verificacion\" en pocharlies-org"
-    },
-    "plataforma": {
-      "sin_dato": "manifiesto simple sin indice OCI"
-    },
-    "refs": [
-      "@sha256:431e15f132cbddb1128923c8c13c482bfc204ffea6a9e153461422c6e051feb6"
-    ],
-    "repo": "harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-sauvage-verificacion@sha256:431e15f132cbddb1128923c8c13c482bfc204ffea6a9e153461422c6e051feb6"
-  },
-  {
-    "base_digest": {
-      "sin_dato": "sin Dockerfile que leer"
-    },
-    "build_fecha": "2026-09-25T12:55:42.791370731Z",
-    "capas_top": [
-      {
-        "digest": "sha256:a7027c17fd52bb25b3bb927667fd52926a7a24f9b2884886b64bfcfe3f34a814",
-        "tamano": 87164872
-      },
-      {
-        "digest": "sha256:61592f5b60306b96e5208206668cdf0fa62d3cda3a3baeed26efdcd1a21aaba5",
-        "tamano": 49837024
-      },
-      {
-        "digest": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150",
-        "tamano": 28238443
-      }
-    ],
-    "clase": "propia",
-    "comprimido": 182782833,
+    "comprimido": 186454151,
     "deployments": [
       "whatsapp-mcp/Deployment/telegram-connector",
       "whatsapp-mcp/Deployment/telegram-connector-professional",
       "whatsapp-mcp/Deployment/telegram-pairing"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (182782833 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (186454151 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-telegram-connector\" en pocharlies-org"
@@ -4446,21 +4544,21 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:6c1bc26117148ff686c34258d61a8f461293f56a83e2ce5c19687fbc85c7ce5b",
-      "@sha256:8594502b214dd8c2e44ab602c88c15e952402831a96e01b3eacc2292ccef6ae8"
+      "@sha256:8594502b214dd8c2e44ab602c88c15e952402831a96e01b3eacc2292ccef6ae8",
+      "@sha256:b81bbc6b514da5c46ae68c234af5b939d8efe046efcddcb7921160ce316cc2a3"
     ],
     "repo": "harbor.e-dani.com/homelab/whatsappmcp-telegram-connector",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-telegram-connector@sha256:8594502b214dd8c2e44ab602c88c15e952402831a96e01b3eacc2292ccef6ae8"
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-telegram-connector@sha256:b81bbc6b514da5c46ae68c234af5b939d8efe046efcddcb7921160ce316cc2a3"
   },
   {
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-07T02:24:40.822397332Z",
+    "build_fecha": "2026-11-17T12:03:40.312137117Z",
     "capas_top": [
       {
-        "digest": "sha256:6ce82072d38365684c71a5589a918c352de021653e0cd5d730d387342bcde8a7",
-        "tamano": 155943424
+        "digest": "sha256:5831b36c23481175c52bfaf98da1691dab86c6411d800beed2e5f55edcfe266b",
+        "tamano": 160057794
       },
       {
         "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
@@ -4472,13 +4570,13 @@
       }
     ],
     "clase": "propia",
-    "comprimido": 199238414,
+    "comprimido": 203488932,
     "deployments": [
       "whatsapp-mcp/Deployment/telegram-sync",
       "whatsapp-mcp/Deployment/telegram-sync-professional"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (199238414 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (203488932 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-telegram-sync\" en pocharlies-org"
@@ -4487,10 +4585,10 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:ef67824334fcee2256a49a8184e851ff9cab7b2f1a602f202887e3e775f8f9c1"
+      "@sha256:ee38739842662eedb7f5a05d0c8829ae5e7e26a55c209f2c31df4d191d24cc9e"
     ],
     "repo": "harbor.e-dani.com/homelab/whatsappmcp-telegram-sync",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-telegram-sync@sha256:ef67824334fcee2256a49a8184e851ff9cab7b2f1a602f202887e3e775f8f9c1"
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-telegram-sync@sha256:ee38739842662eedb7f5a05d0c8829ae5e7e26a55c209f2c31df4d191d24cc9e"
   },
   {
     "base_digest": {
@@ -4535,23 +4633,23 @@
     "base_digest": {
       "sin_dato": "sin Dockerfile que leer"
     },
-    "build_fecha": "2026-11-08T15:47:56.412252392Z",
+    "build_fecha": "2026-10-02T03:15:06.034915905Z",
     "capas_top": [
       {
-        "digest": "sha256:bfb7ea2f27e320f004d174f79d4e9e6580f825e0b1e15236955f5629e48d61fd",
-        "tamano": 101321985
+        "digest": "sha256:57fa3470bc8317e5e6cf35fcfca09a1f7663fd9a12280a45ea0ec2d76288913d",
+        "tamano": 121134259
       },
       {
-        "digest": "sha256:5d0c6c5710f1cdc2a30a47c236d5a75ab16d2785fc0aed022b46273ffafd13c6",
-        "tamano": 49885577
+        "digest": "sha256:61592f5b60306b96e5208206668cdf0fa62d3cda3a3baeed26efdcd1a21aaba5",
+        "tamano": 49837024
       },
       {
-        "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
-        "tamano": 28247982
+        "digest": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150",
+        "tamano": 28238443
       }
     ],
     "clase": "propia",
-    "comprimido": 196805974,
+    "comprimido": 217125703,
     "deployments": [
       "whatsapp-mcp/Deployment/whatsapp-connector",
       "whatsapp-mcp/Deployment/whatsapp-connector-leila",
@@ -4559,7 +4657,7 @@
       "whatsapp-mcp/Deployment/whatsapp-pairing"
     ],
     "descomprimido": {
-      "sin_dato": "omitido por tamano (196805974 bytes comprimidos)"
+      "sin_dato": "omitido por tamano (217125703 bytes comprimidos)"
     },
     "dockerfile": {
       "sin_dato": "sin workflow de build que declare \"IMAGE: homelab/whatsappmcp-whatsapp-connector\" en pocharlies-org"
@@ -4568,13 +4666,11 @@
       "sin_dato": "manifiesto simple sin indice OCI"
     },
     "refs": [
-      "@sha256:1a9634a83bc98e87e23cbe3eb7f7091125617e05766d2fa1e431415a1f58c810",
-      "@sha256:b6fe5bd409028b409d479d1dd25cf964d2c4a850ce16398980b64e9904175e29",
-      "@sha256:d2aba25a250beb9dc9383d8d4d03c42e8cc335da3343245d590ad222417ddb75",
-      "@sha256:ed1de167f7b532b5dcdb298d5fd5a4656f239f323e90353a76742eec1ec2902d"
+      "@sha256:25cbb9e32a1c637390569a378069bece0c637420fa0f379c3f31ce836eb28935",
+      "@sha256:b6fe5bd409028b409d479d1dd25cf964d2c4a850ce16398980b64e9904175e29"
     ],
     "repo": "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-connector",
-    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-connector@sha256:ed1de167f7b532b5dcdb298d5fd5a4656f239f323e90353a76742eec1ec2902d"
+    "resuelta": "harbor.e-dani.com/homelab/whatsappmcp-whatsapp-connector@sha256:b6fe5bd409028b409d479d1dd25cf964d2c4a850ce16398980b64e9904175e29"
   },
   {
     "base_digest": {

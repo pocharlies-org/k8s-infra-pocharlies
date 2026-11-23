@@ -1,0 +1,136 @@
+# Bootstrap del índice (SKIRM-590). Determinista y en git, idempotente: deja el
+# usuario `company` y el índice `company/internal` con la política fijada por el
+# architect — lectura anónima, escritura solo `@company`, y SIN bases: el índice
+# no es espejo del PyPI público (los paquetes públicos los resuelve uv directo
+# desde pypi.org). Además BORRA el índice mirror `root/pypi` que `devpi-init`
+# crea por defecto (criterio A3): mientras existe, el server se trae la lista de
+# proyectos de pypi.org y la indexa (medido en el primer arranque: 946 708
+# proyectos encolados). Nada del contrato lo referencia.
+#
+# El server fija la contraseña de root en su primer init (entrypoint de la
+# imagen, desde el mismo ExternalSecret), así que el Job espera a que la API
+# responda y entra con ella. No imprime secretos. Sin ttlSecondsAfterFinished:
+# se lo pone la Kyverno job-ttl-default.
+#
+# Si el PVC se perdiera, borrar el Job y dejar que ArgoCD lo relance: vuelve a
+# crear usuario e índice contra el server recién inicializado.
+#
+# `sync-options: Force=true,Replace=true` (ArgoCD): el template de un Job es
+# inmutable y la app k8s-infra tiene prune=false, así que un `apply` normal de un
+# cambio de este template falla ("field is immutable"); `Replace` a secas es un
+# PUT que el API también rechaza. Con Force+Replace es el propio ArgoCD quien
+# borra y recrea el Job de forma declarativa al sincronizar — sin mutación
+# imperativa contra el vivo. Es seguro aquí porque el Job es idempotente.
+#
+# Onda 1 + cota de 10 min (SC-6368, medido el 23-11): en la onda 0 el Job
+# competía con los Deployments por el mismo sync y su `until` era infinito. Con
+# devpi en crash-loop (SC-6367: secreto en la raíz group-writable del emptyDir)
+# el Job nunca terminaba, la operación de ArgoCD quedaba «waiting for healthy
+# state of batch/Job/devpi-bootstrap» y el fix del Deployment NO se aplicaba:
+# deadlock — el bootstrap esperaba a un server que solo el nuevo spec podía
+# arreglar. En onda 1 el Job corre después de que primario y réplicas estén
+# sanos, y `activeDeadlineSeconds` (la cota de un run colgado, no un
+# presupuesto de trabajo — patrón de platform/guarda-pins/migrar-job.yaml)
+# corta cualquier espera eterna: la operación termina y lo que toque se puede
+# sincronizar.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devpi-bootstrap
+  namespace: devpi
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # SC-6368: correr después de que los Deployments (onda 0) estén sanos.
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  backoffLimit: 12
+  # SC-6368: cota de un run colgado esperando la API; sin esto, devpi caído
+  # bloqueaba la operación de sync entera para siempre.
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devpi-bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: docker.io/jonasal/devpi-client:7.3.0@sha256:5988832d86d48b63934bc408c8eea210bdcb97b64de75fbc595e7900d2974fe6
+          # Ojo: `command` pisa el ENTRYPOINT de la imagen (que hacía
+          # `devpi use $DEVPI_URL` antes del exec), así que el script hace su
+          # propio `devpi use`. La URL va sin índice: `root/pypi` se borra más
+          # abajo y una URL con índice inexistente rompería el `devpi use`.
+          env:
+            - name: DEVPI_URL
+              value: http://devpi/
+            - name: HOME
+              value: /tmp
+            - name: DEVPI_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: devpi-credentials
+                  key: root_password
+            - name: DEVPI_PUBLISH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: devpi-credentials
+                  key: publish_token
+          command:
+            - /bin/sh
+            - -eu
+            - -c
+            - |
+              until devpi use "$DEVPI_URL" >/dev/null 2>&1 && devpi login root --password="$DEVPI_ROOT_PASSWORD" >/dev/null 2>&1; do
+                echo "esperando la API de devpi..."
+                sleep 5
+              done
+              if devpi user -c company password="$DEVPI_PUBLISH_TOKEN" >/dev/null 2>&1; then
+                echo "usuario company creado"
+              else
+                echo "usuario company ya existía (se conserva su contraseña)"
+              fi
+              if devpi index -c company/internal type=stage >/dev/null 2>&1; then
+                echo "índice company/internal creado (sin bases: sin mirror del PyPI público)"
+              else
+                echo "índice company/internal ya existía"
+              fi
+              # Política en devpi-server 6.x (SC-6258, medido con 6.21.0 +
+              # cliente 7.3.0): las claves `read=`/`write=` de devpi <=5 ya no
+              # existen en el indexconfig (el PATCH responde 400 «unexpected
+              # keyword arguments»). La lectura anónima es el comportamiento por
+              # defecto del server sin plugin que la restrinja (pkg_read =
+              # :ANONYMOUS: + root) y la escritura es el ACL de subida: se fija
+              # `acl_upload=company` explícito, sin depender del default.
+              devpi index company/internal acl_upload=company >/dev/null
+              echo "política aplicada: acl_upload=company (lectura anónima: default del server)"
+              # A3: fuera el mirror por defecto del PyPI público (ver cabecera).
+              # `--delete` (el cliente 7.3.0 no reconoce `-d`: usage error exit 2)
+              # y antes hay que volver volatile el mirror, que el server no deja
+              # borrar non-volatile (403, medido).
+              if devpi index root/pypi volatile=True >/dev/null 2>&1; then
+                devpi index --delete -y root/pypi >/dev/null && echo "mirror root/pypi eliminado"
+              else
+                echo "root/pypi ya no existía"
+              fi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

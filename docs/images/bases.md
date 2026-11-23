@@ -23,10 +23,9 @@ creative cerrada) y el builder de atlantic libre.
   - harbor.e-dani.com/homelab/correo-telegram
   - harbor.e-dani.com/homelab/dgx-dashboard-backend
   - harbor.e-dani.com/homelab/dgx-messages
-  - harbor.e-dani.com/homelab/offers-mcp
 
-Pila python: las cinco consumidoras construyen hoy `FROM python:3.12-slim` (tres
-de ellas ya fijadas por digest en su Dockerfile). La base añade `uv==0.13.7`
+Pila python: las cuatro consumidoras construyen hoy `FROM python:3.12-slim` (algunas
+ya fijadas por digest en su Dockerfile). La base añade `uv==0.13.7`
 (instalado por PyPI, versión fijada).
 
 ## base-node
