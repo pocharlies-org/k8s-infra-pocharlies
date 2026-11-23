@@ -21,6 +21,18 @@
 # PUT que el API también rechaza. Con Force+Replace es el propio ArgoCD quien
 # borra y recrea el Job de forma declarativa al sincronizar — sin mutación
 # imperativa contra el vivo. Es seguro aquí porque el Job es idempotente.
+#
+# Onda 1 + cota de 10 min (SC-6368, medido el 23-11): en la onda 0 el Job
+# competía con los Deployments por el mismo sync y su `until` era infinito. Con
+# devpi en crash-loop (SC-6367: secreto en la raíz group-writable del emptyDir)
+# el Job nunca terminaba, la operación de ArgoCD quedaba «waiting for healthy
+# state of batch/Job/devpi-bootstrap» y el fix del Deployment NO se aplicaba:
+# deadlock — el bootstrap esperaba a un server que solo el nuevo spec podía
+# arreglar. En onda 1 el Job corre después de que primario y réplicas estén
+# sanos, y `activeDeadlineSeconds` (la cota de un run colgado, no un
+# presupuesto de trabajo — patrón de platform/guarda-pins/migrar-job.yaml)
+# corta cualquier espera eterna: la operación termina y lo que toque se puede
+# sincronizar.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,10 +40,15 @@ metadata:
   namespace: devpi
   annotations:
     argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # SC-6368: correr después de que los Deployments (onda 0) estén sanos.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name: devpi
 spec:
   backoffLimit: 12
+  # SC-6368: cota de un run colgado esperando la API; sin esto, devpi caído
+  # bloqueaba la operación de sync entera para siempre.
+  activeDeadlineSeconds: 600
   template:
     metadata:
       labels:
