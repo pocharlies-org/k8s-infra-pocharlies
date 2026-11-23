@@ -42,7 +42,14 @@ data:
     # Rootfs de solo lectura: todo lo escribible va a los emptyDir montados.
     # (request_body_temp_dir: la directiva de squid 6 apunta por defecto a
     # /var/spool/squid, que es el emptyDir montado más abajo.)
-    pid_filename /tmp/squid.pid
+    #
+    # Sin fichero de pid (SC-6397): squid corre como PID 1 y /tmp es un emptyDir
+    # cuyo ciclo de vida es el pod, no el contenedor. Tras cualquier reinicio el
+    # /tmp/squid.pid viejo apunta a un PID 1 vivo —el propio squid nuevo— y
+    # ThrowIfAlreadyRunningWith suelta FATAL «already running»: CrashLoopBackOff
+    # permanente. Nadie usa el pid aquí (probes tcpSocket, parada por SIGTERM a
+    # PID 1, sin `squid -k`), así que `none` quita la comprobación que lo rompe.
+    pid_filename none
     coredump_dir /tmp
     access_log none
     cache_log /dev/stderr
