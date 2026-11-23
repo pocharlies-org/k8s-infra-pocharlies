@@ -120,9 +120,10 @@ spec:
             tcpSocket: { port: http }
             initialDelaySeconds: 15
             periodSeconds: 30
+          # Mismo motivo que en el primario (deployment.yaml): 512 MiB de Argon2 por clave y petición simultánea.
           resources:
             requests: { cpu: 100m, memory: 256Mi }
-            limits: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: 500m, memory: 2Gi }
           volumeMounts:
             - name: data
               mountPath: /var/lib/devpi
