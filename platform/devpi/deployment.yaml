@@ -71,10 +71,14 @@ spec:
                   app.kubernetes.io/part-of: devpi
               topologyKey: kubernetes.io/hostname
       initContainers:
-        # devpi exige que el fichero del secreto sea 0600; un volumen Secret con fsGroup queda 0440.
+        # devpi exige el fichero del secreto 0600 Y su carpeta sin bit de escritura de grupo
+        # u otros (medido en devpi-server 6.21.0, config.py get_validated_secret). Ni el fichero
+        # ni la carpeta del volumen Secret valen (con fsGroup queda 0440, y el directorio del
+        # volumen es group-writable); y el emptyDir lo crea el kubelet 0777. Por eso el secreto
+        # se copia dentro de un subdirectorio propio 0700, no en la raíz del emptyDir.
         - name: secreto
           image: docker.io/jonasal/devpi-server:6.21.0@sha256:7e34fc995b2bd7ed2a21d0377d792adfa4d52c3342ca247e21b737641f3606e4
-          command: ["sh", "-c", "umask 077 && cp /run/secrets/devpi/replication_secret /run/devpi/secret"]
+          command: ["sh", "-c", "umask 077 && mkdir -p -m 700 /run/devpi/private && cp /run/secrets/devpi/replication_secret /run/devpi/private/secret"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -103,7 +107,7 @@ spec:
               value: /var/lib/devpi
             # El secreto compartido con el que primario y réplicas se autentican entre sí.
             - name: DEVPISERVER_SECRETFILE
-              value: /run/devpi/secret
+              value: /run/devpi/private/secret
             - name: DEVPI_PASSWORD
               valueFrom:
                 secretKeyRef:
