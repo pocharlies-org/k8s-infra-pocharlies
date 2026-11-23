@@ -32,7 +32,14 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 30
+      # SC-6374 (23-11): con el scrub md3 de sauvage en marcha, crear el sandbox del pod
+      # llevó 25-45 s y el Job moría por DeadlineExceeded ANTES de ejecutar nc: falsos
+      # positivos de K8sCronJobFailed con la ruta sauvage↔ks5 sana (Endpoint, DNS y TCP
+      # medidos ok). El veredicto real lo da `nc -z -w 5`, que sale solo en pocos
+      # segundos tanto en ok como en fallo; el deadline solo cubre el arranque del
+      # pod, así que 120 no retrasa la detección de una ruta rota: deja de señalar
+      # nodos lentos como cortes de conectividad.
+      activeDeadlineSeconds: 120
       ttlSecondsAfterFinished: 600
       template:
         metadata:
