@@ -136,6 +136,7 @@ spec:
               ALTER ROLE sauvage_bot SET idle_session_timeout = '15min';
               ALTER ROLE dgxbench SET idle_session_timeout = '15min';
               ALTER ROLE company_crm SET idle_session_timeout = '15min';
+              ALTER ROLE company SET idle_session_timeout = '15min';
               ALTER ROLE catalogo SET idle_session_timeout = '15min';
               ALTER ROLE analisis SET idle_session_timeout = '15min';
               ALTER ROLE opencode_archive SET idle_session_timeout = '15min';
@@ -170,7 +171,7 @@ spec:
                   'skirmbooks_ui_app', 'hindsight', 'litellm',
                   'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
                   'aurora', 'horarios', 'sauvage_bot', 'dgxbench',
-                  'company_crm', 'catalogo', 'analisis', 'opencode_archive',
+                  'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
                   'synapse_sre_reporter', 'synapse_agent_m2m']);
           resources:
             requests: { cpu: 10m, memory: 32Mi }

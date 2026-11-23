@@ -425,6 +425,23 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
+# SC-6148: base del supervisor de la compañía (dueño rol company). Las tablas
+# NO las declara este CRD: las crea el migrador del runtime al arrancar.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: company
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: company
+  owner: company
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
+---
 # SC-2495: base del planificador de AlphaLink (horarios-alphalink). El esquema de
 # tablas NO lo declara este CRD (CNPG solo crea la base): lo crea la propia app al
 # arrancar con `create table if not exists`, como dgxbench.

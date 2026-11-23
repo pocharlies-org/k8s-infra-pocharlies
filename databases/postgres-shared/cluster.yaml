@@ -398,6 +398,17 @@ spec:
         passwordSecret:
           name: company-crm-db-credentials
         comment: "CRM propio de la compañía (repo pocharlies-org/company-crm); dueño de la base company_crm"
+      # SC-6148: rol del supervisor de la compañía (base company, dueño de su
+      # esquema). La contraseña la posee 1Password (item
+      # `company-supervisor-db`); CNPG la reconcilia desde
+      # company-db-credentials (ExternalSecret en app-credentials.yaml, wave
+      # -1), que debe estar materializado ANTES de aplicar este spec.
+      - name: company
+        ensure: present
+        login: true
+        passwordSecret:
+          name: company-db-credentials
+        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148."
       # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
       # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
       # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la

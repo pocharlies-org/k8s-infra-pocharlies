@@ -208,7 +208,7 @@ spec:
           expr: >-
             max by (usename) (
               cnpg_idle_sessions_oldest_seconds{namespace="databases",
-                usename=~"keep|keycloak|teslamate|langfuse|skirmbooks_ui_app|hindsight|litellm|synapse_engine|synapse_gateway|n8n|n8n_stg|aurora|horarios|sauvage_bot|dgxbench|company_crm|catalogo|analisis|opencode_archive|synapse_sre_m2m|synapse_sre_reporter|synapse_agent_m2m"}
+                usename=~"keep|keycloak|teslamate|langfuse|skirmbooks_ui_app|hindsight|litellm|synapse_engine|synapse_gateway|n8n|n8n_stg|aurora|horarios|sauvage_bot|dgxbench|company_crm|company|catalogo|analisis|opencode_archive|synapse_sre_m2m|synapse_sre_reporter|synapse_agent_m2m"}
             ) > 1800
           for: 5m
           labels:
