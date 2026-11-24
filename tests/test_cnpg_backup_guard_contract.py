@@ -14,10 +14,15 @@ de pega (reloj fijo al 2026-11-24T10:00:00Z, la hora real del incidente) sobre f
 * tope de intentos: 4 guard-retry fallados de hoy (conservados, no borrados) -> no se crea el 5º;
 * housekeeping: el failed de ayer sí se borra (solo los de hoy son memoria de intentos);
 * RBAC: el Role da get/list sobre scheduledbackups (sin eso el catch-up sería sordo).
+
+SC-6496 añade además el contrato de la otra mitad del par guardia-alerta: las reglas de copia de
+databases/postgres-shared/monitoring.yaml deben tolerar el reintento (umbral de staleness que cubra
+copia + reintento, regla failed con for mayor, absent como regla propia). Ver TestBackupAlertContract.
 """
 
 import os
 import pathlib
+import re
 import stat
 import subprocess
 import tempfile
@@ -28,6 +33,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GUARD = ROOT / "databases" / "postgres-shared" / "stuck-backup-guard.yaml"
+MONITORING = ROOT / "databases" / "postgres-shared" / "monitoring.yaml"
 
 # Reloj fijo: el tick de las 10:00 del 24-11, con el daily fallido a las 09:06 y nacido a las 05:00.
 NOW_EPOCH = int(datetime(2026, 11, 24, 10, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -218,6 +224,84 @@ class TestGuardBehaviour(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertEqual(deleted, ["guard-retry-postgres-shared-nvme-202611230515"])
         self.assertEqual(applied, [], out)
+
+
+DURATION_UNIT = {"s": 1, "m": 60, "h": 3600}
+
+
+def duration_seconds(value):
+    m = re.fullmatch(r"(\d+)([smh])", str(value))
+    assert m, f"duration no entendible: {value!r}"
+    return int(m.group(1)) * DURATION_UNIT[m.group(2)]
+
+
+def backup_alert_rules():
+    """{alertname: rule} de todas las reglas de VMRule en monitoring.yaml."""
+    docs = [d for d in yaml.safe_load_all(MONITORING.read_text()) if d]
+    rules = {}
+    for doc in docs:
+        for group in doc.get("spec", {}).get("groups", []):
+            for rule in group.get("rules", []):
+                if "alert" in rule:
+                    rules[rule["alert"]] = rule
+    return rules
+
+
+class TestBackupAlertContract(unittest.TestCase):
+    """SC-6496: la alerta de copia debe esperar al reintento de la guardia.
+
+    Semántica medida el 24-11-2026 contra el clúster: last_available_backup_timestamp es el
+    STOPPEDAT de la última copia buena (startedAt 05:00:00Z / stoppedAt 09:31:08Z del daily del
+    23-11 vs métrica 1795426268 = 09:31:08Z), con copias de ~4,5 h. Por eso:
+    * el umbral no puede ser 26 h: en régimen normal la staleness máxima es 24 h (medido en 7
+      días) y un daily abortado + reintento de la guardia llega a ~29-33 h — los 26 h disparaban
+      con el guard-retry en vuelo (SC-6027 19-11: true 18 h simulado en VictoriaMetrics; SC-6476
+      24-11: firing a las 12:04 con el retry corriendo desde las 10:11);
+    * `failed > available` no puede llevar for: 10m: el reintento dura ~5 h y aún iba por delante.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rules = backup_alert_rules()
+
+    def test_three_backup_rules_exist(self):
+        for name in (
+            "PostgresSharedBackupStale",
+            "PostgresSharedBackupFailed",
+            "PostgresSharedBackupMetricMissing",
+        ):
+            self.assertIn(name, self.rules, f"falta la regla {name}")
+            self.assertEqual(self.rules[name]["labels"]["severity"], "critical")
+            self.assertEqual(self.rules[name]["labels"]["component"], "postgres-shared")
+
+    def test_staleness_threshold_covers_backup_and_retry(self):
+        """Requisito 2 del Request: 24 h + copia (~5 h) + reintento (~5 h) + margen: 36-40 h."""
+        rule = self.rules["PostgresSharedBackupStale"]
+        expr = rule["expr"]
+        self.assertNotIn("last_failed_backup_timestamp", expr)  # solo staleness: sin ramas extra
+        self.assertNotIn("absent", expr)
+        self.assertNotIn("93600", expr)  # el umbral de 26 h que se cruzaba a diario
+        m = re.search(r">\s*(\d+)\s*$", expr.strip())
+        self.assertIsNotNone(m, f"umbral numérico no encontrado en: {expr}")
+        threshold = int(m.group(1))
+        self.assertGreaterEqual(threshold, 36 * 3600, f"umbral {threshold}s < 36 h")
+        self.assertLessEqual(threshold, 40 * 3600, f"umbral {threshold}s > 40 h")
+
+    def test_failed_rule_waits_for_the_retry(self):
+        """Requisito 3: failed > available con for >= 6 h (reintento ~5 h: si va bien, no suena)."""
+        rule = self.rules["PostgresSharedBackupFailed"]
+        self.assertIn("last_failed_backup_timestamp", rule["expr"])
+        self.assertIn("last_available_backup_timestamp", rule["expr"])
+        self.assertGreaterEqual(
+            duration_seconds(rule["for"]), 6 * 3600,
+            f"for {rule['for']} no deja terminar al reintento de la guardia",
+        )
+
+    def test_absent_rule_is_short_and_own(self):
+        """La ceguera (INFRA-1457) no tiene reintento que esperar: regla propia con for corto."""
+        rule = self.rules["PostgresSharedBackupMetricMissing"]
+        self.assertIn("absent(", rule["expr"])
+        self.assertLessEqual(duration_seconds(rule["for"]), 10 * 60)
 
 
 if __name__ == "__main__":

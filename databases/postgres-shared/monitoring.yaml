@@ -279,50 +279,119 @@ spec:
               levanta. Si coincide con la ventana de desagote (04:00-06:00 UTC)
               y no se resuelve solo, no es un switchover.
 
-        # «Copia buena» = la última completada en el catálogo barman
-        # (cnpg_collector_last_available_backup_timestamp; coincide con
-        # .status.lastSuccessfulBackup). Tres ramas, una alerta:
-        # - sin copia buena en +26h (schedule: diaria 03:00 UTC, ver
-        #   scheduledbackup.yaml);
-        # - última copia fallida (failed_ts > available_ts), el equivalente en
-        #   métricas de LastBackupSucceeded=False.
-        # - la métrica no existe en ningún pod (absent): «no sé si hay copia»
-        #   suena igual que «no hay copia».
-        # Un Backup enquistado en walArchivingFailing (como el de las 03:00 del
-        # 29-10-2026) no mueve ninguno de los dos timestamps y bloquea al
-        # ScheduledBackup siguiente: lo caza la primera rama.
+        # «Copia buena» = la última completada en el catálogo barman. SC-6496
+        # (24-11) divide la antigua alerta única en TRES reglas, cada una con
+        # su `for`, porque las tres ramas no admitían la misma tolerancia al
+        # reintento de la guardia (stuck-backup-guard.yaml, k8s-infra#630):
+        # con un daily abortado a mitad y el guard-retry-* en vuelo, la alerta
+        # disparaba igual (SC-6027 19-11: el retry completó a las 08:11 UTC y
+        # siguió firing; SC-6476 24-11: firing a los 10 min del abort).
         #
-        # Por qué la tercera rama (INFRA-1457, medido el 19-11): del 27-10 al
-        # 16-11 no hubo copia buena en el catálogo y la alerta dejó de sonar el
-        # 30-10 (Keep: último firing 30-10 07:08). Con la cola de copia
-        # atascada, la consulta del catálogo del collector fallaba y la métrica
-        # desaparecía de los dos pods: sin series, `time() - max(...)` no
-        # evalúa y la alerta se queda muda — ceguera de 17 días sobre un
-        # problema que ella misma había cazado el día anterior. Si solo
-        # sobrevive la réplica no pasa: exporta 0 y la primera rama dispara.
-        # Lo que no cubrían las dos primeras ramas es la ausencia total, y es
-        # lo que cierra absent(). (PostgresSharedMetricsMissing no puede
-        # cubrirlo: mira cnpg_backends_total, que seguía fluyendo.)
+        # Semántica MEDIDA el 24-11-2026 contra el clúster (backup
+        # postgres-shared-daily-20261123050000: startedAt 05:00:00Z, stoppedAt
+        # 09:31:08Z; la métrica del pod-1 = 1795426268 = 09:31:08Z):
+        # last_available_backup_timestamp es el FIN (stoppedAt) de la última
+        # copia buena, no su inicio; last_failed_backup_timestamp, el momento
+        # del fallo (medido: 09:06:09Z = el abort del daily del 24-11).
+        # Consecuencia para el umbral: con schedule diario 05:00 UTC
+        # (scheduledbackup.yaml), en régimen normal la staleness máxima es 24 h
+        # (la copia de hoy renueva la métrica ~24 h después del fin de la de
+        # ayer; medido en 7 días: máximo 24 h, sin tocar los 26 h antiguos).
+        # Esos 26 h (93600) dejaban solo ~2 h de margen normal y NINGUNO ante
+        # un abort: un daily abortado a mitad + el reintento de la guardia
+        # completan ~29-33 h después del último fin bueno y disparaban con el
+        # guard-retry en vuelo (medido el 24-11: abort 09:06, retry corriendo
+        # desde 10:11, firing a las 12:04; y el 19-11: retry completó a las
+        # 08:11 UTC y la alerta vieja estuvo true 18 h — simulación
+        # query_range en VictoriaMetrics, SC-6496).
+        #
+        # Un Backup enquistado en walArchivingFailing (como el de las 03:00
+        # del 29-10-2026) no mueve ninguno de los dos timestamps y bloquea al
+        # ScheduledBackup siguiente: lo caza la regla de staleness (la guardia
+        # lo borra a los 30 min y lanza su retry; si aun así no sale copia
+        # buena en 40 h, suena).
+        #
+        # Umbral 40 h (144000) = 24 h de schedule + ~5 h de daily abortado en
+        # el peor momento + 2 x (15 min de tick de la guardia + ~5 h de
+        # reintento) + margen: cubre un abort con UN reintento (~29 h) e
+        # incluso un segundo reintento tras un retry fallado (~34 h). Con
+        # copias creciendo a 6 h el peor caso sigue dentro (~36,5 h). Si se
+        # cambia el schedule o la copia crece mucho, recalcular aquí.
         - alert: PostgresSharedBackupStale
           expr: >-
-            (time() - max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}) > 93600)
-            or
-            (max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"}) > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}))
-            or
-            absent(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
+            time() - max(cnpg_collector_last_available_backup_timestamp{namespace="databases"}) > 144000
           for: 10m
           labels:
             severity: critical
             area: database
             component: postgres-shared
           annotations:
-            summary: postgres-shared sin copia buena (fallida, +26h o métrica ausente)
+            summary: postgres-shared sin copia buena desde hace +40h
             description: >-
-              La última copia falló, no hay una copia buena desde hace +26h, o
-              la métrica de copia no existe en ningún pod (ceguera: como del
-              27-10 al 16-11-2026, cola atascada y alerta muda 17 días). Revisa
-              `kubectl get backups.postgresql.cnpg.io -n databases` (ojo: el
-              nombre corto `backup` resuelve a Longhorn, no a CNPG), el
-              `backupPhase` en los logs del operador cnpg-system y
+              No hay una copia buena en el catálogo barman desde hace +40h: ni
+              el daily ni los reintentos de la guardia (stuck-backup-guard) han
+              completado. Revisa `kubectl get backups.postgresql.cnpg.io -n
+              databases` (ojo: el nombre corto `backup` resuelve a Longhorn, no
+              a CNPG), el `backupPhase` en los logs del operador cnpg-system y
               `cnpg_collector_errors_total`; walArchivingFailing que no avanza
               bloquea la siguiente copia y tumba la consulta del catálogo.
+
+        # Rama de fallo (equivalente en métricas de LastBackupSucceeded=False).
+        # Vive separada con `for: 6h` — era el término `failed > available` de
+        # la alerta única con for: 10m, que disparaba con el reintento en
+        # vuelo (SC-6476). La guardia detecta el failed en su tick de 15 min y
+        # lanza guard-retry-* (~4,5 h): un reintento que va bien renueva
+        # available_ts por delante de failed_ts antes de que la condición
+        # cumpla 6 h y el pending se reinicia sin disparar (medido el 24-11:
+        # abort 09:06 + retry completado ~14:45 = 5 h 39 min de condición; el
+        # margen se agota si las copias pasan de ~5,5 h — recalcular). Solo
+        # suena cuando el reintento también falla (failed_ts se renueva y la
+        # condición no se despeja) o no existe reintento.
+        - alert: PostgresSharedBackupFailed
+          expr: >-
+            max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"})
+            > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
+          for: 6h
+          labels:
+            severity: critical
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: la última copia de postgres-shared falló y el reintento tampoco saca copia buena
+            description: >-
+              La última copia registrada en el catálogo falló después de la
+              última buena y la condición lleva +6h sin despejarse: el
+              reintento de la guardia también falló o no llegó a crearse.
+              Mira `kubectl get backups.postgresql.cnpg.io -n databases
+              --sort-by=.metadata.creationTimestamp` (los guard-retry-* de hoy
+              conservados son los intentos) y los logs del operador
+              cnpg-system.
+
+        # Ceguera: la métrica no existe en ningún pod (INFRA-1457, medido el
+        # 19-11). Del 27-10 al 16-11 no hubo copia buena en el catálogo y la
+        # alerta dejó de sonar el 30-10 (Keep: último firing 30-10 07:08). Con
+        # la cola de copia atascada, la consulta del catálogo del collector
+        # fallaba y la métrica desaparecía de los dos pods: sin series,
+        # `time() - max(...)` no evalúa y la alerta se queda muda — ceguera de
+        # 17 días sobre un problema que ella misma había cazado el día
+        # anterior. «No sé si hay copia» suena igual que «no hay copia», de
+        # ahí critical y el for corto: aquí no hay reintento que esperar, la
+        # ausencia es ya el fallo. Si solo sobrevive la réplica no pasa:
+        # exporta 0 y dispara la regla de staleness. (PostgresSharedMetricsMissing
+        # no puede cubrirlo: mira cnpg_backends_total, que seguía fluyendo.)
+        - alert: PostgresSharedBackupMetricMissing
+          expr: absent(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
+          for: 10m
+          labels:
+            severity: critical
+            area: database
+            component: postgres-shared
+          annotations:
+            summary: la métrica de copia de postgres-shared no existe en ningún pod
+            description: >-
+              Ningún pod exporta cnpg_collector_last_available_backup_timestamp:
+              no se sabe si hay copia (ceguera: como del 27-10 al
+              16-11-2026, cola atascada y alerta muda 17 días). Revisa el
+              VMPodScrape postgres-shared, el endpoint 9187 de los pods y
+              `cnpg_collector_errors_total`; una cola de copia atascada tumba
+              la consulta del catálogo barman del collector.
