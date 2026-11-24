@@ -256,6 +256,22 @@ jobs:
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
 
+  # SC-6476: la guardia anti-atasco de copias CNPG. El test ejecuta el script real
+  # del CronJob end-to-end con kubectl y date de pega (reloj fijo a la hora del
+  # incidente): retry del daily failed en el mismo tick, catch-up del ScheduledBackup,
+  # tope de 4 intentos y las carreras SC-6103.
+  cnpg-backup-guard-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the CNPG backup guard (SC-6476)
+        run: python3 -m unittest tests/test_cnpg_backup_guard_contract.py -v
+
   skirmbooks-ui-db-role-contract:
     runs-on: arc-k8s
     steps:
