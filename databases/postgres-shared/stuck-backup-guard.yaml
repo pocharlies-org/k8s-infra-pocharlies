@@ -130,7 +130,7 @@ data:
         rows = []
         for b in items:
             lb = b["metadata"].get("labels") or {}
-            # mismos dos families de label que el selector del cron viejo
+            # solo los Backup que gestiona la guardia: hijos de ScheduledBackup y retries propios
             if "cnpg.io/scheduled-backup" not in lb and lb.get("cnpg.io/guard-retry") != "true":
                 continue
             created = b["metadata"].get("creationTimestamp") or ""
@@ -138,7 +138,6 @@ data:
                 "name": b["metadata"]["name"],
                 "cluster": (b.get("spec") or {}).get("cluster", {}).get("name", ""),
                 "phase": (b.get("status") or {}).get("phase", ""),
-                "created": created,
                 "ce": epoch(created) if created else 0.0,
                 "day": created[:10],
             })
@@ -148,7 +147,6 @@ data:
             last = (sb.get("status") or {}).get("lastScheduleTime") or ""
             sched.append({
                 "cluster": (sb.get("spec") or {}).get("cluster", {}).get("name", ""),
-                "last": last,
                 "le": epoch(last) if last else 0.0,
                 "day": last[:10],
             })

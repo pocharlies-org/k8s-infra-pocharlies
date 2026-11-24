@@ -64,17 +64,17 @@ G = _guard_module()
 
 def _row(name, cluster, phase, created):
     ce = G.epoch(created) if created else 0.0
-    return {"name": name, "cluster": cluster, "phase": phase, "created": created,
+    return {"name": name, "cluster": cluster, "phase": phase,
             "ce": ce, "day": created[:10]}
 
 
 def _sb(cluster, last):
     le = G.epoch(last) if last else 0.0
-    return {"cluster": cluster, "last": last, "le": le, "day": last[:10]}
+    return {"cluster": cluster, "le": le, "day": last[:10]}
 
 
 def run_guard(children=(), retries=(), scheduled=()):
-    """reconcile() real con reloj fijo; devuelve (deletes, creates-nombres, out-no-usado)."""
+    """reconcile() real con reloj fijo; devuelve (deletes, nombres de creates, deadline)."""
     rows = [_row(n, c, p, t) for (n, c, p, t) in list(children) + list(retries)]
     sched = [_sb(c, t) for (c, t) in scheduled]
     deletes, creates, deadline = G.reconcile(rows, sched, NOW_EPOCH, TODAY)
