@@ -256,10 +256,10 @@ jobs:
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
 
-  # SC-6476: la guardia anti-atasco de copias CNPG. El test ejecuta el script real
-  # del CronJob end-to-end con kubectl y date de pega (reloj fijo a la hora del
-  # incidente): retry del daily failed en el mismo tick, catch-up del ScheduledBackup,
-  # tope de 4 intentos y las carreras SC-6103.
+  # SC-6476 / INFRA-1555: la guardia anti-atasco de copias CNPG. El test extrae el
+  # guard.py real del ConfigMap y ejercita reconcile() con reloj fijo a la hora del
+  # incidente: retry del daily failed en la misma pasada, catch-up del ScheduledBackup,
+  # tope de 4 intentos, las carreras SC-6103 y los umbrales por evento.
   cnpg-backup-guard-contract:
     runs-on: arc-k8s
     steps:
