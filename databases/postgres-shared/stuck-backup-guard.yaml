@@ -3,6 +3,11 @@
 # (operador CNPG v1.29.1, scheduledbackup_controller.go; upstream #4361/#10385/#10745) y la copia diaria
 # deja de salir días. Borrar el CR atascado NO recrea la franja del día (lastScheduleTime ya registrado),
 # por eso la guardia borra el atasco Y crea un Backup suyo (guard-retry-*) que NO es hijo.
+# SC-6476 (24-11-2026): el daily falló a las 09:06 (rollout de SC-6471 mató el instance manager que lo
+# llevaba), la guardia lo borró a las 09:15 y NO creó retry: el cluster ya no tenía filas de hoy y el bucle
+# nacía solo de los Backup existentes. Desde hoy los clusters debidos salen además de los ScheduledBackup que
+# dispararon hoy, y los retries fallados del propio día se conservan (no se borran) para que el tope de 4
+# intentos siga siendo real.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,6 +23,9 @@ rules:
   - apiGroups: ["postgresql.cnpg.io"]
     resources: ["backups"]
     verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["scheduledbackups"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -90,10 +98,16 @@ spec:
 
                   # Atascos: walArchivingFailing > 30 min (terminal en la práctica, el operador no la despeja),
                   # failed > 15 min; y housekeeping de guard-retry-* de hace más de 7 días.
-                  awk -v c30="$cut30" -v c15="$cut15" -v c7="$cut7d" '
-                    ($3=="walArchivingFailing" && $4!="" && $4<c30) ||
-                    ($3=="failed" && $4!="" && $4<c15) ||
-                    ($1 ~ /^guard-retry-/ && $4!="" && $4<c7) {print $1}
+                  # SC-6476: los guard-retry-* nacidos HOY se conservan aunque fallen (solo se borran al
+                  # housekeeping de 7 días): son la memoria de intentos del día; borrarlos dejaba al cluster
+                  # sin filas de hoy y al bucle, sin nada que reintentar (el hueco de este incidente).
+                  awk -v c30="$cut30" -v c15="$cut15" -v c7="$cut7d" -v today="$today" '
+                    {
+                      stuck = (($3=="walArchivingFailing" && $4!="" && $4<c30) || ($3=="failed" && $4!="" && $4<c15))
+                      retry_today = ($1 ~ /^guard-retry-/ && $4!="" && substr($4,1,10)==today)
+                      old_retry = ($1 ~ /^guard-retry-/ && $4!="" && $4<c7)
+                      if ((stuck && !retry_today) || old_retry) print $1
+                    }
                   ' "$work/all" > "$work/del"
                   while read -r name; do
                     [ -n "$name" ] || continue
@@ -101,13 +115,20 @@ spec:
                     echo "GUARD: deleted stuck backup $name"
                   done < "$work/del"
 
-                  # Estado tras los borrados, por cluster con backups de hoy.
-                  list_backups 'cnpg.io/scheduled-backup' > "$work/live"
-                  list_backups 'cnpg.io/guard-retry=true' >> "$work/live"
-                  awk -v today="$today" '$4 ~ "^"today {print $2}' "$work/live" | sort -u > "$work/clusters"
+                  # SC-6476: estado del día tomado de $work/all (anterior a los borrados), para que un
+                  # daily fallado borrado en este mismo tick cuente como intento y genere el retry en el
+                  # acto. Debidos = clusters con filas hoy + clusters cuyo ScheduledBackup disparó hoy hace
+                  # más de 15 min (si a los 15 min el operador no ha creado aún el hijo, algo no va; antes
+                  # de eso no se crea: es la carrera SC-6103 con el nacimiento del daily).
+                  awk -v today="$today" '$4 ~ "^"today {print $2}' "$work/all" > "$work/due"
+                  kubectl get scheduledbackups.postgresql.cnpg.io -n databases \
+                    -o custom-columns=CLUSTER:.spec.cluster.name,LAST:.status.lastScheduleTime \
+                    --no-headers 2>/dev/null \
+                    | awk -v today="$today" -v c15="$cut15" '$1!="" && $2!="" && $2 ~ "^"today && $2<c15 {print $1}' >> "$work/due"
+                  sort -u "$work/due" -o "$work/due"
                   while read -r cluster; do
                     [ -n "$cluster" ] || continue
-                    awk -v c="$cluster" -v today="$today" '$2==c && $4 ~ "^"today' "$work/live" > "$work/rows"
+                    awk -v c="$cluster" -v today="$today" '$2==c && $4 ~ "^"today' "$work/all" > "$work/rows"
                     if awk '$3=="completed"{found=1} END{exit !found}' "$work/rows"; then
                       echo "GUARD: cluster $cluster already completed today, nothing to do"
                       continue
@@ -118,10 +139,11 @@ spec:
                     # barman-cloud-backup de 227 GB en paralelo sobre la misma réplica no acababan ninguno,
                     # saturaban el I/O (scrape del exporter con timeout, cola atascada) y cada tick de la
                     # guardia creaba otro retry: tormenta sobre el atasco. Un atasco real de fase terminal
-                    # (walArchivingFailing/failed) lo borra la regla de arriba; uno enquistado en
-                    # pending/running +26 h lo caza PostgresSharedBackupStale y lo despeja IT.
-                    if awk '$3=="pending" || $3=="running"{found=1} END{exit !found}' "$work/rows"; then
-                      echo "GUARD: cluster $cluster has a backup in progress today, nothing to do"
+                    # (failed) lo borra la regla de arriba y el retry nace en el acto (SC-6476); uno
+                    # enquistado en pending/running/walArchivingFailing +26 h lo caza
+                    # PostgresSharedBackupStale y lo despeja IT: hoy no se crean más retries sobre él.
+                    if awk '$3=="pending" || $3=="running" || $3=="walArchivingFailing"{found=1} END{exit !found}' "$work/rows"; then
+                      echo "GUARD: cluster $cluster has a backup in progress or wedged today, nothing to do"
                       continue
                     fi
                     attempts="$(wc -l < "$work/rows" | tr -d ' ')"
@@ -145,4 +167,4 @@ spec:
                       name: $cluster
                   EOF
                     echo "GUARD: created $name (cluster $cluster, attempts today before this one: $attempts)"
-                  done < "$work/clusters"
+                  done < "$work/due"
