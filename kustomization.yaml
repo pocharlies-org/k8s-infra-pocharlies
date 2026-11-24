@@ -34,6 +34,7 @@ resources:
   - networking/traefik-edge/namespace.yaml
   - networking/traefik-edge/networkpolicy.yaml
   - networking/traefik-edge/tls-store.yaml
+  - networking/traefik-edge/edge-cluster-service.yaml
   - networking/traefik-edge/firecrawl-edge-auth.yaml
   - networking/traefik-edge/harbor-ingressroute.yaml
   - networking/traefik-edge/langfuse-public.yaml
