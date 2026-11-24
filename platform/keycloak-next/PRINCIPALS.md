@@ -193,7 +193,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
 | `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
 | `qa-owu95@e-dani.com` | humano | QA | activo | Fixture de OWU-116 (S1 de OWU-95): usuaria de la ruta bearer de la app nativa en chat.e-dani.com; grupo /edani-users, sin roles directos. Alta y contraseña por GitOps (openwebui-ios-client.sh + ítem 1Password keycloak-next-qa-owu95, lo escribe security); entra una vez por la web antes de probar (el exchange no auto-registra); retirada al cerrar la épica. |
-| `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
+| `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators; con agentgateway-read:photos (INFRA-1522: segundo usuario humano de la app nativa photos-ios, para que QA valide la app y bench_search.py; sin photos-confirm-delete: QA solo propone borrados). Concesión por GitOps (photos-read-grant-qa-job, wave 25). |
 | `qa@e-dani.com` | humano | QA | activo | Fixture de SKIRM-494 (criterio 3 de SKIRM-484): cuenta QA que entra en la web de Skirmbooks (skirmbooks.e-dani.com); grupo /skirmbooks-users, sin roles directos. Ya nominal en gestoria_identity (migración 0096: tenant skirmshop, rol owner). Alta, contraseña y retirada por GitOps (skirmbooks-qa-fixture-user.sh + ítem 1Password keycloak-next-qa, lo escribe security). |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
@@ -402,10 +402,11 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "humano",
       "client": null,
       "owner": "QA",
-      "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556)",
-      "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos.",
+      "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556); agentgateway-read:photos declarado por INFRA-1522 (Request de la sesión tech-lead de INFRA-379) y concedido por el PostSync photos-read-grant-qa-job (wave 25), sujeto fijado por id 469f01d4-dba3-47e9-857c-13e01be14522",
+      "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators; segundo usuario humano de la app nativa photos-ios (INFRA-1522): su token por el client público photos-app trae la lectura de /photos; sin photos-confirm-delete (el gate de borrado sigue solo en Dani, G1 del architect).",
       "realm_roles": [
-        "default-roles-edani"
+        "default-roles-edani",
+        "agentgateway-read:photos"
       ],
       "status": "activo"
     },

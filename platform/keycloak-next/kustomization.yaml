@@ -44,6 +44,9 @@ resources:
   # INFRA-1180: client publico photos-app (app nativa photos-ios, INFRA-403) +
   # el grant humano agentgateway-read:photos que su token exige.
   - photos-app-client.yaml
+  # INFRA-1522: grant humano agentgateway-read:photos a qa-sso-test (segundo
+  # usuario de la app photos-ios; sin photos-confirm-delete: QA solo propone).
+  - photos-read-grant-qa-job.yaml
   # SKIRM-494: fixture humano de QA para la web de Skirmbooks (qa@e-dani.com
   # en /skirmbooks-users; contraseña desde el item 1Password keycloak-next-qa).
   - skirmbooks-qa-fixture-user-job.yaml
@@ -261,6 +264,17 @@ configMapGenerator:
     options:
       labels:
         app.kubernetes.io/component: photos-app-client
+  # INFRA-1522: grant simple (solo kc-admin-common.sh + la lib de grants
+  # humanos): concede agentgateway-read:photos a qa-sso-test, sin crear el rol
+  # (lo posee la matriz de lectura, wave 20).
+  - name: keycloak-photos-read-grant-qa
+    files:
+      - photos-read-grant-qa.sh=scripts/photos-read-grant-qa.sh
+      - kc-admin-common.sh=scripts/kc-admin-common.sh
+      - human-role-grant-daniel-lib.sh=scripts/human-role-grant-daniel-lib.sh
+    options:
+      labels:
+        app.kubernetes.io/component: photos-read-grant-qa
   # SKIRM-494: patron agentgateway-write-fixture-user (solo kc-admin-common.sh):
   # crea el fixture qa@e-dani.com, re-aplica la contrasena y concede la
   # membresia /skirmbooks-users (el grupo lo posee skirmbooks-sso, wave 21).

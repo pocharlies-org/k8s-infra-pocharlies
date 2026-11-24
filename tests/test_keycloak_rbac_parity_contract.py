@@ -49,8 +49,9 @@ NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
 # INFRA-1180: the reviewed human holder of agentgateway-read:photos (the user
 # of the native app photos-ios; granted by photos-app-client.sh, wave 25,
-# outside the read-grants matrix).
-PHOTOS_HUMAN_USERNAMES = ["me@e-dani.com"]
+# outside the read-grants matrix). INFRA-1522: qa-sso-test, second human user of
+# the app (QA); granted by photos-read-grant-qa.sh, wave 25, same pattern.
+PHOTOS_HUMAN_USERNAMES = ["me@e-dani.com", "qa-sso-test"]
 
 
 def shell_list(path, variable, sep=","):
