@@ -266,7 +266,12 @@ spec:
         storageClassName: longhorn
         resources:
           requests:
-            storage: 2Gi
+            # 5Gi, not 2Gi: on-disk footprint is ~2x maxmemory (AOF + RDB + fs
+            # overhead). At 2Gi with --maxmemory 2gb the volume hit 0% free and
+            # KubePersistentVolumeFillingUp fired critical (SC-6486, 24-11-2026).
+            # The three PVCs were expanded live to 5Gi on 24-11-2026; this makes
+            # the template match so a recreated PVC does not drop back to 2Gi.
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: ServiceAccount
