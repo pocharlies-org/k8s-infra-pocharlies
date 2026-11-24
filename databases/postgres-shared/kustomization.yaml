@@ -24,7 +24,6 @@ resources:
   - shared-valkey.yaml
   - scheduledbackup.yaml
   - stuck-backup-guard.yaml
-  - rw-connectivity-probe.yaml
 labels:
   - includeSelectors: false
     pairs:
