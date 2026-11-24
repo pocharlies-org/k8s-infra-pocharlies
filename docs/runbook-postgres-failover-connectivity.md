@@ -35,8 +35,10 @@ postgres-specific:
 
 ## Triage order when it recurs
 
-The probe CronJob `databases/postgres-rw-connectivity-probe` (one probe per minute from a
-pod on sauvage to the rw service) fails → `K8sCronJobFailed` alarm (topic Crons). Then:
+The VMProbe `postgres-rw-sauvage` (continuous TCP probe from `blackbox-exporter-sauvage`,
+a prober pinned to sauvage, to the rw service) fails → `SharedDatastoreUnreachableFromSauvage`
+alarm (critical, topic Crons). INFRA-1556 replaced the old per-minute CronJob
+`postgres-rw-connectivity-probe` with this probe (SC-5617). Then:
 
 1. Confirm the target is right:
    `kubectl get endpointslice -n databases -l kubernetes.io/service-name=postgres-shared-rw -o wide`
