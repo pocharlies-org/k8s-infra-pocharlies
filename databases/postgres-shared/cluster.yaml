@@ -56,6 +56,15 @@ spec:
       # espera de lock >deadlock_timeout (1 s) no dejaba rastro. Con esto el log
       # dice «process N still waiting for Lock on ...» con bloqueado y bloqueador.
       log_lock_waits: "on"
+      # SC-6471 (2026-11-24): sin pg_stat_statements el estancamiento de commits del 24-11 05:56-06:01 UTC
+      # (SYNW-20592, dead-letters de Synapse) no fue diagnosticable: los logs del pod rotan en minutos y no
+      # quedó rastro consultable de qué congelaba los commits. Con parámetros pg_stat_statements.*, CNPG añade la
+      # librería a shared_preload_libraries, hace CREATE EXTENSION en todas las bases y ejecuta un rolling
+      # restart (breve switchover). track=all captura también los COMMIT/INSERT anidados de los pools de
+      # synapse; PG17 expone además wait_event por statement. max 10000 ≈ el régimen de ~250 backends ×
+      # plantillas por base sin desalojos.
+      pg_stat_statements.max: "10000"
+      pg_stat_statements.track: "all"
       # Logical replication prerequisites (Fase 2 of synapse-stack migration).
       # max_replication_slots kept at upstream CNPG default (32) to avoid regression;
       # max_wal_senders bumped from default 10 to 20 to cover 7 synapse role PUBLICATIONs
@@ -148,13 +157,22 @@ spec:
     requests:
       # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
       # 68m (postgres-shared-2). Limits unchanged (4 CPU) absorb the spikes.
-      cpu: "200m"
+      # SC-6471 (2026-11-24): 200m -> 1. El 200m se midió sobre el postgres-shared viejo (una fracción de
+      # la carga actual); el nvme consume de media ~2,7 cores (rate 10m, 24-11) y con shares 204 el primario
+      # compite en desventaja contra etcd/apiserver en el control-plane — la hipótesis del estancamiento del
+      # 24-11 (SYNW-20592). Con 1 el peso sube 5x y el scheduler deja de sobreventaer: requests ks5-cp-2
+      # 4590->5390m/6500m (83%), cp-3 4650m (71%), y en failover a cp-1 5711m (88%): queda hueco para
+      # recolocar.
+      cpu: "1"
       # INFRA-942 (2026-10-26): 5Gi -> 16Gi, para que el scheduler cuente con la memoria (el webhook de CNPG exige
       # además request >= shared_buffers). ks5-cp-2/3: 62,5 GiB, con 22-26 GiB libres en el peor momento de 7 días.
       memory: "16Gi"
     limits:
-      # La CPU se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores y el recall de Hindsight va a la réplica.
-      cpu: "4"
+      # SC-6471 (2026-11-24): 4 -> 5 (era «se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores»). Con 4 el cupo se agota en régimen normal: 2,1-4,3 períodos CFS
+      # throttled/s medidos sobre ~10 períodos/s (21-43% de los períodos, también fuera de la ventana del
+      # incidente; p99 1m = 4 cores). 5 absorbe el pico sin comerse el nodo: a cp-2 le quedan ~1,9 cores
+      # para etcd/apiserver incluso con postgres bursts-hitting-5.
+      cpu: "5"
       memory: "24Gi"
 
   monitoring:
