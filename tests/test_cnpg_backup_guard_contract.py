@@ -283,13 +283,19 @@ class TestBackupAlertContract(unittest.TestCase):
         self.assertLessEqual(threshold, 40 * 3600, f"umbral {threshold}s > 40 h")
 
     def test_failed_rule_waits_for_the_retry(self):
-        """Requisito 3: failed > available con for >= 6 h (reintento ~5 h: si va bien, no suena)."""
+        """Requisito 3: failed > available con for mayor que el reintento SANO completo.
+
+        Medido el 24-11 (SC-6476): abort 09:06 -> el operador arrancó el guard-retry a las
+        10:11 (1 h 05 min tras el rollout) y completó a las 15:18: la condición sana duró
+        6 h 12 min. Un for de 6 h dispara con el reintento en vuelo; el suelo del contrato
+        es 7 h (margen sobre lo medido).
+        """
         rule = self.rules["PostgresSharedBackupFailed"]
         self.assertIn("last_failed_backup_timestamp", rule["expr"])
         self.assertIn("last_available_backup_timestamp", rule["expr"])
         self.assertGreaterEqual(
-            duration_seconds(rule["for"]), 6 * 3600,
-            f"for {rule['for']} no deja terminar al reintento de la guardia",
+            duration_seconds(rule["for"]), 7 * 3600,
+            f"for {rule['for']} no deja terminar al reintento de la guardia (medido: 6 h 12 min sanas)",
         )
 
     def test_absent_rule_is_short_and_own(self):

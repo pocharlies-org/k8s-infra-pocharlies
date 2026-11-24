@@ -312,10 +312,11 @@ spec:
         # buena en 40 h, suena).
         #
         # Umbral 40 h (144000) = 24 h de schedule + ~5 h de daily abortado en
-        # el peor momento + 2 x (15 min de tick de la guardia + ~5 h de
-        # reintento) + margen: cubre un abort con UN reintento (~29 h) e
-        # incluso un segundo reintento tras un retry fallado (~34 h). Con
-        # copias creciendo a 6 h el peor caso sigue dentro (~36,5 h). Si se
+        # el peor momento + 2 x (15 min de umbral de la guardia + ~1 h de
+        # latencia de arranque del operador tras un rollout + ~5 h de copia) +
+        # margen: cubre un abort con UN reintento (medido el 24-11: último fin
+        # bueno 09:31 del 23-11 → retry completado 15:18 del 24-11 = 29,8 h) e
+        # incluso un segundo reintento tras un retry fallado (~36 h). Si se
         # cambia el schedule o la copia crece mucho, recalcular aquí.
         - alert: PostgresSharedBackupStale
           expr: >-
@@ -337,21 +338,26 @@ spec:
               bloquea la siguiente copia y tumba la consulta del catálogo.
 
         # Rama de fallo (equivalente en métricas de LastBackupSucceeded=False).
-        # Vive separada con `for: 6h` — era el término `failed > available` de
+        # Vive separada con `for: 8h` — era el término `failed > available` de
         # la alerta única con for: 10m, que disparaba con el reintento en
-        # vuelo (SC-6476). La guardia detecta el failed en su tick de 15 min y
-        # lanza guard-retry-* (~4,5 h): un reintento que va bien renueva
-        # available_ts por delante de failed_ts antes de que la condición
-        # cumpla 6 h y el pending se reinicia sin disparar (medido el 24-11:
-        # abort 09:06 + retry completado ~14:45 = 5 h 39 min de condición; el
-        # margen se agota si las copias pasan de ~5,5 h — recalcular). Solo
-        # suena cuando el reintento también falla (failed_ts se renueva y la
-        # condición no se despeja) o no existe reintento.
+        # vuelo (SC-6476). La guardia (informer, INFRA-1555) borra el failed a
+        # los 15 min y crea su guard-retry-*, pero el operador puede tardar en
+        # arrancarlo: MEDIDO el 24-11 (SC-6476, el rollout de SC-6471 dejó la
+        # instancia sin ready) — abort 09:06, el backup del retry arrancó a las
+        # 10:11 (1 h 05 min) y completó a las 15:18 → la condición
+        # `failed > available` vive 6 h 12 min con el reintento SANO en vuelo.
+        # Con for: 6h (primera versión, PR #636) habría disparado a las 15:06,
+        # 12 min antes de que el retry completara: el for tiene que cubrir
+        # umbral de la guardia + latencia de arranque del operador (hasta ~1 h
+        # en un rollout) + duración de la copia (~5 h) + margen → 8 h. Un
+        # reintento que va bien renueva available_ts y el pending se reinicia
+        # sin disparar. Solo suena cuando el reintento también falla
+        # (failed_ts se renueva y la condición no se despeja) o no existe.
         - alert: PostgresSharedBackupFailed
           expr: >-
             max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"})
             > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
-          for: 6h
+          for: 8h
           labels:
             severity: critical
             area: database
