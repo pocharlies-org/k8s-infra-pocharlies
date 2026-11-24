@@ -266,7 +266,13 @@ spec:
         storageClassName: longhorn
         resources:
           requests:
-            storage: 2Gi
+            # 2026-11-24 (SC-6485): raised 2Gi -> 5Gi. At ~1 MB/s of writes the AOF
+            # incr files reach the rewrite threshold every few minutes; the rewrite
+            # needs a full base (~0.5 GB) of free space and the replicas filled
+            # 2Gi, dead-locking replication (crash + resync storm). 5Gi covers
+            # base + one rewrite cycle of headroom even at maxmemory 2gb.
+            # Existing volumes were expanded live (Longhorn online expansion).
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: ServiceAccount
