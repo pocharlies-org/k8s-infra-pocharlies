@@ -94,6 +94,10 @@ resources:
   - kubernetes/storage/local-path-retain.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
+  # SC-6611 (SC-5806 ola 2): guardas del reloj único sobre los Jobs de synapse-adapter-k8s.
+  - platform/reloj/vap-jobs.yaml
+  - platform/reloj/vap-etiqueta.yaml
+  - platform/reloj/kyverno-guarda.yaml
   - platform/reflector/rbac.yaml
   - platform/arc/rbac-hermes-despliegue.yaml
   - platform/arc/rbac-manifestguard.yaml

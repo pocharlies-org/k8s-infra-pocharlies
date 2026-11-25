@@ -388,6 +388,16 @@ spec:
         passwordSecret:
           name: synapse-agent-m2m-db-credentials
         comment: "Private durable Synapse agent-run callback plane"
+      # SC-6611 (SC-5806 ola 2): el reloj único synapse-reloj. Sus permisos son exactamente los
+      # de synapse:migrations/0124_reloj.sql (sus tablas synapse.reloj_*, INSERT en el outbox y
+      # SELECT de handler_config); sin synapse_app, como los planos dedicados de arriba.
+      - name: synapse_reloj
+        ensure: present
+        login: true
+        inherit: false
+        passwordSecret:
+          name: synapse-reloj-db-credentials
+        comment: "Synapse reloj unico (synapse-reloj, SC-6611): reloj_* y el despertador en outbox"
       - name: keep
         ensure: present
         login: true
