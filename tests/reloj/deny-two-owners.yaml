@@ -20,8 +20,8 @@ metadata:
     blockOwnerDeletion: true
   - apiVersion: batch/v1
     kind: CronJob
-    name: x
-    uid: y
+    name: otra-plantilla
+    uid: 00000000-0000-0000-0000-000000000002
 spec:
   backoffLimit: 3
   template:
