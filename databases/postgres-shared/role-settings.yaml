@@ -96,6 +96,18 @@
 #     pod se reinició (3→4). Con el rol cubierto sería un reinicio cada ≤15 min.
 #     (El LISTEN `message_updated` de whatsapp-app SÍ reconecta — change-bus.mjs
 #     con backoff — pero la regla es por rol y el rol es compartido.)
+#   - skirmshop y skirmbooks_ui_app (INFRA-1586, CRIT-20912) — retirada tras la
+#     regresión medida el 25-11 al fusionar #639: el sweep del sync tumbó las
+#     ociosas del rol y 4 pods de consumidores `pg` (node-postgres) murieron con
+#     el FATAL sin handler y reiniciaron (labels-outbox-relay,
+#     labels-pickup-point-reminder, labels-shopify-app — rol skirmshop — y
+#     skirmbooks-ui — rol skirmbooks_ui_app), disparando el
+#     SkirmshopAppRestartSpike. La prueba B de #639 se midió solo con los
+#     consumidores Prisma del rol compartido (reabren, 0 reinicios); los `pg` no
+#     sobreviven al corte servidor — mismo caso whatsappmcp: la regla es por rol
+#     y el rol es compartido. Rojo = rol fuera; la corrección (manejar el error
+#     del pool y reabrir, como los Prisma) va en el repo del consumidor, y
+#     entonces el rol vuelve con su prueba B verde.
 #   - synapse_app, brain_openwebui_ro — sin conexiones vivas al probar: no se
 #     puede medir reconexión; no entran hasta que un consumidor las use y pase B.
 #   - synapse_migration, synapse_owner — exclusión permanente: migraciones
@@ -161,7 +173,6 @@ spec:
               ALTER ROLE keycloak SET idle_session_timeout = '15min';
               ALTER ROLE teslamate SET idle_session_timeout = '15min';
               ALTER ROLE langfuse SET idle_session_timeout = '15min';
-              ALTER ROLE skirmbooks_ui_app SET idle_session_timeout = '15min';
               ALTER ROLE hindsight SET idle_session_timeout = '15min';
               ALTER ROLE litellm SET idle_session_timeout = '15min';
               ALTER ROLE synapse_engine SET idle_session_timeout = '15min';
@@ -185,9 +196,18 @@ spec:
               # Los que fallaron la LISTEN (gestoria_*, synapse_adapter,
               # whatsappmcp) y su razón, en el comentario de cabecera.
               ALTER ROLE synapse_dispatcher SET idle_session_timeout = '15min';
-              ALTER ROLE skirmshop SET idle_session_timeout = '15min';
               ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
               ALTER ROLE synapse_outbox_gc SET idle_session_timeout = '15min';
+            # INFRA-1586 (CRIT-20912): el GUC persiste en pg_db_role_setting, así
+            # que sacar el rol de la lista de arriba no lo desarma — hay que
+            # RESETearlo explícitamente. Idempotente (no-op si el rol no lo tiene).
+            # Al fusionar esto, reiniciar además los pods de estos roles abiertos
+            # desde 25-11 06:49Z: sus sesiones actuales llevan el GUC y seguirían
+            # cayendo a los 15 min de ocio.
+            - -c
+            - |
+              ALTER ROLE skirmshop RESET idle_session_timeout;
+              ALTER ROLE skirmbooks_ui_app RESET idle_session_timeout;
             # --- SC-6040: CONNECTION LIMIT del rol hindsight -------------------
             # El API de Hindsight abre dos pools (escritura 40 + lectura 40 = 80
             # conexiones, k8s-hindsight-pocharlies/k8s/values.yaml). El rol se
@@ -223,12 +243,12 @@ spec:
                 AND state_change < now() - interval '15 minutes'
                 AND usename = ANY (ARRAY[
                   'keep', 'keycloak', 'teslamate', 'langfuse',
-                  'skirmbooks_ui_app', 'hindsight', 'litellm',
+                  'hindsight', 'litellm',
                   'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
                   'aurora', 'horarios', 'sauvage_bot', 'dgxbench', 'dgxskills',
                   'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
                   'synapse_sre_m2m', 'synapse_sre_reporter', 'synapse_agent_m2m',
-                  'synapse_dispatcher', 'skirmshop', 'synapse_admin',
+                  'synapse_dispatcher', 'synapse_admin',
                   'synapse_outbox_gc']);
           resources:
             requests: { cpu: 10m, memory: 32Mi }
