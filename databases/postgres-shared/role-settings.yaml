@@ -56,11 +56,48 @@
 # `managed.roles` del cluster.yaml debe añadirse a la lista de ALTERs de este
 # Job, o dejar aquí justificada su exclusión.
 #
+# --- INFRA-1369 (P2): matriz de reconexión por consumidor (C3) ----------------
+#
+# Regla del architect (nota-architect-plan.md de INFRA-1295): un rol entra en la
+# lista SOLO con su prueba B verde (matar backend idle → la siguiente unidad de
+# trabajo se completa sin reinicio). Evidencia medida el 25-11-2026, en la
+# descripción de la PR de INFRA-1369.
+#
+# Entran en P2 (prueba verde):
+#   - skirmshop — 44 ociosas (la más antigua, 19 h) terminadas de golpe; los
+#     apps Prisma (affiliate, bundles, translations, collections-tree, serial,
+#     control-panel, nuq) reabrieron 21 conexiones en ~30 s y siguieron
+#     sondeando su cola de Jobs; 0 reinicios.
+#   - synapse_dispatcher — su LISTEN `outbox_pending` es `state='idle'` por
+#     diseño y el código NO re-LISTEN (main.py:321, sin supervisor). Terminada la
+#     LISTEN, el bucle principal sobrevive y despacha por su fallback de sondeo
+#     (`idle_poll_interval_ms=2000`, main.py:344; escaneo main.py:151): 89 filas
+#     del outbox posteriores a la muerte, latencia media 1.00 s / máxima 2.01 s,
+#     backlog 0, 0 reinicios. Es la condición de paso que fijó el architect
+#     («degrada a latencia de escaneo si el proceso sobrevive»).
+#   - synapse_admin — 6 ociosas terminadas; el pool reabrió y la UI responde
+#     200; 0 reinicios.
+#   - synapse_outbox_gc — Job horario one-shot: adquiere y suelta la conexión
+#     por ciclo (main.py:96-97), nunca retiene una sesión idle entre ciclos;
+#     último Job `Complete 1/1`. Nada que el timeout pueda alcanzar.
+#
 # Excluidos a propósito (ni ALTER ni terminate):
-#   - synapse_dispatcher, synapse_adapter — mantienen conexiones LISTEN que
-#     están en `state='idle'` por diseño; entrarán en P2 solo tras pasar la
-#     prueba de reconexión (matar backend idle → siguiente unidad de trabajo
-#     sin reinicio del pod).
+#   - synapse_adapter y los roles gestoria_*_app (12) — cada servicio sostiene
+#     un LISTEN `tenants_changed` de TenantRegistry (synapse-shared
+#     tenant_registry.py), que NO tiene supervisor de reapertura (a diferencia
+#     de HandlerConfigCache, que sí lo tiene). Medido el 25-11: terminada la
+#     LISTEN de un adapter y la de notifications-alerts, el pool reabrió pero el
+#     LISTEN no volvió en >4 min → el snapshot de tenants deja de recargar en
+#     caliente hasta el reinicio del pod. Rojo = rol fuera; la corrección
+#     (supervisor como `_supervise_listener` de handler_config.py) va en el repo
+#     del consumidor, no aquí.
+#   - whatsappmcp — el job brain-windows termina el proceso al perder su LISTEN
+#     (brain-windows.ts:669, `process.exit(1)`); medido: terminada la LISTEN el
+#     pod se reinició (3→4). Con el rol cubierto sería un reinicio cada ≤15 min.
+#     (El LISTEN `message_updated` de whatsapp-app SÍ reconecta — change-bus.mjs
+#     con backoff — pero la regla es por rol y el rol es compartido.)
+#   - synapse_app, brain_openwebui_ro — sin conexiones vivas al probar: no se
+#     puede medir reconexión; no entran hasta que un consumidor las use y pase B.
 #   - synapse_migration, synapse_owner — exclusión permanente: migraciones
 #     con pg_advisory_lock (la razón ya documentada arriba).
 #   - postgres (superuser: instance manager de CNPG y los propios Job
@@ -144,6 +181,13 @@ spec:
               ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
               ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
               ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
+              # INFRA-1369 (P2): roles con prueba B verde (evidencia en la PR).
+              # Los que fallaron la LISTEN (gestoria_*, synapse_adapter,
+              # whatsappmcp) y su razón, en el comentario de cabecera.
+              ALTER ROLE synapse_dispatcher SET idle_session_timeout = '15min';
+              ALTER ROLE skirmshop SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
+              ALTER ROLE synapse_outbox_gc SET idle_session_timeout = '15min';
             # --- SC-6040: CONNECTION LIMIT del rol hindsight -------------------
             # El API de Hindsight abre dos pools (escritura 40 + lectura 40 = 80
             # conexiones, k8s-hindsight-pocharlies/k8s/values.yaml). El rol se
@@ -183,7 +227,9 @@ spec:
                   'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
                   'aurora', 'horarios', 'sauvage_bot', 'dgxbench', 'dgxskills',
                   'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
-                  'synapse_sre_reporter', 'synapse_agent_m2m']);
+                  'synapse_sre_m2m', 'synapse_sre_reporter', 'synapse_agent_m2m',
+                  'synapse_dispatcher', 'skirmshop', 'synapse_admin',
+                  'synapse_outbox_gc']);
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 128Mi }
