@@ -540,3 +540,21 @@ spec:
   ensure: present
   cluster:
     name: postgres-shared-nvme
+---
+# SKIRM-652: base de datos del stage de la app de traducciones (SII Test SC1800).
+# La app es de un solo comerciante: el stage no puede compartir la BD de producción
+# porque la cola durable tomaría jobs de las dos tiendas.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: translations-stage
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: translations_stage
+  owner: skirmshop
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
