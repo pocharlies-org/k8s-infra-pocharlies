@@ -109,7 +109,8 @@ jobs:
             tests/test_dgx_edge_proof_contract.py \
             tests/test_dgx_cine_preflight_contract.py \
             tests/test_agentgateway_token_smoke_contract.py \
-            tests/test_pagos_hermes_reader_contract.py
+            tests/test_pagos_hermes_reader_contract.py \
+            tests/test_arc_manifestguard_rbac_contract.py
 
   # INFRA-219: realm RBAC catalog (ROLES.yaml) and its verifiers. Stdlib only:
   # no Keycloak image, no PyYAML; the verifiers run against a fake Keycloak

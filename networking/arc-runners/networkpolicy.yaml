@@ -271,3 +271,58 @@ spec:
             cidr: 100.75.189.75/32
       ports:
         - { protocol: TCP, port: 6443 }
+---
+# `arc-manifestguard` (INFRA-1407, P1 de INFRA-1405) lee los CRDs del clúster con el token de su
+# SA para que el guard de manifiestos valide contra ellos: necesita la API, y nada más. Mismo
+# modo de fallo y misma solución que `arc-hermes` y `arc-openclaw` arriba (kube-router evalúa el
+# destino pre-DNAT —ClusterIP, dentro del `except 10/8` de arc-runners-egress— y post-DNAT
+# —tailnet, dentro del `except 100.64/10`—, y la regla namespaceSelector no cubre ninguno).
+#
+# Medido el 16-11-2026 desde un pod con la etiqueta del pool nuevo (imagen del runner, sin
+# token), dos intentos por destino:
+#   https://kubernetes.default.svc/version  -> 401 y 000   (intermitente: el DNAT cae a un
+#                                                    endpoint de tailnet que la baseline bloquea)
+#   https://10.43.0.1:443/version           -> 401 y 000
+#   https://100.107.21.89:6443/version      -> 000 siempre  (el endpoint real, bloqueado)
+# Con la policy (comprobado el mismo día con la etiqueta `arc-hermes`, que ya la tiene):
+#   los tres destinos -> 401 estables (401 = llega al API sin credenciales, que es lo que se
+#   quiere: la ruta abierta, el permiso lo decide el RBAC).
+# Sin esta policy el runner no falla ruidosamente: a veces lee los CRDs y a veces no, que es peor.
+#
+# No abre Harbor ni BuildKit (el guard no construye imágenes: kustomize y kubeconform se bajan
+# de internet, que ya permite arc-runners-egress). Los tres /32 son los endpoints actuales del
+# service `kubernetes` (kubectl get endpoints kubernetes -n default, 16-11-2026); si un
+# control-plane cambia de IP, esta lista se actualiza con él.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-manifestguard-cluster-egress
+  namespace: arc-runners
+  annotations:
+    e-dani.com/motivo: >-
+      El runner arc-manifestguard necesita la API de Kubernetes para leer los CRDs (guard de
+      manifiestos, INFRA-1407); solo el service CIDR en 443 y los tres endpoints reales del API
+      en 6443. El :19900 del x86 y el resto de la tailnet siguen cerrados para el pool.
+spec:
+  podSelector:
+    matchLabels:
+      actions.github.com/scale-set-name: arc-manifestguard
+  policyTypes:
+    - Egress
+  egress:
+    # Destino pre-DNAT: la ClusterIP del service `kubernetes`.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+    # Destino post-DNAT: los endpoints hostNetwork del API server.
+    - to:
+        - ipBlock:
+            cidr: 100.107.21.89/32
+        - ipBlock:
+            cidr: 100.71.117.127/32
+        - ipBlock:
+            cidr: 100.75.189.75/32
+      ports:
+        - { protocol: TCP, port: 6443 }
