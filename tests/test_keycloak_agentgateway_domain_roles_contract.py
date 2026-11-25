@@ -15,16 +15,16 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         script = (BASE / "scripts" / "agentgateway-domain-roles.sh").read_text()
         expected = {
             "synapse", "media", "picqer", "skirmshop-plugins", "shopify",
-            "social", "workspace", "gsc", "offers", "sauvage", "hermes",
+            "social", "workspace", "gsc", "sauvage", "hermes",
             "dgx-control", "workspace-envio", "workspace-borrador", "alphalink",
-            "hindsight-tienda", "nova",
+            "hindsight-tienda", "nova", "atlassian-nova",
         }
         for domain in expected:
             self.assertIn(f"agentgateway-write:{domain}", script)
         self.assertIn("ROLE_NAMES is immutable", script)
         self.assertIn("ALLOWED_SERVICE_ACCOUNTS is immutable", script)
         self.assertIn(
-            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp"',
+            'EXPECTED_ALLOWED_SERVICE_ACCOUNTS="agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp,agentgateway-write:atlassian-nova=service-account-nova-atlassian"',
             script,
         )
         self.assertIn('roles/${role}/users', script)
@@ -107,6 +107,8 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertTrue(any("-s name=agentgateway-write:correo-ejecutor " in call for call in creations))
         # INFRA-1224/INFRA-1234: the literal route role of /nova, same family.
         self.assertTrue(any("-s name=agentgateway-write:nova " in call for call in creations))
+        # INFRA-1493: the scoped write role of nova-atlassian, same family.
+        self.assertTrue(any("-s name=agentgateway-write:atlassian-nova " in call for call in creations))
         self.assertIn('"roles":18,"created":18,"human_assigned":false,"service_account_grants":0', result.stdout)
         self.assertFalse(any("add-roles" in call for call in calls))
 
@@ -176,6 +178,26 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
             })
             self.assertEqual(1, result.returncode, holder)
             self.assertIn("agentgateway-write:nova is assigned to an unauthorized user", result.stderr)
+
+    def test_atlassian_nova_is_held_by_exactly_the_nova_atlassian_sa(self):
+        # INFRA-1493 (verdict amending condition 1 of INFRA-1396): the scoped
+        # write role of nova-atlassian (three Jira tools on /atlassian). Its
+        # one reviewed holder is the dedicated client's service account; the
+        # grant and the client scope ride hindsight-reader-client.sh (wave 24)
+        # and this hook creates the role and tolerates exactly this holder.
+        # The shared plane's SA, the chat identity or a human fail it.
+        result, _ = self._run_reconciler({
+            "roles/agentgateway-write:atlassian-nova/users": "service-account-nova-atlassian",
+        })
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn('"human_assigned":false,"service_account_grants":1', result.stdout)
+        for holder in ("service-account-agentgateway-mcp", "service-account-chat-agentgateway",
+                       "me@e-dani.com"):
+            result, _ = self._run_reconciler({
+                "roles/agentgateway-write:atlassian-nova/users": holder,
+            })
+            self.assertEqual(1, result.returncode, holder)
+            self.assertIn("agentgateway-write:atlassian-nova is assigned to an unauthorized user", result.stderr)
 
     def test_dgx_control_write_is_inert_nobody_may_hold_it(self):
         # INFRA-249: created without grantees; any holder, even the reviewed chat
@@ -272,7 +294,7 @@ class KeycloakAgentGatewayDomainRolesContractTest(unittest.TestCase):
         self.assertIn('capabilities: { drop: ["ALL"] }', manifest)
         self.assertIn("quay.io/keycloak/keycloak:26.6.2@sha256:", manifest)
         self.assertIn("app.kubernetes.io/component: agentgateway-domain-roles", manifest)
-        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp", manifest)
+        self.assertIn("value: agentgateway-write:media=service-account-chat-agentgateway,agentgateway-write:social=service-account-chat-agentgateway,agentgateway-write:workspace=service-account-chat-agentgateway,agentgateway-write:gsc=service-account-chat-agentgateway,agentgateway-write:synapse=service-account-chat-agentgateway,agentgateway-write:hermes=service-account-chat-agentgateway,agentgateway-write:social=service-account-hermes-secretaria,agentgateway-write:social=service-account-hermes-secretaria-casa,agentgateway-write:social=service-account-hermes-secretaria-dani,agentgateway-write:social=service-account-hermes-secretaria-leila,agentgateway-write:workspace=service-account-hermes-secretaria,agentgateway-write:workspace=service-account-hermes-secretaria-casa,agentgateway-write:workspace=service-account-hermes-secretaria-dani,agentgateway-write:workspace=service-account-hermes-secretaria-leila,agentgateway-write:workspace-envio=service-account-hermes-enviar,agentgateway-write:workspace-borrador=service-account-hermes-secretaria-skirmshop,agentgateway-write:correo-ejecutor=service-account-correo-ejecutor,agentgateway-write:nova=service-account-agentgateway-mcp,agentgateway-write:atlassian-nova=service-account-nova-atlassian", manifest)
         self.assertNotIn("0.0.0.0/0", manifest)
 
     def test_kustomize_owns_job_and_script(self):

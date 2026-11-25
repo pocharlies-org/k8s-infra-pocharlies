@@ -135,6 +135,23 @@ spec:
         - name: dgx-messages
           namespace: messages
           port: http
+    # DGX-1742 (security S-3): el gemelo LAN de la regla OPTIONS 450 del edge. Backlot solo se
+    # abre en casa y, en casa, AdGuard resuelve dgx.e-dani.com a este VIP: el preflight de sus
+    # escrituras llega aquí, y sin esta regla caería en la 420 de /api/cine (sso-chain → 302).
+    # Solo el preflight, solo /api/cine y solo el host al que llama Backlot (dgx.e-dani.com);
+    # el GET/POST de detrás sigue por la 420 con sso-chain.
+    - kind: Rule
+      match: Host(`dgx.e-dani.com`) && Method(`OPTIONS`) && PathPrefix(`/api/cine`)
+      priority: 450
+      middlewares:
+        - name: dgx-strip-identity-headers
+          namespace: traefik-lan
+        - name: dgx-edge-proof
+          namespace: traefik-lan
+      services:
+        - name: dgx-dashboard-ui
+          namespace: control-nexus
+          port: 80
     # DGX-1539: /api/identidad (con qué usuario está la sesión) solo lee el Bearer verificado
     # (DGX-807) y la 300 de DGX-1314 estampa cabeceras, que el backend no cree: sin sso-chain el
     # chip de la app diría «cuenta» siempre. Como Nova (420): strip + sso-chain + prueba de borde.
@@ -157,8 +174,11 @@ spec:
     # Va la página (/nova, la pantalla Expo) para que la carga lleve al login, y la API entera (todos los métodos):
     # crea un pod que entra en un Meet con la cuenta de Google de Nova y el estado es la transcripción (security).
     # La app del iPhone manda su propio Bearer (cliente dgx-app), que oauth2-proxy acepta.
+    # DGX-1676: /cine y /api/cine (producciones de OpenMontage) por la misma razón: todo /api/cine va tras
+    # ESCRITURA_CLUSTER (crea agentes en paseo-0 y lee sus guiones), y sin sso-chain el JWT no llega.
+    # DGX-1751: POST /api/arreglar/auditoria (botón «Arreglar con Claude» de /skirmshop) igual: lanza una sesión en paseo-0.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (Path(`/nova`) || PathPrefix(`/api/nova`) || Path(`/cine`) || PathPrefix(`/api/cine`) || Path(`/api/arreglar/auditoria`))
       priority: 420
       middlewares:
         - name: dgx-strip-identity-headers
@@ -200,8 +220,9 @@ spec:
     # transparente; solo un anónimo sin cookie cae al login. Sustituye a la 400 estrecha de
     # INFRA-1321 (absorbida). Sin /api/messages ni /api/autoreply (los gana la 460) ni /api/app/alarma
     # (la gana la 415). Espejo en jarvis: tests/test_jarvis_host_sso_parity_dgx_contract.py.
+    # DGX-1621 (dgx-infra#2114): /api/studio/agent* entra también: Studio web exige el JWT verificado (401 sin él).
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alertas`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || PathPrefix(`/cuentas`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && (PathPrefix(`/api/company`) || PathPrefix(`/api/litellm/keys`) || PathPrefix(`/api/litellm/config`) || PathPrefix(`/api/claude-sessions`) || PathPrefix(`/api/hermes-sessions`) || PathPrefix(`/api/app/secure`) || PathPrefix(`/api/app/pagos`) || PathPrefix(`/api/app/alertas`) || PathPrefix(`/api/app/push`) || PathPrefix(`/api/email/state`) || PathPrefix(`/plaud`) || PathPrefix(`/api/plaud`) || PathPrefix(`/entregas`) || PathPrefix(`/static/entregas`) || PathPrefix(`/api/model-routing`) || PathPrefix(`/api/hermes-panel`) || PathPrefix(`/api/studio/agent`) || (PathPrefix(`/api/secretaria`) && !PathRegexp(`^/api/secretaria/despacho(/secretaria(-[a-z]+)?)?/escalar$`)) || PathPrefix(`/despacho-secretaria`) || PathPrefix(`/cuentas`))
       priority: 400
       middlewares:
         - name: dgx-strip-identity-headers
@@ -219,8 +240,12 @@ spec:
     # lee los grupos del JWT). DGX-1539: el resto de escrituras del panel vuelve también (ver 400)
     # — sin Bearer el guarda rechaza también al operador. Absorbe la 350 estrecha de INFRA-1321.
     # Las lecturas de estas rutas quedan en la 300 (son las LECTURAS_ABIERTAS del contrato de paridad).
+    # DGX-1575: /api/kiosco/vista y /api/kiosco/escritorio (POST) entran también — el edge ya las
+    # llevaba (espejo DGX-1449) pero aquí faltaban: sin sso-chain no hay Bearer y la guarda
+    # (guarda_cluster) dejaba el panel del quiosco sin poder escribir nunca desde casa/tailnet.
+    # `Path` exacto: las de máquina /api/kiosco/*/machine (HMAC) siguen en la 300 a propósito.
     - kind: Rule
-      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      match: (Host(`dgx.e-dani.com`) || Host(`dgx.lan.e-dani.com`)) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/kiosco/vista`) || Path(`/api/kiosco/escritorio`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers
@@ -296,7 +321,7 @@ spec:
           namespace: control-nexus
           port: 80
     - kind: Rule
-      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
+      match: Host(`s3.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`)) && ((PathPrefix(`/api/cluster/`) || Path(`/api/compute/mode`) || Path(`/api/kiosco/vista`) || Path(`/api/kiosco/escritorio`) || Path(`/api/llm/dgx3/mode`) || Path(`/api/activity/power`) || Path(`/api/llm/uncensored`) || PathRegexp(`^/api/litellm/background-consumers/[^/]+/(block|unblock)$`)) && Method(`POST`))
       priority: 350
       middlewares:
         - name: dgx-strip-identity-headers

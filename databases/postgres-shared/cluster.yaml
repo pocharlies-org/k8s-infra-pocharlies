@@ -50,6 +50,21 @@ spec:
       default_statistics_target: "100"
       log_statement: "ddl"
       log_min_duration_statement: "1000"
+      # SC-5999 (2026-11-19): los incidentes Keep datastore-shared (alerta
+      # PostgresSharedBackendsWaiting) llegaban sin poder atribuir el bloqueo:
+      # con log_statement=ddl y sin log_lock_waits, un VACUUM FULL o cualquier
+      # espera de lock >deadlock_timeout (1 s) no dejaba rastro. Con esto el log
+      # dice «process N still waiting for Lock on ...» con bloqueado y bloqueador.
+      log_lock_waits: "on"
+      # SC-6471 (2026-11-24): sin pg_stat_statements el estancamiento de commits del 24-11 05:56-06:01 UTC
+      # (SYNW-20592, dead-letters de Synapse) no fue diagnosticable: los logs del pod rotan en minutos y no
+      # quedó rastro consultable de qué congelaba los commits. Con parámetros pg_stat_statements.*, CNPG añade la
+      # librería a shared_preload_libraries, hace CREATE EXTENSION en todas las bases y ejecuta un rolling
+      # restart (breve switchover). track=all captura también los COMMIT/INSERT anidados de los pools de
+      # synapse; PG17 expone además wait_event por statement. max 10000 ≈ el régimen de ~250 backends ×
+      # plantillas por base sin desalojos.
+      pg_stat_statements.max: "10000"
+      pg_stat_statements.track: "all"
       # Logical replication prerequisites (Fase 2 of synapse-stack migration).
       # max_replication_slots kept at upstream CNPG default (32) to avoid regression;
       # max_wal_senders bumped from default 10 to 20 to cover 7 synapse role PUBLICATIONs
@@ -142,13 +157,22 @@ spec:
     requests:
       # INFRA-42/INFRA-79 (2026-09-13): 500m -> 200m. p95 14d = 112m (postgres-shared-3),
       # 68m (postgres-shared-2). Limits unchanged (4 CPU) absorb the spikes.
-      cpu: "200m"
+      # SC-6471 (2026-11-24): 200m -> 1. El 200m se midió sobre el postgres-shared viejo (una fracción de
+      # la carga actual); el nvme consume de media ~2,7 cores (rate 10m, 24-11) y con shares 204 el primario
+      # compite en desventaja contra etcd/apiserver en el control-plane — la hipótesis del estancamiento del
+      # 24-11 (SYNW-20592). Con 1 el peso sube 5x y el scheduler deja de sobreventaer: requests ks5-cp-2
+      # 4590->5390m/6500m (83%), cp-3 4650m (71%), y en failover a cp-1 5711m (88%): queda hueco para
+      # recolocar.
+      cpu: "1"
       # INFRA-942 (2026-10-26): 5Gi -> 16Gi, para que el scheduler cuente con la memoria (el webhook de CNPG exige
       # además request >= shared_buffers). ks5-cp-2/3: 62,5 GiB, con 22-26 GiB libres en el peor momento de 7 días.
       memory: "16Gi"
     limits:
-      # La CPU se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores y el recall de Hindsight va a la réplica.
-      cpu: "4"
+      # SC-6471 (2026-11-24): 4 -> 5 (era «se queda en 4: ks5-cp-2 usa ~6,6 de sus 8 cores»). Con 4 el cupo se agota en régimen normal: 2,1-4,3 períodos CFS
+      # throttled/s medidos sobre ~10 períodos/s (21-43% de los períodos, también fuera de la ventana del
+      # incidente; p99 1m = 4 cores). 5 absorbe el pico sin comerse el nodo: a cp-2 le quedan ~1,9 cores
+      # para etcd/apiserver incluso con postgres bursts-hitting-5.
+      cpu: "5"
       memory: "24Gi"
 
   monitoring:
@@ -160,6 +184,18 @@ spec:
     # defaultMonitoringQueries, operador 1.29.1).
     customQueriesConfigMap:
       - name: postgres-shared-aurora-rca-coverage
+        key: queries
+      # SC-5827 C9: frescura de la proyeccion de catalogo (webhook propio de rag-app).
+      - name: postgres-shared-catalogo-freshness
+        key: queries
+      # INFRA-1295 P3: ociosa mas antigua por rol (guardia del idle_session_timeout).
+      # La consulta y su alerta (PostgresSharedOldestIdleSession) entraron con #545
+      # pero este cable se olvidó: sin él la metrica no se exporta y la alerta esta
+      # muda. Corregido en INFRA-1464 al cablear la consulta de roles.
+      - name: postgres-shared-idle-sessions
+        key: queries
+      # INFRA-1464: backends y connectionLimit por rol (guardia de saturacion por rol).
+      - name: postgres-shared-role-connections
         key: queries
 
   managed:
@@ -234,6 +270,16 @@ spec:
         passwordSecret:
           name: dgxbench-db-credentials
         comment: "DGX benchmark results (dgx-infra services/dashboard/bench); pool capped at 3"
+      # DGX-1022: índice en Postgres de las skills de Hermes (dgx-infra
+      # services/dashboard/skills). El dashboard es el único writer (pool max_size=3
+      # perezoso) y el Job importador no toca la BD: emite JSON por stdout.
+      # CONNECTION LIMIT 5 en role-settings.yaml.
+      - name: dgxskills
+        ensure: present
+        login: true
+        passwordSecret:
+          name: dgxskills-db-credentials
+        comment: "DGX skills index (dgx-infra services/dashboard/skills); pool capped at 3, CONNECTION LIMIT 5"
       # Synapse host stack (41 services in sauvage), migrated from docker shared-postgres
       # to CNPG (2026-06-08). Mirrors the role topology in docker: synapse_app is a NOLOGIN
       # group; the 6 login roles inherit from it. synapse_engine + synapse_admin BYPASSRLS.
@@ -380,6 +426,17 @@ spec:
         passwordSecret:
           name: company-crm-db-credentials
         comment: "CRM propio de la compañía (repo pocharlies-org/company-crm); dueño de la base company_crm"
+      # SC-6148: rol del supervisor de la compañía (base company, dueño de su
+      # esquema). La contraseña la posee 1Password (item
+      # `company-supervisor-db`); CNPG la reconcilia desde
+      # company-db-credentials (ExternalSecret en app-credentials.yaml, wave
+      # -1), que debe estar materializado ANTES de aplicar este spec.
+      - name: company
+        ensure: present
+        login: true
+        passwordSecret:
+          name: company-db-credentials
+        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148."
       # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
       # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
       # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la
@@ -400,24 +457,40 @@ spec:
         comment: "UI de gestión Skirmbooks (repo: pocharlies-org/skirmbooks-gestoria-src). SKIRM-184."
       # INFRA-940: Hindsight (memoria de agentes). Contraseña en 1Password (item
       # `hindsight-db`), reconciliada desde hindsight-db-credentials (app-credentials.yaml).
-      # connectionLimit: HINDSIGHT_API_DB_POOL_MAX_SIZE=40 (values de k8s-hindsight-pocharlies, INFRA-942 19-10)
-      # con 1 réplica de API; 50 deja margen para las migraciones del arranque y el rollout.
+      # SC-6031 (CRON-19991, 19-11): con 50 el arranque de la API reventaba con
+      # «too many connections for role "hindsight"» → CrashLoopBackOff de hindsight-api →
+      # service sin endpoints → los CronJobs hindsight-consolidacion y codigo-ev fallaban
+      # con Connection refused. El límite es por instancia y en el primario se juntan:
+      # pool de escritura 40 (HINDSIGHT_API_DB_POOL_MAX_SIZE) + migraciones del arranque +
+      # el pool del anterior pod aún drenando durante el reinicio (el bucle de crashes se
+      # canibalizaba: cada arranque nuevo competía con los ~40 del moribundo). El pool de
+      # lectura (40) va al réplica postgres-shared-ro, donde el mismo límite también cuenta.
+      # 100 = 40 de pool + solapamiento de rollout/crash-loop + margen de migraciones.
+      # Máximos por rol sobre un clúster de max_connections=500: no desplaza a los demás.
       - name: hindsight
         ensure: present
         login: true
-        connectionLimit: 50
+        connectionLimit: 100
         passwordSecret:
           name: hindsight-db-credentials
         comment: "Hindsight, memoria de agentes (repo: pocharlies-org/k8s-hindsight-pocharlies). INFRA-940."
-      # SC-5489: comercio del Brain (catálogo, precios, ofertas) que sale de Qdrant/FalkorDB.
+      # SC-5489: comercio (catálogo, precios, ofertas). SC-5827: el Brain murió; el rol
+      # `catalogo` es ahora el writer de rag-app (dueña de la proyección desde su webhook).
       # Rol propio, no `skirmshop` (que es dueño de sii y skirmbooks). Item `catalogo-db`, sembrado por security.
+      # SC-5985: con 20 reventó el 18-11 (CRON-19899): dos jobs del cronjob
+      # `rag-picqer-price-sync` instantiatedos por Synapse a la vez (15:07 y 15:13,
+      # el segundo con el primero aún en retry) + el writer de rag-app pasaron de 20
+      # y el job murió con «too many connections for role "catalogo"». El pool de
+      # Prisma del job no va acotado en la URL, así que el tope sigue en el servidor
+      # (patrón de `horarios`/`hindsight`): 40 da margen a dos jobs concurrentes y
+      # rag-app; max_connections del clúster es 500 y el uso total medido ~314.
       - name: catalogo
         ensure: present
         login: true
-        connectionLimit: 20
+        connectionLimit: 40
         passwordSecret:
           name: catalogo-db-credentials
-        comment: "Comercio del Brain sobre pgvector (repo: pocharlies-org/skirmshop-brain-v2). SC-5489."
+        comment: "Comercio (catálogo, precios, ofertas) sobre pgvector. Dueña: rag-app (skirmshopshopifyapp) desde SC-5827. SC-5489."
       # SC-2956 D2: base de los empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies).
       # Contraseña en 1Password (item `analisis-db`, sembrado por security), reconciliada desde
       # analisis-db-credentials (app-credentials.yaml). No aplicar hasta que ese item exista.
@@ -428,24 +501,6 @@ spec:
         passwordSecret:
           name: analisis-db-credentials
         comment: "Empleados de análisis (repo: pocharlies-org/k8s-analisis-pocharlies). SC-2956 D2."
-      # INFRA-555 (P2-b): rol de SOLO LECTURA del indexador de Open WebUI (script
-      # ingest_open_webui.py en skirmshop-brain-v2; CronJob en skirmshop-brain-k8s).
-      # Contraseña en 1Password (item `brain-openwebui-db`, campos DB_USER y
-      # DB_PASSWORD, sembrado por security), reconciliada desde
-      # brain-openwebui-db-credentials (ExternalSecret en app-credentials.yaml).
-      # No aplicar hasta que ese item exista (secuencia de merge en el PR).
-      # Los GRANT los concede el Job PostSync brain-openwebui-grants.yaml: SELECT
-      # solo sobre chat, "user" y chat_message de la base chat; cero escrituras.
-      - name: brain_openwebui_ro
-        ensure: present
-        login: true
-        # connectionLimit: el CronJob abre 1 conexión por pasada; 3 deja margen
-        # para verificación manual y corta un pool desbocado (historial de
-        # saturación del clúster, 367/400 el 28-07).
-        connectionLimit: 3
-        passwordSecret:
-          name: brain-openwebui-db-credentials
-        comment: "Indexador de solo lectura de Open WebUI (repo: pocharlies-org/skirmshop-brain-v2; CronJob en skirmshop-brain-k8s). INFRA-555."
 
   # INFRA-942 (2026-10-23): promovido. Se creó como réplica en streaming de
   # postgres-shared (Longhorn) y se promovió en el corte con el viejo cercado.
@@ -517,7 +572,15 @@ spec:
           key: ACCESS_SECRET_KEY
       wal:
         compression: gzip
-        maxParallel: 4
+        # 2026-11-25 (SC-6517): un pico de generación de WAL (reindex de embeddings de
+        # hindsight: ~40 GiB en 40 min, ~17 MB/s) superó el caudal de archivo con 4
+        # streams (~7.5 MB/s medidos: 16 MiB/segmento en ~8.5 s por stream, CPU 81% idle
+        # → límite de latencia/ancho de banda por stream, no de CPU). El backlog de
+        # 5340 segmentos (84 GiB) sin archivar no se puede reciclar y se comió 40 GiB
+        # de la raíz de ks5-cp-3 → alerta NodeRootDiskLowOrFilling (NODE-20744).
+        # Con 8 streams el caudal duplica si el enlace lo permite y el backlog del pico
+        # queda a la mitad; no tiene coste en steady state.
+        maxParallel: 8
       data:
         compression: gzip
         jobs: 2
@@ -541,6 +604,14 @@ spec:
         operator: Exists
         effect: NoExecute
         tolerationSeconds: 300
+      # SC-6096: los nodos ks5-cp-* llevan ahora taint control-plane:NoSchedule. Las PVCs
+      # de este cluster son local-path atadas a ks5-cp-2/3 (no se mueven a otro nodo), asi
+      # que la toleracion se declara aqui explicita (patron de kubernetes/scheduling/
+      # README.md para BDs del pool ks5) y no se deja solo al allowlist de Kyverno:
+      # si la policy faltara, el primario no podria resucitar.
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
     nodeSelector:
       kubernetes.io/arch: amd64
       # 2026-07-29: required anti-affinity (above) stopped co-location but still

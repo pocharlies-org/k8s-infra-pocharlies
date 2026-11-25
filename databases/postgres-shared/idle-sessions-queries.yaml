@@ -22,8 +22,12 @@
 # `<collector>_<query>_<column>` (patrón documentado en
 # aurora-rca-coverage-queries.yaml):
 #   cnpg_idle_sessions_oldest_seconds{usename,datname}
-# Las columnas no declaradas como métrica (`usename`, `datname`) salen como
-# etiquetas.
+# Las columnas de etiqueta (`usename`, `datname`) se declaran con
+# `usage: "LABEL"`: el collector de CNPG exige que el número de entradas de
+# `metrics` iguale el de columnas del SELECT o descarta la consulta entera
+# («Columns number mismatch», medido en vivo el 19/11 al cablear esta consulta,
+# que hasta entonces no estaba en customQueriesConfigMap y por eso el fallo no
+# había aparecido nunca).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -48,6 +52,12 @@ data:
       target_databases:
         - postgres
       metrics:
+        - usename:
+            usage: "LABEL"
+            description: "Rol dueno de la conexion (etiqueta variable)"
+        - datname:
+            usage: "LABEL"
+            description: "Base de la conexion (etiqueta variable)"
         - oldest_seconds:
             usage: "GAUGE"
             description: "Segundos desde el ultimo cambio de estado de la conexion idle mas antigua del rol (guardia del idle_session_timeout, INFRA-1295)"

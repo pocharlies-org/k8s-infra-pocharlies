@@ -1,0 +1,56 @@
+---
+# DGX-1675 (épica DGX-1674, Dani 17-11 «Backlot original solo en casa»): el tablero Backlot de
+# OpenMontage, servido UPSTREAM PURO por el Deployment `backlot` del ns `paseo` (k8s-paseo-pocharlies,
+# k8s/backlot.yaml), solo para LAN, tailnet y pods/servicios del clúster. Desde cualquier otra red la
+# regla no casa y Traefik responde 404. Fuera de casa no hay tablero; las acciones sobre las producciones
+# van por el dashboard (/api/cine/*, tras sso-chain), no por aquí.
+#
+# Mismo montaje que correo.lan (DGX-880): el comodín `*.lan.e-dani.com` resuelve al VIP de traefik-lan y el
+# certificado es el de la casa (TLSStore por defecto, `*.lan.e-dani.com`). Sin clase de ingreso que el borde
+# procese y `paseo` fuera del allowlist de traefik-edge: no hay ruta pública por sauvage.
+#
+# Sin sso-chain (como paseo.e-dani.com en LAN, DGX-1314: LAN = Dani). Backlot es de SOLO LECTURA (nunca
+# escribe en proyectos, no tiene ruta de escritura) y no lee identidad de ninguna cabecera: no hay identidad
+# que forjar. Sí se quitan Cookie y Authorization (abajo) para que la sesión SSO del navegador no llegue a él.
+#
+# Host reescrito a `localhost`: el TrustedHostMiddleware de Backlot (backlot/server.py) solo admite
+# localhost/127.0.0.1 como defensa contra DNS-rebinding en su uso local. Reescribir aquí es cumplir su
+# contrato sin parchear el clon (regla de Dani: OpenMontage tal cual, DGX-1661).
+# Cookie y Authorization vacías (security, DGX-1677 §9.3): el tablero no tiene login y el navegador le mandaría la
+# cookie SSO de .e-dani.com; un valor vacío en customRequestHeaders quita la cabecera.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cine-host-localhost
+  namespace: traefik-lan
+  labels: {app.kubernetes.io/part-of: cine, app.kubernetes.io/managed-by: gitops}
+spec:
+  headers:
+    customRequestHeaders:
+      Host: localhost
+      Cookie: ""
+      Authorization: ""
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lan-cine
+  namespace: traefik-lan
+  labels: {app.kubernetes.io/part-of: cine, app.kubernetes.io/managed-by: gitops}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`cine.lan.e-dani.com`) && (ClientIP(`192.168.50.0/24`) || ClientIP(`100.64.0.0/10`) || ClientIP(`10.42.0.0/16`) || ClientIP(`10.43.0.0/16`))
+      middlewares:
+        - name: cine-host-localhost
+          namespace: traefik-lan
+      services:
+        - name: backlot
+          namespace: paseo
+          port: 19913
+  tls:
+    store:
+      name: default
+      namespace: traefik-lan

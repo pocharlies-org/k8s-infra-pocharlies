@@ -1,0 +1,60 @@
+# INFRA-1464 (SC-6032): consulta a medida del exporter CNPG que hace visible la
+# saturación POR ROL — el incidente del 17-19/11/2026 fue ciego para las reglas de
+# `postgres-shared-connections`: el clúster estaba sano (~314/500) y lo que saturó
+# fue el connectionLimit del rol `hindsight` (pool 40 + migraciones de startup
+# sobre un límite de 50). `cnpg_backends_total` permite ver QUÉ rol consume
+# (etiqueta usename) pero no CUÁNTO le deja su límite: rolconnlimit vive en
+# pg_roles y ninguna métrica nativa lo exporta.
+#
+# `connectionLimit` de un rol es POR INSTANCIA (cada postmaster cuenta sus
+# backends), así que la consulta corre también en la réplica (sin `primary:
+# true`): las series salen con la etiqueta `pod` y la alerta compara cada
+# instancia por separado, como las reglas de max_connections de monitoring.yaml.
+# `pg_roles` y `pg_stat_activity` las lee el usuario de métricas de CNPG
+# (`pg_read_all_stats`); no hace falta GRANT nuevo. Solo roles con límite
+# puesto (`rolconnlimit > 0`): -1 es ilimitado y no tiene 80% que vigilar.
+#
+# Series exportadas — el exporter compone el nombre como
+# `<collector>_<query>_<column>`:
+#   cnpg_role_connections_conn_limit{rolname}
+#   cnpg_role_connections_backends{rolname}
+# Las consume la alerta `PostgresSharedRoleConnectionsHigh` de monitoring.yaml.
+#
+# OJO (medido en vivo el 19/11 al desplegar esta consulta): el collector de CNPG
+# descarta la consulta entera con «Columns number mismatch» si el número de
+# columnas del SELECT no coincide con el de entradas de `metrics` — las columnas
+# de etiqueta NO se añaden "gratis": hay que declararlas también ellas, con
+# `usage: "LABEL"` (parser.go: ColumnUsage LABEL → variable label, mappings.go).
+# De ahí la entrada `rolname` abajo con usage LABEL.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-role-connections
+  namespace: databases
+  labels:
+    # cnpg.io/reload es una LABEL (docs CNPG 1.29, Monitoring → User defined
+    # metrics): las instancias recargan las consultas al cambiar este
+    # ConfigMap sin `kubectl cnpg reload` manual.
+    cnpg.io/reload: "true"
+    app.kubernetes.io/component: postgres-monitoring
+data:
+  queries: |
+    role_connections:
+      query: |
+        SELECT r.rolname AS rolname,
+               r.rolconnlimit::bigint AS conn_limit,
+               (SELECT count(*) FROM pg_stat_activity a WHERE a.usename = r.rolname)::bigint AS backends
+        FROM pg_roles r
+        WHERE r.rolcanlogin AND r.rolconnlimit > 0
+      target_databases:
+        - postgres
+      metrics:
+        - rolname:
+            usage: "LABEL"
+            description: "Nombre del rol (etiqueta variable de las dos metricas)"
+        - conn_limit:
+            usage: "GAUGE"
+            description: "connectionLimit del rol en el servidor (ALTER ROLE ... CONNECTION LIMIT); solo roles con limite puesto"
+        - backends:
+            usage: "GAUGE"
+            description: "Backends del rol en esta instancia (pg_stat_activity por usename)"

@@ -10,7 +10,7 @@ umask 077
 # me@e-dani.com and lays84.mv@gmail.com, those two and nobody else; the other
 # seven Open WebUI users do not hold it.
 #
-# The reviewed holder set (the seven grantees of ROLES.yaml):
+# The reviewed holder set (the eight grantees of ROLES.yaml):
 #   * service-account-hermes-secretaria and service-account-hermes-secretaria-
 #     casa — the Hermes secretarias read the personal bank (granted by the
 #     SC-4051 ruling; asserted here and re-granted if drift removed them);
@@ -35,6 +35,21 @@ umask 077
 #     Literal URL and client_id, no tenant key, no write plane). Same door as
 #     socialmedia-hindsight: the client is created at wave 24 by
 #     hindsight-reader-client.sh, so the account exists when this wave runs;
+#   * service-account-agentgateway-mcp — the shared session plane: the JWT the
+#     local auth-proxy (127.0.0.1:8790) of the Claude CLI sessions in paseo-0
+#     and company-0 sends to the gateway. Decision of Dani, owner of the bank,
+#     of 20-11-2026 (SC-6113): "el personal quiero que se pueda consultar" —
+#     every Claude session reads `claude-personal` and `personal`. It replaces,
+#     for this SA only, the earlier rule "the personal bank does NOT travel in
+#     the shared SA of the MCP plane" (SC-4051 verdict). The role reaches the
+#     token through the agentgateway-mcp client scope (fullScopeAllowed=false):
+#     grant and scope mapping are written by agentgateway-read-grants.sh
+#     (wave 20, PERSONAL_READ_ROLE_NAME, which also pins the exact minted
+#     token); here it is one more reviewed holder, re-granted if drift removed
+#     it. The SA is shared by EVERY session of the auth-proxy, including those
+#     the router sends to providers outside the cluster: a tool result of the
+#     personal bank can leave the cluster (the exposure claude-personal
+#     already has on the same plane). The chat SA stays revoked (below);
 #   * the two humans, pinned by their immutable Keycloak subject (the `sub`
 #     every consumer binds on, OWU-80 precedent) with the username, the
 #     enabled flag and human-ness cross-checked before any write.
@@ -70,9 +85,10 @@ EXPECTED_ROLE_NAME="agentgateway-read:hindsight-personal"
 # e51253a7-c137-4c6c-9fb9-af9cecd3b147 = me@e-dani.com, the OWU-80 subject, and
 # 66ec6f4f-5f2c-44f6-a3db-0dccba6e1748 = lays84.mv@gmail.com).
 HUMAN_GRANTEE_IDS="e51253a7-c137-4c6c-9fb9-af9cecd3b147=me@e-dani.com 66ec6f4f-5f2c-44f6-a3db-0dccba6e1748=lays84.mv@gmail.com"
-# The reviewed service-account holders (SC-4051): asserted present, re-granted
-# if missing, never revoked by this hook.
-REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-socialmedia-hindsight,service-account-nova-hindsight-personal,service-account-synapse-hindsight-personal"
+# The reviewed service-account holders (SC-4051 onwards, one review each in
+# the header; the last one, the shared session plane, is SC-6113): asserted
+# present, re-granted if missing, never revoked by this hook.
+REVIEWED_SERVICE_ACCOUNTS="service-account-hermes-secretaria,service-account-hermes-secretaria-casa,service-account-socialmedia-hindsight,service-account-nova-hindsight-personal,service-account-synapse-hindsight-personal,service-account-agentgateway-mcp"
 # The chat service account lost the grant in SC-4304 S6 (sidecar bypass,
 # header above). Its client's manual scope mapping is revoked with it.
 REVOKED_SERVICE_ACCOUNTS="service-account-chat-agentgateway"
@@ -233,7 +249,7 @@ reconcile_holders() {
   IFS="${old_ifs}"
   # 3. Exclusivity: every direct holder outside the reviewed set is revoked.
   # Bounded listing (same idiom as the read-grants hook): the reviewed set is
-  # seven, so max=10 makes an extra, unauthorized holder visible.
+  # eight (SC-6113), so max=10 makes an extra, unauthorized holder visible.
   holders="$(kget "roles/${ROLE_NAME}/users" -q first=0 -q max=10 \
     --fields id,username --format csv --noquotes | nonempty_lines)"
   allowed="$(allowed_holder_ids)"
@@ -292,7 +308,7 @@ revoke_chat_client_scope_mapping() {
 }
 
 report() {
-  printf '{"realm":"%s","role":"%s","holders_reviewed":7,"changed":%s}\n' \
+  printf '{"realm":"%s","role":"%s","holders_reviewed":8,"changed":%s}\n' \
     "${REALM}" "${ROLE_NAME}" "$1"
 }
 

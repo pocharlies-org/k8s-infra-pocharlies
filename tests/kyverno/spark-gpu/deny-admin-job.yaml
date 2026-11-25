@@ -1,0 +1,31 @@
+# user: system:admin
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deny-admin-job
+  namespace: comfyui
+spec:
+  template:
+    metadata:
+      labels:
+        app: deny-admin-job
+        gpu.dgx-infra/role: on-demand
+        gpu.dgx-infra/pool: gb10
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      containers:
+      - name: c
+        image: x
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 600

@@ -217,7 +217,7 @@ alone while only `/studio` went through the sidecar). Those six are exactly the
 domains the chat already reached with the hand-pasted umbrella token its MCP
 tool servers used until that date, so moving every server onto the sidecar loses
 no capability and drops the umbrella's reach over shopify, picqer,
-skirmshop-plugins, offers and sauvage. The roles are owned by the domain-roles
+skirmshop-plugins and sauvage. The roles are owned by the domain-roles
 hook above; this reconciler refuses to run if one is missing and never creates
 or deletes them. It fails if the service account holds ANY `agentgateway-write*`
 role outside the set, if a human or group holds one of them, or if the minted

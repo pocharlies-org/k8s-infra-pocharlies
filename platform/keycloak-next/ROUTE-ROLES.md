@@ -11,7 +11,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
 - Un **gate** es un par (ruta, rol). `require` = el rol se exige a nivel de ruta
   (regla `require:` o regla de autorización sin tool); `tools` = el rol se exige
   en reglas `mcpAuthorization` que nombran tools, con la lista exacta de tools.
-  Hoy: **54 rutas, 91 gates** en esta matriz (SC-5492, 15-11-2026: − filas `brain` y
+  Hoy: **53 rutas, 90 gates** en esta matriz (INFRA-1493, 20-11-2026: + gate `atlassian` × `agentgateway-write:atlassian-nova` (3 tools de Jira de Nova), declarado por delante del config vivo — pendiente del merge de la PR de escrituras de INFRA-1382 en k8s-agentgateway; el verificador lo señala hasta que la regla despliegue; SC-5827, 17-11-2026: − fila `offers`, retirada del gateway con offers-mcp (dictamen C7, el Brain se apaga); SC-5492, 15-11-2026: − filas `brain` y
   `chat-brain`, retiradas del gateway con brain-mcp en k8s-agentgateway-pocharlies#287;
   INFRA-1234, 09-11-2026: + fila `nova`,
   declarada por delante del config vivo — pendiente del merge de
@@ -35,7 +35,7 @@ no cambia ningún `require:`: documenta el que hay y falla cuando se mueve.
   diferencia son rutas y tools que la matriz aún no recoge (el verificador las
   señala una a una; `workspace` y `chat-workspace` están al día desde INFRA-676). SC-4051 (02-11-2026) declara las dos filas `hindsight-claude-personal` y `hindsight-personal`
   (rutas de SC-4050, k8s-agentgateway-pocharlies#246, fusionada y viva: banco fijo por path, rol dedicado
-  por banco, sin plano de escritura; grants en ROLES.yaml). SC-4304 (02-11-2026) declara la fila `hindsight-codigo` (ruta de k8s-agentgateway-pocharlies#248, fusionada y viva: banco `codigo` — corpus del código de los repos del registro, gitleaks en el ingreso —, rol dedicado, grants en ROLES.yaml). SC-4304 S6 (03-11-2026) declara la fila `chat-hindsight-personal` (gemela de chat de /hindsight-personal para Open WebUI, k8s-agentgateway-pocharlies#257, fusionada y viva: mismo banco `personal` fijo por path y mismo rol de ruta; el token lo emite el client público dedicado agentgateway-chat-hindsight-mcp y los titulares son los dos humanos de la decisión de Dani de 03-11 más las dos SAs de las secretarias, grants en ROLES.yaml). DGX-1218 declara
+  por banco, sin plano de escritura; grants en ROLES.yaml). SC-4304 (02-11-2026) declara la fila `hindsight-codigo` (ruta de k8s-agentgateway-pocharlies#248, fusionada y viva: banco `codigo` — corpus del código de los repos del registro, gitleaks en el ingreso —, rol dedicado, grants en ROLES.yaml). SC-4304 S6 (03-11-2026) declara la fila `chat-hindsight-personal` (gemela de chat de /hindsight-personal para Open WebUI, k8s-agentgateway-pocharlies#257, fusionada y viva: mismo banco `personal` fijo por path y mismo rol de ruta; el token lo emite el client público dedicado agentgateway-chat-hindsight-mcp y los titulares son los dos humanos de la decisión de Dani de 03-11 más las dos SAs de las secretarias, grants en ROLES.yaml). SC-6113 (20-11-2026) no cambia ninguna fila: el rol de `hindsight-personal` gana el titular `service-account-agentgateway-mcp` (el plano compartido de las sesiones de Claude, decisión de Dani, dueño del banco); el conjunto vigente de titulares está en ROLES.yaml. DGX-1218 declara
   los tres gates de `agentgateway-write:correo-ejecutor` (`shopify-admin` y `skirmshop-plugins-admin`) por delante
   del config vivo, hasta el merge de k8s-agentgateway-pocharlies#221.
 - `unrouted` = roles gateway vivos que ninguna ruta exige, con para qué existen.
@@ -89,7 +89,6 @@ los pares de `chat-agentgateway`. No se toca el `require:` de ninguna ruta.
 |---|---|---|
 | `agentgateway-read:dgx-control` | reservado | /dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente. |
 | `agentgateway-read:image` | reservado | Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44). |
-| `agentgateway-read:offers` | reservado | /offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require. |
 | `agentgateway-read:tts` | reservado | /tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require. |
 | `claude-sessions` | aplicacion | Rol de aplicacion del servicio chat-session-trigger (OWU-27): el propio backend decide quien crea y sigue sesiones de Claude CLI desde el chat. El gateway no lo lee; /claude-sessions se gatea con agentgateway-read:claude-sessions y agentgateway-write:claude-sessions. |
 
@@ -147,10 +146,9 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
 | `plaud` | `/plaud` | `agentgateway-read:plaud` | — |
 | `photos` | `/photos` | `agentgateway-read:photos` | — |
 | `merchant` | `/merchant` | `agentgateway-read:merchant` | — |
-| `offers` | `/offers` | — | `agentgateway-write` (3), `agentgateway-write:offers` (3) |
 | `company-metrics` | `/company-metrics` | `company-metrics-read` | `company-metrics-read` (5) |
 | `chat-atlassian` | `/chat-atlassian` | — | `agentgateway-write` (40) |
-| `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40) |
+| `atlassian` | `/atlassian` | `agentgateway-read:atlassian` | `agentgateway-write` (40), `agentgateway-write:atlassian-nova` (3) |
 | `1password` | `/1password` | — | `agentgateway-write` (8) |
 | `claude-sessions-read` | `/claude-sessions` | `agentgateway-read:claude-sessions` | — |
 | `claude-sessions-write` | `/claude-sessions` | `agentgateway-write:claude-sessions` | — |
@@ -508,15 +506,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "tools": {}
     },
     {
-      "route": "offers",
-      "path": "/offers",
-      "require": [],
-      "tools": {
-        "agentgateway-write": ["offers_dismiss", "offers_import", "offers_link"],
-        "agentgateway-write:offers": ["offers_dismiss", "offers_import", "offers_link"]
-      }
-    },
-    {
       "route": "company-metrics",
       "path": "/company-metrics",
       "require": ["company-metrics-read"],
@@ -537,6 +526,7 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
       "path": "/atlassian",
       "require": ["agentgateway-read:atlassian"],
       "tools": {
+        "agentgateway-write:atlassian-nova": ["jira_add_comment", "jira_create_issue", "jira_edit_comment"],
         "agentgateway-write": ["confluence_add_comment", "confluence_add_inline_comment", "confluence_add_label", "confluence_copy_page", "confluence_create_page", "confluence_create_page_from_template", "confluence_delete_attachment", "confluence_delete_page", "confluence_move_page", "confluence_reply_to_comment", "confluence_set_page_restrictions", "confluence_update_page", "confluence_update_page_section", "confluence_upload_attachment", "confluence_upload_attachments", "jira_add_comment", "jira_add_issues_to_sprint", "jira_add_watcher", "jira_add_worklog", "jira_assign_issue", "jira_batch_create_issues", "jira_batch_create_versions", "jira_create_customer_request", "jira_create_issue", "jira_create_issue_link", "jira_create_remote_issue_link", "jira_create_sprint", "jira_create_version", "jira_delete_issue", "jira_edit_comment", "jira_link_to_epic", "jira_move_issue", "jira_move_issues_to_backlog", "jira_remove_issue_link", "jira_remove_watcher", "jira_transition_issue", "jira_update_issue", "jira_update_proforma_form_answers", "jira_update_sprint", "jira_update_version"]
       }
     },
@@ -583,7 +573,6 @@ Rutas `chat-*` sin rol de ruta: su entrada la autentica `mcpAuthentication`
     {"role": "agentgateway-read:dgx-control", "disposition": "reservado", "purpose": "/dgx-control y /chat-dgx-control no exigen rol lector: compute_mode_get y refusal_lambda_get se permiten a cualquier JWT valido del issuer y la audiencia. agentgateway-read-grants.sh lo concede a agentgateway-mcp (matriz R2, INFRA-44) para que la ruta pueda adoptar un require sin cortar a su cliente."},
     {"role": "agentgateway-read:image", "disposition": "reservado", "purpose": "Ruta /image retirada 24-09 (imagen = solo studio_generate_image en /studio y /chat-studio); el rol sigue vivo, no se borra. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44)."},
     {"role": "cto-office-send", "disposition": "reservado", "purpose": "Ruta /cto-office retirada 19-10 (DGX-1135, k8s-agentgateway-pocharlies#210: opencode retirado). El rol sigue vivo: openclaw-readonly-clients.sh, synapse-sre-client.sh y agentgateway-read-grants.sh lo usan como rol base inmutable y fallan cerrados sin él; retirarlo exige antes cambiar esos reconciliadores."},
-    {"role": "agentgateway-read:offers", "disposition": "reservado", "purpose": "/offers no exige rol lector: offers_search y offers_test_connection se permiten a cualquier JWT valido. Concedido a agentgateway-mcp y openclaw-readonly-agentgateway por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-read:tts", "disposition": "reservado", "purpose": "/tts y /chat-tts no exigen rol lector: tts_list_voices, tts_health y tts_voice_design_spec se permiten a cualquier JWT valido. Concedido a agentgateway-mcp por agentgateway-read-grants.sh (INFRA-44) para cuando la ruta adopte un require."},
     {"role": "agentgateway-write:compania", "disposition": "reservado", "purpose": "Medido en el realm vivo el 16-10 (SC-2522): concedido por admin API a service-account-hermes-secretaria y -casa sin declaracion en GitOps; ninguna ruta de k8s-agentgateway-pocharlies lo exige todavia. Entra en unrouted como llego (precedente INFRA-380); cuando la ruta /compania se declare, sale de aqui y pasa a su fila de la matriz."},
     {"role": "agentgateway-write:analisis", "disposition": "reservado", "purpose": "Medido en el realm vivo el 27-10 (SC-1282): creado y concedido por security a service-account-analisis en SC-2967 ([SEC] de SC-2951) con limite de tools (navigate, resize, screenshot, snapshot, console_messages, evaluate) para /playwright; la regla del gateway para ese limite queda pendiente (devops). Entra en unrouted como llego (precedente SC-2522); cuando la ruta lo declare, sale de aqui y pasa a su fila de la matriz."},

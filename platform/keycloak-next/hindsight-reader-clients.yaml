@@ -20,6 +20,10 @@
 #       nova-hindsight-personal        agentgateway-read:hindsight-personal
 #       nova-hindsight-cloudblue       agentgateway-read:hindsight-cloudblue
 #       nova-atlassian                 agentgateway-read:atlassian
+#                                      + agentgateway-write:atlassian-nova
+#                                        (INFRA-1493: sus tres escrituras de
+#                                        Jira por /atlassian; enmienda a C2,
+#                                        nunca el write pelado)
 #     C1 of the verdict is binding and lives in Nova, not here: with a bank
 #     profile loaded, no model outside the cluster runs the turn
 #     (k8s-nova-pocharlies#40).
@@ -518,7 +522,12 @@ spec:
 ---
 # Nova (INFRA-1245, verdict INFRA-1248): the voice agent's Jira/Confluence
 # reads (jira_get_issue, jira_search, confluence_search, confluence_get_page)
-# on the /atlassian route. The grant is owned by this hook;
+# on the /atlassian route. Since INFRA-1493 (security verdict amending C2 of
+# INFRA-1248) this hook also grants the scoped write role
+# agentgateway-write:atlassian-nova (jira_add_comment, jira_edit_comment and
+# jira_create_issue on /atlassian, INFRA-1382): created by the domain-roles
+# hook (wave 19), granted and scope-mapped here, never the bare
+# agentgateway-write. The grant is owned by this hook;
 # agentgateway-read-grants (wave 20) admits service-account-nova-atlassian in
 # the role's holder allowlist. The gateway-side identity-binding of this sub
 # goes in the k8s-agentgateway config PR (INFRA-1248, precedent jarvis-echo,

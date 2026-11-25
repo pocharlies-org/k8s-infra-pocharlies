@@ -107,8 +107,8 @@ jobs:
             tests/test_dgx_lan_sso_secretaria_escrituras_contract.py \
             tests/test_jarvis_host_sso_parity_dgx_contract.py \
             tests/test_dgx_edge_proof_contract.py \
+            tests/test_dgx_cine_preflight_contract.py \
             tests/test_agentgateway_token_smoke_contract.py \
-            tests/test_brain_shopify_webhooks_edge_contract.py \
             tests/test_pagos_hermes_reader_contract.py \
             tests/test_arc_manifestguard_rbac_contract.py
 
@@ -200,6 +200,7 @@ jobs:
         run: |
           python3 scripts/gen_coredns_edani.py --check
           python3 -m unittest tests/test_coredns_edani_contract.py -v
+          python3 -m unittest tests/test_edani_dns_divergence_watch_contract.py -v
 
   private-service-exposure-contract:
     runs-on: arc-k8s
@@ -247,7 +248,7 @@ jobs:
       - name: Install YAML parser
         run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
       - name: Validate the 1Password Connect read path (INFRA-523)
-        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py tests/test_onepassword_store_wave_contract.py tests/test_alibaba_plan_policy_contract.py -v
+        run: python3 -m unittest tests/test_onepassword_connect_contract.py tests/test_onepassword_onchange_policy_contract.py tests/test_onepassword_store_wave_contract.py tests/test_alibaba_plan_policy_contract.py tests/test_spark_gpu_policy_contract.py tests/test_job_ttl_default_policy_contract.py tests/test_arc_runner_ttl_policy_contract.py tests/test_control_plane_toleration_policy_contract.py -v
 
   synapse-sre-postgres-role-contract:
     runs-on: arc-k8s
@@ -255,6 +256,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate least-privilege SRE database roles
         run: python3 -m unittest tests/test_synapse_sre_postgres_roles.py
+
+  # SC-6476 / INFRA-1555: la guardia anti-atasco de copias CNPG. El test extrae el
+  # guard.py real del ConfigMap y ejercita reconcile() con reloj fijo a la hora del
+  # incidente: retry del daily failed en la misma pasada, catch-up del ScheduledBackup,
+  # tope de 4 intentos, las carreras SC-6103 y los umbrales por evento.
+  cnpg-backup-guard-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the CNPG backup guard (SC-6476)
+        run: python3 -m unittest tests/test_cnpg_backup_guard_contract.py -v
 
   skirmbooks-ui-db-role-contract:
     runs-on: arc-k8s
@@ -286,6 +303,22 @@ jobs:
       # replication and a stable Sentinel myid).
       - name: Validate shared Valkey startup scripts (INFRA-859)
         run: python3 -m unittest tests/test_shared_valkey_startup_contract.py
+
+  # SC-5880: decisión pura del etiquetador de master valkey (qué pod
+  # etiquetar dada la dirección de Sentinel) y los contratos del manifiesto
+  # (Role sin pods/exec, NetworkPolicy del 26379, Services *-master intactos).
+  # La decisión es stdlib; el YAML parser es para los contratos de manifiesto.
+  valkey-master-labeler-contract:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML==6.0.2
+      - name: Validate the valkey master labeler (SC-5880)
+        run: python3 -m unittest tests/test_valkey_master_labeler_contract.py tests/test_valkey_master_labeler_loop.py -v
 
   longhorn-strict-local-contract:
     runs-on: arc-k8s

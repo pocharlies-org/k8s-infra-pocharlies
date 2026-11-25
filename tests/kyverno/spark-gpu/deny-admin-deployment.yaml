@@ -1,0 +1,33 @@
+# user: system:admin
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deny-admin-deployment
+  namespace: comfyui
+spec:
+  template:
+    metadata:
+      labels:
+        app: deny-admin-deployment
+        gpu.dgx-infra/role: on-demand
+        gpu.dgx-infra/pool: gb10
+    spec:
+      restartPolicy: Always
+      runtimeClassName: nvidia
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: llm
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: dgx3
+      containers:
+      - name: c
+        image: x
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+  replicas: 0
+  selector:
+    matchLabels:
+      app: deny-admin-deployment

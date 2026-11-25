@@ -80,9 +80,14 @@ keep their middleware and outrank both rules through explicit priorities.
   routes where the service owner did not already provide one.
 - `networking/traefik-edge/canonical-hosts-public.yaml`: canonical public UI
   and machine routes, excluded from per-host ExternalDNS publication.
+- `networking/dns/coredns-edani-edge-pins.yaml` +
+  `networking/traefik-edge/edge-cluster-service.yaml`: names whose backends live
+  on DC nodes (today `harbor.e-dani.com`, SKIRM-621) are pinned by the generator
+  to the in-cluster `traefik-edge-cluster` ClusterIP instead of `traefik-lan`, so
+  registry traffic stays in the DC instead of hairpinning OVH → home → OVH.
 - `networking/dns/coredns-custom.yaml`: pins `x86.taile0ad27.ts.net` to `100.83.56.98` in
   its own `taile0ad27.ts.net:53` server block, for the `ExternalName` Services that
-  point at the x86 (oficinas, jira-epic-trigger, blog-drafts, paseo). The pin must
+  point at the x86 (oficinas, blog-drafts, paseo). The pin must
   not live in the `e-dani.com:53` block: CoreDNS only selects a server block that
   matches the queried suffix. This keeps those routes declarative across restores
   without Argo-excluded endpoint resources. (The OpenChamber routes that first used

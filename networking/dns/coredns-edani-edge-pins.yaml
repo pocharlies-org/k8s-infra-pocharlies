@@ -1,0 +1,21 @@
+# Edge pins del generador scripts/gen_coredns_edani.py (SKIRM-621).
+#
+# Un Host(`*.e-dani.com`) servido por una IngressRoute de networking/traefik-lan/
+# se fija por defecto a traefik-lan (casa) en el bloque e-dani.com:53 de
+# coredns-custom.yaml. Los nombres de esta lista NO son excepciones al fijado:
+# siguen fijados, pero al traefik-edge del interior del clúster (Service
+# traefik-edge-cluster, :443, certificado wildcard-public-tls), porque sus
+# backends viven en los nodos del DC y fijarlos a casa hace hairpin
+# OVH -> casa -> OVH (los pulls del registro bajaban a 0,25 MB/s).
+# `reason` es obligatorio (una línea): el CI (job coredns-edani-guard) falla si
+# falta, si el nombre ya no es un Host() de traefik-lan (pin rancio) o si
+# está además en las exclusiones.
+#
+# NO es un recurso de Kubernetes: no va en kustomization.yaml.
+#
+# pins:
+#   - name: ejemplo.e-dani.com
+#     reason: por qué se fija al edge del DC y no a traefik-lan
+pins:
+  - name: harbor.e-dani.com
+    reason: 'Harbor corre en los ks5-cp del DC y traefik-edge ya sirve el Host (harbor-public); fijarlo a traefik-lan hairpina cada capa de imagen OVH->casa->OVH (SKIRM-621: 42 MB en 170 s por casa vs 4 s por el edge, medido 24-11 desde paseo-0 en atlantic)'

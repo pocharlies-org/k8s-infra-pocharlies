@@ -27,14 +27,14 @@ def config_map() -> dict:
     raise AssertionError("ConfigMap shared-valkey-scripts not found")
 
 
-def labeler_args() -> str:
+def labeler_container() -> dict:
     for doc in yaml.safe_load_all(MANIFEST.read_text(encoding="utf-8")):
         if (
             doc
             and doc.get("kind") == "Deployment"
             and doc["metadata"]["name"] == "shared-valkey-master-labeler"
         ):
-            return doc["spec"]["template"]["spec"]["containers"][0]["args"][0]
+            return doc["spec"]["template"]["spec"]["containers"][0]
     raise AssertionError("labeler Deployment not found")
 
 
@@ -217,9 +217,22 @@ class StartSentinelTest(unittest.TestCase):
 
 
 class LabelerTest(unittest.TestCase):
-    def test_labeler_logs_role_changes(self) -> None:
-        args = labeler_args()
-        self.assertIn("role: ${prev:-unknown} -> ${role:-none}", args)
+    def test_labeler_is_event_driven_not_a_clock_loop(self) -> None:
+        # SC-5880: el bucle `sleep 20` + `kubectl exec valkey-cli role` fue
+        # sustituido por la imagen databases/valkey-master-labeler (Sentinel
+        # +switch-master + watch de pods, sin reloj). La visibilidad de los
+        # cambios de rol (INFRA-822) la da ahora el log de cada parche de la
+        # imagen; su contrato se comprueba en
+        # tests/test_valkey_master_labeler_contract.py.
+        container = labeler_container()
+        self.assertNotIn("args", container)
+        # El ENTRYPOINT de la imagen, explícito (no un shell): el `/bin/sh -c` viejo lo posee otro field manager
+        # y el server-side apply de ArgoCD no lo borra si el manifiesto deja de declararlo.
+        self.assertEqual(container.get("command"), ["python", "-m", "valkey_master_labeler.main"])
+        self.assertTrue(
+            container["image"].startswith("harbor.e-dani.com/homelab/valkey-master-labeler"),
+            container["image"],
+        )
 
 
 if __name__ == "__main__":

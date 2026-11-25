@@ -1,0 +1,346 @@
+# INFRA-1032: guardia anti-atasco de copias CNPG (patrón: kubernetes/workloads/sauvage-zombie-watchdog.yaml).
+# Un Backup hijo del ScheduledBackup en fase no terminal corta el reconcile del ScheduledBackup entero
+# (operador CNPG v1.29.1, scheduledbackup_controller.go; upstream #4361/#10385/#10745) y la copia diaria
+# deja de salir días. Borrar el CR atascado NO recrea la franja del día (lastScheduleTime ya registrado),
+# por eso la guardia borra el atasco Y crea un Backup suyo (guard-retry-*) que NO es hijo.
+# SC-6476 (24-11-2026): el daily falló a las 09:06 (rollout de SC-6471 mató el instance manager que lo
+# llevaba), la guardia lo borró a las 09:15 y NO creó retry: el cluster ya no tenía filas de hoy y el bucle
+# nacía solo de los Backup existentes. Desde hoy los clusters debidos salen además de los ScheduledBackup que
+# dispararon hoy, y los retries fallados del propio día se conservan (no se borran) para que el tope de 4
+# intentos siga siendo real.
+#
+# INFRA-1555 (SC-5617, eventos nunca polling): el CronJob */15 pasa a un Deployment-informer de
+# backups.postgresql.cnpg.io. Bucle level-triggered: cada evento del watch (o el vencimiento de un
+# deadline derivado del propio objeto) dispara UNA pasada completa sobre una foto única del estado.
+# Los umbrales temporales (failed > 15 min, walArchivingFailing > 30 min desde creationTimestamp) NO
+# se sondean: se arma un event.wait(deadline) ABSOLUTO (creationTimestamp + umbral) solo sobre objetos
+# borrables que aún no cruzaron el umbral; en régimen normal no hay temporizador armado (wait puro por
+# eventos). El CronJob */15 muere en este PR. Queda UN reloj diario (12:00 UTC, guard.py --daily):
+# agregación del día y red de vida del informer, no detección de cambios (veredicto INFRA-1548).
+#
+# La foto inicial del watch se procesa igual que cualquier evento (alpine/k8s:1.32.5 emite objetos
+# sueltos; el handler también acepta kind: List por robustez ante otras versiones de kubectl): un
+# atasco ya presente al arrancar o tras un rollout se limpia en la primera pasada, sin esperar evento.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+rules:
+  # watch añadido para el informer; SIN update/patch a propósito: el RBAC fuerza el invariante
+  # de no tocar ScheduledBackup.lastScheduleTime (no recrear la franja del día).
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["backups"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["scheduledbackups"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cnpg-scheduled-backup-guard
+subjects:
+  - kind: ServiceAccount
+    name: cnpg-scheduled-backup-guard
+    namespace: databases
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cnpg-backup-guard
+  namespace: databases
+  labels:
+    app.kubernetes.io/name: cnpg-scheduled-backup-guard
+data:
+  guard.py: |
+    """INFRA-1555: guardia anti-atasco CNPG por eventos (sustituye al CronJob */15).
+
+    Level-triggered: cada evento del watch de backups (o un deadline absoluto derivado de
+    creationTimestamp) dispara una pasada completa sobre una foto única. Toda la decisión
+    (deletes, debidos, retries) se calcula de la MISMA foto anterior a los borrados (SC-6476),
+    y solo entonces se actúa: delete primero, create después. Idempotente.
+    """
+    import datetime
+    import json
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    NS = "databases"
+    FAILED_S = 900          # failed > 15 min
+    WALFAIL_S = 1800        # walArchivingFailing > 30 min
+    HOUSEKEEP_S = 604800    # guard-retry-* > 7 días
+    MAX_ATTEMPTS = 4
+    changed = threading.Event()
+
+
+    def kubectl(args, timeout=60):
+        return subprocess.run(["kubectl", "-n", NS] + args,
+                              capture_output=True, text=True, timeout=timeout)
+
+
+    def epoch(ts):
+        return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+
+
+    def watch_thread():
+        # Solo alimenta el disparo: cualquier objeto parseado (List o Backup) marca cambio.
+        # El estado real se lee fresco en cada pasada; el watch es el evento, no la foto.
+        while True:
+            proc = subprocess.Popen(
+                ["kubectl", "get", "backups.postgresql.cnpg.io", "-n", NS, "-w", "-o", "json"],
+                stdout=subprocess.PIPE, text=True)
+            dec = json.JSONDecoder()
+            buf = ""
+            for line in proc.stdout:
+                buf += line
+                while True:
+                    buf = buf.lstrip()
+                    if not buf:
+                        break
+                    try:
+                        obj, idx = dec.raw_decode(buf)
+                    except json.JSONDecodeError:
+                        break  # objeto incompleto: esperar más líneas
+                    buf = buf[idx:]
+                    if isinstance(obj, dict) and obj.get("kind") in ("List", "Backup"):
+                        changed.set()
+            proc.wait()
+            changed.set()      # el stream terminó: reconciliar y relanzar
+            time.sleep(1)      # backoff de relanzamiento del stream, no sondeo de estado
+
+
+    def snapshot():
+        r = kubectl(["get", "backups.postgresql.cnpg.io", "-o", "json"])
+        items = json.loads(r.stdout).get("items", [])
+        rows = []
+        for b in items:
+            lb = b["metadata"].get("labels") or {}
+            # solo los Backup que gestiona la guardia: hijos de ScheduledBackup y retries propios
+            if "cnpg.io/scheduled-backup" not in lb and lb.get("cnpg.io/guard-retry") != "true":
+                continue
+            created = b["metadata"].get("creationTimestamp") or ""
+            rows.append({
+                "name": b["metadata"]["name"],
+                "cluster": (b.get("spec") or {}).get("cluster", {}).get("name", ""),
+                "phase": (b.get("status") or {}).get("phase", ""),
+                "ce": epoch(created) if created else 0.0,
+                "day": created[:10],
+            })
+        s = kubectl(["get", "scheduledbackups.postgresql.cnpg.io", "-o", "json"])
+        sched = []
+        for sb in json.loads(s.stdout).get("items", []):
+            last = (sb.get("status") or {}).get("lastScheduleTime") or ""
+            sched.append({
+                "cluster": (sb.get("spec") or {}).get("cluster", {}).get("name", ""),
+                "le": epoch(last) if last else 0.0,
+                "day": last[:10],
+            })
+        return rows, sched
+
+
+    def reconcile(rows, sched, now, today):
+        """Devuelve (deletes, creates, deadline) calculados de la foto única."""
+        cut15, cut30, cut7 = now - FAILED_S, now - WALFAIL_S, now - HOUSEKEEP_S
+        deletes = []
+        deadlines = []
+        for r in rows:
+            retry_today = r["name"].startswith("guard-retry-") and r["day"] == today
+            stuck = ((r["phase"] == "walArchivingFailing" and r["ce"] and r["ce"] < cut30)
+                     or (r["phase"] == "failed" and r["ce"] and r["ce"] < cut15))
+            old_retry = r["name"].startswith("guard-retry-") and r["ce"] and r["ce"] < cut7
+            if (stuck and not retry_today) or old_retry:
+                deletes.append(r["name"])
+            # deadline absoluto solo sobre objetos borrables por stuck que AÚN no cruzaron
+            # el umbral (un retry de hoy no es borrable: no arma reloj que se rearma solo).
+            if not retry_today and r["ce"]:
+                if r["phase"] == "failed" and r["ce"] + FAILED_S > now:
+                    deadlines.append(r["ce"] + FAILED_S)
+                elif r["phase"] == "walArchivingFailing" and r["ce"] + WALFAIL_S > now:
+                    deadlines.append(r["ce"] + WALFAIL_S)
+
+        # Debidos = clusters con filas hoy (foto ANTERIOR a los borrados, SC-6476) + clusters
+        # cuyo ScheduledBackup disparó hoy hace > 15 min y aún no nació el hijo.
+        due = {r["cluster"] for r in rows if r["day"] == today and r["cluster"]}
+        for sb in sched:
+            if sb["cluster"] and sb["day"] == today and sb["le"] and sb["le"] < cut15:
+                due.add(sb["cluster"])
+            # el cambio de lastScheduleTime es un evento; su pasada arma lastScheduleTime+15min
+            if sb["day"] == today and sb["le"] and sb["le"] + FAILED_S > now:
+                deadlines.append(sb["le"] + FAILED_S)
+
+        creates = []
+        stamp = time.strftime("%Y%m%d%H%M", time.gmtime(now))
+        for cluster in sorted(due):
+            crows = [r for r in rows if r["cluster"] == cluster and r["day"] == today]
+            if any(r["phase"] == "completed" for r in crows):
+                print("GUARD: cluster %s already completed today, nothing to do" % cluster, flush=True)
+                continue
+            # SC-6103: no crear retry con un backup del operador en curso o enquistado hoy.
+            if any(r["phase"] in ("pending", "running", "walArchivingFailing") for r in crows):
+                print("GUARD: cluster %s has a backup in progress or wedged today, nothing to do" % cluster, flush=True)
+                continue
+            attempts = len(crows)
+            if attempts >= MAX_ATTEMPTS:
+                print("GUARD: cluster %s has %d attempts today, not retrying" % (cluster, attempts), flush=True)
+                continue
+            creates.append((cluster, "guard-retry-%s-%s" % (cluster, stamp), attempts))
+        deadline = min(deadlines) if deadlines else None
+        return deletes, creates, deadline
+
+
+    def act(deletes, creates):
+        for name in deletes:
+            r = kubectl(["delete", "backups.postgresql.cnpg.io", name, "--wait=false"])
+            if r.returncode == 0:
+                print("GUARD: deleted stuck backup %s" % name, flush=True)
+            else:
+                print("GUARD: ERROR deleting %s: %s" % (name, r.stderr.strip()), flush=True)
+        for cluster, name, attempts in creates:
+            body = {
+                "apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",
+                "metadata": {"name": name, "namespace": NS,
+                             "labels": {"cnpg.io/guard-retry": "true"}},
+                "spec": {"method": "barmanObjectStore", "cluster": {"name": cluster}},
+            }
+            r = subprocess.run(["kubectl", "apply", "-f", "-"], input=json.dumps(body),
+                               capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                print("GUARD: created %s (cluster %s, attempts today before this one: %d)"
+                      % (name, cluster, attempts), flush=True)
+            else:
+                print("GUARD: ERROR creating %s: %s" % (name, r.stderr.strip()), flush=True)
+
+
+    def pass_once():
+        now = time.time()
+        today = time.strftime("%Y-%m-%d", time.gmtime(now))
+        rows, sched = snapshot()
+        deletes, creates, deadline = reconcile(rows, sched, now, today)
+        act(deletes, creates)
+        return deadline
+
+
+    def main():
+        if "--daily" in sys.argv:
+            # reloj diario sancionado: agregación del día + red de vida del informer.
+            pass_once()
+            return
+        threading.Thread(target=watch_thread, daemon=True).start()
+        print("cnpg backup-guard informer: watching backups.postgresql.cnpg.io", flush=True)
+        while True:
+            changed.clear()
+            deadline = pass_once()
+            if deadline is None:
+                changed.wait()                 # sueño puro por eventos
+            else:
+                changed.wait(max(0.0, deadline - time.time()))
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cnpg-scheduled-backup-guard
+  namespace: databases
+  labels:
+    app.kubernetes.io/name: cnpg-scheduled-backup-guard
+spec:
+  replicas: 1
+  # Un solo informer; Recreate evita dos watchers creando retries en paralelo (SC-6103).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cnpg-scheduled-backup-guard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cnpg-scheduled-backup-guard
+    spec:
+      serviceAccountName: cnpg-scheduled-backup-guard
+      enableServiceLinks: false
+      containers:
+        - name: guard
+          image: alpine/k8s:1.32.5
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/scripts/guard.py"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: cnpg-backup-guard
+            defaultMode: 493
+---
+# Reloj diario sancionado (SC-5617): agregación del día («hoy no hubo backup» cuando no hubo
+# NINGÚN evento) y red de vida del informer. No es sondeo de cambios: corre el mismo guard.py
+# en modo --daily (una pasada). Si el job falla salta K8sCronJobFailed (topic Crons).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cnpg-backup-guard-daily
+  namespace: databases
+  labels:
+    app.kubernetes.io/name: cnpg-scheduled-backup-guard
+spec:
+  schedule: "0 12 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: cnpg-scheduled-backup-guard
+        spec:
+          serviceAccountName: cnpg-scheduled-backup-guard
+          restartPolicy: Never
+          enableServiceLinks: false
+          containers:
+            - name: guard
+              image: alpine/k8s:1.32.5
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/scripts/guard.py", "--daily"]
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  memory: 256Mi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+          volumes:
+            - name: scripts
+              configMap:
+                name: cnpg-backup-guard
+                defaultMode: 493

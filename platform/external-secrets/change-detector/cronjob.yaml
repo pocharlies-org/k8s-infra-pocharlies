@@ -10,6 +10,22 @@
 # or run it now:
 #   kubectl create job -n external-secrets-operator --from=cronjob/onepassword-change-detector onepassword-change-detector-manual-1
 # Red = K8sCronJobFailed (k8s-observability-pocharlies manifests/rules.yaml).
+#
+# INFRA-1552 (ley SC-5617 «events, never polling»): este CronJob ES el adaptador
+# de borde único de una fuente SIN push, no un sondeo a retirar. Verificado
+# 24-11-2026 contra la documentación de 1Password: no existe webhook saliente de
+# cambio de item. La Events Reporting API (developer.1password.com/events-api)
+# es REST de SONDEO con cursor, tier Business y un bearer token aparte de
+# Events Reporting; reporta audit events / item usages, no empuja. Connect / el
+# service account que usa este job tampoco tienen webhook. Por la excepción de
+# SC-5617 («a source that emits nothing enters through ONE edge adapter that
+# reads it»), el que lee la fuente sin push es este job, y nadie más la sondea:
+# ESO consume el force-sync que este job pone. Frecuencia justificada: cada 4 h,
+# 1-2 req/pase (~12/día de la cuota 1000/día de la cuenta); una rotación llega
+# sola en ≤4 h, y lo que no puede esperar usa el force-sync manual de arriba.
+# Cambiar a la Events API seguiría siendo un poll (sin ganancia), exigiría tier
+# Business + token nuevo (security) y no da la versión del item que compara
+# detect.py. Se mantiene tal cual.
 apiVersion: batch/v1
 kind: CronJob
 metadata:

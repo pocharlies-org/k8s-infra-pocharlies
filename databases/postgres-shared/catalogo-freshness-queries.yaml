@@ -1,0 +1,47 @@
+# SC-5827 (condición C9 del dictamen architect): frescura de la proyección de
+# catálogo que antes vigilaban las alertas del Brain (borradas en
+# k8s-observability). Muerto el Brain, el riesgo principal del corte es que
+# `catalogo` y el espejo Hindsight `tienda` se queden viejos en silencio si el
+# webhook propio de rag-app (/webhooks/catalogo) deja de aplicar eventos.
+#
+# Qué mide: edad en segundos del `updated_at` (versión de Shopify) más reciente
+# aplicado a `catalogo.product`. Es la opción que fija C9 («edad del último
+# products/update aplicado a catalogo»). Limitación conocida: una tienda sin
+# cambios legítimos de producto también envejece la serie; el umbral de la
+# alerta (48 h) está elegido para el ritmo medido de la tienda (~8 webhooks/h
+# en 37 h de inventario SC-5827), y el handler nunca lanza (falla cerrando en
+# el logger `webhook-catalogo`), así que la edad es el único síntoma observable
+# sin métricas propias de rag-app.
+#
+# Patrón de la casa: consulta a medida del exporter CNPG (precedente
+# aurora-rca-coverage-queries.yaml); la consume la VMRule
+# `RagCatalogoWebhookStale` de k8s-observability-pocharlies (manifests/rules.yaml).
+# La serie sale como `cnpg_catalogo_webhook_freshness_max_product_age_seconds`
+# (el exporter compone <collector>_<query>_<column>, collector fijo "cnpg").
+#
+# El GRANT que necesita el exporter (`cnpg_metrics_exporter`) sobre
+# catalogo.product va al final del setup.sql de catalogo-schema.yaml (mismo
+# Job PostSync, idempotente y protegido: el rol lo crea el operador de CNPG).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-catalogo-freshness
+  namespace: databases
+  labels:
+    # cnpg.io/reload es una LABEL (docs CNPG 1.29, Monitoring → User defined
+    # metrics): recarga las consultas sin `kubectl cnpg reload` manual.
+    cnpg.io/reload: "true"
+    app.kubernetes.io/component: postgres-monitoring
+data:
+  queries: |
+    catalogo_webhook_freshness:
+      query: |
+        SELECT EXTRACT(EPOCH FROM now() - max(updated_at))::double precision
+          AS max_product_age_seconds FROM catalogo.product
+      primary: true
+      target_databases:
+        - catalogo
+      metrics:
+        - max_product_age_seconds:
+            usage: "GAUGE"
+            description: "Segundos desde el products/update mas reciente aplicado a catalogo.product (SC-5827 C9)"

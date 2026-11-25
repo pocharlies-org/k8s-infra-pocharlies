@@ -1,0 +1,18 @@
+# user: system:serviceaccount:argocd:argocd-application-controller
+apiVersion: v1
+kind: Pod
+metadata:
+  name: core-pod
+  namespace: argocd
+  ownerReferences:
+    - apiVersion: apps/v1
+      uid: 00000000-0000-0000-0000-000000000001
+      kind: ReplicaSet
+      name: argocd-server-abc
+spec:
+  nodeSelector:
+    kubernetes.io/arch: amd64
+    workload: core
+  containers:
+    - name: app
+      image: harbor.lan.e-dani.com/library/pause:3.9

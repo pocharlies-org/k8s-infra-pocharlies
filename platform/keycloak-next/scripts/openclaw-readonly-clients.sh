@@ -20,7 +20,7 @@ REQUIRED_REALM_ROLE="${REQUIRED_REALM_ROLE:-cto-office-send}"
 # agentgateway-read-grants.sh (which maps both the grants
 # and this client's role scope). This reconciler only asserts they arrive in
 # the minted token; it never creates or maps them.
-EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:offers,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
+EXPECTED_READ_ROLES="agentgateway-read:gsc,agentgateway-read:plaud,agentgateway-read:skirmshop-plugins,agentgateway-read:studio,agentgateway-read:synapse,agentgateway-read:synapse-tools"
 KCADM="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 ADMIN_CONFIG=/tmp/kcadm-openclaw-readonly-admin.config
 CLIENT_CONFIG=/tmp/kcadm-openclaw-readonly-client.config

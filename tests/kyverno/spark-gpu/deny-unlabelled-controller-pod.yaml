@@ -1,0 +1,26 @@
+# user: system:serviceaccount:kube-system:replicaset-controller
+apiVersion: v1
+kind: Pod
+metadata:
+  name: deny-unlabelled-controller-pod
+  namespace: llm
+  labels:
+    app: omnivoice-train
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: deny-unlabelled-controller-pod-owner
+    uid: 00000000-0000-0000-0000-000000000001
+    controller: true
+spec:
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: llm
+    effect: NoSchedule
+  containers:
+  - name: c
+    image: x
+    resources:
+      limits:
+        nvidia.com/gpu: '1'

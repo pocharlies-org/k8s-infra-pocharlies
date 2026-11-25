@@ -85,6 +85,29 @@ spec:
         - { protocol: TCP, port: 443 }
         - { protocol: TCP, port: 80 }
 
+    # Harbor por el borde interior del DC (SC-6445). Desde SKIRM-621 el pin de
+    # CoreDNS fija harbor.e-dani.com al Service ClusterIP `traefik-edge-cluster`
+    # (networking/traefik-edge/edge-cluster-service.yaml), y kube-router
+    # comprueba el destino TRAS el DNAT (leccion arc-openclaw): los endpoints son
+    # los pods hostNetwork del DaemonSet del edge, IPs de la tailnet, dentro del
+    # `except 100.64.0.0/10` de arriba. Todo pull de imagen del runner desde
+    # 24-11 00:05Z sale "connection refused" (Plugin e2e de synapse#440). Se
+    # abre SOLO el :443 de los cuatro nodos donde escucha el edge (los endpoints
+    # actuales del Service); no el :6443 del API ni ningun otro puerto, y el
+    # resto de la tailnet sigue aislado. Mismo patron de ipBlock /32 que
+    # arc-hermes-cluster-egress usa para los endpoints del API.
+    - to:
+        - ipBlock:
+            cidr: 100.107.21.89/32    # ks5-cp-1
+        - ipBlock:
+            cidr: 100.71.117.127/32   # ks5-cp-2
+        - ipBlock:
+            cidr: 100.75.189.75/32    # ks5-cp-3
+        - ipBlock:
+            cidr: 100.109.183.9/32    # sauvage
+      ports:
+        - { protocol: TCP, port: 443 }
+
     # Builder remoto canónico de los workflows de imagen. Se abre únicamente
     # el Service de BuildKit dentro de su namespace; no da acceso al resto de
     # servicios privados ni al x86 host.

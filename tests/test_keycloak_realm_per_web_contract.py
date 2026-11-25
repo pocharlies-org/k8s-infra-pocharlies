@@ -31,7 +31,7 @@ LEGACY = {
     "sso-chain": {
         "adguard-setup.e-dani.com", "adguard.e-dani.com", "agentgateway-mcp-stg.e-dani.com",
         "alertmanager.e-dani.com", "argocd.e-dani.com", "aurora-api.e-dani.com",
-        "aurora.e-dani.com", "brain-ingest-k8s.e-dani.com", "brain-k8s.e-dani.com",
+        "aurora.e-dani.com",
         "code.lan.e-dani.com", "company.e-dani.com", "dgx.e-dani.com", "dgx.lan.e-dani.com",
         "grafana.e-dani.com", "ha-dashboard.e-dani.com", "home-assistant.e-dani.com",
         "jarvis.e-dani.com", "keep-api.e-dani.com", "keep.e-dani.com", "libreplay.e-dani.com",

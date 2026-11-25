@@ -33,13 +33,13 @@ CONTROL_SET = [("GET", p) for p in (
     "/api/messages", "/api/autoreply", "/api/claude-sessions", "/api/hermes-sessions",
     "/api/app/secure/x",
     "/api/app/pagos/lista", "/api/app/alertas/a_x", "/api/app/alarma/estado", "/api/app/push/token", "/api/email/state",
-    "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel",
+    "/entregas", "/static/entregas/app.js", "/api/model-routing", "/api/hermes-panel", "/api/studio/agent/sessions",
     "/api/secretaria/despacho/temas", "/despacho-secretaria",
 )]
 # Escrituras del backend (regla 350): solo por POST; los GET de esas rutas se compran abajo, abiertos.
 ESCRITURAS = [("POST", p) for p in (
     "/api/cluster/apply", "/api/cluster/refresh", "/api/compute/mode", "/api/activity/power",
-    "/api/llm/uncensored", "/api/llm/dgx3/mode", "/api/kiosco/vista",
+    "/api/llm/uncensored", "/api/llm/dgx3/mode", "/api/kiosco/vista", "/api/kiosco/escritorio",
     "/api/litellm/background-consumers/aurora-rca/block",
     "/api/litellm/background-consumers/aurora-rca/unblock",
 )]
@@ -53,6 +53,18 @@ MAQUINA = [
     ("POST", "/api/activity/claude/refresh"),  # F1: extensión vscode-claude-cuenta, sin sesión
     ("POST", "/api/llm/dgx3/mode/orden"), ("GET", "/api/llm/dgx3/mode/orden/d3o_x"),  # DGX-1621: Hermes pide la ventana (HMAC V2)
     ("POST", "/api/alertas"), ("GET", "/api/alertas/a_x/imagen"),  # DGX-1628: alerta urgente (firma de máquina) y su imagen (clave k)
+    ("POST", "/api/creative/cine/producciones"),  # DGX-1700: alta de producción OpenMontage (HMAC V2 clase studio)
+    ("GET", "/api/creative/cine/producciones"),  # DGX-1719: el flujo de /cine por comandos del bot (HMAC V2 clase studio, dgx.cine.gates-machine.v1)
+    ("GET", "/api/creative/cine/producciones/huerto-1a2b/estado"),
+    ("GET", "/api/creative/cine/producciones/huerto-1a2b/actividad"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/aprobar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/cambios"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/mensaje"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/reanudar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/archivar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/parar"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/tomas"),
+    ("POST", "/api/creative/cine/producciones/huerto-1a2b/pregunta"),  # DGX-1780: la pregunta del director a Dani (HMAC V2 clase studio)
 ]
 # Lecturas que la app usa sin sesión (fixtures de dgx-infra): abiertas en los dos hosts.
 LECTURAS_ABIERTAS = [("GET", p) for p in (
@@ -107,6 +119,22 @@ class ParidadJarvisConDgx(unittest.TestCase):
                     self.assertEqual(cadena, [("dgx-strip-identity-headers", "traefik-lan"),
                                               ("sso-chain", "keycloak"),
                                               ("dgx-edge-proof", "traefik-lan")])
+
+    def test_escrituras_van_tras_sso_chain(self):
+        """DGX-1575: la paridad no basta — DGX-1449 dejó /api/kiosco/vista y /api/kiosco/escritorio
+        fuera de la 350 en los dos hosts (cayían en la 300 abierta) y el contrato pasó igual porque
+        solo comparaba cadenas entre hosts. El backend exige prueba de borde + /edani-admins
+        (guarda_cluster) en TODAS las ESCRITURAS: sin sso-chain no hay Bearer y el panel no puede
+        escribir nunca desde casa/tailnet. Estas rutas deben ganar con sso-chain en los dos hosts."""
+        rutas_j = _rutas(*JARVIS[:2])
+        rutas_d = _rutas(*DGX[:2])
+        for ip in DE_CASA:
+            for method, path in ESCRITURAS:
+                for rutas, host in ((rutas_j, JARVIS[2]), (rutas_d, DGX[2])):
+                    with self.subTest(f"{method} {path} en {host} desde {ip}"):
+                        cadena = _cadena(_gana(rutas, host, ip, method, path))
+                        self.assertIn(("sso-chain", "keycloak"), cadena,
+                                      f"{method} {path} no va tras sso-chain en {host}")
 
     def test_el_hud_sigue_sin_sesion(self):
         """El HUD de jarvis (la 400) es lo único propio del host: sigue abierto, con strip y prueba."""

@@ -49,8 +49,9 @@ NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
 HUMANOS_USERNAMES = ["me@e-dani.com", "lays84.mv@gmail.com"]
 # INFRA-1180: the reviewed human holder of agentgateway-read:photos (the user
 # of the native app photos-ios; granted by photos-app-client.sh, wave 25,
-# outside the read-grants matrix).
-PHOTOS_HUMAN_USERNAMES = ["me@e-dani.com"]
+# outside the read-grants matrix). INFRA-1522: qa-sso-test, second human user of
+# the app (QA); granted by photos-read-grant-qa.sh, wave 25, same pattern.
+PHOTOS_HUMAN_USERNAMES = ["me@e-dani.com", "qa-sso-test"]
 
 
 def shell_list(path, variable, sep=","):
@@ -162,8 +163,8 @@ class RoleCatalogParityTest(unittest.TestCase):
 
     def test_extractor_reads_the_reviewed_constants(self):
         # Guard against a silent parse: the matrices are non-trivial today.
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 28)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain
-        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 7)
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_READ_ROLE_NAMES")), 27)  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain; SC-5827: - offers
+        self.assertEqual(len(shell_list(READ_GRANTS, "EXPECTED_OPENCLAW_READ_ROLE_NAMES")), 6)  # SC-5827: - offers
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_CHAT_READ_ROLE_NAMES"), ["agentgateway-read:studio"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_JARVIS_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
         self.assertEqual(shell_list(READ_GRANTS, "EXPECTED_ENVIAR_READ_ROLE_NAMES"), ["agentgateway-read:workspace"])
@@ -215,6 +216,10 @@ class RoleCatalogParityTest(unittest.TestCase):
             # shared session-plane SA (grant and client scope ride
             # agentgateway-read-grants.sh; the chat hook never inspects it).
             "agentgateway-write:nova=service-account-agentgateway-mcp",
+            # INFRA-1493: the scoped write role of nova-atlassian (grant and
+            # client scope ride hindsight-reader-client.sh, wave 24; the chat
+            # hook never inspects it).
+            "agentgateway-write:atlassian-nova=service-account-nova-atlassian",
         }, guarded_elsewhere)
 
 

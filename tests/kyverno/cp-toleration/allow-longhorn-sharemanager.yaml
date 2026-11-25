@@ -1,0 +1,15 @@
+# user: system:serviceaccount:longhorn-system:longhorn-service-account
+apiVersion: v1
+kind: Pod
+metadata:
+  name: share-manager-pvc-1234
+  namespace: longhorn-system
+  ownerReferences:
+    - apiVersion: longhorn.io/v1beta2
+      uid: 00000000-0000-0000-0000-000000000001
+      kind: ShareManager
+      name: pvc-1234
+spec:
+  containers:
+    - name: share-manager
+      image: harbor.lan.e-dani.com/library/longhorn-engine:v1.0.0

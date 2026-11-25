@@ -26,6 +26,11 @@ umask 077
 #       nova-hindsight-personal        agentgateway-read:hindsight-personal
 #       nova-hindsight-cloudblue       agentgateway-read:hindsight-cloudblue
 #       nova-atlassian                 agentgateway-read:atlassian
+#                                      + agentgateway-write:atlassian-nova
+#                                        (INFRA-1493, veredicto de security que
+#                                        enmienda C2 de INFRA-1248: sus tres
+#                                        escrituras de Jira por /atlassian,
+#                                        nunca el write pelado)
 #     C1 of that verdict is binding and lives in Nova, not here: while a
 #     session carries a bank profile, no model outside the cluster runs the
 #     turn (the race drops alibaba-q38-flash; k8s-nova-pocharlies#40). The
@@ -45,11 +50,15 @@ umask 077
 # is a new table entry plus its own security verdict, never a looser one here.
 #
 # One principal per (service, bank): a leaked credential must open exactly one
-# bank. The service account holds exactly ONE realm role, the shared route role
-# of its bank (for nova-atlassian, the route role of its Jira/Confluence reads),
-# and NOTHING from the agentgateway-write family — the routes are read-only by
-# design (no write plane exists on any hindsight route; see the retain analysis
-# on /hindsight-cloudblue in the live gateway config).
+# bank. The service account holds exactly the reviewed set of its table entry:
+# the shared route role of its bank and, ONLY for nova-atlassian since
+# INFRA-1493, the scoped write role agentgateway-write:atlassian-nova (three
+# Jira tools on /atlassian, verdict amending C2 of INFRA-1248; the bare
+# agentgateway-write is never granted here — it would open all 26 Jira and 15
+# Confluence writes). Nothing else from the agentgateway-write family — the
+# hindsight routes are read-only by design (no write plane exists on any
+# hindsight route; see the retain analysis on /hindsight-cloudblue in the live
+# gateway config).
 #
 # Ownership of each grant (which reconciler owns it, so drift cannot revoke
 # it — INFRA-1248 C4): this hook's ensure flow grants the reviewed role to the
@@ -114,7 +123,10 @@ KCADM_TMP_FILES="${CLIENT_CONFIG}"
 
 # Space-separated reviewed set, already sorted, so its comma form is the shape
 # token_realm_roles prints for the exact token comparison. WRITE_ROLE_NAME is
-# empty: no identity here holds a write role at all.
+# non-empty only for nova-atlassian (INFRA-1493): its one scoped write role,
+# created by agentgateway-domain-roles (wave 19), granted and scope-mapped by
+# the shared library and asserted exclusive by assert_write_role_exclusive.
+WRITE_ROLE_NAME=""
 case "${CLIENT_ID}" in
   socialmedia-hindsight)
     REVIEWED_ROLES="agentgateway-read:hindsight-personal"
@@ -135,11 +147,15 @@ case "${CLIENT_ID}" in
     REVIEWED_ROLES="agentgateway-read:hindsight-cloudblue"
     ;;
   nova-atlassian)
-    REVIEWED_ROLES="agentgateway-read:atlassian"
+    # INFRA-1493 (veredicto de security, enmienda a C2 de INFRA-1248): las tres
+    # escrituras de Jira de Nova (jira_add_comment, jira_edit_comment,
+    # jira_create_issue) por /atlassian, con el rol acotado — nunca el write
+    # pelado, que abriría las 40 escrituras de la ruta.
+    REVIEWED_ROLES="agentgateway-read:atlassian agentgateway-write:atlassian-nova"
+    WRITE_ROLE_NAME="agentgateway-write:atlassian-nova"
     ;;
   *) fail "unsupported immutable client" ;;
 esac
-WRITE_ROLE_NAME=""
 EXPECTED_TOKEN_ROLES="$(printf '%s' "${REVIEWED_ROLES}" | tr ' ' ',')"
 [ "${MAPPER_NAME}" = "aud-mcp" ] || fail "MAPPER_NAME is immutable"
 case "${MODE}" in

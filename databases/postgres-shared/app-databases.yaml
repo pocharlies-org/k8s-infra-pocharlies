@@ -197,6 +197,47 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
+# SKIRM-510: base de tests de skirmshop-affiliate-api. `vitest.globalSetup.ts`
+# ejecuta `prisma migrate deploy` contra `affiliate_test`, y Prisma intenta
+# crearla si no existe — el usuario de la app `skirmshop` no tiene (ni debe
+# tener) CREATEDB, así que la base se declara aquí como todas: el operador
+# CNPG la crea como superusuario y skirmshop queda dueño, suficiente para
+# aplicar migraciones. Los datos son efímeros: los reescribe `npm test`.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: affiliate-test
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: affiliate_test
+  owner: skirmshop
+  cluster:
+    name: postgres-shared-nvme
+---
+# SKIRM-510: base de trabajo desechable para el test de migración de
+# skirmshop-affiliate-api. El test restaura un pg_dump de la BD viva en una BD
+# de trabajo que NO puede ser `affiliate` (producción) ni `affiliate_test` (la
+# usa el resto de la suite en paralelo), y el usuario `skirmshop` no tiene
+# CREATEDB, así que se declara aquí igual que affiliate-test: CNPG la crea como
+# superusuario y skirmshop queda dueño. Los datos son efímeros: los reescribe
+# el propio test en cada pasada.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: affiliate-migtest
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: affiliate_migtest
+  owner: skirmshop
+  cluster:
+    name: postgres-shared-nvme
+---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
@@ -384,6 +425,23 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
+# SC-6148: base del supervisor de la compañía (dueño rol company). Las tablas
+# NO las declara este CRD: las crea el migrador del runtime al arrancar.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: company
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: company
+  owner: company
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme
+---
 # SC-2495: base del planificador de AlphaLink (horarios-alphalink). El esquema de
 # tablas NO lo declara este CRD (CNPG solo crea la base): lo crea la propia app al
 # arrancar con `create table if not exists`, como dgxbench.
@@ -440,7 +498,7 @@ spec:
   cluster:
     name: postgres-shared-nvme
 ---
-# SC-5489: comercio del Brain sobre pgvector (sustituye a Qdrant/FalkorDB). El esquema lo crea el Brain.
+# SC-5489: comercio sobre pgvector (sustituye a Qdrant/FalkorDB). El esquema lo crea rag-app (SC-5827).
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
@@ -458,3 +516,27 @@ spec:
   extensions:
     - name: vector
       ensure: present
+---
+# DGX-1022: índice de las skills de Hermes (ficheros SKILL.md del volumen
+# hermes-data) para que el DGX Dashboard las busque y audite. Calcada a dgxbench
+# (arriba, l.379): base separada en el clúster vivo postgres-shared-nvme, dueño
+# el managed role dgxskills. El esquema (skills, skill_versions, skill_imports,
+# skill_searches) NO lo declara este CRD — lo crea de forma idempotente el
+# bootstrap de dgx-infra services/dashboard/skills/db.py con SCHEMA_VERSION,
+# igual que bench/db.py::ensure_schema(). Sin extensiones: búsqueda ILIKE
+# (a ~115 skills basta; pg_trgm sería un cambio del spec del clúster
+# compartido por ocho consumidores).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: dgxskills
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-database
+spec:
+  name: dgxskills
+  owner: dgxskills
+  ensure: present
+  cluster:
+    name: postgres-shared-nvme

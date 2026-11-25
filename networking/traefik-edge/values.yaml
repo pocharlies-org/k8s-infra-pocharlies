@@ -106,7 +106,6 @@ providers:
       - litellm
       - n8n
       - harbor
-      - skirmshop-brain-prod
       - cv
       - blog
       - web
@@ -138,6 +137,7 @@ providers:
       - stt-mcp
       - vault
       - traefik-lan
+      - canal
     allowCrossNamespace: true
     allowExternalNameServices: true
     allowEmptyServices: true
@@ -150,7 +150,6 @@ providers:
       - litellm
       - n8n
       - harbor
-      - skirmshop-brain-prod
       - cv
       - blog
       - web
@@ -178,6 +177,7 @@ providers:
       - stt-mcp
       - vault
       - traefik-lan
+      - canal
     allowExternalNameServices: true
     allowEmptyServices: true
 

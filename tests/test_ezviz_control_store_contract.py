@@ -1,5 +1,6 @@
-"""INFRA-717 fase 2: el store kubernetes que da al ezviz-gateway (ns `frigate`) SOLO el token del control que genera el
-dashboard en control-nexus. Fija el alcance: un Role de `get` exacto sobre ese Secret, una SA, y solo `frigate` lo usa."""
+"""INFRA-717 fases 2 y 3: el store kubernetes que da al ezviz-gateway (ns `frigate`) SOLO los tokens del control y de la
+puerta que genera el dashboard en control-nexus. Fija el alcance: un Role de `get` exacto sobre esos dos Secrets, una SA,
+y solo `frigate` lo usa."""
 import pathlib
 import unittest
 
@@ -25,12 +26,13 @@ class StoreEzvizControl(unittest.TestCase):
         self.assertEqual(k["auth"], {"serviceAccount": {"name": SA, "namespace": "frigate"}})
         self.assertEqual(k["remoteNamespace"], "control-nexus")
 
-    def test_role_solo_get_del_token(self):
+    def test_role_solo_get_de_los_dos_tokens(self):
         role = self.de["Role"]
         self.assertEqual(role["metadata"]["namespace"], "control-nexus")
         (secretos,) = [r for r in role["rules"] if r.get("resources") == ["secrets"]]
         self.assertEqual(secretos, {"apiGroups": [""], "resources": ["secrets"],
-                                    "resourceNames": ["dgx-dashboard-ezviz-control"], "verbs": ["get"]})
+                                    "resourceNames": ["dgx-dashboard-ezviz-control", "dgx-dashboard-ezviz-puerta"],
+                                    "verbs": ["get"]})
         self.assertEqual(len(role["rules"]), 2)
 
     def test_binding_une_solo_esa_sa(self):

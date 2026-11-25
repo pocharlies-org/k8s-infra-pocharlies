@@ -60,4 +60,25 @@ spec:
               for node in ks5-cp-1 ks5-cp-2 ks5-cp-3; do
                 kubectl label node "$node" node-role.kubernetes.io/control-plane=true node-role.kubernetes.io/etcd=true --overwrite
                 kubectl label node "$node" node-pool=ks5-nvme storage=nvme storage-longhorn=true db-storage=fast workload=core workload.openclaw=true ingress=true topology=ovh region=ovh-rbx --overwrite
+                # SC-6096 (guard SC-6094): hasta aqui estos nodos NO tenian taint alguno y
+                # cualquier carga podia aterrizar en el plano de control (ks5-cp-3 llego a
+                # load1 >13 con el Postgres compartido y el almacen de metricas encima).
+                # NoSchedule, no NoExecute: no desaloja lo ya desplegado. La allowlist de
+                # toleraciones la aplica el ClusterPolicy control-plane-toleration-allowlist
+                # (platform/kyverno/policies.yaml): workload=core, node-pool=ks5-nvme,
+                # DaemonSets y longhorn-system. Nada mas programa aqui.
+                kubectl taint node "$node" node-role.kubernetes.io/control-plane:NoSchedule --overwrite
               done
+
+              # SC-6061: clase de computo para la saturacion de nodo. Los nodos con
+              # node-role.kubernetes.io/compute=true quedan fuera del warning
+              # NodeSystemSaturation (k8s-observability manifests/rules.yaml, VMRule
+              # pocharlies-node-saturation) y viven en NodeSystemSaturationCompute
+              # (severity info, sin Request): su carga sostenida es el punto de
+              # operacion — atlantic (sesiones de la compania), dgx3 (vLLM y lanes
+              # creative), nvidia-dgx y gx10-ec3d (vLLM tp), ubuntu (arc-runners de
+              # CI efimeros, load/core medido hasta 7.2). Antes la regla los lista
+              # por nombre y ubuntu se quedo fuera (SC-6047/SC-6048). Un nodo de
+              # computo nuevo se etiqueta aqui; sin etiqueta cae en el warning
+              # (ruido visible, nunca silencio).
+              kubectl label node nvidia-dgx gx10-ec3d dgx3 atlantic ubuntu node-role.kubernetes.io/compute=true --overwrite

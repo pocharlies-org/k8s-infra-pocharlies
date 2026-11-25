@@ -83,9 +83,15 @@ echo "KS5 capacity before ${mode}:"
 headroom_report | awk -F '\t' 'BEGIN { OFS="\t"; print "NODE","MAX_Gi","RESERVED_Gi","SCHEDULED_Gi","PHYSICAL_FREE_Gi","HEADROOM_Gi" }
   { for (i=2; i<=NF; i++) $i=sprintf("%.3f", $i/1073741824); print }'
 
+existing_volumes=()
 for volume in "${volumes[@]}"; do
-  volume_json="$(kubectl -n "${namespace}" get volumes.longhorn.io "${volume}" -o json)" ||
-    fail "allowlisted volume ${volume} no longer exists"
+  # A volume already deleted by a previous cleanup run is success, not a
+  # failure: the audit must stay runnable while the allowlist drains (SC-6023).
+  if ! kubectl -n "${namespace}" get volumes.longhorn.io "${volume}" >/dev/null 2>&1; then
+    echo "ALREADY-CLEANED ${volume}"
+    continue
+  fi
+  volume_json="$(kubectl -n "${namespace}" get volumes.longhorn.io "${volume}" -o json)"
 
   [[ "$(jq -r '.spec.size' <<<"${volume_json}")" == "${one_gib}" ]] ||
     fail "${volume}: size changed"
@@ -130,6 +136,7 @@ for volume in "${volumes[@]}"; do
     fail "${volume}: replicas are not spread exactly across the KS5 trio"
 
   echo "SAFE-CANDIDATE ${volume}"
+  existing_volumes+=("${volume}")
 done
 
 if [[ "${mode}" == "audit" ]]; then
@@ -140,10 +147,11 @@ fi
 [[ "${CONFIRM_DELETE_KS5_SMOKE_VOLUMES:-}" == "YES" ]] ||
   fail "set CONFIRM_DELETE_KS5_SMOKE_VOLUMES=YES for --execute"
 
-kubectl -n "${namespace}" delete volumes.longhorn.io "${volumes[@]}" --wait=false
+[[ "${#existing_volumes[@]}" -gt 0 ]] || { echo "Nothing left to delete."; exit 0; }
+kubectl -n "${namespace}" delete volumes.longhorn.io "${existing_volumes[@]}" --wait=false
 
 deadline=$((SECONDS + 300))
-for volume in "${volumes[@]}"; do
+for volume in "${existing_volumes[@]}"; do
   until ! kubectl -n "${namespace}" get volumes.longhorn.io "${volume}" >/dev/null 2>&1; do
     (( SECONDS < deadline )) || fail "timed out waiting for ${volume} deletion"
     sleep 2

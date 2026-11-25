@@ -1,0 +1,69 @@
+name: build-valkey-master-labeler
+
+# Imagen del etiquetador de master valkey (SC-5880) — patrón canónico
+# build-bge-embedding.yml (el que documenta docs/images/bases.md): buildx
+# dual-builder sobre los buildkitd remotos del namespace `buildkit`
+# (buildkitd-amd64 en atlantic, buildkitd-arm64 en dgx3), nativo por arch,
+# sin QEMU, push a Harbor. El runner empuja por el hostname LAN (mismo
+# Harbor; los manifiestos tiran de harbor.e-dani.com — precedente
+# dgx-infra build-dashboard-backend.yml).
+#
+# Tras el primer push: fijar el digest en los dos Deployment que consumen
+# la imagen (INFRA-1300) — databases/postgres-shared/shared-valkey.yaml
+# aquí y k8s/valkey-master-service.yaml en k8s-shopify-label-pocharlies.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag (default: ci-<short-sha>)"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: harbor.lan.e-dani.com
+  IMAGE: homelab/valkey-master-labeler
+  PLATFORM: linux/amd64,linux/arm64
+  BUILDKIT_AMD64: tcp://buildkitd-amd64.buildkit.svc.cluster.local:1234
+  BUILDKIT_ARM64: tcp://buildkitd-arm64.buildkit.svc.cluster.local:1234
+  CONTEXT: databases/valkey-master-labeler
+
+jobs:
+  build:
+    runs-on: arc-k8s
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute tag
+        id: t
+        env:
+          TAG: ${{ inputs.tag || format('ci-{0}', github.sha) }}
+        run: |
+          [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || { echo "tag no válido: $TAG" >&2; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Configure remote buildkit builders (uno por arch)
+        run: |
+          docker buildx rm vml-multi 2>/dev/null || true
+          docker buildx create --name vml-multi --driver remote \
+            --platform linux/amd64 "$BUILDKIT_AMD64" --use
+          docker buildx create --name vml-multi --driver remote \
+            --platform linux/arm64 --append "$BUILDKIT_ARM64"
+          docker buildx inspect --bootstrap
+      - name: Login to Harbor
+        env:
+          HARBOR_USER: ${{ secrets.HARBOR_USER }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+        run: echo "$HARBOR_PASSWORD" | docker login "$REGISTRY" -u "$HARBOR_USER" --password-stdin
+      - name: Build & push
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
+        run: |
+          docker buildx build \
+            --platform "$PLATFORM" \
+            --tag "$REGISTRY/$IMAGE:$TAG" \
+            --push \
+            "$CONTEXT"
+      - name: Summary
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
+        run: echo "Pushed \`$REGISTRY/$IMAGE:$TAG\` — re-pinear el digest en los dos Deployment (INFRA-1300)" >> "$GITHUB_STEP_SUMMARY"

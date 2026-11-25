@@ -339,8 +339,8 @@ read matrix:
   `agentgateway-read:plaud`).
 - Grants them individually — never via groups (SC-44 C6): the
   `agentgateway-mcp` service account receives all 22; the
-  `openclaw-readonly-agentgateway` service account receives its seven reviewed
-  routes (`synapse`, `synapse-tools`, `studio`, `gsc`, `offers`,
+  `openclaw-readonly-agentgateway` service account receives its six reviewed
+  routes (`synapse`, `synapse-tools`, `studio`, `gsc`,
   `plaud`, `skirmshop-plugins`). `synapse-sre-orchestrator`,
   `synapse-draft-orchestrator` and `company-metrics-agentgateway` receive
   none.
@@ -349,6 +349,16 @@ read matrix:
   INFRA-45 (section 11) the `agentgateway-mcp` scope additionally carries
   `agentgateway-write` explicitly, and the client's `fullScopeAllowed` is
   owned as `false` by this reconciler.
+- SC-6113 (20-11-2026, decision of Dani, owner of the bank `personal`): every
+  Claude session reads `personal` too, so `agentgateway-read:hindsight-personal`
+  rides the `agentgateway-mcp` plane (the JWT of the auth-proxy 127.0.0.1:8790
+  of paseo-0 and company-0) — granted to its service account, mapped into its
+  client scope and pinned in the exact minted token (`PERSONAL_READ_ROLE_NAME`)
+  — but it is NOT a matrix role: this reconciler never creates it, never
+  checks its holder set (owned by `agentgateway-hindsight-personal-grants`,
+  wave 25, where the shared SA is a reviewed holder; section 22) and the
+  rollback below leaves its grant and scope mapping in place. Withdrawing it is
+  a reviewed change to both hooks plus removing that grant and mapping.
 - Fails closed on any group mapping, any member outside the matrix, any
   composite role, any scope or grant entry outside the matrix, and any
   freshly minted token whose `realm_access.roles` is not exactly the measured
@@ -1024,9 +1034,11 @@ service account (`run_scoped_client` → `ensure_role_mapping`), and —
 `agentgateway-read:hindsight-personal` is created by security (SC-4051) and its
 complete direct holder set is owned by the wave-25 hook
 `agentgateway-hindsight-personal-grants`, whose reviewed set includes
-`service-account-socialmedia-hindsight` and
-`service-account-nova-hindsight-personal`: without that entry the hook would
-revoke the grant on every sync; — `hindsight-tienda`,
+`service-account-socialmedia-hindsight`,
+`service-account-nova-hindsight-personal` (and, since SC-6113, the shared
+`service-account-agentgateway-mcp`, whose grant and client scope mapping the
+wave-20 `agentgateway-read-grants` writes, section 10): without that entry the
+hook would revoke the grant on every sync; — `hindsight-tienda`,
 `hindsight-claude-personal` and `atlassian` are shared route roles owned by the
 wave-20 hook `agentgateway-read-grants`, which widens the holder ALLOWLIST of
 each one for the Nova service account (SC-699/INFRA-477 precedent) so its

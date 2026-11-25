@@ -1,0 +1,46 @@
+# Cierre del índice (SKIRM-590, criterio A4). El único camino legítimo hacia
+# devpi es la IngressRoute LAN: el generador de CoreDNS fija pypi.e-dani.com al
+# VIP de traefik-lan, así que todo el tráfico útil llega desde pods del
+# namespace traefik-lan (la CI también: los runners resuelven por ese pin). Sin
+# esta política, cualquier pod del cluster golpearía el Service ClusterIP por
+# detrás de Traefik.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devpi-default-deny-ingress
+  namespace: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devpi-allow-traefik-lan
+  namespace: devpi
+  labels:
+    app.kubernetes.io/name: devpi
+spec:
+  # Primario y réplicas (INFRA-1533).
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: devpi
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik-lan
+        # Mismo namespace: el Job de bootstrap entra por el Service ClusterIP y las réplicas
+        # hablan con el primario.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: devpi
+      ports:
+        - protocol: TCP
+          port: 8080

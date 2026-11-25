@@ -15,11 +15,11 @@ READ_ROUTES = [
     "alphalink",
     "analytics", "atlassian", "dgx-control", "gsc", "hindsight-claude-personal", "hindsight-codigo", "hindsight-shopify-contenido", "hindsight-tienda",
     "image",
-    "merchant", "offers", "photos", "picqer", "plaud", "shopify", "shopify-admin",
+    "merchant", "photos", "picqer", "plaud", "shopify", "shopify-admin",
     "skills", "skirmshop-plugins", "social", "stt", "studio", "synapse", "synapse-sre",
     "synapse-tools", "tts", "weight", "workspace",
 ]
-OPENCLAW_ROUTES = ["gsc", "offers", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
+OPENCLAW_ROUTES = ["gsc", "plaud", "skirmshop-plugins", "studio", "synapse", "synapse-tools"]
 
 READ_ROLE_NAMES = [f"agentgateway-read:{route}" for route in READ_ROUTES]
 OPENCLAW_ROLE_NAMES = [f"agentgateway-read:{route}" for route in OPENCLAW_ROUTES]
@@ -54,6 +54,12 @@ NOVA_CLAUDE_PERSONAL_SA = "service-account-nova-hindsight-claude-personal"
 NOVA_CLAUDE_PERSONAL_SHARED_ROLES = ["agentgateway-read:hindsight-claude-personal"]
 NOVA_ATLASSIAN_SA = "service-account-nova-atlassian"
 NOVA_ATLASSIAN_SHARED_ROLES = ["agentgateway-read:atlassian"]
+# SC-6113 (2026-11-20, decision of Dani): the route role of /hindsight-personal
+# rides the shared plane — granted to the shared SA, mapped into its client
+# scope and pinned in its exact token by this hook — but it is NOT a matrix
+# role: never created, holder-set checked nor deleted here (the catalog and the
+# wave-25 agentgateway-hindsight-personal-grants hook own those).
+PERSONAL_ROLE = "agentgateway-read:hindsight-personal"
 
 # Measured 2026-09-12 (INFRA-44/INFRA-46): agentgateway-mcp with
 # fullScopeAllowed=true carries the reviewed 23 PLUS the flattened composites
@@ -64,8 +70,8 @@ NOVA_ATLASSIAN_SHARED_ROLES = ["agentgateway-read:atlassian"]
 # so after INFRA-45's flip the
 # exact expected agentgateway-mcp set is the reviewed 23.
 TOKEN_DEFAULT_ROLES = ["default-roles-edani", "offline_access", "uma_authorization"]
-MCP_TOKEN_ON_ROLES = READ_ROLE_NAMES + ["agentgateway-write", "agentgateway-write:nova"] + TOKEN_DEFAULT_ROLES
-MCP_TOKEN_OFF_ROLES = ["agentgateway-write", "agentgateway-write:nova"] + READ_ROLE_NAMES
+MCP_TOKEN_ON_ROLES = READ_ROLE_NAMES + ["agentgateway-write", "agentgateway-write:nova", PERSONAL_ROLE] + TOKEN_DEFAULT_ROLES
+MCP_TOKEN_OFF_ROLES = ["agentgateway-write", "agentgateway-write:nova", PERSONAL_ROLE] + READ_ROLE_NAMES
 DEFAULT_OC_ROLES = ["cto-office-send"] + OPENCLAW_ROLE_NAMES
 
 
@@ -211,6 +217,15 @@ FAKE_KCADM = textwrap.dedent(
                 id) printf 'id-nova\\n' ;;
                 composite) printf 'false\\n' ;;
               esac
+            elif [ "$role" = agentgateway-read:hindsight-personal ]; then
+              # SC-6113: pre-existing role owned by the catalog (created by
+              # security in SC-4051): resolvable unless the test removed it,
+              # never created or deleted by this script.
+              [ -f "$state/personal-role-missing" ] && exit 1
+              case "$fields" in
+                id) printf 'id-personal\\n' ;;
+                composite) printf 'false\\n' ;;
+              esac
             elif [ -f "$state/roles" ] && grep -Fxq "$role,false" "$state/roles"; then
               case "$fields" in
                 id) printf 'id-%s\\n' "$role" ;;
@@ -322,6 +337,7 @@ def seed_full_state(state):
     (state / "scope-mcp").write_text(
         "agentgateway-write\nagentgateway-write:nova\n"
         + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+        + f"{PERSONAL_ROLE}\n"
     )
     (state / "scope-oc").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
@@ -329,6 +345,7 @@ def seed_full_state(state):
     (state / "grants-mcp-sa").write_text(
         "agentgateway-write\nagentgateway-write:nova\n"
         + "".join(f"{role}\n" for role in READ_ROLE_NAMES)
+        + f"{PERSONAL_ROLE}\n"
     )
     (state / "grants-oc-sa").write_text(
         "cto-office-send\n" + "".join(f"{role}\n" for role in OPENCLAW_ROLE_NAMES)
@@ -406,13 +423,20 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_matrix_is_immutable_and_exactly_the_reviewed_routes(self):
         script = (BASE / "scripts" / "agentgateway-read-grants.sh").read_text()
-        self.assertEqual(28, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain
+        self.assertEqual(27, len(READ_ROLE_NAMES))  # SC-4304: + hindsight-codigo, + hindsight-shopify-contenido; INFRA-402: + photos; SC-5492: - brain; SC-5827: - offers
         for role in READ_ROLE_NAMES:
             self.assertIn(role, script)
         self.assertIn("READ_ROLE_NAMES is immutable", script)
         # INFRA-1224/INFRA-1234: the literal /nova route role rides the shared plane.
         self.assertIn("NOVA_WRITE_ROLE_NAME is immutable", script)
         self.assertIn("agentgateway-write:nova", script)
+        # SC-6113: the /hindsight-personal route role rides the shared plane as
+        # its own immutable constant, outside the matrix.
+        self.assertIn("PERSONAL_READ_ROLE_NAME is immutable", script)
+        self.assertIn('PERSONAL_READ_ROLE_NAME="${PERSONAL_READ_ROLE_NAME:-agentgateway-read:hindsight-personal}"', script)
+        self.assertNotIn(PERSONAL_ROLE, READ_ROLE_NAMES)
+        expected_reads = script.split('\nEXPECTED_READ_ROLE_NAMES="', 1)[1].split('"', 1)[0]
+        self.assertNotIn(PERSONAL_ROLE, expected_reads.split(","))
         self.assertIn("OPENCLAW_READ_ROLE_NAMES is immutable", script)
         # SC-699: the chat holder allowlist is its own reviewed constant.
         self.assertIn("CHAT_READ_ROLE_NAMES is immutable", script)
@@ -461,30 +485,35 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
 
     def test_ensure_from_empty_creates_roles_maps_grants_and_verifies_tokens(self):
         result, journal, state_files = self.run_reconciler(mode="ensure", seed=None)
-        self.assertIn('"roles":28,"created":28', result.stdout)  # matrix 28 (SC-4304 + INFRA-402 - SC-5492)
+        self.assertIn('"roles":27,"created":27', result.stdout)  # matrix 28 (SC-4304 + INFRA-402 - SC-5492 - SC-5827)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertIn('"tokens_verified":true', result.stdout)
-        self.assertEqual(28, journal.count("create roles "))
+        self.assertEqual(27, journal.count("create roles "))
         self.assertEqual(1, journal.count("create clients/mcp-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create clients/oc-uuid/scope-mappings/realm"))
         self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
         self.assertEqual(1, journal.count("create users/oc-sa/role-mappings/realm"))
         # INFRA-45: the mcp client scope is agentgateway-write plus the 22
         # read roles (23), and the flag ends up false.
-        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + nova + 28 reads (INFRA-1234, SC-5492)
+        self.assertEqual(30, len(state_files["scope-mcp"].split()))  # write + nova + 27 reads + personal (INFRA-1234, SC-5492, SC-5827, SC-6113)
+        self.assertIn(PERSONAL_ROLE, state_files["scope-mcp"].split())
         self.assertIn("agentgateway-write", state_files["scope-mcp"].split())
         self.assertEqual("false\n", state_files["fullscope-mcp"])
         # cto-office-send belongs to the openclaw reconciler: this one maps
         # and grants exactly its seven reviewed roles on that client.
-        self.assertEqual(7, len(state_files["scope-oc"].split()))
-        self.assertEqual(29, len(state_files["grants-mcp-sa"].split()))  # write + nova + 28 reads (INFRA-1234, SC-5492)
-        self.assertEqual(7, len(state_files["grants-oc-sa"].split()))
+        self.assertEqual(6, len(state_files["scope-oc"].split()))
+        self.assertEqual(29, len(state_files["grants-mcp-sa"].split()))  # nova + 27 reads + personal (INFRA-1234, SC-5492, SC-5827, SC-6113)
+        self.assertIn(PERSONAL_ROLE, state_files["grants-mcp-sa"].split())
+        # SC-6113: the personal role is catalog-owned — granted, never created.
+        self.assertNotIn("name=agentgateway-read:hindsight-personal", journal)
+        self.assertIn('"grants_agentgateway_mcp":29', result.stdout)
+        self.assertEqual(6, len(state_files["grants-oc-sa"].split()))
 
     def test_ensure_is_no_op_when_full_state_is_present(self):
         result, journal, state_files = self.run_reconciler(
             mode="ensure", seed=seed_full_state
         )
-        self.assertIn('"roles":28,"created":0', result.stdout)
+        self.assertIn('"roles":27,"created":0', result.stdout)
         self.assertIn('"fullscope_allowed":false', result.stdout)
         self.assertNotIn("create roles ", journal)
         self.assertNotIn("create clients/", journal)
@@ -498,6 +527,63 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
         result, journal, _ = self.run_reconciler(mode="audit", seed=seed_full_state)
         self.assertIn('"tokens_verified":true', result.stdout)
         self.assertNotIn("create ", journal)
+
+    @staticmethod
+    def seed_without_personal(state):
+        seed_full_state(state)
+        for name in ("scope-mcp", "grants-mcp-sa"):
+            lines = (state / name).read_text().splitlines()
+            (state / name).write_text("".join(f"{line}\n" for line in lines if line != PERSONAL_ROLE))
+
+    def test_ensure_grants_and_scopes_the_personal_role_without_creating_it(self):
+        # SC-6113: the live state before this change (shared SA without the
+        # personal grant or scope mapping) converges in one ensure run: one
+        # scope mapping and one grant, the role never created, and the final
+        # token carries it.
+        result, journal, state_files = self.run_reconciler(
+            mode="ensure", seed=self.seed_without_personal
+        )
+        self.assertIn('"tokens_verified":true', result.stdout)
+        self.assertEqual(1, journal.count("create clients/mcp-uuid/scope-mappings/realm"))
+        self.assertEqual(1, journal.count("create users/mcp-sa/role-mappings/realm"))
+        self.assertNotIn("create roles ", journal)
+        self.assertIn(PERSONAL_ROLE, state_files["scope-mcp"].split())
+        self.assertIn(PERSONAL_ROLE, state_files["grants-mcp-sa"].split())
+        # its holder set is the wave-25 hook's business, never inspected here
+        self.assertNotIn(f"roles/{PERSONAL_ROLE}/users", journal)
+
+    def test_audit_fails_closed_without_the_personal_grant_or_scope(self):
+        result, _, _ = self.run_reconciler(
+            mode="audit", seed=self.seed_without_personal, expect_ok=False
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(f"{PERSONAL_ROLE} is not mapped in the expected set", result.stderr)
+
+    def test_token_without_the_personal_role_fails_closed(self):
+        result, _, _ = self.run_reconciler(
+            mode="audit", seed=seed_full_state, expect_ok=False,
+            mcp_off_roles=[role for role in MCP_TOKEN_OFF_ROLES if role != PERSONAL_ROLE],
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("realm roles are not exactly the reviewed matrix", result.stderr)
+
+    def test_missing_personal_role_fails_closed_and_is_never_created(self):
+        def seed(state):
+            self.seed_without_personal(state)
+            (state / "personal-role-missing").touch()
+
+        result, journal, _ = self.run_reconciler(mode="ensure", seed=seed, expect_ok=False)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(f"{PERSONAL_ROLE} is missing from the realm", result.stderr)
+        self.assertNotIn("name=agentgateway-read:hindsight-personal", journal)
+
+    def test_personal_role_name_is_immutable(self):
+        result, _, _ = self.run_reconciler(
+            mode="audit", seed=seed_full_state, expect_ok=False,
+            extra_env={"PERSONAL_READ_ROLE_NAME": "agentgateway-read:hindsight-leila"},
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("PERSONAL_READ_ROLE_NAME is immutable", result.stderr)
 
     def test_group_mapping_fails_closed(self):
         def seed(state):
@@ -881,13 +967,20 @@ class AgentgatewayReadGrantsContractTest(unittest.TestCase):
             mode="rollback", seed=seed_full_state
         )
         self.assertIn('"roles_deleted":28,"present":false', result.stdout)
-        self.assertEqual(28, journal.count("delete roles/agentgateway-read:"))
+        self.assertEqual(27, journal.count("delete roles/agentgateway-read:"))
         self.assertNotIn("delete roles/agentgateway-write", journal)
         self.assertNotIn("agentgateway-read:", state_files.get("roles", ""))
-        self.assertNotIn("agentgateway-read:", state_files["scope-mcp"])
+        for role in READ_ROLE_NAMES:
+            self.assertNotIn(role, state_files["scope-mcp"].split())
         # The write surface predates this reconciler and stays: while
         # fullScopeAllowed=false it is what keeps write traffic alive.
-        self.assertEqual("agentgateway-write\nagentgateway-write:nova\n", state_files["scope-mcp"])
+        # SC-6113: so does the personal route role — not a matrix role (its
+        # holder set is the wave-25 hook's), withdrawn only by a reviewed change.
+        self.assertEqual(
+            f"agentgateway-write\nagentgateway-write:nova\n{PERSONAL_ROLE}\n", state_files["scope-mcp"]
+        )
+        self.assertIn(PERSONAL_ROLE, state_files["grants-mcp-sa"].split())
+        self.assertNotIn(f"delete roles/{PERSONAL_ROLE}", journal)
         self.assertEqual("false\n", state_files["fullscope-mcp"])
 
     def test_job_is_postsync_nonroot_pinned_and_network_limited(self):

@@ -1,0 +1,21 @@
+# user: system:kube-controller-manager
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allow-gpu-operator-ds-pod
+  namespace: gpu-operator
+  labels:
+    app: nvidia-dcgm
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: DaemonSet
+    name: allow-gpu-operator-ds-pod-owner
+    uid: 00000000-0000-0000-0000-000000000001
+    controller: true
+spec:
+  tolerations:
+  - operator: Exists
+  runtimeClassName: nvidia
+  containers:
+  - name: c
+    image: x

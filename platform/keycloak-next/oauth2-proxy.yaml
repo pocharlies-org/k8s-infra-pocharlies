@@ -85,7 +85,7 @@ data:
     #
     # La password NO va aquí: v7.15.2 no expande `$(VAR)` en el .cfg — con el literal dentro, el proxy no
     # arranca. `OAUTH2_PROXY_REDIS_PASSWORD`, del Secret de arriba, es la que oauth2-proxy lleva en AUTH.
-    # La DB 1 es por convención (la 0 es de aiops): el ACL de valkey no sabe de números de DB.
+    # La DB 1 es por convención: el ACL de valkey no sabe de números de DB.
     session_store_type = "redis"
     redis_connection_url = "redis://oauth2-proxy@shared-valkey-master.databases.svc.cluster.local:6379/1"
 

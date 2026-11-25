@@ -747,3 +747,422 @@ spec:
           spec:
             securityContext:
               fsGroupChangePolicy: OnRootMismatch
+---
+# POLICY: spark-gpu-queue-only (DGX-1665, Dani 17-11-2026)
+# GPU on the NVIDIA Sparks (nvidia-dgx, gx10-ec3d, dgx3) only through the queue: no GPU
+# pod or workload is created by hand. Origin: a bare `kubectl apply` pod
+# (llm/omnivoice-train, sleep infinity) held dgx3's GPU after its run, the arbiter
+# aborted ComfyUI's lease (late_gpu_blocker) and the whole creative window ran nothing.
+# A pod "uses the GPU" if it asks for nvidia.com/gpu, runs with runtimeClassName nvidia
+# or sets NVIDIA_VISIBLE_DEVICES to a device (GB10 unified memory: the last two are
+# enough without the resource). It "targets a Spark" if it tolerates dedicated=llm
+# (the taint every Spark carries) or names a Spark in spec.nodeName.
+# One pod is not made by a controller: gpu-operator's validator DaemonSet (init
+# cuda-validation) creates gpu-operator/nvidia-cuda-validator-* itself with its own SA
+# after every node boot; only that SA, that namespace and that label pass (DGX-1672).
+# Keep the DaemonSet list in step with TRUSTED_GPU_SYSTEM_DAEMONSETS (dgx-infra
+# services/dashboard/gpu_arbiter.py) and the resident list with compute_mode.py.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: spark-gpu-queue-only
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    policies.kyverno.io/title: GPU On The Sparks Only Through The Queue
+    # The Pod rule judges pods by their creator; autogen would apply it to Deployments too.
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: GPU
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet, Job, CronJob
+    policies.kyverno.io/description: >
+      Denies hand-made GPU loads on the Sparks. GPU pods there must be created by a
+      Kubernetes controller for a queue lane (gpu.dgx-infra/role on-demand|resident,
+      pool gb10), a GPU system DaemonSet or a listed LLM resident (sole exception:
+      gpu-operator's nvidia-cuda-validator pod, by its validator SA); GPU workloads must
+      be created by ArgoCD or the dashboard queue; GPU Jobs must end on their own
+      (activeDeadlineSeconds and ttlSecondsAfterFinished). DGX-1665.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Enforce
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: spark-gpu-pods-only-from-controllers
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: allowed
+          variable:
+            jmesPath: >-
+              (
+                (request.userInfo.username == 'system:kube-controller-manager' || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:'))
+                && request.object.metadata.ownerReferences[0].kind != null
+                && (
+                  (request.object.metadata.ownerReferences[0].kind == 'DaemonSet' && contains(['gpu-operator','monitoring'], request.namespace))
+                  || (contains(['on-demand','resident'], request.object.metadata.labels."gpu.dgx-infra/role" || '') && request.object.metadata.labels."gpu.dgx-infra/pool" == 'gb10')
+                  || (request.namespace == 'llm' && contains(['qwen38-flash-next-head','qwen38-flash-next-worker','qwen38-flash-next-worker-dgx3'], request.object.metadata.labels.app || ''))
+                  || (request.namespace == 'ai-lab' && request.object.metadata.labels.app == 'qwen38-lab')
+                )
+              )
+              || (request.namespace == 'gpu-operator' && request.userInfo.username == 'system:serviceaccount:gpu-operator:nvidia-operator-validator' && request.object.metadata.labels.app == 'nvidia-cuda-validator')
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-1665: GPU on the Sparks only through the queue. A GPU pod there must
+          come from a queue lane, a GPU system DaemonSet or a listed LLM resident,
+          created by its controller; a pod applied by hand is refused. Launch the
+          work through the dashboard queue (gpu_arbiter), e.g. POST
+          /api/train/voz for an OmniVoice voice training.
+        deny:
+          conditions:
+            all:
+              - key: "{{ allowed }}"
+                operator: Equals
+                value: false
+    - name: spark-gpu-workloads-only-from-gitops-or-queue
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet, Job, CronJob]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec.template.spec || request.object.spec.jobTemplate.spec.template.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: allowed
+          variable:
+            jmesPath: >-
+              contains(['system:serviceaccount:argocd:argocd-application-controller','system:serviceaccount:control-nexus:dgx-dashboard','system:kube-controller-manager'], request.userInfo.username)
+              || starts_with(request.userInfo.username, 'system:serviceaccount:kube-system:')
+              || starts_with(request.userInfo.username, 'system:serviceaccount:gpu-operator:')
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-1665: GPU workloads on the Sparks are created only by ArgoCD (a GitOps
+          lane) or the dashboard queue, never by hand. Add a lane by PR or launch the
+          work through the queue.
+        deny:
+          conditions:
+            all:
+              - key: "{{ allowed }}"
+                operator: Equals
+                value: false
+    - name: spark-gpu-jobs-must-end
+      match:
+        any:
+          - resources:
+              kinds: [Job]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      context:
+        - name: podspec
+          variable:
+            jmesPath: request.object.spec.template.spec
+        - name: spark
+          variable:
+            jmesPath: >-
+              length(podspec.tolerations[?(key=='dedicated' && (value=='llm' || operator=='Exists')) || (key==null && operator=='Exists')] || `[]`) > `0`
+              || contains(['nvidia-dgx','gx10-ec3d','dgx3'], podspec.nodeName || '')
+        - name: gpu
+          variable:
+            jmesPath: >-
+              length([podspec.containers, podspec.initContainers || `[]`][] | [?resources.limits."nvidia.com/gpu" || resources.requests."nvidia.com/gpu"]) > `0`
+              || podspec.runtimeClassName == 'nvidia'
+              || length([podspec.containers, podspec.initContainers || `[]`][][].env[] | [?name=='NVIDIA_VISIBLE_DEVICES' && !contains(['void','none',''], value || '')]) > `0`
+        - name: ends
+          variable:
+            jmesPath: >-
+              request.object.spec.activeDeadlineSeconds != null && request.object.spec.activeDeadlineSeconds <= `21600`
+              && request.object.spec.ttlSecondsAfterFinished != null && request.object.spec.ttlSecondsAfterFinished <= `86400`
+      preconditions:
+        all:
+          - key: "{{ spark }}"
+            operator: Equals
+            value: true
+          - key: "{{ gpu }}"
+            operator: Equals
+            value: true
+      validate:
+        allowExistingViolations: true
+        message: >-
+          DGX-1665: a GPU Job on the Sparks must end on its own: set
+          activeDeadlineSeconds (at most 21600) and ttlSecondsAfterFinished (at most
+          86400).
+        deny:
+          conditions:
+            all:
+              - key: "{{ ends }}"
+                operator: Equals
+                value: false
+---
+# POLICY: job-ttl-default (SC-5907, SC-5806 «todo por eventos»)
+# Every Job admitted without spec.ttlSecondsAfterFinished gets 86400: the Job and its pods
+# go 24 h after they finish, through the kube-controller-manager's ttl-after-finished
+# controller. This replaces the kube-system/sauvage-pod-reaper CronJob and its
+# cluster-wide ClusterRole (pods get,list,delete). Failed pods of ReplicaSets, the
+# other thing the reaper swept, go through the PodGC (terminated-pod-gc-threshold=200,
+# ansible/roles/k3s_control_plane).
+# - A ttl the owner set (0 included) is never touched: the +() anchor only adds.
+# - Jobs that ArgoCD tracks (annotation argocd.argoproj.io/tracking-id) are left alone
+#   unless they are hooks: a synced Job deleted by its TTL is "Missing" to ArgoCD,
+#   and selfHeal would create and RUN it again every day (libreplay db-migrate/seed,
+#   restore-drill, llm qwen38fn-tp3-* on 17-11). Hooks are ArgoCD's to delete anyway.
+# - On a Spark GPU Job without ttl, the 86400 also satisfies the ttl half of
+#   spark-gpu-jobs-must-end (Kyverno validates the mutated object);
+#   activeDeadlineSeconds is still required there.
+# - failurePolicy Ignore: this rule adds no blocking path. (Job CREATE is already
+#   behind mutate/validate.kyverno.svc-fail through the Pod policies' autogen, so a
+#   Kyverno outage stops Jobs with or without this policy; security on #558.)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: job-ttl-default
+  annotations:
+    policies.kyverno.io/title: Jobs Clean Up After Themselves
+    policies.kyverno.io/description: >
+      Sets ttlSecondsAfterFinished 86400 on Jobs created without one, except
+      ArgoCD-tracked Jobs that are not hooks, so finished Jobs and their pods are
+      deleted by Kubernetes 24 h after they end.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  # Mismo patrón que externalsecret-onepassword-onchange (INFRA-481): solo admisión,
+  # failurePolicy Ignore, los defaults del webhook declarados tal cual.
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: ttl-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [Job]
+              operations: [CREATE]
+      preconditions:
+        any:
+          - key: "{{ request.object.metadata.annotations.\"argocd.argoproj.io/tracking-id\" || '' }}"
+            operator: Equals
+            value: ""
+          - key: "{{ request.object.metadata.annotations.\"argocd.argoproj.io/hook\" || request.object.metadata.annotations.\"helm.sh/hook\" || '' }}"
+            operator: NotEquals
+            value: ""
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            +(ttlSecondsAfterFinished): 86400
+---
+# POLICY: arc-runner-ttl (INFRA-1488, Dani 20-11-2026: «todo runner con timeout, que no
+# queden zombis»). Every EphemeralRunner of every ARC scale set (any namespace, present
+# or future) is born with cleanup.kyverno.io/ttl, so Kyverno's cleanup controller deletes
+# it 12 h after creation whatever state it is stuck in (Failed, pod in Init or Pending,
+# runner hung after its job). Deleting the EphemeralRunner is ARC's own scale-down path:
+# its finalizers deregister the runner from GitHub and remove the pod, and the
+# EphemeralRunnerSet creates a fresh one if the pool still needs it.
+# - Armed per object at admission, no cron sweep (SC-5617 «todo por eventos»).
+# - 12 h: GitHub already ends any job at 6 h (default timeout-minutes 360), so a runner
+#   still alive at 12 h is a zombie or a warm runner idle half a day; recycling the
+#   latter is harmless. shortcut: the clock starts at creation, not at job start, so a
+#   job that lands on a runner idle ~12 h can be cut; upgrade to arming the TTL on the
+#   workflow_job in_progress event if that ever shows up in CI.
+# - Add-only (+()): a TTL set by hand on a runner wins.
+# - failurePolicy Ignore: a Kyverno outage never blocks ARC from creating runners.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: arc-runner-ttl
+  annotations:
+    policies.kyverno.io/title: ARC Runners Expire
+    policies.kyverno.io/description: >
+      Labels every ARC EphemeralRunner with cleanup.kyverno.io/ttl 12h at creation, so
+      Kyverno's cleanup controller deletes any runner still around 12 h later.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: ttl-at-admission
+      match:
+        any:
+          - resources:
+              kinds: [actions.github.com/v1alpha1/EphemeralRunner]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              +(cleanup.kyverno.io/ttl): 12h
+---
+# The cleanup controller only expires kinds it can list, watch and delete (INFRA-1488).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:cleanup-controller:arc-runners
+  labels:
+    rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
+rules:
+  - apiGroups: [actions.github.com]
+    resources: [ephemeralrunners]
+    verbs: [get, list, watch, delete]
+---
+# Read-only for the reports controller, which watches every kind a policy matches.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:reports-controller:arc-runners
+  labels:
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"
+rules:
+  - apiGroups: [actions.github.com]
+    resources: [ephemeralrunners]
+    verbs: [get, list, watch]
+---
+# POLICY 13: guard del plano de control (SC-6096, mitigacion SC-6094)
+# ks5-cp-1/2/3 llevan node-role.kubernetes.io/control-plane:NoSchedule (registro:
+# kubernetes/node-labels/labels-job.yaml, aplicado a mano). Antes de SC-6096 estos nodos no
+# tenian taint alguno y cualquier carga aterrizaba en el plano de control; ks5-cp-3 se
+# saturaba con el Postgres compartido y el almacen de metricas encima. Esta mutacion añade
+# la toleracion SOLO a la allowlist, declarada por el propio pod:
+#   - nodeSelector workload=core  -> clase plataforma de la casa (ArgoCD, CNPG, rabbitmq,
+#     valkey, nats, harbor, keycloak, loki, vmalert... ~90 cargas que ya viven en el pool ks5)
+#   - nodeSelector node-pool=ks5-nvme -> anclados al pool NVMe (postgres compartido,
+#     vmsingle-rca)
+#   - pods de DaemonSet -> deben correr en todos los nodos (longhorn, velero node-agent,
+#     alloy, node-exporter; traefik-edge y coredns-local ya la traen)
+#   - namespace longhorn-system -> instance/share-managers, creados por el operador, no por DS
+# Todo lo demas (despliegues de negocio, pods ad-hoc, runners efimeros de CI — SC-6076) no
+# puede programarse aqui y aterriza en atlantic/ubuntu/sauvage.
+# failurePolicy Ignore (patron de la casa): si Kyverno cae, un pod de la allowlist se queda
+# sin toleracion y queda Pending (visible, un borrado lo recrea) en lugar de bloquear toda
+# creacion de pods del cluster.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: control-plane-toleration-allowlist
+  annotations:
+    policies.kyverno.io/title: Toleracion del plano de control solo para la allowlist
+    policies.kyverno.io/description: >
+      Los nodos ks5-cp-* llevan taint node-role.kubernetes.io/control-plane:NoSchedule.
+      La toleracion se añade en admision solo a pods que declaran vivir aqui (nodeSelector
+      workload=core o node-pool=ks5-nvme), a pods de DaemonSet y a pods de longhorn-system.
+      Ningun otro pod puede programarse en ks5-cp-1/2/3.
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    # SC-6196: dos reglas con patchesJson6902 en lugar de patchStrategicMerge. El merge
+    # estrategico de Kyverno REEMPLAZABA la lista de toleraciones (no tiene clave de merge) y
+    # dejo Pending al dgx-gpu-mem-exporter en dgx3: el pod perdia su dedicated=llm y no
+    # cabia en ningun nodo (DEPL-20166). Ahora la toleracion del plano de control se ANADE a
+    # las que el pod ya declara. Son dos reglas porque json6902 no puede anadir bajo
+    # /spec/tolerations/- si el campo todavia no existe.
+    - name: add-control-plane-toleration
+      match: &cp-toleration-match
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE]
+      skipBackgroundRequests: true
+      # preconditions (no conditions): patron de job-ttl-default, y verificado con la CLI
+      # (tests/kyverno/cp-toleration/run-offline.sh) — las `conditions` nuevas no se
+      # evaluaban en la regla mutate.
+      preconditions:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: GreaterThan
+            value: 0
+        any: &cp-toleration-allowlist
+          - key: "{{ request.object.spec.nodeSelector.workload || '' }}"
+            operator: Equals
+            value: "core"
+          - key: "{{ request.object.spec.nodeSelector.\"node-pool\" || '' }}"
+            operator: Equals
+            value: "ks5-nvme"
+          - key: "{{ length((request.object.metadata.ownerReferences || `[]`)[?kind=='DaemonSet']) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.namespace }}"
+            operator: Equals
+            value: "longhorn-system"
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/tolerations/-
+            op: add
+            value:
+              key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+    - name: add-control-plane-toleration-when-absent
+      match: *cp-toleration-match
+      skipBackgroundRequests: true
+      preconditions:
+        all:
+          - key: "{{ length(request.object.spec.tolerations || `[]`) }}"
+            operator: Equals
+            value: 0
+        any: *cp-toleration-allowlist
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/tolerations
+            op: add
+            value:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule

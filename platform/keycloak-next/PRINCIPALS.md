@@ -193,12 +193,12 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `qa-sin-rol@e-dani.com` | humano | QA | retirada-propuesta | Usuario de prueba autenticado SIN company-operator, para el 403 del backend de company.e-dani.com. |
 | `qa-write-sin-vinculo@e-dani.com` | humano | QA | activo | Fixture C2 reverso de OWU-28-g: usuario de prueba CON agentgateway-write, SIN grupos y SIN entrada en atlassian-identity-bindings; login scriptado PKCE por el cliente público agentgateway-chat-mcp. Su alta y contraseña las posee GitOps (agentgateway-write-fixture-user.sh + ítem 1Password); retirada propuesta al cerrar la épica. |
 | `qa-owu95@e-dani.com` | humano | QA | activo | Fixture de OWU-116 (S1 de OWU-95): usuaria de la ruta bearer de la app nativa en chat.e-dani.com; grupo /edani-users, sin roles directos. Alta y contraseña por GitOps (openwebui-ios-client.sh + ítem 1Password keycloak-next-qa-owu95, lo escribe security); entra una vez por la web antes de probar (el exchange no auto-registra); retirada al cerrar la épica. |
-| `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos. |
+| `qa-sso-test` | humano | QA | activo | Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators; con agentgateway-read:photos (INFRA-1522: segundo usuario humano de la app nativa photos-ios, para que QA valide la app y bench_search.py; sin photos-confirm-delete: QA solo propone borrados). Concesión por GitOps (photos-read-grant-qa-job, wave 25). |
 | `qa@e-dani.com` | humano | QA | activo | Fixture de SKIRM-494 (criterio 3 de SKIRM-484): cuenta QA que entra en la web de Skirmbooks (skirmbooks.e-dani.com); grupo /skirmbooks-users, sin roles directos. Ya nominal en gestoria_identity (migración 0096: tenant skirmshop, rol owner). Alta, contraseña y retirada por GitOps (skirmbooks-qa-fixture-user.sh + ítem 1Password keycloak-next-qa, lo escribe security). |
 | `staticduo@gmail.com` | humano | Dani (operador) | activo | Jordi Ibáñez Fernández (staticduo), colaborador externo de las épicas Browser Harness (INFRA-383/INFRA-413): su principal para gobernar por Keycloak sus propios browsers en sus hosts. Sin roles en este realm. |
 | `uriel` | humano | Dani (operador) | activo | Cuenta del cliente externo Uriel Productions (info@urielproductions.com) para la propuesta viva uriel.e-dani.com. |
 | `service-account-agentgateway-mac-cb` | sa | Dani (operador) | activo | client_credentials del Mac CloudBlue para /hindsight-cloudblue (banco CloudBlue, solo lectura; contenido solo Anthropic/local). Client manual, declarado en INFRA-974. |
-| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; el banco personal NO viaja aqui; INFRA-402: + photos), agentgateway-write y el rol de ruta agentgateway-write:nova (INFRA-1224). |
+| `service-account-agentgateway-mcp` | sa | DevOps | activo | Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; INFRA-402: + photos), agentgateway-read:hindsight-personal fuera de la matriz (SC-6113, decisión de Dani 20-11-2026: todas las sesiones de Claude consultan también el banco `personal`; deja sin efecto para este SA la regla de SC-4051 que lo excluía), agentgateway-write y el rol de ruta agentgateway-write:nova (INFRA-1224). |
 | `service-account-agentgateway-smoke-operator` | sa | DevOps | activo | Fixture de solo lectura del smoke de la frontera de escritura del AgentGateway (INFRA-1189, C7 de la épica INFRA-218): el OPERATOR_TOKEN de `scripts/smoke-write-role.sh` — exactamente agentgateway-read:social y agentgateway-read:workspace y ningún agentgateway-write*. Creado por su PostSync, nunca a mano. |
 | `service-account-atlassian-mcp-probe` | sa | DevOps | activo | Sonda de round-trip MCP del plano Atlassian: llama a la ruta /atlassian-probe (única herramienta jira_get_issue) con agentgateway-read:atlassian. |
 | `service-account-chat-agentgateway` | sa | DevOps | activo | Identidad del chat (/studio) ante AgentGateway: los seis agentgateway-write:<dominio> de su superficie mas el rol de ruta agentgateway-read:studio (SC-699). Desde SC-4304 S6 no lee la memoria personal: perdió el grant de SC-4051 para cerrar la vía del sidecar (veredicto security 03-11-2026). |
@@ -217,7 +217,7 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
 | `service-account-hermes-secretaria-skirmshop` | sa | DevOps | activo | Identidad MCP del perfil secretaria-skirmshop de Hermes ante AgentGateway: lectura de negocio (picqer, shopify, shopify-admin solo product_stock_status por su lista fina de Hermes —DGX-854—, skirmshop-plugins, workspace) y, como única escritura, redactar borradores de Gmail (agentgateway-write:workspace-borrador, INFRA-676); nunca enviar. |
 | `service-account-jarvis-echo` | sa | DevOps | activo | Identidad M2M de la skill de Alexa jarvis-alexa: lectura del calendario de la Agenda del Echo Show por AgentGateway /workspace con agentgateway-read:workspace; sin ningún write (INFRA-477). |
 | `service-account-keycloak-rbac-auditor` | sa | DevOps | activo | Auditor de solo lectura del realm para el CronJob keycloak-role-drift (view-realm, view-users, query-users, query-groups de realm-management; sin view-clients ni manage-*). |
-| `service-account-nova-atlassian` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: sus lecturas de Jira/Confluence por /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page). Exactamente agentgateway-read:atlassian y ningún agentgateway-write (veredicto INFRA-1248). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
+| `service-account-nova-atlassian` | sa | DevOps | activo | Identidad de Nova (el agente de voz, ns nova) ante AgentGateway: sus lecturas de Jira/Confluence por /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page) y, desde INFRA-1493, sus tres escrituras de Jira (jira_add_comment, jira_edit_comment, jira_create_issue) con el rol acotado agentgateway-write:atlassian-nova (veredicto INFRA-1396 enmendado por INFRA-1493; enmienda a C2 de INFRA-1248). Exactamente agentgateway-read:atlassian y agentgateway-write:atlassian-nova, nunca el write pelado (abriría las 40 escrituras de la ruta). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
 | `service-account-nova-hindsight-claude-personal` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: búsqueda semántica del banco `claude-personal` por /hindsight-claude-personal. Exactamente agentgateway-read:hindsight-claude-personal y ningún agentgateway-write (veredicto INFRA-1248; C1: con banco cargado ningún modelo fuera del clúster corre el turno, k8s-nova-pocharlies#40). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
 | `service-account-nova-hindsight-cloudblue` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: banco `cloudblue` por /hindsight-cloudblue. Exactamente agentgateway-read:hindsight-cloudblue y ningún agentgateway-write (veredicto INFRA-1248; su C1 satisface la restricción de proveedor del rol: Anthropic/local, nunca OpenAI/Alibaba). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
 | `service-account-nova-hindsight-personal` | sa | DevOps | activo | Identidad de solo lectura de Nova (el agente de voz, ns nova) ante AgentGateway: banco `personal` por /hindsight-personal en sus propias llamadas (la decisión de Dani del 03-11 acota los lectores humanos, no las identidades de servicio dedicadas). Exactamente agentgateway-read:hindsight-personal y ningún agentgateway-write (veredicto INFRA-1248; C1, k8s-nova-pocharlies#40). Creada por su PostSync (hindsight-reader-clients.yaml), nunca a mano. |
@@ -402,10 +402,11 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "humano",
       "client": null,
       "owner": "QA",
-      "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556)",
-      "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators, sin roles directos.",
+      "source": "INFRA-561 (usuario de prueba del realm edani para QA, con TOTP en 1Password, alta 05-10); su acceso por sso-chain verificado en INFRA-599 (cierre de la exposición INFRA-556); agentgateway-read:photos declarado por INFRA-1522 (Request de la sesión tech-lead de INFRA-379) y concedido por el PostSync photos-read-grant-qa-job (wave 25), sujeto fijado por id 469f01d4-dba3-47e9-857c-13e01be14522",
+      "purpose": "Usuario de prueba de QA para cadenas SSO con TOTP; grupo edani-operators; segundo usuario humano de la app nativa photos-ios (INFRA-1522): su token por el client público photos-app trae la lectura de /photos; sin photos-confirm-delete (el gate de borrado sigue solo en Dani, G1 del architect).",
       "realm_roles": [
-        "default-roles-edani"
+        "default-roles-edani",
+        "agentgateway-read:photos"
       ],
       "status": "activo"
     },
@@ -466,8 +467,8 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "sa",
       "client": "agentgateway-mcp",
       "owner": "DevOps",
-      "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
-      "purpose": "Plano MCP de AgentGateway: las 28 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal, los bancos personales no viajan en el SA compartido; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova).",
+      "source": "platform/keycloak-next: agentgateway-read-grants.sh (INFRA-44; SC-6113 para hindsight-personal), agentgateway-hindsight-personal-grants.sh (SC-6113: titular revisado), agentgateway-write-role.sh (SC-44), agentgateway-mcp-token-ttl.sh (INFRA-187)",
+      "purpose": "Plano MCP de AgentGateway: las 27 lecturas agentgateway-read:* de la matriz (SC-4051: + hindsight-claude-personal; SC-4304: + hindsight-codigo, corpus del código de los repos del registro ya filtrado por gitleaks; INFRA-402: + photos; SC-5492: − brain, brain-mcp retirado; SC-5827: − offers, offers-mcp retirado), agentgateway-write (la escritura del planificador va con el write pelado; SC-2726) y agentgateway-write:nova (INFRA-1224: la ruta /nova exige el rol literal, el write global no la pasa; es el JWT con el que las sesiones de Claude de Dani llaman a Nova). Además agentgateway-read:hindsight-personal, fuera de la matriz (SC-6113, decisión de Dani, dueño del banco, 20-11-2026: «el personal quiero que se pueda consultar»; todas las sesiones de Claude, que llaman con este JWT por el auth-proxy 127.0.0.1:8790 de paseo-0 y company-0, consultan claude-personal y personal; deja sin efecto para este SA la regla de SC-4051 «los bancos personales no viajan en el SA compartido»). Riesgo: el SA lo comparten todas las sesiones del auth-proxy, también las que el router manda a proveedores fuera del clúster (la misma exposición que ya tiene claude-personal).",
       "realm_roles": [
         "agentgateway-read:alphalink",
         "agentgateway-read:analytics",
@@ -476,11 +477,11 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
         "agentgateway-read:gsc",
         "agentgateway-read:hindsight-claude-personal",
         "agentgateway-read:hindsight-codigo",
+        "agentgateway-read:hindsight-personal",
         "agentgateway-read:hindsight-shopify-contenido",
         "agentgateway-read:hindsight-tienda",
         "agentgateway-read:image",
         "agentgateway-read:merchant",
-        "agentgateway-read:offers",
         "agentgateway-read:photos",
         "agentgateway-read:picqer",
         "agentgateway-read:plaud",
@@ -800,7 +801,6 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "purpose": "Identidad de solo lectura de OpenClaw ante AgentGateway, más cto-office-send.",
       "realm_roles": [
         "agentgateway-read:gsc",
-        "agentgateway-read:offers",
         "agentgateway-read:plaud",
         "agentgateway-read:skirmshop-plugins",
         "agentgateway-read:studio",
@@ -934,10 +934,11 @@ today (measured 2026-09-24, `ROLES.yaml`): `me@e-dani.com` and
       "type": "sa",
       "client": "nova-atlassian",
       "owner": "DevOps",
-      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026); platform/keycloak-next/hindsight-reader-clients.yaml; falta el identity-binding del sub en el gateway (k8s-agentgateway, precedente jarvis-echo k8s-agentgateway-pocharlies#170)",
-      "purpose": "Identidad M2M de solo lectura de Nova (el agente de voz, ns nova) para sus lecturas de Jira/Confluence por AgentGateway /atlassian (jira_get_issue, jira_search, confluence_search, confluence_get_page). Solo lectura: agentgateway-read:atlassian, ningún agentgateway-write (C2).",
+      "source": "INFRA-1245 (veredicto de security INFRA-1248, 10-11-2026) + INFRA-1382/INFRA-1493 (veredicto INFRA-1396 de 15-11 enmendado por INFRA-1493 de 20-11, que concede el rol acotado de escritura); platform/keycloak-next/hindsight-reader-clients.yaml; el identity-binding del sub en el gateway está en el tronco (accounts: [nova], default: nova)",
+      "purpose": "Identidad M2M de Nova (el agente de voz, ns nova) ante AgentGateway /atlassian: lecturas de Jira/Confluence (jira_get_issue, jira_search, confluence_search, confluence_get_page) y, desde INFRA-1493, las tres escrituras de Jira (jira_add_comment, jira_edit_comment, jira_create_issue) atribuidas a la cuenta jira-agent-nova por el binding del sub. Exactamente agentgateway-read:atlassian y agentgateway-write:atlassian-nova; nunca el write pelado (condición 3 del veredicto INFRA-1396).",
       "realm_roles": [
         "agentgateway-read:atlassian",
+        "agentgateway-write:atlassian-nova",
         "default-roles-edani"
       ],
       "status": "activo"

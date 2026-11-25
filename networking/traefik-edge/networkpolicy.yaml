@@ -34,7 +34,6 @@ spec:
         values:
           - edge-static-server
           - firecrawl-edge-auth
-          - synapse-brain-feedback-handler
           - tesla-static
   ingress:
     - from:

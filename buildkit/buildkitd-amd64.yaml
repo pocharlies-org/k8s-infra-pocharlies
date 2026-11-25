@@ -231,11 +231,13 @@ spec:
           # INFRA-1014 (2026-11-03): this tmpfs filled 4 times since August with
           # no warning (INFRA-953). There is now an alert for it: VMRule
           # pocharlies-buildkit-cache / BuildkitAmd64CacheHigh in
-          # k8s-observability-pocharlies manifests/rules.yaml — fires when
-          # container_memory_working_set_bytes{namespace="buildkit",
-          # pod=~"buildkitd-amd64.*", container="buildkitd"} > 26.1Gi (85 % of
-          # this sizeLimit; tmpfs pages are charged to the container's cgroup)
-          # for 10 minutes, leaving time to `buildctl prune` before ENOSPC.
+          # k8s-observability-pocharlies manifests/rules.yaml — fires when the
+          # tmpfs itself exceeds 26.1Gi (85 % of this sizeLimit) for 1 minute.
+          # Since SC-6224 (21-11) the signal is container_memory_cache -
+          # total_inactive_file_bytes (the tmpfs alone); the old
+          # container_memory_working_set_bytes also carried the build RSS and
+          # fired on benign build spikes while missing the real fast fills
+          # (~2.5Gi/min — a 10-minute window never catches them).
           # If the sizeLimit changes, update the threshold in that rule.
           emptyDir:
             medium: Memory
