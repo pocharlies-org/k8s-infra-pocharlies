@@ -1,0 +1,238 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synapse-reloj-plantillas
+  namespace: synapse
+  labels:
+    app.kubernetes.io/name: synapse-reloj-plantillas
+    app.kubernetes.io/part-of: synapse
+data:
+  hindsight.hindsight-codigo.env-from: ''
+  hindsight.hindsight-codigo.env-literales: ''
+  hindsight.hindsight-codigo.env-nombres: SOLO
+  hindsight.hindsight-codigo.env-refs: secret:hindsight-secrets:HINDSIGHT_API_TENANT_API_KEY
+  hindsight.hindsight-codigo.montajes: ''
+  hindsight.hindsight-codigo.origen: sc5875
+  hindsight.hindsight-codigo.sa: default
+  hindsight.hindsight-codigo.vols-fijadas: ''
+  hindsight.hindsight-codigo.volumenes: 'bitbucket-token=secret:hindsight-codigo-bitbucket
+
+    codigo=configMap:hindsight-codigo
+
+    github-token=secret:hindsight-codigo-github-token'
+  plantillas: 'hindsight.hindsight-codigo
+
+    skills-catalog.skills-candidata
+
+    skirmshop.affiliate-sync-discounts
+
+    skirmshop.rag-picqer-price-sync
+
+    skirmshop.shopify-picqer-order-audit
+
+    skirmshop.shopify-sync-warehouse
+
+    skirmshop.skirmbooks-banking-balance-recompute
+
+    skirmshop.skirmbooks-banking-pending-transfers
+
+    skirmshop.skirmbooks-classifier-sweep
+
+    skirmshop.skirmbooks-dehu-fetch
+
+    skirmshop.skirmbooks-facturas-daily
+
+    skirmshop.skirmbooks-facturas-daily-moreno
+
+    skirmshop.skirmbooks-personal-classifier-sweep
+
+    skirmshop.skirmbooks-reconcile-sweep
+
+    synapse.synapse-outbox-gc'
+  skills-catalog.skills-candidata.env-from: ''
+  skills-catalog.skills-candidata.env-literales: ''
+  skills-catalog.skills-candidata.env-nombres: 'CI
+
+    PR
+
+    SHA'
+  skills-catalog.skills-candidata.env-refs: secret:skills-mcp-secrets:litellm_key
+  skills-catalog.skills-candidata.montajes: ''
+  skills-catalog.skills-candidata.origen: sc5875
+  skills-catalog.skills-candidata.sa: default
+  skills-catalog.skills-candidata.vols-fijadas: ''
+  skills-catalog.skills-candidata.volumenes: github-write-token=secret:skills-mcp-github-write-token
+  skirmshop.affiliate-sync-discounts.env-from: secret:affiliate-secrets|
+  skirmshop.affiliate-sync-discounts.env-literales: ''
+  skirmshop.affiliate-sync-discounts.env-nombres: ''
+  skirmshop.affiliate-sync-discounts.env-refs: 'secret:affiliate-shared-valkey:password
+
+    secret:shared-postgres-app:password
+
+    secret:shared-postgres-app:username'
+  skirmshop.affiliate-sync-discounts.montajes: ''
+  skirmshop.affiliate-sync-discounts.origen: sc5875
+  skirmshop.affiliate-sync-discounts.sa: default
+  skirmshop.affiliate-sync-discounts.vols-fijadas: ''
+  skirmshop.affiliate-sync-discounts.volumenes: ''
+  skirmshop.rag-picqer-price-sync.env-from: ''
+  skirmshop.rag-picqer-price-sync.env-literales: ''
+  skirmshop.rag-picqer-price-sync.env-nombres: SOLO
+  skirmshop.rag-picqer-price-sync.env-refs: 'secret:collections-tree-secrets:PICQER_API_KEY
+
+    secret:collections-tree-secrets:PICQER_SUBDOMAIN
+
+    secret:rag-catalogo-db:CATALOGO_DATABASE_URL'
+  skirmshop.rag-picqer-price-sync.montajes: ''
+  skirmshop.rag-picqer-price-sync.origen: sc5875
+  skirmshop.rag-picqer-price-sync.sa: default
+  skirmshop.rag-picqer-price-sync.vols-fijadas: ''
+  skirmshop.rag-picqer-price-sync.volumenes: script=configMap:rag-picqer-price-sync-script-fc242h2bgf
+  skirmshop.shopify-picqer-order-audit.env-from: secret:shopify-sync-secrets|
+  skirmshop.shopify-picqer-order-audit.env-literales: ''
+  skirmshop.shopify-picqer-order-audit.env-nombres: SOLO_ORDER
+  skirmshop.shopify-picqer-order-audit.env-refs: ''
+  skirmshop.shopify-picqer-order-audit.montajes: ''
+  skirmshop.shopify-picqer-order-audit.origen: sc5875
+  skirmshop.shopify-picqer-order-audit.sa: default
+  skirmshop.shopify-picqer-order-audit.vols-fijadas: ''
+  skirmshop.shopify-picqer-order-audit.volumenes: ''
+  skirmshop.shopify-sync-warehouse.env-from: secret:shopify-sync-secrets|
+  skirmshop.shopify-sync-warehouse.env-literales: ''
+  skirmshop.shopify-sync-warehouse.env-nombres: SOLO_SKU
+  skirmshop.shopify-sync-warehouse.env-refs: ''
+  skirmshop.shopify-sync-warehouse.montajes: warehouse-sync|state|/state||rw
+  skirmshop.shopify-sync-warehouse.origen: sc5875
+  skirmshop.shopify-sync-warehouse.sa: default
+  skirmshop.shopify-sync-warehouse.vols-fijadas: state
+  skirmshop.shopify-sync-warehouse.volumenes: state=pvc:shopify-sync-state
+  skirmshop.skirmbooks-banking-balance-recompute.env-from: ''
+  skirmshop.skirmbooks-banking-balance-recompute.env-literales: ''
+  skirmshop.skirmbooks-banking-balance-recompute.env-nombres: ''
+  skirmshop.skirmbooks-banking-balance-recompute.env-refs: ''
+  skirmshop.skirmbooks-banking-balance-recompute.montajes: ''
+  skirmshop.skirmbooks-banking-balance-recompute.origen: sc5875
+  skirmshop.skirmbooks-banking-balance-recompute.sa: default
+  skirmshop.skirmbooks-banking-balance-recompute.vols-fijadas: ''
+  skirmshop.skirmbooks-banking-balance-recompute.volumenes: 'config=configMap:skirmbooks-banking-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-banking-balance-recompute-script'
+  skirmshop.skirmbooks-banking-pending-transfers.env-from: ''
+  skirmshop.skirmbooks-banking-pending-transfers.env-literales: ''
+  skirmshop.skirmbooks-banking-pending-transfers.env-nombres: ''
+  skirmshop.skirmbooks-banking-pending-transfers.env-refs: ''
+  skirmshop.skirmbooks-banking-pending-transfers.montajes: ''
+  skirmshop.skirmbooks-banking-pending-transfers.origen: sc5875
+  skirmshop.skirmbooks-banking-pending-transfers.sa: default
+  skirmshop.skirmbooks-banking-pending-transfers.vols-fijadas: ''
+  skirmshop.skirmbooks-banking-pending-transfers.volumenes: 'config=configMap:skirmbooks-banking-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-banking-pending-transfers-script'
+  skirmshop.skirmbooks-classifier-sweep.env-from: ''
+  skirmshop.skirmbooks-classifier-sweep.env-literales: ''
+  skirmshop.skirmbooks-classifier-sweep.env-nombres: ''
+  skirmshop.skirmbooks-classifier-sweep.env-refs: ''
+  skirmshop.skirmbooks-classifier-sweep.montajes: ''
+  skirmshop.skirmbooks-classifier-sweep.origen: sc5875
+  skirmshop.skirmbooks-classifier-sweep.sa: default
+  skirmshop.skirmbooks-classifier-sweep.vols-fijadas: ''
+  skirmshop.skirmbooks-classifier-sweep.volumenes: 'config=configMap:skirmbooks-banking-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-classifier-sweep-script'
+  skirmshop.skirmbooks-dehu-fetch.env-from: ''
+  skirmshop.skirmbooks-dehu-fetch.env-literales: ''
+  skirmshop.skirmbooks-dehu-fetch.env-nombres: ''
+  skirmshop.skirmbooks-dehu-fetch.env-refs: secret:skirmbooks-telegram-bot:TELEGRAM_BOT_TOKEN
+  skirmshop.skirmbooks-dehu-fetch.montajes: ''
+  skirmshop.skirmbooks-dehu-fetch.origen: sc5875
+  skirmshop.skirmbooks-dehu-fetch.sa: default
+  skirmshop.skirmbooks-dehu-fetch.vols-fijadas: ''
+  skirmshop.skirmbooks-dehu-fetch.volumenes: 'certs=secret:dehu-cert-alphalink
+
+    config=configMap:skirmbooks-notifications-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    dshm=emptyDir
+
+    gmail-sa=secret:skirmbooks-gmail-sa
+
+    script=configMap:skirmbooks-dehu-fetch-script'
+  skirmshop.skirmbooks-facturas-daily-moreno.env-from: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.env-literales: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.env-nombres: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.env-refs: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.montajes: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.origen: sc5875
+  skirmshop.skirmbooks-facturas-daily-moreno.sa: default
+  skirmshop.skirmbooks-facturas-daily-moreno.vols-fijadas: ''
+  skirmshop.skirmbooks-facturas-daily-moreno.volumenes: 'config=configMap:skirmbooks-invoicing-config
+
+    credentials=secret:skirmbooks-backend-secrets'
+  skirmshop.skirmbooks-facturas-daily.env-from: ''
+  skirmshop.skirmbooks-facturas-daily.env-literales: ''
+  skirmshop.skirmbooks-facturas-daily.env-nombres: FACTURAS_TENANTS_ONLY
+  skirmshop.skirmbooks-facturas-daily.env-refs: ''
+  skirmshop.skirmbooks-facturas-daily.montajes: ''
+  skirmshop.skirmbooks-facturas-daily.origen: sc5875
+  skirmshop.skirmbooks-facturas-daily.sa: default
+  skirmshop.skirmbooks-facturas-daily.vols-fijadas: ''
+  skirmshop.skirmbooks-facturas-daily.volumenes: 'config=configMap:skirmbooks-invoicing-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-facturas-per-tenant-script'
+  skirmshop.skirmbooks-personal-classifier-sweep.env-from: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.env-literales: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.env-nombres: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.env-refs: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.montajes: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.origen: sc5875
+  skirmshop.skirmbooks-personal-classifier-sweep.sa: default
+  skirmshop.skirmbooks-personal-classifier-sweep.vols-fijadas: ''
+  skirmshop.skirmbooks-personal-classifier-sweep.volumenes: 'config=configMap:skirmbooks-banking-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-personal-classifier-sweep-script'
+  skirmshop.skirmbooks-reconcile-sweep.env-from: ''
+  skirmshop.skirmbooks-reconcile-sweep.env-literales: ''
+  skirmshop.skirmbooks-reconcile-sweep.env-nombres: ''
+  skirmshop.skirmbooks-reconcile-sweep.env-refs: ''
+  skirmshop.skirmbooks-reconcile-sweep.montajes: ''
+  skirmshop.skirmbooks-reconcile-sweep.origen: sc5875
+  skirmshop.skirmbooks-reconcile-sweep.sa: default
+  skirmshop.skirmbooks-reconcile-sweep.vols-fijadas: ''
+  skirmshop.skirmbooks-reconcile-sweep.volumenes: 'config=configMap:skirmbooks-banking-config
+
+    credentials=secret:skirmbooks-backend-secrets
+
+    script=configMap:skirmbooks-reconcile-sweep-script'
+  synapse.synapse-outbox-gc.env-from: ''
+  synapse.synapse-outbox-gc.env-literales: PYTHONUNBUFFERED=1
+  synapse.synapse-outbox-gc.env-nombres: ''
+  synapse.synapse-outbox-gc.env-refs: ''
+  synapse.synapse-outbox-gc.montajes: ''
+  synapse.synapse-outbox-gc.origen: reloj
+  synapse.synapse-outbox-gc.sa: synapse
+  synapse.synapse-outbox-gc.vols-fijadas: ''
+  synapse.synapse-outbox-gc.volumenes: 'config=configMap:synapse-config
+
+    credentials=secret:synapse-secrets'
+  synapse.prueba-hostpath.origen: prueba
+  synapse.prueba-hostpath.sa: synapse
+  synapse.prueba-hostpath.volumenes: estado=hostPath:/var/lib/prueba
+  synapse.prueba-hostpath.vols-fijadas: estado
+  synapse.prueba-hostpath.montajes: outbox-gc|estado|/estado||ro
+  synapse.prueba-hostpath.env-refs: ''
+  synapse.prueba-hostpath.env-from: ''
+  synapse.prueba-hostpath.env-literales: PYTHONUNBUFFERED=1
+  synapse.prueba-hostpath.env-nombres: ''
+  synapse.prueba-hostpath.nodo: kubernetes.io/hostname=ubuntu
+  synapse.prueba-hostpath.nodename: ''

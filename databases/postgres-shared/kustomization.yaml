@@ -6,6 +6,8 @@ resources:
   - priorityclass.yaml
   - ovh-credentials.yaml
   - app-credentials.yaml
+  # SC-6611: credencial del rol synapse_reloj (generada aquí y copiada a 1Password).
+  - synapse-reloj-credentials.yaml
   - cluster.yaml
   - services-alias.yaml
   - app-databases.yaml

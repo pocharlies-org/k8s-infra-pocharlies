@@ -1,0 +1,30 @@
+# user: system:serviceaccount:synapse:synapse-adapter-k8s
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: suelto
+  namespace: synapse
+  labels:
+    synapse.e-dani.com/cronjob: synapse-outbox-gc
+    synapse.e-dani.com/reloj: 'true'
+  annotations:
+    cronjob.kubernetes.io/instantiate: synapse-reloj
+    synapse.e-dani.com/instante: '2026-11-26T10:17:00Z'
+    synapse.e-dani.com/reloj-clave: tiempo.synapse.synapse-outbox-gc
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synapse-outbox-gc
+        app.kubernetes.io/part-of: synapse
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: x
+        image: busybox
+        command:
+        - sh
+        - -c
+        - cat /s/*
+  ttlSecondsAfterFinished: 86400

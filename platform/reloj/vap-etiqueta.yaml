@@ -1,0 +1,40 @@
+# SC-6611 (SC-5806 ola 2): la etiqueta `synapse.e-dani.com/plantilla` de un CronJob solo la pone o
+# la cambia ArgoCD (nota-cto-reloj-unico.md v4 §2.10 regla 3). Es una de las condiciones de la
+# guarda de Kyverno (synapse-reloj-guarda) y del adaptador (no lanza una plantilla sin ella):
+# si cualquiera pudiera ponerla a mano, la revisión en git de qué es plantilla no valdría nada.
+# Deny en todo el clúster: ningún flujo legítimo la escribe fuera de un sync de ArgoCD.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: synapse-reloj-etiqueta
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["cronjobs"]
+  variables:
+    - name: antes
+      expression: >-
+        oldObject != null && has(oldObject.metadata.labels) && 'synapse.e-dani.com/plantilla' in oldObject.metadata.labels
+          ? oldObject.metadata.labels['synapse.e-dani.com/plantilla'] : '<sin>'
+    - name: ahora
+      expression: >-
+        has(object.metadata.labels) && 'synapse.e-dani.com/plantilla' in object.metadata.labels
+          ? object.metadata.labels['synapse.e-dani.com/plantilla'] : '<sin>'
+  validations:
+    - expression: >-
+        variables.antes == variables.ahora ||
+        request.userInfo.username == 'system:serviceaccount:argocd:argocd-application-controller'
+      messageExpression: >-
+        'la etiqueta synapse.e-dani.com/plantilla solo la pone o la cambia ArgoCD (' + variables.antes + ' → ' + variables.ahora + ')'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: synapse-reloj-etiqueta
+spec:
+  policyName: synapse-reloj-etiqueta
+  validationActions: [Deny]

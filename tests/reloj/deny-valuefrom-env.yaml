@@ -1,0 +1,83 @@
+# user: system:serviceaccount:synapse:synapse-adapter-k8s
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synapse-outbox-gc-thtgp5
+  namespace: synapse
+  labels:
+    synapse.e-dani.com/cronjob: synapse-outbox-gc
+    synapse.e-dani.com/reloj: 'true'
+  annotations:
+    cronjob.kubernetes.io/instantiate: synapse-reloj
+    synapse.e-dani.com/instante: '2026-11-26T10:17:00Z'
+    synapse.e-dani.com/reloj-clave: tiempo.synapse.synapse-outbox-gc
+  ownerReferences:
+  - apiVersion: batch/v1
+    kind: CronJob
+    name: synapse-outbox-gc
+    uid: c4ec0c3f-16e3-4941-906b-012fc96ef3f6
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synapse-outbox-gc
+        app.kubernetes.io/part-of: synapse
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - python
+        - -m
+        - synapse_outbox_gc
+        env:
+        - name: CREDENTIALS_DIRECTORY
+          value: /etc/synapse/credentials
+        - name: PYTHONUNBUFFERED
+          value: '1'
+        - name: SYNAPSE_SERVICE
+          value: outbox-gc
+        - name: X
+          valueFrom:
+            secretKeyRef:
+              name: synapse-secrets
+              key: postgres_admin.password
+        image: harbor.lan.e-dani.com/homelab/synapse@sha256:814c63465658063f57354793b65349d67062a512176d8e83c7e4699e80e08bc6
+        imagePullPolicy: IfNotPresent
+        name: outbox-gc
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/synapse
+          name: config
+          readOnly: true
+        - mountPath: /etc/synapse/credentials
+          name: credentials
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: harbor-pull
+      restartPolicy: OnFailure
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: synapse
+      serviceAccountName: synapse
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: synapse-config
+        name: config
+      - name: credentials
+        secret:
+          defaultMode: 420
+          secretName: synapse-secrets
+  ttlSecondsAfterFinished: 86400
