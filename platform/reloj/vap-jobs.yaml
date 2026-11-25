@@ -225,10 +225,14 @@ metadata:
 spec:
   policyName: synapse-reloj-jobs
   validationActions: [Audit, Warn]
+  # Allow, no Deny: un parámetro que falta es un error de configuración del binding, y con
+  # failurePolicy Fail el API server deniega SIN mirar validationActions (veredicto de security
+  # en #643). Aquí eso cortaría los flujos SC-5875 vivos si el ConfigMap aún no está; el Deny
+  # de parámetro ausente se queda en el binding -deny (synapse y ns del sistema).
   paramRef:
     name: synapse-reloj-plantillas
     namespace: synapse
-    parameterNotFoundAction: Deny
+    parameterNotFoundAction: Allow
   matchResources:
     namespaceSelector:
       matchExpressions:
