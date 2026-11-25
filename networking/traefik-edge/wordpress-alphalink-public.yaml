@@ -1,0 +1,62 @@
+# INFRA-1588 — la web de AlphaLink (WordPress) sale por el edge de OVH.
+#
+# Hasta el 25-11-2026 salía por `traefik-alphalink`, en la IP del droplet de
+# DigitalOcean (206.189.15.5), y ese droplet costaba 34,85 $/mes para nada más.
+# El WordPress y su MySQL viven ahora en el nodo `sauvage`, y el edge solo
+# vigila su propia namespace (`providers.kubernetescrd.namespaces`), así que la
+# ruta va aquí con el patrón de la casa (ver `horarios-alphalink-public.yaml`):
+# ExternalName + IngressRoute en `traefik-edge`.
+#
+# La zona `alphalinkcrossfit.com` está en Cloudflare y NO la gestiona
+# external-dns: los A de @ y www se meten a mano, al VIP del edge.
+#
+# Sin SSO: es la web pública del cliente. El TLS se valida por DNS-01 con el
+# solver de `alphalinkcrossfit.com` de cluster-issuers.yaml.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wordpress-alphalink-tls
+  namespace: traefik-edge
+spec:
+  secretName: wordpress-alphalink-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "alphalinkcrossfit.com"
+    - "www.alphalinkcrossfit.com"
+  renewBefore: 720h
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-wordpress-alphalink
+  namespace: traefik-edge
+  labels:
+    app.kubernetes.io/name: edge-wordpress-alphalink
+spec:
+  type: ExternalName
+  externalName: wordpress.alphalink.svc.cluster.local
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: edge-wordpress-alphalink
+  namespace: traefik-edge
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`alphalinkcrossfit.com`) || Host(`www.alphalinkcrossfit.com`)
+      services:
+        - name: edge-wordpress-alphalink
+          port: 80
+  tls:
+    secretName: wordpress-alphalink-tls
