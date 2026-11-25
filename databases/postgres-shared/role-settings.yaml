@@ -181,9 +181,9 @@ spec:
               ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
               ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
               ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
-              # INFRA-1369 (P2): roles con prueba B verde (evidencia en la PR).
-              # Los que fallaron la LISTEN (gestoria_*, synapse_adapter,
-              # whatsappmcp) y su razón, en el comentario de cabecera.
+              -- INFRA-1369 (P2): roles con prueba B verde (evidencia en la PR).
+              -- Los que fallaron la LISTEN (gestoria_*, synapse_adapter,
+              -- whatsappmcp) y su razón, en el comentario de cabecera.
               ALTER ROLE synapse_dispatcher SET idle_session_timeout = '15min';
               ALTER ROLE skirmshop SET idle_session_timeout = '15min';
               ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
