@@ -188,6 +188,20 @@ spec:
               ALTER ROLE skirmshop SET idle_session_timeout = '15min';
               ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
               ALTER ROLE synapse_outbox_gc SET idle_session_timeout = '15min';
+            # --- INFRA-1369 (P2): RESET de residuos de P1 sin prueba B ----------
+            # Regla del architect (P2): un rol queda cubierto solo con su prueba B
+            # en verde. brain_openwebui_ro y synapse_app no la tienen (sin
+            # conexiones vivas al medir: no se puede probar reconexión), así que
+            # no entran en la lista de SET de arriba. Pero el SET de P1 dejó
+            # residuo en el catálogo: medido en vivo el 25-11-2026,
+            # brain_openwebui_ro aún lleva idle_session_timeout=15min (synapse_app
+            # no, por eso no se RESETea). El fichero GitOps es la verdad de
+            # estado, así que el Job hace RESET de lo que el fichero no cubre: el
+            # RESET converge el estado vivo con el fichero (al revés que un SET
+            # retirado, que dejaría el valor vivo sin dueño). Idempotente: en
+            # syncs posteriores no hay setting que resetear.
+            - -c
+            - ALTER ROLE brain_openwebui_ro RESET idle_session_timeout;
             # --- SC-6040: CONNECTION LIMIT del rol hindsight -------------------
             # El API de Hindsight abre dos pools (escritura 40 + lectura 40 = 80
             # conexiones, k8s-hindsight-pocharlies/k8s/values.yaml). El rol se
