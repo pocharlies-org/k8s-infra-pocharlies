@@ -253,21 +253,29 @@ spec:
         # Instancia lista = instancia donde el exporter de CNPG recolecta
         # (cnpg_collector_up=1). En el bucle de pg_rewind del 22-10 Postgres no
         # llegaba a subir, así que collector_up se quedaba en 0: exactamente el
-        # estado a cazar. El `or vector(0)` cubre el caso de que desaparezcan
-        # todos los pods: sum() sobre vector vacío devuelve vacío y la alerta no
-        # llegaría a evaluarse; con el guard evalúa 0 y dispara.
+        # estado a cazar (sum() sobre series que existen devuelve 0 y dispara).
+        # El guard `or vector(0)` se retiró (SC-6651, CRIT-21008 25-11): con
+        # VictoriaMetrics en hueco (OOM del vmsingle 23:27) la respuesta
+        # vacía-pero-válida hacía evaluar 0 al guard y esta crítica sonaba con
+        # Postgres sano — disparó dos veces esa noche (SC-6651 y SC-6659) y
+        # volvió a sonar el 31-10 (SC-3831). El caso "todos los pods fuera" lo
+        # cubre PostgresSharedMetricsMissing (absent, 10m) y, si la causa es un
+        # nodo, KubeNodeNotReady.
         # El 2 es spec.instances (cluster.yaml): si se cambia uno, el otro.
         # Las ventanas de desagote de los nodos de control (04:00/05:00/06:00
         # UTC) promueven el clúster y se recuperan solas; `for: 5m` es el filtro
         # que pidió la sesión problem (INFRA-971).
         - alert: PostgresSharedInstancesNotReady
           expr: >-
-            (sum(cnpg_collector_up{namespace="databases"}) or vector(0)) < 2
+            sum(cnpg_collector_up{namespace="databases"}) < 2
           for: 5m
           labels:
             severity: critical
             area: database
             component: postgres-shared
+            # sin él, la safety-net de Keep titula el incidente «Crítico en
+            # N/A» (agrupa y titula por namespace)
+            namespace: databases
           annotations:
             summary: postgres-shared lleva +5m con menos de 2 instancias listas
             description: >-
