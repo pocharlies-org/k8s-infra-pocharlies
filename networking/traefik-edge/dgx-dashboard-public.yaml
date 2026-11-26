@@ -167,8 +167,11 @@ spec:
     # prioridad — /api/autoreply/telegram/* (salvo conversations), /brain y /systems
     # no matchean esta regla y caen en el control set (400) o en la pública (100),
     # es decir, siguen en el dashboard (routes_ops_social.py tras DGX-296).
+    # DGX-1864: la url limpia /messages ya NO es de dgx-messages — la sirve la app del
+    # dashboard (chasis, barra lateral estándar) y esta regla solo toma la página embebida
+    # (?embed=app, la enmarca la app) y sus assets/API.
     - kind: Rule
-      match: Host(`dgx.e-dani.com`) && (Path(`/messages`) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`) || Path(`/whatsapp`) || PathPrefix(`/whatsapp/`) || Path(`/whatsapp-console`) || PathPrefix(`/whatsapp-console/`) || Path(`/conversaciones`) || PathPrefix(`/conversaciones/`) || PathPrefix(`/api/whatsapp`) || (PathPrefix(`/api/autoreply`) && ((!PathPrefix(`/api/autoreply/telegram`)) || Path(`/api/autoreply/telegram/conversations`)) && !PathPrefix(`/api/autoreply/brain`) && !PathPrefix(`/api/autoreply/systems`)))
+      match: Host(`dgx.e-dani.com`) && ((Path(`/messages`) && Query(`embed`,`app`)) || PathPrefix(`/messages/`) || PathPrefix(`/static/messages/`) || PathPrefix(`/api/messages`) || Path(`/whatsapp`) || PathPrefix(`/whatsapp/`) || Path(`/whatsapp-console`) || PathPrefix(`/whatsapp-console/`) || Path(`/conversaciones`) || PathPrefix(`/conversaciones/`) || PathPrefix(`/api/whatsapp`) || (PathPrefix(`/api/autoreply`) && ((!PathPrefix(`/api/autoreply/telegram`)) || Path(`/api/autoreply/telegram/conversations`)) && !PathPrefix(`/api/autoreply/brain`) && !PathPrefix(`/api/autoreply/systems`)))
       priority: 450
       middlewares:
         - name: dgx-strip-identity-headers
