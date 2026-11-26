@@ -580,8 +580,17 @@ spec:
   groups:
     - name: shared-valkey.cache
       rules:
+        # SC-6723 (DSTR-21066, hueco de vmsingle del 25-11 23:27 por OOM): con el
+        # backend caído toda serie está ausente y estas tres críticas sonaron con
+        # Valkey sano. Las dos de `or vector(0)` lo pierden (SC-6651, mismo patrón:
+        # VM devuelve vacío-pero-válido); la `absent` se puertas con el uptime del
+        # propio vmalert — si ni sus métricas llegan a VM, la ausencia no es
+        # evidencia (eso lo cubre AlertingRulesError). Con backend vivo y Valkey
+        # caído las tres siguen disparando.
         - alert: SharedValkeyMetricsMissing
-          expr: absent(redis_up{job="shared-valkey-headless"})
+          expr: >-
+            absent(redis_up{job="shared-valkey-headless"})
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 5m
           labels:
             severity: critical
@@ -589,7 +598,7 @@ spec:
             component: shared-valkey
           annotations:
             summary: "shared-valkey metrics are missing"
-            description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down."
+            description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down. No dispara si las métricas del propio vmalert tampoco llegan a VictoriaMetrics (caída del backend, SC-6723)."
         - alert: SharedValkeyScrapeTargetsLow
           expr: count(redis_up{job="shared-valkey-headless"}) < 3
           for: 5m
@@ -610,8 +619,13 @@ spec:
           annotations:
             summary: "shared-valkey exporter cannot reach Valkey"
             description: "Exporter target {{ $labels.pod }} reports redis_up=0 for 2m."
+        # el `or vector(0)` se queda (cuenta CERO series: sin master no hay
+        # resultado y la regla callaría) y se puertas como la MetricsMissing:
+        # con el backend en hueco evalúa 0 y disparaba falsa (SC-6723).
         - alert: SharedValkeyMasterCountInvalid
-          expr: (count(redis_instance_info{job="shared-valkey-headless",role="master"}) or vector(0)) != 1
+          expr: >-
+            ((count(redis_instance_info{job="shared-valkey-headless",role="master"}) or vector(0)) != 1)
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 2m
           labels:
             severity: critical
@@ -620,8 +634,12 @@ spec:
           annotations:
             summary: "shared-valkey master count is invalid"
             description: "Expected exactly one shared-valkey master; current master count is {{ $value }}."
+        # sin `or vector(0)` (SC-6723, patrón SC-6651): el master con 0 replicas
+        # reporta la serie con valor 0 y sigue disparando; con el backend en hueco
+        # la respuesta vacía evaluaba 0 y sonaba falsa — el "pods fuera" lo cubre
+        # SharedValkeyMetricsMissing.
         - alert: SharedValkeyReplicaCountLow
-          expr: (max(redis_connected_slaves{job="shared-valkey-headless"}) or vector(0)) < 2
+          expr: max(redis_connected_slaves{job="shared-valkey-headless"}) < 2
           for: 5m
           labels:
             severity: critical
