@@ -193,6 +193,14 @@ data:
     ALTER ROLE skirmshop RESET idle_session_timeout;
     ALTER ROLE skirmbooks_ui_app RESET idle_session_timeout;
 
+    -- INFRA-1369 (P2): residuo del SET de P1 en brain_openwebui_ro, que no
+    -- tiene prueba B (sin conexiones vivas al medir: no se puede probar
+    -- reconexión, cabecera). El GUC persiste en pg_db_role_setting y el
+    -- fichero GitOps es la verdad de estado: RESET converge lo vivo con el
+    -- fichero. Idempotente (no-op si el rol no lo tiene). synapse_app no
+    -- quedó con residuo, no se toca.
+    ALTER ROLE brain_openwebui_ro RESET idle_session_timeout;
+
     -- SC-6040: CONNECTION LIMIT del rol hindsight. El API de Hindsight abre
     -- dos pools (escritura 40 + lectura 40 = 80 conexiones,
     -- k8s-hindsight-pocharlies/k8s/values.yaml); el límite de 50 sin hogar en
