@@ -27,10 +27,12 @@ ROUTING = ROOT / "platform" / "keycloak-next" / "routing.yaml"
 # pagos; /api/alarma* es la ruta de maquina (HMAC V2) y NO entra, como /api/pagos*.
 # SC-2175 (security): /api/hermes-panel* (dgx.panel.hermes.v1) entra igual: su backend da 401 sin la cabecera.
 # DGX-1621 (dgx-infra#2114): /api/studio/agent* (dgx.studio.agent-chat.v1) igual: 401 sin el JWT verificado.
+# SC-6852: /api/skills-uso* (dgx.skills-uso.v1, Uso y Logs del catálogo de skills) igual: 401 sin el JWT verificado.
 # DGX-1628: /api/app/alertas* (la alerta urgente: detalle, imagen y respuesta «Lo hago/No») entra igual que pagos;
 # /api/alertas* es la de máquina (firma X-Dgx-*) y NO entra.
 APP_PREFIXES = ("PathPrefix(`/api/app/pagos`)", "PathPrefix(`/api/app/alertas`)", "PathPrefix(`/api/app/push`)",
-                "PathPrefix(`/api/app/alarma`)", "PathPrefix(`/api/hermes-panel`)", "PathPrefix(`/api/studio/agent`)")
+                "PathPrefix(`/api/app/alarma`)", "PathPrefix(`/api/hermes-panel`)", "PathPrefix(`/api/studio/agent`)",
+                "PathPrefix(`/api/skills-uso`)")
 
 
 def _docs(path):
@@ -104,7 +106,7 @@ class PagosSSOContract(unittest.TestCase):
                     if route.get("priority", 0) > 400:
                         if [(m["name"], m.get("namespace", "")) for m in route.get("middlewares", [])] == canonica:
                             continue
-                        for prefix in ("/api/app", "/api/hermes-panel", "/api/studio/agent"):
+                        for prefix in ("/api/app", "/api/hermes-panel", "/api/studio/agent", "/api/skills-uso"):
                             self.assertNotIn(prefix, route["match"],
                                              f"{name}@{route.get('priority')} would shadow the control set")
 
