@@ -441,12 +441,28 @@ spec:
       # `company-supervisor-db`); CNPG la reconcilia desde
       # company-db-credentials (ExternalSecret en app-credentials.yaml, wave
       # -1), que debe estar materializado ANTES de aplicar este spec.
+      # SC-6821: CONNECTION LIMIT 30. El supervisor (pod `company-0`) abre
+      # conexiones efímeras por turno (0 backends persistentes medidos) y nunca
+      # llega a 30: el límite no lo estrangula en régimen normal. Su valor es
+      # hacer visible y acotada la huella del rol — con `rolconnlimit = -1` no
+      # lo cubría la alerta `PostgresSharedRoleConnectionsHigh` (compara
+      # backends/conn_limit), de modo que una fuga del propio supervisor
+      # pasaría desapercibida y contribuiría al muro de `max_connections`. El
+      # límite de rol es POR INSTANCIA (500/instancia, SC-5295), igual que el
+      # resto. La garantía de que el supervisor no quede fuera cuando el
+      # clúster se acerca a `max_connections - superuser_reserved_connections`
+      # (= 497: ahí el postmaster rechaza a los no-SUPERUSER con «remaining
+      # connection slots are reserved for roles with the SUPERUSER attribute»)
+      # no la da un límite de `company`: exige acotar el agregado de los pools
+      # (budget global por rol / pooler PgBouncer), decisión pendiente de
+      # INFRA-1295 (architect). Ver nota-it-informe de SC-6821.
       - name: company
         ensure: present
         login: true
+        connectionLimit: 30
         passwordSecret:
           name: company-db-credentials
-        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148."
+        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148, CONNECTION LIMIT 30 (SC-6821)."
       # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
       # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
       # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la
