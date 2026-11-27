@@ -42,6 +42,7 @@ resources:
   - networking/traefik-edge/crosslink-ingress.yaml
   - networking/traefik-edge/affiliate-public.yaml
   - networking/traefik-edge/horarios-alphalink-public.yaml
+  - networking/traefik-edge/wordpress-alphalink-public.yaml
   - networking/traefik-edge/static-edge.yaml
   - networking/traefik-edge/dgx-edge-proof.yaml
   - networking/traefik-edge/dgx-dashboard-public.yaml
@@ -94,6 +95,10 @@ resources:
   - kubernetes/storage/local-path-retain.yaml
   - platform/keycloak-next
   - platform/kyverno/policies.yaml
+  # SC-6611 (SC-5806 ola 2): guardas del reloj único sobre los Jobs de synapse-adapter-k8s.
+  - platform/reloj/vap-jobs.yaml
+  - platform/reloj/vap-etiqueta.yaml
+  - platform/reloj/kyverno-guarda.yaml
   - platform/reflector/rbac.yaml
   - platform/arc/rbac-hermes-despliegue.yaml
   - platform/arc/rbac-manifestguard.yaml

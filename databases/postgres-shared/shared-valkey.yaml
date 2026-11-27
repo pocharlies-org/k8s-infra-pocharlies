@@ -578,10 +578,19 @@ metadata:
     app.kubernetes.io/part-of: shared-valkey
 spec:
   groups:
+    # SC-6692 (DSTR-21006 y DSTR-21066, noche del 25-11): las tres alertas de ausencia
+    # (`MetricsMissing`, `MasterCountInvalid`, `ReplicaCountLow`) dispararon critical de
+    # datastore cuando lo único caído era vmsingle (OOM): sin serie fresca, `absent` y el
+    # fallback `or vector(0)` son ciertos para cualquier target. Mismo gate que SC-6718 en
+    # k8s-observability (atlassian-mcp-rules.yaml): si ni las métricas del propio vmalert
+    # llegan a VictoriaMetrics, la ausencia no es evidencia (la caída del backend la cubre
+    # AlertingRulesError). Con el backend vivo y valkey caído la serie del gate está fresca
+    # y las reglas disparan igual.
     - name: shared-valkey.cache
       rules:
         - alert: SharedValkeyMetricsMissing
           expr: absent(redis_up{job="shared-valkey-headless"})
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 5m
           labels:
             severity: critical
@@ -589,7 +598,7 @@ spec:
             component: shared-valkey
           annotations:
             summary: "shared-valkey metrics are missing"
-            description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down."
+            description: "No redis_up series for shared-valkey for 5m. The exporter scrape is failing or the shared Valkey pods are down. Does not fire when vmalert's own metrics are also absent (metrics-backend outage — covered by AlertingRulesError, SC-6692)."
         - alert: SharedValkeyScrapeTargetsLow
           expr: count(redis_up{job="shared-valkey-headless"}) < 3
           for: 5m
@@ -611,7 +620,8 @@ spec:
             summary: "shared-valkey exporter cannot reach Valkey"
             description: "Exporter target {{ $labels.pod }} reports redis_up=0 for 2m."
         - alert: SharedValkeyMasterCountInvalid
-          expr: (count(redis_instance_info{job="shared-valkey-headless",role="master"}) or vector(0)) != 1
+          expr: ((count(redis_instance_info{job="shared-valkey-headless",role="master"}) or vector(0)) != 1)
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 2m
           labels:
             severity: critical
@@ -619,9 +629,10 @@ spec:
             component: shared-valkey
           annotations:
             summary: "shared-valkey master count is invalid"
-            description: "Expected exactly one shared-valkey master; current master count is {{ $value }}."
+            description: "Expected exactly one shared-valkey master; current master count is {{ $value }}. Silenced while vmalert's own metrics are absent (metrics-backend outage, SC-6692)."
         - alert: SharedValkeyReplicaCountLow
-          expr: (max(redis_connected_slaves{job="shared-valkey-headless"}) or vector(0)) < 2
+          expr: ((max(redis_connected_slaves{job="shared-valkey-headless"}) or vector(0)) < 2)
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 5m
           labels:
             severity: critical
@@ -629,7 +640,7 @@ spec:
             component: shared-valkey
           annotations:
             summary: "shared-valkey master has fewer than two replicas"
-            description: "The current shared-valkey master reports {{ $value }} connected replica(s); expected 2."
+            description: "The current shared-valkey master reports {{ $value }} connected replica(s); expected 2. Silenced while vmalert's own metrics are absent (metrics-backend outage, SC-6692)."
         - alert: SharedValkeyMemoryHigh
           expr: max(redis_memory_used_bytes{job="shared-valkey-headless"} / redis_memory_max_bytes{job="shared-valkey-headless"}) > 0.80
           for: 10m

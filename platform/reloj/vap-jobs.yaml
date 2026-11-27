@@ -1,0 +1,241 @@
+# SC-6611 (SC-5806 ola 2, fase 0): VAP nativa sobre los Jobs que crea synapse-adapter-k8s
+# (nota-cto-reloj-unico.md v4 §2.10 regla 4, tercera revisión hallazgo 1).
+#
+# Respaldo que NO depende de Kyverno (los filtros de Kyverno no ven kube-system ni kyverno,
+# y Kyverno puede caer): solo mira los Jobs que pide el SA del adaptador y exige, contra
+# los parámetros de cada plantilla (ConfigMap synapse/synapse-reloj-plantillas, GENERADO por
+# synapse:scripts/reloj/plantillas.py; una plantilla que falte ahí se deniega):
+#   - nunca un namespace del sistema; una sola ownerReference CronJob controller;
+#   - el serviceAccountName de la plantilla;
+#   - lo que deniega PSA baseline: hostPID/hostIPC/hostNetwork, privileged, capabilities.add
+#     fuera del conjunto baseline, seccomp/AppArmor Unconfined, SELinux fuera de lo permitido,
+#     hostPort, sysctls inseguros, procMount distinto de Default, hostProcess (los hostPath
+#     solo los de la plantilla, por el conjunto exacto de volúmenes);
+#   - el conjunto EXACTO de volúmenes (nombre → Secret, ConfigMap, PVC, hostPath, projected);
+#   - los volumeMounts de los volúmenes PVC y hostPath (volumen, mountPath, subPath, readOnly);
+#   - env: secretKeyRef/configMapKeyRef/fieldRef/resourceFieldRef solo los listados, envFrom
+#     solo el de la plantilla, y PATH, LD_*, PYTHON*, NODE_OPTIONS, BASH_ENV y HOME solo con el
+#     valor literal que ya trae la plantilla;
+#   - el nodo (nodeSelector exacto, nodeName, sin affinity) de las plantillas con hostPath o
+#     PVC local-path (p. ej. la fila 25 solo en ubuntu, la 5 solo en sauvage);
+#   - en las plantillas `fijado` (fila 15): digest de la imagen, command y args.
+# Lo que solo comprueba Kyverno (synapse-reloj-guarda): la igualdad completa con la plantilla
+# VIVA (uid, etiqueta, imagen de las demás filas…).
+#
+# Bindings: Deny en `synapse` (el piloto, fila 93) y en los namespaces del sistema; Audit+Warn
+# en el resto mientras los flujos SC-5875 vivos acumulan cero violaciones (R3). Pasar un
+# namespace a Deny es parte del lote que lo liga (§6, «la guarda en Enforce y la VAP de v4»).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: synapse-reloj-jobs
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs"]
+  matchConditions:
+    - name: solo-el-adaptador-k8s
+      expression: "request.userInfo.username == 'system:serviceaccount:synapse:synapse-adapter-k8s'"
+  variables:
+    - name: owners
+      expression: "has(object.metadata.ownerReferences) ? object.metadata.ownerReferences : []"
+    - name: k
+      expression: "request.namespace + '.' + (size(variables.owners) == 1 ? variables.owners[0].name : '-')"
+    - name: d
+      expression: "has(params.data) ? params.data : {}"
+    - name: ps
+      expression: "object.spec.template.spec"
+    - name: cs
+      expression: "variables.ps.containers + (has(variables.ps.initContainers) ? variables.ps.initContainers : [])"
+    - name: pvols
+      expression: "(variables.k + '.volumenes') in variables.d && variables.d[variables.k + '.volumenes'] != '' ? variables.d[variables.k + '.volumenes'].split('\\n') : []"
+    - name: pfijadas
+      expression: "(variables.k + '.vols-fijadas') in variables.d && variables.d[variables.k + '.vols-fijadas'] != '' ? variables.d[variables.k + '.vols-fijadas'].split('\\n') : []"
+    - name: pmontajes
+      expression: "(variables.k + '.montajes') in variables.d && variables.d[variables.k + '.montajes'] != '' ? variables.d[variables.k + '.montajes'].split('\\n') : []"
+    - name: penvrefs
+      expression: "(variables.k + '.env-refs') in variables.d && variables.d[variables.k + '.env-refs'] != '' ? variables.d[variables.k + '.env-refs'].split('\\n') : []"
+    - name: penvfrom
+      expression: "(variables.k + '.env-from') in variables.d && variables.d[variables.k + '.env-from'] != '' ? variables.d[variables.k + '.env-from'].split('\\n') : []"
+    - name: pliterales
+      expression: "(variables.k + '.env-literales') in variables.d && variables.d[variables.k + '.env-literales'] != '' ? variables.d[variables.k + '.env-literales'].split('\\n') : []"
+    - name: vols
+      expression: >-
+        (has(variables.ps.volumes) ? variables.ps.volumes : []).map(v, v.name + '=' + (
+          has(v.secret) ? 'secret:' + (has(v.secret.secretName) ? v.secret.secretName : '') :
+          has(v.configMap) ? 'configMap:' + (has(v.configMap.name) ? v.configMap.name : '') :
+          has(v.persistentVolumeClaim) ? 'pvc:' + v.persistentVolumeClaim.claimName :
+          has(v.hostPath) ? 'hostPath:' + v.hostPath.path :
+          has(v.emptyDir) ? 'emptyDir' :
+          has(v.projected) ? 'projected:' + (has(v.projected.sources) ? v.projected.sources.map(s,
+            has(s.secret) ? 'secret:' + (has(s.secret.name) ? s.secret.name : '') :
+            has(s.configMap) ? 'configMap:' + (has(s.configMap.name) ? s.configMap.name : '') :
+            has(s.serviceAccountToken) ? 'serviceAccountToken' :
+            has(s.downwardAPI) ? 'downwardAPI' : 'other').join('+') : '') :
+          'other:?'))
+  validations:
+    - expression: "!(request.namespace in ['kube-system', 'kyverno', 'kube-public', 'kube-node-lease'])"
+      message: "el adaptador del reloj nunca crea Jobs en un namespace del sistema"
+    - expression: >-
+        size(variables.owners) == 1 && variables.owners[0].kind == 'CronJob' &&
+        variables.owners[0].apiVersion == 'batch/v1' &&
+        has(variables.owners[0].controller) && variables.owners[0].controller == true
+      message: "un Job del adaptador lleva exactamente una ownerReference: su CronJob plantilla (controller)"
+    - expression: "(variables.k + '.sa') in variables.d"
+      messageExpression: "'plantilla ' + variables.k + ' sin parámetros en synapse/synapse-reloj-plantillas'"
+    - expression: >-
+        (has(variables.ps.serviceAccountName) ? variables.ps.serviceAccountName : 'default') == variables.d[variables.k + '.sa'] &&
+        (!has(variables.ps.serviceAccount) || variables.ps.serviceAccount == variables.ps.serviceAccountName)
+      message: "serviceAccountName distinto del de la plantilla"
+    - expression: >-
+        !(has(variables.ps.hostPID) && variables.ps.hostPID) &&
+        !(has(variables.ps.hostIPC) && variables.ps.hostIPC) &&
+        !(has(variables.ps.hostNetwork) && variables.ps.hostNetwork)
+      message: "hostPID, hostIPC y hostNetwork prohibidos (PSA baseline)"
+    - expression: >-
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.privileged) || !c.securityContext.privileged)
+      message: "contenedor privilegiado prohibido (PSA baseline)"
+    - expression: >-
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.capabilities) ||
+          !has(c.securityContext.capabilities.add) ||
+          c.securityContext.capabilities.add.all(x, x in ['AUDIT_WRITE', 'CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETID', 'KILL',
+            'MKNOD', 'NET_BIND_SERVICE', 'SETFCAP', 'SETGID', 'SETPCAP', 'SETUID', 'SYS_CHROOT']))
+      message: "capabilities.add fuera del conjunto de PSA baseline"
+    - expression: >-
+        !(has(variables.ps.securityContext) && has(variables.ps.securityContext.seccompProfile) &&
+          variables.ps.securityContext.seccompProfile.type == 'Unconfined') &&
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.seccompProfile) ||
+          c.securityContext.seccompProfile.type != 'Unconfined')
+      message: "seccompProfile Unconfined prohibido (PSA baseline)"
+    - expression: >-
+        !(has(variables.ps.securityContext) && has(variables.ps.securityContext.appArmorProfile) &&
+          variables.ps.securityContext.appArmorProfile.type == 'Unconfined') &&
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.appArmorProfile) ||
+          c.securityContext.appArmorProfile.type != 'Unconfined') &&
+        (!has(object.spec.template.metadata) || !has(object.spec.template.metadata.annotations) ||
+          object.spec.template.metadata.annotations.all(a,
+            !a.startsWith('container.apparmor.security.beta.kubernetes.io/') ||
+            object.spec.template.metadata.annotations[a] != 'unconfined'))
+      message: "AppArmor Unconfined prohibido (PSA baseline)"
+    - expression: >-
+        (!has(variables.ps.securityContext) || !has(variables.ps.securityContext.seLinuxOptions) ||
+          (!has(variables.ps.securityContext.seLinuxOptions.user) && !has(variables.ps.securityContext.seLinuxOptions.role) &&
+           (!has(variables.ps.securityContext.seLinuxOptions.type) ||
+            variables.ps.securityContext.seLinuxOptions.type in ['', 'container_t', 'container_init_t', 'container_kvm_t', 'container_engine_t']))) &&
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.seLinuxOptions) ||
+          (!has(c.securityContext.seLinuxOptions.user) && !has(c.securityContext.seLinuxOptions.role) &&
+           (!has(c.securityContext.seLinuxOptions.type) ||
+            c.securityContext.seLinuxOptions.type in ['', 'container_t', 'container_init_t', 'container_kvm_t', 'container_engine_t'])))
+      message: "seLinuxOptions fuera de lo que admite PSA baseline"
+    - expression: >-
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.procMount) || c.securityContext.procMount == 'Default') &&
+        variables.cs.all(c, !has(c.securityContext) || !has(c.securityContext.windowsOptions) ||
+          !has(c.securityContext.windowsOptions.hostProcess) || !c.securityContext.windowsOptions.hostProcess) &&
+        !(has(variables.ps.securityContext) && has(variables.ps.securityContext.windowsOptions) &&
+          has(variables.ps.securityContext.windowsOptions.hostProcess) && variables.ps.securityContext.windowsOptions.hostProcess)
+      message: "procMount distinto de Default o hostProcess (PSA baseline)"
+    - expression: >-
+        variables.cs.all(c, !has(c.ports) || c.ports.all(p, !has(p.hostPort) || p.hostPort == 0))
+      message: "hostPort prohibido (PSA baseline)"
+    - expression: >-
+        !has(variables.ps.securityContext) || !has(variables.ps.securityContext.sysctls) ||
+        variables.ps.securityContext.sysctls.all(s, s.name in ['kernel.shm_rmid_forced', 'net.ipv4.ip_local_port_range',
+          'net.ipv4.ip_unprivileged_port_start', 'net.ipv4.tcp_syncookies', 'net.ipv4.ping_group_range',
+          'net.ipv4.ip_local_reserved_ports', 'net.ipv4.tcp_keepalive_time', 'net.ipv4.tcp_fin_timeout',
+          'net.ipv4.tcp_keepalive_intvl', 'net.ipv4.tcp_keepalive_probes'])
+      message: "sysctl fuera de la lista segura de PSA baseline"
+    - expression: >-
+        size(variables.vols) == size(variables.pvols) &&
+        variables.vols.all(x, x in variables.pvols) && variables.pvols.all(x, x in variables.vols)
+      messageExpression: "'volúmenes distintos de los de la plantilla ' + variables.k + ': ' + variables.vols.join(', ')"
+    - expression: >-
+        variables.cs.all(c, !has(c.volumeMounts) || c.volumeMounts.all(m, !(m.name in variables.pfijadas) ||
+          (c.name + '|' + m.name + '|' + m.mountPath + '|' +
+           (has(m.subPath) ? m.subPath : (has(m.subPathExpr) ? 'expr:' + m.subPathExpr : '')) + '|' +
+           ((has(m.readOnly) && m.readOnly) ? 'ro' : 'rw')) in variables.pmontajes)) &&
+        variables.pmontajes.all(s, variables.cs.exists(c, has(c.volumeMounts) && c.volumeMounts.exists(m,
+          (c.name + '|' + m.name + '|' + m.mountPath + '|' +
+           (has(m.subPath) ? m.subPath : (has(m.subPathExpr) ? 'expr:' + m.subPathExpr : '')) + '|' +
+           ((has(m.readOnly) && m.readOnly) ? 'ro' : 'rw')) == s)))
+      message: "volumeMount de un PVC o hostPath distinto del de la plantilla (volumen, ruta, subPath, readOnly)"
+    - expression: >-
+        variables.cs.all(c, !has(c.env) || c.env.all(e, !has(e.valueFrom) || (
+          has(e.valueFrom.secretKeyRef) ? 'secret:' + (has(e.valueFrom.secretKeyRef.name) ? e.valueFrom.secretKeyRef.name : '') + ':' + e.valueFrom.secretKeyRef.key :
+          has(e.valueFrom.configMapKeyRef) ? 'configMap:' + (has(e.valueFrom.configMapKeyRef.name) ? e.valueFrom.configMapKeyRef.name : '') + ':' + e.valueFrom.configMapKeyRef.key :
+          has(e.valueFrom.fieldRef) ? 'field:' + e.valueFrom.fieldRef.fieldPath :
+          has(e.valueFrom.resourceFieldRef) ? 'resource:' + e.valueFrom.resourceFieldRef.resource : 'other') in variables.penvrefs))
+      message: "env con valueFrom que no está en los parámetros de la plantilla"
+    - expression: >-
+        variables.cs.all(c, !has(c.envFrom) || c.envFrom.all(f,
+          ((has(f.secretRef) ? 'secret:' + (has(f.secretRef.name) ? f.secretRef.name : '') :
+            'configMap:' + (has(f.configMapRef) && has(f.configMapRef.name) ? f.configMapRef.name : '')) + '|' +
+           (has(f.prefix) ? f.prefix : '')) in variables.penvfrom))
+      message: "envFrom añadido: no está en la plantilla"
+    - expression: >-
+        variables.cs.all(c, !has(c.env) || c.env.all(e,
+          !(e.name in ['PATH', 'NODE_OPTIONS', 'BASH_ENV', 'HOME'] || e.name.startsWith('LD_') || e.name.startsWith('PYTHON')) ||
+          (!has(e.valueFrom) && (e.name + '=' + (has(e.value) ? e.value : '')) in variables.pliterales)))
+      message: "PATH, LD_*, PYTHON*, NODE_OPTIONS, BASH_ENV y HOME solo con el valor literal de la plantilla"
+    - expression: >-
+        !((variables.k + '.nodo') in variables.d) || (
+          !has(variables.ps.affinity) &&
+          (has(variables.ps.nodeName) ? variables.ps.nodeName : '') == variables.d[variables.k + '.nodename'] &&
+          size(has(variables.ps.nodeSelector) ? variables.ps.nodeSelector : {}) ==
+            size(variables.d[variables.k + '.nodo'] == '' ? [] : variables.d[variables.k + '.nodo'].split('\n')) &&
+          (has(variables.ps.nodeSelector) ? variables.ps.nodeSelector : {}).all(n,
+            (n + '=' + variables.ps.nodeSelector[n]) in variables.d[variables.k + '.nodo'].split('\n')))
+      message: "plantilla con hostPath o local-path: nodeSelector, nodeName y affinity tienen que ser los fijados"
+    - expression: >-
+        !((variables.k + '.fijado') in variables.d) || variables.cs.all(c,
+          (variables.k + '.fijado.' + c.name + '.imagen') in variables.d &&
+          c.image == variables.d[variables.k + '.fijado.' + c.name + '.imagen'] &&
+          (has(c.command) ? c.command : []).map(x, string(size(x)) + ':' + x).join('') == variables.d[variables.k + '.fijado.' + c.name + '.command'] &&
+          (has(c.args) ? c.args : []).map(x, string(size(x)) + ':' + x).join('') == variables.d[variables.k + '.fijado.' + c.name + '.args'])
+      message: "imagen, command o args distintos de los fijados para esta plantilla"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: synapse-reloj-jobs-deny
+spec:
+  policyName: synapse-reloj-jobs
+  validationActions: [Deny]
+  paramRef:
+    name: synapse-reloj-plantillas
+    namespace: synapse
+    parameterNotFoundAction: Deny
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [synapse, kube-system, kyverno, kube-public, kube-node-lease]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: synapse-reloj-jobs-audit
+spec:
+  policyName: synapse-reloj-jobs
+  validationActions: [Audit, Warn]
+  # Allow, no Deny: un parámetro que falta es un error de configuración del binding, y con
+  # failurePolicy Fail el API server deniega SIN mirar validationActions (veredicto de security
+  # en #643). Aquí eso cortaría los flujos SC-5875 vivos si el ConfigMap aún no está; el Deny
+  # de parámetro ausente se queda en el binding -deny (synapse y ns del sistema).
+  paramRef:
+    name: synapse-reloj-plantillas
+    namespace: synapse
+    parameterNotFoundAction: Allow
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [synapse, kube-system, kyverno, kube-public, kube-node-lease]

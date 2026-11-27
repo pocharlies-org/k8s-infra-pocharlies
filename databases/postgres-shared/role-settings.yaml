@@ -96,6 +96,18 @@
 #     pod se reinició (3→4). Con el rol cubierto sería un reinicio cada ≤15 min.
 #     (El LISTEN `message_updated` de whatsapp-app SÍ reconecta — change-bus.mjs
 #     con backoff — pero la regla es por rol y el rol es compartido.)
+#   - skirmshop y skirmbooks_ui_app (INFRA-1586, CRIT-20912) — retirada tras la
+#     regresión medida el 25-11 al fusionar #639: el sweep del sync tumbó las
+#     ociosas del rol y 4 pods de consumidores `pg` (node-postgres) murieron con
+#     el FATAL sin handler y reiniciaron (labels-outbox-relay,
+#     labels-pickup-point-reminder, labels-shopify-app — rol skirmshop — y
+#     skirmbooks-ui — rol skirmbooks_ui_app), disparando el
+#     SkirmshopAppRestartSpike. La prueba B de #639 se midió solo con los
+#     consumidores Prisma del rol compartido (reabren, 0 reinicios); los `pg` no
+#     sobreviven al corte servidor — mismo caso whatsappmcp: la regla es por rol
+#     y el rol es compartido. Rojo = rol fuera; la corrección (manejar el error
+#     del pool y reabrir, como los Prisma) va en el repo del consumidor, y
+#     entonces el rol vuelve con su prueba B verde.
 #   - synapse_app, brain_openwebui_ro — sin conexiones vivas al probar: no se
 #     puede medir reconexión; no entran hasta que un consumidor las use y pase B.
 #   - synapse_migration, synapse_owner — exclusión permanente: migraciones
@@ -105,6 +117,123 @@
 #
 # Para revertir el mecanismo completo:
 #   ALTER ROLE <rol> RESET idle_session_timeout;   (por cada rol cubierto)
+#
+# --- INFRA-1599: bucle de espera de conexión + SQL en ConfigMap ----------------
+#
+# El 24-11 (SC-6473, mismo fingerprint ARGO-20896) este Job murió al primer
+# error mientras el primario estaba saturado (SC-6471/SC-6543): a diferencia de
+# sus dos Job PostSync hermanos (agent-transcripts-schema.yaml y
+# catalogo-schema.yaml) no tenía bucle de espera y agotaba el backoff con
+# `operationState: Failed`. Ahora, como ellos: el contenedor primero espera a
+# que el primario responda un `SELECT 1` (60 intentos × 5 s = 5 min) y solo
+# entonces corre el SQL; `backoffLimit` 5, como los hermanos. Semántica
+# intacta: los ALTER son idempotentes y la limpieza del backlog también.
+#
+# El SQL deja de ser argumento inline de psql y vive en el ConfigMap
+# `postgres-shared-role-settings-sql` (montado en /sql, forma de los hermanos).
+# Los comentarios DENTRO del SQL son `--`, nunca `#`: psql no reconoce `#` como
+# comentario y revienta con error de sintaxis (INFRA-1369: tres líneas de `#`
+# dentro del block scalar → BackoffLimitExceeded en cada sync, incidente
+# ARGO-20896 / SC-6618; fix k8s-infra#645). La guardia
+# tests/test_postgres_shared_postsync_sql_contract.py falla en CI si reaparece
+# una línea de comentario `#` en el SQL que un Job de este directorio pasa a
+# psql, en cualquiera de sus dos formas (block scalar del ConfigMap o `-c`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-shared-role-settings-sql
+  namespace: databases
+  labels:
+    app.kubernetes.io/part-of: shared-infrastructure
+    app.kubernetes.io/component: postgres-role-settings
+data:
+  setup.sql: |
+    -- ALTER ROLE ... SET es idempotente y persiste en el catálogo
+    -- (pg_db_role_setting), así que sobrevive a reinicio y failover.
+    -- Para revertir: ALTER ROLE keep RESET idle_in_transaction_session_timeout;
+    ALTER ROLE keep SET idle_in_transaction_session_timeout = '5min';
+
+    -- idle_session_timeout por rol (INFRA-1295 P1, valor fijado por el
+    -- architect: 15min). La lista son los roles cubiertos; los excluidos y su
+    -- razón, en el comentario de cabecera del fichero. Todo rol nuevo de
+    -- managed.roles entra aquí o justifica su exclusión.
+    ALTER ROLE keep SET idle_session_timeout = '15min';
+    ALTER ROLE keycloak SET idle_session_timeout = '15min';
+    ALTER ROLE teslamate SET idle_session_timeout = '15min';
+    ALTER ROLE langfuse SET idle_session_timeout = '15min';
+    ALTER ROLE hindsight SET idle_session_timeout = '15min';
+    ALTER ROLE litellm SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_engine SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_gateway SET idle_session_timeout = '15min';
+    ALTER ROLE n8n SET idle_session_timeout = '15min';
+    ALTER ROLE n8n_stg SET idle_session_timeout = '15min';
+    ALTER ROLE aurora SET idle_session_timeout = '15min';
+    ALTER ROLE horarios SET idle_session_timeout = '15min';
+    ALTER ROLE sauvage_bot SET idle_session_timeout = '15min';
+    ALTER ROLE dgxbench SET idle_session_timeout = '15min';
+    ALTER ROLE dgxskills SET idle_session_timeout = '15min';
+    ALTER ROLE company_crm SET idle_session_timeout = '15min';
+    ALTER ROLE company SET idle_session_timeout = '15min';
+    ALTER ROLE catalogo SET idle_session_timeout = '15min';
+    ALTER ROLE analisis SET idle_session_timeout = '15min';
+    ALTER ROLE opencode_archive SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_dispatcher SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
+    ALTER ROLE synapse_outbox_gc SET idle_session_timeout = '15min';
+
+    -- INFRA-1586 (CRIT-20912): el GUC persiste en pg_db_role_setting, así
+    -- que sacar el rol de la lista de arriba no lo desarma — hay que
+    -- RESETearlo explícitamente. Idempotente (no-op si el rol no lo tiene).
+    -- Al fusionar esto, reiniciar además los pods de estos roles abiertos
+    -- desde 25-11 06:49Z: sus sesiones actuales llevan el GUC y seguirían
+    -- cayendo a los 15 min de ocio.
+    ALTER ROLE skirmshop RESET idle_session_timeout;
+    ALTER ROLE skirmbooks_ui_app RESET idle_session_timeout;
+
+    -- INFRA-1369 (P2): residuo del SET de P1 en brain_openwebui_ro, que no
+    -- tiene prueba B (sin conexiones vivas al medir: no se puede probar
+    -- reconexión, cabecera). El GUC persiste en pg_db_role_setting y el
+    -- fichero GitOps es la verdad de estado: RESET converge lo vivo con el
+    -- fichero. Idempotente (no-op si el rol no lo tiene). synapse_app no
+    -- quedó con residuo, no se toca.
+    ALTER ROLE brain_openwebui_ro RESET idle_session_timeout;
+
+    -- SC-6040: CONNECTION LIMIT del rol hindsight. El API de Hindsight abre
+    -- dos pools (escritura 40 + lectura 40 = 80 conexiones,
+    -- k8s-hindsight-pocharlies/k8s/values.yaml); el límite de 50 sin hogar en
+    -- GitOps agotaba el acquire de asyncpg (SC-6035/SC-6031). 100 = 80 +
+    -- margen de los cron. Idempotente (atributo de rol, no GUC).
+    -- Para revertir: ALTER ROLE hindsight CONNECTION LIMIT -1;
+    ALTER ROLE hindsight CONNECTION LIMIT 100;
+
+    -- DGX-1022: CONNECTION LIMIT del rol dgxskills. Consumidores: backend y
+    -- worker del dashboard, cada uno con un pool asyncpg max_size=3 perezoso.
+    -- 5 = 3 del backend + 2 de margen; nunca los dos pools al máximo a la vez.
+    -- Idempotente (atributo de rol, no GUC).
+    -- Para revertir: ALTER ROLE dgxskills CONNECTION LIMIT -1;
+    ALTER ROLE dgxskills CONNECTION LIMIT 5;
+
+    -- Limpieza única del backlog tras los ALTER (INFRA-1295 P1): los
+    -- ALTER solo afectan a sesiones nuevas, así que las ociosas ya
+    -- acumuladas mueren aquí. Idempotente: en syncs posteriores devuelve
+    -- 0 filas. Solo state='idle' (nunca idle in transaction) y solo roles
+    -- cubiertos.
+    SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+    WHERE state = 'idle'
+      AND state_change < now() - interval '15 minutes'
+      AND usename = ANY (ARRAY[
+        'keep', 'keycloak', 'teslamate', 'langfuse',
+        'hindsight', 'litellm',
+        'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
+        'aurora', 'horarios', 'sauvage_bot', 'dgxbench', 'dgxskills',
+        'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
+        'synapse_sre_m2m', 'synapse_sre_reporter', 'synapse_agent_m2m',
+        'synapse_dispatcher', 'synapse_admin',
+        'synapse_outbox_gc']);
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -117,7 +246,9 @@ metadata:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  backoffLimit: 2
+  # 5, como los Job PostSync hermanos: el bucle de abajo ya cubre una
+  # indisponibilidad de hasta 5 min por intento (INFRA-1599).
+  backoffLimit: 5
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
@@ -143,107 +274,30 @@ spec:
               valueFrom:
                 secretKeyRef: { name: postgres-shared-superuser, key: password }
           command:
-            - psql
-            - -v
-            - ON_ERROR_STOP=1
-            # ALTER ROLE ... SET es idempotente y persiste en el catálogo
-            # (pg_db_role_setting), así que sobrevive a reinicio y failover.
-            # Para revertir: ALTER ROLE keep RESET idle_in_transaction_session_timeout;
-            - -c
-            - ALTER ROLE keep SET idle_in_transaction_session_timeout = '5min';
-            # idle_session_timeout por rol (INFRA-1295 P1, valor fijado por el
-            # architect: 15min). La lista son los roles cubiertos; los
-            # excluidos y su razón, en el comentario de cabecera. Todo rol
-            # nuevo de managed.roles entra aquí o justifica su exclusión.
+            - /bin/bash
             - -c
             - |
-              ALTER ROLE keep SET idle_session_timeout = '15min';
-              ALTER ROLE keycloak SET idle_session_timeout = '15min';
-              ALTER ROLE teslamate SET idle_session_timeout = '15min';
-              ALTER ROLE langfuse SET idle_session_timeout = '15min';
-              ALTER ROLE skirmbooks_ui_app SET idle_session_timeout = '15min';
-              ALTER ROLE hindsight SET idle_session_timeout = '15min';
-              ALTER ROLE litellm SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_engine SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_gateway SET idle_session_timeout = '15min';
-              ALTER ROLE n8n SET idle_session_timeout = '15min';
-              ALTER ROLE n8n_stg SET idle_session_timeout = '15min';
-              ALTER ROLE aurora SET idle_session_timeout = '15min';
-              ALTER ROLE horarios SET idle_session_timeout = '15min';
-              ALTER ROLE sauvage_bot SET idle_session_timeout = '15min';
-              ALTER ROLE dgxbench SET idle_session_timeout = '15min';
-              ALTER ROLE dgxskills SET idle_session_timeout = '15min';
-              ALTER ROLE company_crm SET idle_session_timeout = '15min';
-              ALTER ROLE company SET idle_session_timeout = '15min';
-              ALTER ROLE catalogo SET idle_session_timeout = '15min';
-              ALTER ROLE analisis SET idle_session_timeout = '15min';
-              ALTER ROLE opencode_archive SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_sre_m2m SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_sre_reporter SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_agent_m2m SET idle_session_timeout = '15min';
-              # INFRA-1369 (P2): roles con prueba B verde (evidencia en la PR).
-              # Los que fallaron la LISTEN (gestoria_*, synapse_adapter,
-              # whatsappmcp) y su razón, en el comentario de cabecera.
-              ALTER ROLE synapse_dispatcher SET idle_session_timeout = '15min';
-              ALTER ROLE skirmshop SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_admin SET idle_session_timeout = '15min';
-              ALTER ROLE synapse_outbox_gc SET idle_session_timeout = '15min';
-            # --- INFRA-1369 (P2): RESET de residuos de P1 sin prueba B ----------
-            # Regla del architect (P2): un rol queda cubierto solo con su prueba B
-            # en verde. brain_openwebui_ro y synapse_app no la tienen (sin
-            # conexiones vivas al medir: no se puede probar reconexión), así que
-            # no entran en la lista de SET de arriba. Pero el SET de P1 dejó
-            # residuo en el catálogo: medido en vivo el 25-11-2026,
-            # brain_openwebui_ro aún lleva idle_session_timeout=15min (synapse_app
-            # no, por eso no se RESETea). El fichero GitOps es la verdad de
-            # estado, así que el Job hace RESET de lo que el fichero no cubre: el
-            # RESET converge el estado vivo con el fichero (al revés que un SET
-            # retirado, que dejaría el valor vivo sin dueño). Idempotente: en
-            # syncs posteriores no hay setting que resetear.
-            - -c
-            - ALTER ROLE brain_openwebui_ro RESET idle_session_timeout;
-            # --- SC-6040: CONNECTION LIMIT del rol hindsight -------------------
-            # El API de Hindsight abre dos pools (escritura 40 + lectura 40 = 80
-            # conexiones, k8s-hindsight-pocharlies/k8s/values.yaml). El rol se
-            # creó el 17-10 (INFRA-940) con CONNECTION LIMIT 50 sin hogar en
-            # GitOps: en una ronda de consolidación el pool no puede crecer de
-            # 50, el acquire de asyncpg agota su timeout (30 s), el poller se
-            # auto-apaga ("shutting worker down so the task is recovered on
-            # restart") y la API queda caída ~14 min por ciclo — 16 reinicios
-            # del 17 al 19-11, causa de SC-6035 y SC-6031. 100 = 80 de los dos
-            # pools + margen de los cron. Idempotente (atributo de rol, no GUC).
-            # Para revertir: ALTER ROLE hindsight CONNECTION LIMIT -1;
-            - -c
-            - ALTER ROLE hindsight CONNECTION LIMIT 100;
-            # --- DGX-1022: CONNECTION LIMIT del rol dgxskills --------------------
-            # Índice de skills de Hermes (dgx-infra services/dashboard/skills). Los
-            # únicos consumidores son backend y worker del dashboard, cada uno con un
-            # pool asyncpg max_size=3 perezoso (espejo de bench/db.py, techo fijado
-            # por el plan tras la saturación del 28-07). 5 = 3 del backend + 2 de
-            # margen: el worker solo escribe (cola de importación) y el backend lee;
-            # nunca los dos pools al máximo a la vez. Idempotente (atributo de rol,
-            # no GUC). Para revertir: ALTER ROLE dgxskills CONNECTION LIMIT -1;
-            - -c
-            - ALTER ROLE dgxskills CONNECTION LIMIT 5;
-            # Limpieza única del backlog tras los ALTER (INFRA-1295 P1): los
-            # ALTER solo afectan a sesiones nuevas, así que las ociosas ya
-            # acumuladas mueren aquí. Idempotente: en syncs posteriores
-            # devuelve 0 filas. Solo state='idle' (nunca idle in transaction)
-            # y solo roles cubiertos.
-            - -c
-            - |
-              SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-              WHERE state = 'idle'
-                AND state_change < now() - interval '15 minutes'
-                AND usename = ANY (ARRAY[
-                  'keep', 'keycloak', 'teslamate', 'langfuse',
-                  'skirmbooks_ui_app', 'hindsight', 'litellm',
-                  'synapse_engine', 'synapse_gateway', 'n8n', 'n8n_stg',
-                  'aurora', 'horarios', 'sauvage_bot', 'dgxbench', 'dgxskills',
-                  'company_crm', 'company', 'catalogo', 'analisis', 'opencode_archive',
-                  'synapse_sre_m2m', 'synapse_sre_reporter', 'synapse_agent_m2m',
-                  'synapse_dispatcher', 'skirmshop', 'synapse_admin',
-                  'synapse_outbox_gc']);
+              set -euo pipefail
+              ok=0
+              for i in $(seq 1 60); do
+                if psql -v ON_ERROR_STOP=1 -Atc 'SELECT 1' >/dev/null 2>&1; then
+                  ok=1; break
+                fi
+                sleep 5
+              done
+              if [ "$ok" != 1 ]; then
+                echo "postgres-shared no responde tras 5 min (primario caído o saturado)" >&2
+                exit 1
+              fi
+              psql -v ON_ERROR_STOP=1 -f /sql/setup.sql
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 128Mi }
+      volumes:
+        - name: sql
+          configMap:
+            name: postgres-shared-role-settings-sql

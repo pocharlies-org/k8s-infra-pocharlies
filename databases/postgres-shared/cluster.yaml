@@ -228,12 +228,20 @@ spec:
         passwordSecret:
           name: n8n-stg-db-credentials
         comment: "n8n staging workflow automation"
+      # SC-6824 (MON-21241, 27-11 04:25Z): CONNECTION LIMIT 60. En la misma saturación
+      # (493/500) litellm llegó a 74 backends (61 `active`) encolando INSERTs detrás del
+      # embotellamiento de bloqueos — el `INSERT INTO "LiteLLM_EndUserTable"` del log
+      # tardó 152 s. Régimen normal medido a 7 días: p50 22, p95 31 sobre 2 réplicas.
+      # 60 = ~2× el p95 con margen de rollout (las dos réplicas al máximo no lo tocan en
+      # uso normal); patrón `hindsight`/`catalogo`. Cubre además al rol en la alerta
+      # `PostgresSharedRoleConnectionsHigh`. Para revertir: quitar el campo.
       - name: litellm
         ensure: present
         login: true
+        connectionLimit: 60
         passwordSecret:
           name: litellm-db-credentials
-        comment: "LiteLLM router (repo: pocharlies/k8s-litellm-pocharlies)"
+        comment: "LiteLLM router (repo: pocharlies/k8s-litellm-pocharlies). CONNECTION LIMIT 60 (SC-6824)."
       - name: langfuse
         ensure: present
         login: true
@@ -388,12 +396,38 @@ spec:
         passwordSecret:
           name: synapse-agent-m2m-db-credentials
         comment: "Private durable Synapse agent-run callback plane"
+      # SC-6611 (SC-5806 ola 2): el reloj único synapse-reloj. Sus permisos son exactamente los
+      # de synapse:migrations/0124_reloj.sql (sus tablas synapse.reloj_*, INSERT en el outbox y
+      # SELECT de handler_config); sin synapse_app, como los planos dedicados de arriba.
+      - name: synapse_reloj
+        ensure: present
+        login: true
+        inherit: false
+        passwordSecret:
+          name: synapse-reloj-db-credentials
+        comment: "Synapse reloj unico (synapse-reloj, SC-6611): reloj_* y el despertador en outbox"
+      # SC-6824 (MON-21241, 27-11 04:25Z): CONNECTION LIMIT 80. El 27-11 postgres-shared
+      # llegó a 493/500: keep abrió 109 backends (103 `active`, no ociosos) durante un
+      # embotellamiento de bloqueos — un `UPDATE "user" ... id=1` del login de Keep estuvo
+      # 24,9 min en espera de candado —, el pool compartido se agotó y el 53300 tumbó los
+      # arranques de synapse-dispatcher y firecrawl-api (TargetDown + BlackboxProbeDown →
+      # incidente monitoring-degraded) y devolvía HTTP 500 al keepsvc-stale-reaper. El techo
+      # normal del rol es pool 5 + overflow 10 por worker (DATABASE_POOL_SIZE en
+      # k8s-observability-pocharlies/keep/values.yaml); p50 medido 28, p95 31 (7 d). 80 ≈
+      # 2,5× el p95: no estrangula a Keep en régimen normal ni en una ronda legítima del
+      # hub, y acota la parte del muro que puso Keep (patrón `hindsight`/`catalogo`); los
+      # demás consumidores conservan slot aunque Keep se desboque. Con límite puesto, el rol queda además cubierto por la
+      # alerta `PostgresSharedRoleConnectionsHigh` (80%), que con -1 no lo miraba.
+      # Comprobado en vivo tras el ALTER (el límite iba ya puesto a mano por SC-6824):
+      # keep 28 backends, litellm 19 — muy por debajo de sus techos, cero impacto.
+      # Para revertir: quitar el campo (CNPG lo deja sin límite).
       - name: keep
         ensure: present
         login: true
+        connectionLimit: 80
         passwordSecret:
           name: keep-db-credentials
-        comment: "Keep alert hub — sistema de récord de alertas (repo: pocharlies/k8s-observability-pocharlies)"
+        comment: "Keep alert hub — sistema de récord de alertas (repo: pocharlies/k8s-observability-pocharlies). CONNECTION LIMIT 80 (SC-6824)."
       - name: aurora
         ensure: present
         login: true
@@ -431,12 +465,28 @@ spec:
       # `company-supervisor-db`); CNPG la reconcilia desde
       # company-db-credentials (ExternalSecret en app-credentials.yaml, wave
       # -1), que debe estar materializado ANTES de aplicar este spec.
+      # SC-6821: CONNECTION LIMIT 30. El supervisor (pod `company-0`) abre
+      # conexiones efímeras por turno (0 backends persistentes medidos) y nunca
+      # llega a 30: el límite no lo estrangula en régimen normal. Su valor es
+      # hacer visible y acotada la huella del rol — con `rolconnlimit = -1` no
+      # lo cubría la alerta `PostgresSharedRoleConnectionsHigh` (compara
+      # backends/conn_limit), de modo que una fuga del propio supervisor
+      # pasaría desapercibida y contribuiría al muro de `max_connections`. El
+      # límite de rol es POR INSTANCIA (500/instancia, SC-5295), igual que el
+      # resto. La garantía de que el supervisor no quede fuera cuando el
+      # clúster se acerca a `max_connections - superuser_reserved_connections`
+      # (= 497: ahí el postmaster rechaza a los no-SUPERUSER con «remaining
+      # connection slots are reserved for roles with the SUPERUSER attribute»)
+      # no la da un límite de `company`: exige acotar el agregado de los pools
+      # (budget global por rol / pooler PgBouncer), decisión pendiente de
+      # INFRA-1295 (architect). Ver nota-it-informe de SC-6821.
       - name: company
         ensure: present
         login: true
+        connectionLimit: 30
         passwordSecret:
           name: company-db-credentials
-        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148."
+        comment: "Supervisor de la compañía (repo pocharlies-org/x86-host-runtime-pocharlies); dueño de la base company. SC-6148, CONNECTION LIMIT 30 (SC-6821)."
       # SKIRM-184: rol propio de la UI de gestión de Skirmbooks, para que deje de
       # entrar con `skirmshop` (que lee la base SII de la tienda). La contraseña la
       # posee 1Password (item `skirmbooks-ui-db`, sembrado por security); CNPG la

@@ -253,21 +253,29 @@ spec:
         # Instancia lista = instancia donde el exporter de CNPG recolecta
         # (cnpg_collector_up=1). En el bucle de pg_rewind del 22-10 Postgres no
         # llegaba a subir, así que collector_up se quedaba en 0: exactamente el
-        # estado a cazar. El `or vector(0)` cubre el caso de que desaparezcan
-        # todos los pods: sum() sobre vector vacío devuelve vacío y la alerta no
-        # llegaría a evaluarse; con el guard evalúa 0 y dispara.
+        # estado a cazar (sum() sobre series que existen devuelve 0 y dispara).
+        # El guard `or vector(0)` se retiró (SC-6651, CRIT-21008 25-11): con
+        # VictoriaMetrics en hueco (OOM del vmsingle 23:27) la respuesta
+        # vacía-pero-válida hacía evaluar 0 al guard y esta crítica sonaba con
+        # Postgres sano — disparó dos veces esa noche (SC-6651 y SC-6659) y
+        # volvió a sonar el 31-10 (SC-3831). El caso "todos los pods fuera" lo
+        # cubre PostgresSharedMetricsMissing (absent, 10m) y, si la causa es un
+        # nodo, KubeNodeNotReady.
         # El 2 es spec.instances (cluster.yaml): si se cambia uno, el otro.
         # Las ventanas de desagote de los nodos de control (04:00/05:00/06:00
         # UTC) promueven el clúster y se recuperan solas; `for: 5m` es el filtro
         # que pidió la sesión problem (INFRA-971).
         - alert: PostgresSharedInstancesNotReady
           expr: >-
-            (sum(cnpg_collector_up{namespace="databases"}) or vector(0)) < 2
+            sum(cnpg_collector_up{namespace="databases"}) < 2
           for: 5m
           labels:
             severity: critical
             area: database
             component: postgres-shared
+            # sin él, la safety-net de Keep titula el incidente «Crítico en
+            # N/A» (agrupa y titula por namespace)
+            namespace: databases
           annotations:
             summary: postgres-shared lleva +5m con menos de 2 instancias listas
             description: >-
@@ -338,7 +346,7 @@ spec:
               bloquea la siguiente copia y tumba la consulta del catálogo.
 
         # Rama de fallo (equivalente en métricas de LastBackupSucceeded=False).
-        # Vive separada con `for: 8h` — era el término `failed > available` de
+        # Vive separada con `for: 30h` (8h hasta SC-6654) — era el término `failed > available` de
         # la alerta única con for: 10m, que disparaba con el reintento en
         # vuelo (SC-6476). La guardia (informer, INFRA-1555) borra el failed a
         # los 15 min y crea su guard-retry-*, pero el operador puede tardar en
@@ -353,11 +361,23 @@ spec:
         # reintento que va bien renueva available_ts y el pending se reinicia
         # sin disparar. Solo suena cuando el reintento también falla
         # (failed_ts se renueva y la condición no se despeja) o no existe.
+        # RE-MEDIDO el 26-11 (SC-6654): el supuesto «el pending se reinicia»
+        # no vale cuando el reintento YA completó ese día. 25-11: el retry
+        # completó a las 10:07:56 (copia DONE de 82 GiB en el catálogo) y el
+        # daily, que iba detrás, registró su intento abortado como failed a las
+        # 10:08:01 → failed_ts > available_ts con la guarda bloqueada («already
+        # completed today»): nada renueva available hasta el daily de las 05:00
+        # del día siguiente (~24 h después). Con for: 8h CUALQUIER intento
+        # abortado tras un éxito del día deriva en crítica segura a +8 h con
+        # copia buena recién hecha (hubo que reabrir Request por ello). El for
+        # tiene que cubrir un ciclo diario completo (~24 h + latencia del
+        # siguiente) → 30 h: una rotura real la cazan antes BackupStale (+40 h)
+        # y la propia guardia; este término queda para «dos días fallando».
         - alert: PostgresSharedBackupFailed
           expr: >-
             max(cnpg_collector_last_failed_backup_timestamp{namespace="databases"})
             > max(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
-          for: 8h
+          for: 30h
           labels:
             severity: critical
             area: database
@@ -366,12 +386,16 @@ spec:
             summary: la última copia de postgres-shared falló y el reintento tampoco saca copia buena
             description: >-
               La última copia registrada en el catálogo falló después de la
-              última buena y la condición lleva +6h sin despejarse: el
-              reintento de la guardia también falló o no llegó a crearse.
-              Mira `kubectl get backups.postgresql.cnpg.io -n databases
+              última buena y la condición lleva +30h sin despejarse — dos
+              ciclos diarios sin renovar available_ts: el reintento de la
+              guardia también falló, no llegó a crearse, o la guarda está
+              bloqueada por un éxito previo del mismo día (SC-6654). Mira
+              `kubectl get backups.postgresql.cnpg.io -n databases
               --sort-by=.metadata.creationTimestamp` (los guard-retry-* de hoy
-              conservados son los intentos) y los logs del operador
-              cnpg-system.
+              conservados son los intentos), los logs del operador
+              cnpg-system y `barman-cloud-backup list` del catálogo: la última
+              entrada puede ser DONE y el failed un intento abortado (libro de
+              registro, no pérdida de dato).
 
         # Ceguera: la métrica no existe en ningún pod (INFRA-1457, medido el
         # 19-11). Del 27-10 al 16-11 no hubo copia buena en el catálogo y la
@@ -385,8 +409,17 @@ spec:
         # ausencia es ya el fallo. Si solo sobrevive la réplica no pasa:
         # exporta 0 y dispara la regla de staleness. (PostgresSharedMetricsMissing
         # no puede cubrirlo: mira cnpg_backends_total, que seguía fluyendo.)
+        # SC-6654 (noche del 25-11, CRIT-21012): disparó falsa crítica cuando lo
+        # caído era el propio backend (vmsingle OOM 23:01: sin serie fresca,
+        # `absent` es cierto para cualquier métrica; ~20 críticas simultáneas).
+        # Gate igual que SC-6718/SC-6692: `unless on()` sobre el uptime del
+        # propio vmalert — con el backend vivo y el collector caído dispara
+        # igual; con el backend ciego la ausencia no es evidencia (la cubre
+        # AlertingRulesError).
         - alert: PostgresSharedBackupMetricMissing
-          expr: absent(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
+          expr: >-
+            absent(cnpg_collector_last_available_backup_timestamp{namespace="databases"})
+            unless on() absent_over_time(vm_app_uptime_seconds{job="vmalert-vm-victoria-metrics-k8s-stack"}[10m])
           for: 10m
           labels:
             severity: critical
@@ -400,4 +433,6 @@ spec:
               16-11-2026, cola atascada y alerta muda 17 días). Revisa el
               VMPodScrape postgres-shared, el endpoint 9187 de los pods y
               `cnpg_collector_errors_total`; una cola de copia atascada tumba
-              la consulta del catálogo barman del collector.
+              la consulta del catálogo barman del collector. No dispara si las
+              métricas del propio vmalert tampoco llegan a VictoriaMetrics
+              (caída del backend — la cubre AlertingRulesError, SC-6654).

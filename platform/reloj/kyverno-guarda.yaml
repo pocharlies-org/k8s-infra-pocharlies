@@ -1,0 +1,179 @@
+# SC-6611 (SC-5806 ola 2, fase 0): la guarda de Kyverno sobre los Jobs de synapse-adapter-k8s
+# (nota-cto-reloj-unico.md v4 §2.10 regla 2). Lo que la VAP no puede ver porque exige leer la
+# plantilla VIVA:
+#   - exactamente una ownerReference CronJob controller cuyo name y uid son los de un CronJob
+#     vivo del mismo namespace (resource.Get) que lleva la etiqueta synapse.e-dani.com/plantilla=true
+#     (la pone solo ArgoCD: VAP synapse-reloj-etiqueta). No se exige `suspend` (§12 discrepancia 4:
+#     la fila 65 de SC-5875 sigue lanzándose por evento); el adaptador sí lo exige a las del reloj;
+#   - spec.template.spec igual campo a campo al de la plantilla; la única diferencia admitida son
+#     entradas de env con `value` literal y un nombre de la lista de esa plantilla (parámetros
+#     generados: synapse/synapse-reloj-plantillas), y nunca PATH, LD_*, PYTHON*, NODE_OPTIONS,
+#     BASH_ENV ni HOME.
+# Falla cerrada: si resource.Get falla (plantilla o parámetros ausentes, API sin respuesta) la
+# evaluación da error y `failurePolicy: Fail` deniega (en la política Deny).
+# Despliegue gradual (§2.10, R3): Deny en `synapse` (el piloto); Audit en el resto hasta 7 días
+# con cero violaciones en los PolicyReports con tráfico real de SC-5875. Kyverno no ve
+# kube-system ni kyverno: ahí deniega la VAP synapse-reloj-jobs.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: synapse-reloj-guarda-synapse
+  annotations:
+    policies.kyverno.io/title: "Reloj único: Jobs del adaptador k8s iguales a su plantilla (Deny en synapse)"
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  webhookConfiguration:
+    timeoutSeconds: 15
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [synapse]
+  matchConditions:
+    - name: solo-el-adaptador-k8s
+      expression: "request.userInfo.username == 'system:serviceaccount:synapse:synapse-adapter-k8s'"
+  variables:
+    - name: owners
+      expression: "has(object.metadata.ownerReferences) ? object.metadata.ownerReferences : []"
+    - name: duenoName
+      expression: "size(variables.owners) == 1 ? variables.owners[0].name : ''"
+    - name: plantilla
+      expression: "resource.Get('batch/v1', 'cronjobs', object.metadata.namespace, variables.duenoName)"
+    - name: params
+      expression: "resource.Get('v1', 'configmaps', 'synapse', 'synapse-reloj-plantillas').data"
+    - name: k
+      expression: "object.metadata.namespace + '.' + variables.duenoName"
+    - name: nombres
+      expression: >-
+        (variables.k + '.env-nombres') in variables.params && variables.params[variables.k + '.env-nombres'] != ''
+          ? variables.params[variables.k + '.env-nombres'].split('\n') : []
+    - name: tspec
+      expression: "variables.plantilla.spec.jobTemplate.spec.template.spec"
+    - name: jspec
+      expression: "object.spec.template.spec"
+  validations:
+    - expression: >-
+        size(variables.owners) == 1 && variables.owners[0].kind == 'CronJob' &&
+        has(variables.owners[0].controller) && variables.owners[0].controller == true
+      message: "exactamente una ownerReference: el CronJob plantilla, controller"
+    - expression: "variables.plantilla.metadata.uid == variables.owners[0].uid"
+      message: "la ownerReference no apunta al uid del CronJob vivo"
+    - expression: >-
+        has(variables.plantilla.metadata.labels) &&
+        'synapse.e-dani.com/plantilla' in variables.plantilla.metadata.labels &&
+        variables.plantilla.metadata.labels['synapse.e-dani.com/plantilla'] == 'true'
+      message: "el CronJob no lleva la etiqueta synapse.e-dani.com/plantilla=true"
+    - expression: "(variables.k + '.sa') in variables.params"
+      message: "la plantilla no está en synapse/synapse-reloj-plantillas"
+    - expression: >-
+        variables.jspec.all(f, f in ['containers', 'initContainers'] || (f in variables.tspec && variables.jspec[f] == variables.tspec[f])) &&
+        variables.tspec.all(f, f in ['containers', 'initContainers'] || f in variables.jspec)
+      message: "spec.template.spec distinto del de la plantilla"
+    - expression: >-
+        size(variables.jspec.containers) == size(variables.tspec.containers) &&
+        (has(variables.jspec.initContainers) ? size(variables.jspec.initContainers) : 0) ==
+          (has(variables.tspec.initContainers) ? size(variables.tspec.initContainers) : 0) &&
+        (variables.jspec.containers + (has(variables.jspec.initContainers) ? variables.jspec.initContainers : [])).all(jc,
+          (variables.tspec.containers + (has(variables.tspec.initContainers) ? variables.tspec.initContainers : [])).exists(tc,
+            tc.name == jc.name &&
+            jc.all(f, f == 'env' || (f in tc && jc[f] == tc[f])) &&
+            tc.all(f, f == 'env' || f in jc) &&
+            (has(jc.env) ? jc.env : []).all(e,
+              (has(tc.env) && e in tc.env) ||
+              (!has(e.valueFrom) && has(e.value) && e.name in variables.nombres &&
+               !(e.name in ['PATH', 'NODE_OPTIONS', 'BASH_ENV', 'HOME'] || e.name.startsWith('LD_') || e.name.startsWith('PYTHON')))) &&
+            (has(tc.env) ? tc.env : []).all(te,
+              (has(jc.env) && te in jc.env) || (has(jc.env) && te.name in variables.nombres && jc.env.exists(e, e.name == te.name)))))
+      message: "contenedores distintos de la plantilla: solo se admite env literal añadido con un nombre de su lista"
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: synapse-reloj-guarda-audit
+  annotations:
+    policies.kyverno.io/title: "Reloj único: Jobs del adaptador k8s iguales a su plantilla (Audit fuera de synapse)"
+spec:
+  validationActions: [Audit]
+  failurePolicy: Ignore
+  webhookConfiguration:
+    timeoutSeconds: 15
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [synapse, kube-system, kyverno]
+  matchConditions:
+    - name: solo-el-adaptador-k8s
+      expression: "request.userInfo.username == 'system:serviceaccount:synapse:synapse-adapter-k8s'"
+  variables:
+    - name: owners
+      expression: "has(object.metadata.ownerReferences) ? object.metadata.ownerReferences : []"
+    - name: duenoName
+      expression: "size(variables.owners) == 1 ? variables.owners[0].name : ''"
+    - name: plantilla
+      expression: "resource.Get('batch/v1', 'cronjobs', object.metadata.namespace, variables.duenoName)"
+    - name: params
+      expression: "resource.Get('v1', 'configmaps', 'synapse', 'synapse-reloj-plantillas').data"
+    - name: k
+      expression: "object.metadata.namespace + '.' + variables.duenoName"
+    - name: nombres
+      expression: >-
+        (variables.k + '.env-nombres') in variables.params && variables.params[variables.k + '.env-nombres'] != ''
+          ? variables.params[variables.k + '.env-nombres'].split('\n') : []
+    - name: tspec
+      expression: "variables.plantilla.spec.jobTemplate.spec.template.spec"
+    - name: jspec
+      expression: "object.spec.template.spec"
+  validations:
+    - expression: >-
+        size(variables.owners) == 1 && variables.owners[0].kind == 'CronJob' &&
+        has(variables.owners[0].controller) && variables.owners[0].controller == true
+      message: "exactamente una ownerReference: el CronJob plantilla, controller"
+    - expression: "variables.plantilla.metadata.uid == variables.owners[0].uid"
+      message: "la ownerReference no apunta al uid del CronJob vivo"
+    - expression: >-
+        has(variables.plantilla.metadata.labels) &&
+        'synapse.e-dani.com/plantilla' in variables.plantilla.metadata.labels &&
+        variables.plantilla.metadata.labels['synapse.e-dani.com/plantilla'] == 'true'
+      message: "el CronJob no lleva la etiqueta synapse.e-dani.com/plantilla=true"
+    - expression: "(variables.k + '.sa') in variables.params"
+      message: "la plantilla no está en synapse/synapse-reloj-plantillas"
+    - expression: >-
+        variables.jspec.all(f, f in ['containers', 'initContainers'] || (f in variables.tspec && variables.jspec[f] == variables.tspec[f])) &&
+        variables.tspec.all(f, f in ['containers', 'initContainers'] || f in variables.jspec)
+      message: "spec.template.spec distinto del de la plantilla"
+    - expression: >-
+        size(variables.jspec.containers) == size(variables.tspec.containers) &&
+        (has(variables.jspec.initContainers) ? size(variables.jspec.initContainers) : 0) ==
+          (has(variables.tspec.initContainers) ? size(variables.tspec.initContainers) : 0) &&
+        (variables.jspec.containers + (has(variables.jspec.initContainers) ? variables.jspec.initContainers : [])).all(jc,
+          (variables.tspec.containers + (has(variables.tspec.initContainers) ? variables.tspec.initContainers : [])).exists(tc,
+            tc.name == jc.name &&
+            jc.all(f, f == 'env' || (f in tc && jc[f] == tc[f])) &&
+            tc.all(f, f == 'env' || f in jc) &&
+            (has(jc.env) ? jc.env : []).all(e,
+              (has(tc.env) && e in tc.env) ||
+              (!has(e.valueFrom) && has(e.value) && e.name in variables.nombres &&
+               !(e.name in ['PATH', 'NODE_OPTIONS', 'BASH_ENV', 'HOME'] || e.name.startsWith('LD_') || e.name.startsWith('PYTHON')))) &&
+            (has(tc.env) ? tc.env : []).all(te,
+              (has(jc.env) && te in jc.env) || (has(jc.env) && te.name in variables.nombres && jc.env.exists(e, e.name == te.name)))))
+      message: "contenedores distintos de la plantilla: solo se admite env literal añadido con un nombre de su lista"
