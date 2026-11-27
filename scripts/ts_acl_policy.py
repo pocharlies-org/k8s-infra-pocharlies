@@ -17,10 +17,14 @@ Tailnet slug: the API does NOT resolve the MagicDNS name (taile0ad27) nor
 `-`; the slug is the tailnet name shown by `tailscale status` CurrentTailnet.Name:
   TS_TAILNET_SLUG          (default e-dani.com)
 
+Endpoint (verified live 27-11, INFRA-1315): GET /tailnet/{slug}/acl returns the
+policy as application/hujson; the write is POST /tailnet/{slug}/acl (PUT and the
+/acl-policy path answer 404/405).
+
 Usage:
   ts_acl_policy.py get                 # print the current policy (HuJSON) to stdout
   ts_acl_policy.py put <file>          # replace the policy with the file contents
-  ts_acl_policy.py check <file>        # PUT the file and fail if the API rejects it,
+  ts_acl_policy.py check <file>        # POST the file and fail if the API rejects it,
                                        # then restore the previous policy
 
 Logs go to stderr; the policy body goes to stdout only, so the caller can do:
@@ -45,7 +49,8 @@ def api(method: str, path: str, token: str, body: bytes | None = None) -> bytes:
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+        headers={"Authorization": "Bearer " + token,
+                 **({"Content-Type": "application/hujson"} if body is not None else {})},
         method=method,
     )
     try:
@@ -62,7 +67,7 @@ def main() -> None:
         read_cred("TS_ACL_OAUTH_CLIENT_ID", "TS_ACL_OAUTH_ID_FILE", "/home/dibanez/k8s/.ts-oauth-acl-id"),
         read_cred("TS_ACL_OAUTH_CLIENT_SECRET", "TS_ACL_OAUTH_SECRET_FILE", "/home/dibanez/k8s/.ts-oauth-acl-secret"),
     )
-    acl_path = f"/tailnet/{urllib.parse.quote(slug)}/acl-policy"
+    acl_path = f"/tailnet/{urllib.parse.quote(slug)}/acl"
 
     if cmd == "get":
         sys.stdout.buffer.write(api("GET", acl_path, tok))
@@ -75,14 +80,14 @@ def main() -> None:
         except (IndexError, OSError) as exc:
             raise SystemExit(f"put/check need a policy file: {exc}")
         if cmd == "put":
-            api("PUT", acl_path, tok, new_policy)
+            api("POST", acl_path, tok, new_policy)
             log("policy updated")
             return
-        # check: PUT, then restore what was there before, so the criterion
+        # check: POST, then restore what was there before, so the criterion
         # "the API accepts this policy" is proven without leaving it applied.
         previous = api("GET", acl_path, tok)
-        api("PUT", acl_path, tok, new_policy)
-        api("PUT", acl_path, tok, previous)
+        api("POST", acl_path, tok, new_policy)
+        api("POST", acl_path, tok, previous)
         log("policy accepted by the API and previous policy restored")
         return
 
