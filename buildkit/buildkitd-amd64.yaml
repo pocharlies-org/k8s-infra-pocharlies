@@ -186,13 +186,13 @@ spec:
               memory: 12Gi
             limits:
               cpu: "4"
-              # sizeLimit (30 GiB) + build headroom (peak RSS of the daemon and
+              # sizeLimit (48 GiB) + build headroom (peak RSS of the daemon and
               # its builds: 5.7 GiB over 4 days); an OOM kill of the daemon is
               # visible and Recreate brings it back with an empty cache.
               # SC-2759: with 10Gi/16Gi the LiteLLM build was OOM-killed even on
               # an empty cache (INFRA-937 comment); 30Gi/36Gi ran the builds of
-              # 2026-10-15..18.
-              memory: 36Gi
+              # 2026-10-15..18 until INFRA-1628 raised both (cache volume comment).
+              memory: 54Gi
           ports:
             - name: buildkit
               containerPort: 1234
@@ -220,7 +220,7 @@ spec:
           # PVC's comment). SC-2759 (2026-10-19) re-measured md3 before keeping
           # this: still 100% util and 283 ms write await with no build cache on
           # it, so a PVC on sauvage is not an option until the node gets a fast
-          # disk (INFRA-482). sizeLimit bounds the tmpfs: 30Gi leaves >= 22 GiB
+          # disk (INFRA-482). sizeLimit bounds the tmpfs: 48Gi leaves >= 40 GiB
           # for builds in flight on top of the <= 8 GiB the toml gcpolicy keeps
           # (10Gi left 2 GiB, and every large build — LiteLLM, Open WebUI,
           # dashboard, correo — hit ENOSPC). RAM is used only as it is written:
@@ -232,16 +232,22 @@ spec:
           # no warning (INFRA-953). There is now an alert for it: VMRule
           # pocharlies-buildkit-cache / BuildkitAmd64CacheHigh in
           # k8s-observability-pocharlies manifests/rules.yaml — fires when the
-          # tmpfs itself exceeds 26.1Gi (85 % of this sizeLimit) for 1 minute.
+          # tmpfs itself exceeds 40.8Gi (85 % of this sizeLimit) for 1 minute.
           # Since SC-6224 (21-11) the signal is container_memory_cache -
           # total_inactive_file_bytes (the tmpfs alone); the old
           # container_memory_working_set_bytes also carried the build RSS and
           # fired on benign build spikes while missing the real fast fills
           # (~2.5Gi/min — a 10-minute window never catches them).
           # If the sizeLimit changes, update the threshold in that rule.
+          # INFRA-1628 (2026-11-27): the rule fired for real — two concurrent
+          # builds hit ENOSPC at 29.4Gi (a batch of merges left ~6 amd64 builds
+          # in flight at once; the between-build GC cannot trim records in use).
+          # atlantic (126GiB) kept >= 44GiB MemAvailable even at the peak, so
+          # the ceiling goes to 48Gi (limit 54Gi) and the rule threshold to
+          # 40.8Gi.
           emptyDir:
             medium: Memory
-            sizeLimit: 30Gi
+            sizeLimit: 48Gi
         - name: harbor-push
           secret:
             secretName: harbor-push
