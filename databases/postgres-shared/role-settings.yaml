@@ -138,6 +138,9 @@
 # tests/test_postgres_shared_postsync_sql_contract.py falla en CI si reaparece
 # una línea de comentario `#` en el SQL que un Job de este directorio pasa a
 # psql, en cualquiera de sus dos formas (block scalar del ConfigMap o `-c`).
+# Ese mismo test fija además el régimen de ociosas de INFRA-1295 (INFRA-1625):
+# cubiertos con su SET, excluidos sin él, keep con su idle_in_transaction y el
+# barrido del backlog solo sobre `state = 'idle'` y solo sobre roles cubiertos.
 apiVersion: v1
 kind: ConfigMap
 metadata:
